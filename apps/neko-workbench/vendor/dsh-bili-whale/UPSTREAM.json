@@ -108,7 +108,7 @@
     "deps/licenses/qrcode/license": "a060a98ea20666c5ce36c08c58fcffd9bbf0562f7de525449bbe1b7cdf4911a8",
     "deps/qrcode.cjs": "818a4046bce863ccb279e30caefe36f0b8a5b126c70875a0a7f1892ce478e02d",
     "lib/auth.js": "055ebe1bfa765a0236f1490121607ff84b066ad9303680e51cc8fd509d664bbb",
-    "lib/client.js": "b33ec00ec9f4f6823fbed072e70db6fbf4d4a202dfa3e0924fb391ad715e4fd2",
+    "lib/client.js": "19100f068605c2dcd91f1758e4cc6268a85d2e64ce3d1688523bc6b352c10d5b",
     "lib/credentials.js": "00905567a2661eddc429d2598eb4cb208ce7097541a662ffffd4945546e69ce8",
     "lib/index.js": "e4ba95f79a7ea54f45e629c11d14d8a6cfd372dca9a97c1b33a706c60519409e",
     "lib/mention-summary.js": "f496c00dc066b2c18ab27ec188b2a53fbe5bcd6728c1948c7b15bec3033e11bb",

@@ -43,7 +43,7 @@ function nekoAccountBalanceLabel(snapshot) {
 
 function createNekoAccountBalanceReader(ctx, options) {
   options = options || {};
-  const source = 'DeepSeek 官方充值钱包';
+  const source = '官方充值钱包';
   const listeners = new Set();
   let generation = 0, disposed = false, pending = null;
   let snapshot = Object.freeze({ signedIn: null, status: 'unavailable', amount: null, currency: null, source, fetchedAt: null });
@@ -267,8 +267,8 @@ function installNekoAccountHabitat(ctx, options) {
     if (developerSrc) avatar.src = developerSrc;
     identity.appendChild(avatar);
     launcher.owned.append(identity, habitat(snap, false));
-    rememberSet(launcher, 'aria-label', '开发喵账号菜单，DeepSeek，' + (effectiveSignedIn(snap) ? '已登录，' : '未登录，') + balanceLabel(snap) + '，来源：' + snap.source);
-    rememberSet(launcher, 'title', '开发喵 · DeepSeek 账号菜单');
+    rememberSet(launcher, 'aria-label', '开发喵账号菜单，' + (effectiveSignedIn(snap) ? '已登录，' : '未登录，') + balanceLabel(snap) + '，来源：' + snap.source);
+    rememberSet(launcher, 'title', '开发喵 · 账号菜单');
   }
   function renderMenu(snap) {
     if (!menuRecord) return;
@@ -277,16 +277,17 @@ function installNekoAccountHabitat(ctx, options) {
     menuRecord.renderKey = key;
     clearOwned(menuRecord.owned);
     const heading = element('div', 'neh-menu-heading');
-    heading.append(element('h3', '', '账号'), element('span', 'neh-login-status', effectiveSignedIn(snap) ? '已登录' : '未登录'));
+    heading.append(element('h3', '', '账号与生活'), element('span', 'neh-login-status', effectiveSignedIn(snap) ? '已登录' : '未登录'));
     const summary = element('div', 'neh-service-summary');
-    summary.append(element('strong', '', 'DeepSeek · 大肥鱼'), element('span', '', '当前工作台账号'));
-    menuRecord.owned.append(heading, summary, habitat(snap, true), element('p', 'neh-menu-help', '账号设置、充值和退出继续使用下方原生功能。'));
+    summary.append(element('strong', '', '账号'), element('span', '', '工作台账号'));
+    const help = effectiveSignedIn(snap) ? '账号和充值可在下方设置中管理。' : '使用下方登录按钮连接账号。';
+    menuRecord.owned.append(heading, summary, habitat(snap, true), element('p', 'neh-menu-help', help));
   }
   function render() {
     if (stopped) return;
     const snap = reader.getSnapshot();
     renderLauncher(snap); renderMenu(snap);
-    const message = effectiveSignedIn(snap) ? 'DeepSeek，' + balanceLabel(snap) + '，来源：' + snap.source : 'DeepSeek 未登录，余额暂不可读取';
+    const message = effectiveSignedIn(snap) ? '账号，' + balanceLabel(snap) + '，来源：' + snap.source : '账号未登录，余额暂不可读取';
     if (message !== lastAnnouncement) { announcement.textContent = message; lastAnnouncement = message; }
   }
   function matchAccountMenu(menu) {
@@ -295,13 +296,40 @@ function installNekoAccountHabitat(ctx, options) {
       const label = button.querySelector('._itemLabel_4ub78_190');
       return (label || button).textContent.replace(/\s+/g, '').toLowerCase();
     });
+    const accountAction = nativeSignedIn === true
+      ? /^(退出|退出登录|登出|signout|logout)$/
+      : /^(登录|登入|登陆|signin|login)$/;
     return labels.length === 3 && /^(设置|settings)$/.test(labels[0]) &&
       /^(联系我们|意见反馈|反馈意见|contactus|contact|feedback|sendfeedback)$/.test(labels[1]) &&
-      /^(退出|退出登录|登出|signout|logout)$/.test(labels[2]);
+      accountAction.test(labels[2]);
+  }
+  // Only the native login dialog's exact introductory sentence is adapted.
+  // Do not rewrite general page content, conversation messages, or links.
+  const loginCopy = new Map([
+    ['登录 DeepSeek 账号，或添加 API Key，即可开始使用。你的项目和文件保存在本地。', '登录账号，或添加 API Key，即可开始使用。你的项目和文件保存在本地。'],
+    ['Sign in to your DeepSeek account or add an API Key to get started. Your projects and files are stored locally.', 'Sign in to your account or add an API Key to get started. Your projects and files are stored locally.'],
+  ]);
+  const loginCopyChanges = new Map();
+  function adaptLoginDialog() {
+    for (const dialog of doc.querySelectorAll('[role="dialog"]')) {
+      const title = dialog.querySelector('h2');
+      if (!title || !/^(开始使用|Get started)$/.test(title.textContent.trim())) continue;
+      const labels = Array.from(dialog.querySelectorAll('button')).map(button => button.textContent.trim());
+      if (!labels.some(label => /^(登录|Sign in)$/.test(label)) || !labels.some(label => /^(添加 API Key|Add API Key)$/.test(label))) continue;
+      for (const paragraph of dialog.querySelectorAll('p')) {
+        const node = paragraph.firstChild;
+        if (!node || node.nodeType !== 3 || paragraph.childNodes.length !== 1) continue;
+        const replacement = loginCopy.get(node.nodeValue);
+        if (!replacement) continue;
+        loginCopyChanges.set(node, { original: node.nodeValue, owned: replacement });
+        node.nodeValue = replacement;
+      }
+    }
   }
   function sync() {
     scheduled = false;
     if (stopped) return;
+    adaptLoginDialog();
     const trigger = doc.querySelector(triggerSelector);
     if (!trigger) { releaseMenu(); releaseLauncher(); nativeSignedIn = null; reader.invalidate(null); return; }
     if (!launcher || launcher.element !== trigger || !launcher.owned.isConnected) {
@@ -393,6 +421,8 @@ function installNekoAccountHabitat(ctx, options) {
     win.clearInterval(interval);
     for (const release of releases.reverse()) { try { release(); } catch (_) {} }
     unsubscribe(); reader.dispose();
+    for (const [node, values] of loginCopyChanges) if (node.nodeValue === values.owned) node.nodeValue = values.original;
+    loginCopyChanges.clear();
     releaseMenu(); releaseLauncher();
     announcement.remove(); style.remove();
   };

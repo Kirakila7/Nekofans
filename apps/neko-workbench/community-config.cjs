@@ -248,10 +248,15 @@ function createCommunityController({ WebContentsView, openExternal, env = proces
     bindHost(host);
     if (request.action === 'hide') {
       if (current) {
+        const record = current;
+        const wasWanted = record.wanted;
         // Destroy pending navigations so a new open never joins an old load or
         // receives its eventual ERR_ABORTED. Cookies stay in the partition.
-        if (current.loading) dispose();
-        else { current.epoch++; current.wanted = false; detach(current); }
+        if (record.loading) { if (wasWanted) state(record, 'hidden'); dispose(); }
+        else {
+          record.epoch++; record.wanted = false; detach(record);
+          if (wasWanted) state(record, 'hidden');
+        }
       }
       return { ok: true };
     }

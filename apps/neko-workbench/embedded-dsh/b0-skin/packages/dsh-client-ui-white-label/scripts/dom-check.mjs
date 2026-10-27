@@ -149,6 +149,7 @@ const exportsObj = entry.factory((id) => {
   throw new Error(`unexpected ${id}`)
 })
 const seats = {}
+const seatSpecs = {}
 const disposers = []
 const opened = []
 const ctx = {
@@ -156,11 +157,26 @@ const ctx = {
   effect(fn) { const d = fn(); if (typeof d === 'function') disposers.push(d) },
   slots: {
     inject(_key, cb) { const d = cb(); disposers.push(d); return () => {} },
-    register(spec, component) { seats[spec.name] = component; return () => { delete seats[spec.name] } },
+    register(spec, component) { seats[spec.name] = component; seatSpecs[spec.name] = spec; return () => { delete seats[spec.name]; delete seatSpecs[spec.name] } },
   },
 }
 exportsObj.apply(ctx)
 assert.equal(document.title, 'New chat — N.E.K.O. 工作台')
+
+// The welcome notice is overridden only by its own list id. Rendering it
+// advances the existing queue once without creating content or persistence.
+assert.deepEqual({ ...seatSpecs['settings.onboarding'] }, {
+  name: 'settings.onboarding', id: 'welcome-notice', order: -100, priority: -1,
+})
+const welcomeHost = document.createElement('div')
+document.body.appendChild(welcomeHost)
+const welcomeRoot = ReactDOMClient.createRoot(welcomeHost)
+let welcomeCompleted = 0
+await act(async () => { welcomeRoot.render(React.createElement(seats['settings.onboarding'], { complete: () => { welcomeCompleted++ } })) })
+assert.equal(welcomeCompleted, 1)
+assert.equal(welcomeHost.childNodes.length, 0)
+await act(async () => welcomeRoot.unmount())
+welcomeHost.remove()
 
 // Native DSH RunningStatus markup, including TextShimmer's plain text and
 // its aria-hidden decoration. Transcript content and tool labels can contain
@@ -399,12 +415,28 @@ await click(originalNewSession)
 assert.equal(newSessionClicks, 1, 'the original new-session click still runs exactly once')
 const communityEntry = $('.neko-community')
 assert.equal(communityEntry.disabled, false)
+const [workMode, leisureMode] = $$('.neko-mode-switch__button')
+assert.equal(workMode.textContent, '工作区')
+assert.equal(leisureMode.textContent, '休闲区')
+assert.equal(workMode.getAttribute('aria-pressed'), 'true')
+assert.equal(leisureMode.getAttribute('aria-pressed'), 'false')
+$('#composer').value = '保留未发送的草稿'
+await click(leisureMode)
+assert.equal($('.neko-community-pane').hidden, false, 'leisure uses the existing native community pane')
+assert.equal(leisureMode.getAttribute('aria-pressed'), 'true')
+assert.equal(workMode.getAttribute('aria-pressed'), 'false')
+assert.equal($('#composer').value, '保留未发送的草稿')
+await click(workMode)
+assert.equal($('.neko-community-pane').hidden, true)
+assert.equal(workMode.getAttribute('aria-pressed'), 'true')
+assert.equal(leisureMode.getAttribute('aria-pressed'), 'false')
+assert.equal($('#composer').value, '保留未发送的草稿')
 await click(communityEntry)
 assert.equal(calls.at(-1)[0], 'community')
 assert.deepEqual(JSON.parse(JSON.stringify(calls.at(-1)[1])), { action:'open', bounds:{x:248,y:48,width:852,height:704} })
 assert.equal($('.neko-community-pane').hidden, false)
 assert.equal($('main').hasAttribute('inert'), true, 'covered coding content leaves keyboard navigation')
-assert.equal($('textarea').value, '', 'coding composer stays mounted')
+assert.equal($('textarea').value, '保留未发送的草稿', 'coding composer stays mounted')
 const coveredDivInput = document.createElement('input')
 document.body.appendChild(coveredDivInput)
 coveredDivInput.focus()
@@ -424,15 +456,22 @@ for (const width of [60, 40, 216]) {
 }
 await click($('.neko-community-pane__toolbar button'))
 assert.equal($('.neko-community-pane').hidden, true)
+assert.equal(workMode.getAttribute('aria-pressed'), 'true', 'native return synchronizes mode')
 assert.equal($('main').hasAttribute('inert'), false)
 assert.equal(document.activeElement, communityEntry)
 await click(communityEntry)
+await act(async () => { for (const fn of subs) fn({ ...state, navigation: { fishSettingsRevision: 1 } }) })
+assert.equal($('.neko-community-pane').hidden, true, 'fish settings navigation releases the covered workbench')
+assert.equal(workMode.getAttribute('aria-pressed'), 'true', 'fish settings navigation synchronizes mode')
+await click(communityEntry)
 await click(originalNewSession)
 assert.equal($('.neko-community-pane').hidden, true, 'native plus returns to coding without replacing the original node')
+assert.equal(workMode.getAttribute('aria-pressed'), 'true', 'new session navigation synchronizes mode')
 assert.equal(newSessionClicks, 2)
 await click(communityEntry)
 await act(async () => { $('.neko-role__tools').dispatchEvent(new window.MouseEvent('pointerdown', { bubbles:true })) })
 assert.equal($('.neko-community-pane').hidden, true, 'local tools are never covered by the native remote view')
+assert.equal(workMode.getAttribute('aria-pressed'), 'true', 'local menus synchronize mode')
 assert.equal(nativeNav.parentElement, $('#sb-root'), 'native nav not moved')
 assert.deepEqual([...nativeNav.querySelectorAll('button')], nativeButtons, 'native buttons untouched (same nodes)')
 assert.equal(nativeNav.getAttribute('data-neko-tools'), 'folded')
