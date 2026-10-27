@@ -12,7 +12,7 @@ function bundle() {
   return entry.factory(name => name === 'react' ? { createElement() {} } : { createPortal() {} });
 }
 class Element extends EventTarget {
-  constructor(tag) { super(); this.tag = tag; this.children = []; this.style = {}; this.attributes = new Map(); this.isConnected = true; }
+  constructor(tag) { super(); this.tag = tag; this.children = []; this.style = {}; this.attributes = new Map(); this.isConnected = true; this.classList = { contains: name => (this.className || '').split(/\s+/).includes(name) }; }
   append(...elements) { this.children.push(...elements); }
   appendChild(element) { this.append(element); }
   setAttribute(key, value) { this.attributes.set(key, String(value)); }
@@ -31,7 +31,7 @@ function fixture(options = {}) {
   const strip = { getBoundingClientRect: () => ({ top: 700, height: 24 }) };
   const doc = new EventTarget();
   Object.assign(doc, { body, createElement: tag => new Element(tag),
-    querySelector: selector => selector === '.neko-strip' ? strip : selector === '.neko-community' ? button : null,
+    querySelector: selector => selector === '.neko-strip' ? strip : selector === '.neko-community' || selector === '.neko-community:not(.neko-bilibili)' ? button : null,
     querySelectorAll: selector => selector === 'main' ? [main] : selector === '.neko-community' ? [button] : [] });
   let observer, resizeObserver;
   Object.assign(win, { innerWidth: 1100, innerHeight: 724,
@@ -62,7 +62,7 @@ test('opening, resizing and returning preserve the original coding DOM and focus
   const f = fixture();
   f.main.textContent = 'unsent coding draft';
   await f.pane.open();
-  assert.deepEqual(f.calls[0], { action: 'open', bounds: { x: 280, y: 48, width: 820, height: 652 } });
+  assert.deepEqual(f.calls[0], { action: 'open', site: 'community', bounds: { x: 280, y: 48, width: 820, height: 652 } });
   assert.equal(f.panel.hidden, false);
   assert.equal(f.main.hasAttribute('inert'), true);
   assert.equal(f.root.hasAttribute('inert'), false);
@@ -146,7 +146,7 @@ test('load failure provides retry in place; removed layout and unload restore co
   f.bridge.community = async request => { f.calls.push(request); if (request.action === 'open') throw new Error('offline'); return { ok: true }; };
   await assert.rejects(f.pane.open(), /offline/);
   assert.match(f.panel.children[1].textContent, /未能加载/);
-  const reload = f.panel.children[0].children[2];
+  const reload = f.panel.children[0].children[3];
   assert.equal(reload.disabled, false);
   reload.dispatchEvent(new Event('click')); await tick(); await tick();
   assert.equal(f.calls.at(-1).action, 'reload');

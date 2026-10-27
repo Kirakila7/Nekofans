@@ -86,7 +86,7 @@ assert.ok(Object.isFrozen(exports.PRODUCT_BRAND))
 const IDS = ['yui', 'devcat', 'bigfish', 'claude', 'gemini']
 assert.deepEqual([...exports.AVATARS.map((a) => a.id)], IDS)
 assert.deepEqual([...exports.AVATARS.map((a) => a.name)], ['YUi', '开发喵', '大肥鱼', 'Claude娘', 'Gemini小猫'])
-assert.deepEqual([...exports.ACTION_NAMES], ['neko-settings', 'open-neko', 'task-notes', 'connect-neko', 'connection-status', 'reconnect-workbench', 'open-community'])
+assert.deepEqual([...exports.ACTION_NAMES], ['neko-settings', 'open-neko', 'task-notes', 'connect-neko', 'connection-status', 'reconnect-workbench', 'open-community', 'open-bilibili'])
 for (const id of IDS) assert.match(exports.PLACEHOLDERS[id], /^data:image\/svg\+xml,/, `placeholder ${id}`)
 const art = exports.AVATAR_ART
 const embedded = Object.keys(art)

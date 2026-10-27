@@ -86,6 +86,7 @@ window.__ModuleLoader__.load({
       'connection-status',
       'reconnect-workbench',
       'open-community',
+      'open-bilibili',
     ])
     const ACTION_GROUPS = Object.freeze([
       Object.freeze([
@@ -330,7 +331,7 @@ window.__ModuleLoader__.load({
      * One store per apply(). Holds sanitized bridge state plus UI-only
      * pending/notice flags; disposed on unload (bridge subscription, timers).
      */
-    function createStore(bridge, { openCommunity = () => currentCommunityPane?.open() } = {}) {
+    function createStore(bridge, { openCommunity = (site) => currentCommunityPane?.open(site) } = {}) {
       const listeners = new Set()
       let disposed = false
       let unsubscribe = null
@@ -429,8 +430,9 @@ window.__ModuleLoader__.load({
 
       async function runAction(name) {
         if (!ACTION_NAMES.includes(name) || snapshot.pending.action) return false
-        if (name === 'open-community' && (!snapshot.bridgeReady || snapshot.preview)) return false
-        const scope = name === 'open-community' ? 'community' : 'options'
+        const isSocial = name === 'open-community' || name === 'open-bilibili'
+        if (isSocial && (!snapshot.bridgeReady || snapshot.preview)) return false
+        const scope = isSocial ? 'community' : 'options'
         clearNotice(scope)
         if (!bridge) {
           notify(scope, 'info', '预览模式：未接入桌宠，操作未执行')
@@ -440,8 +442,8 @@ window.__ModuleLoader__.load({
         try {
           // The community stays in our coding pane. Older native bridges must
           // never silently fall back to opening a separate window.
-          const result = name === 'open-community'
-            ? await openCommunity()
+          const result = isSocial
+            ? await openCommunity(name === 'open-bilibili' ? 'bilibili' : 'community')
             : await withTimeout(bridge.action(name), BRIDGE_TIMEOUT_MS)
           if (!result || result.ok !== true) throw new Error('桌宠未确认')
           return true
@@ -1389,6 +1391,20 @@ function SidebarMark({ size }) {
       )
     }
 
+    function BilibiliEntry({ snap, store }) {
+      const disabled = snap.preview || !snap.bridgeReady || !!snap.pending.action
+      const opening = snap.pending.action === 'open-bilibili'
+      return h('button', {
+        type: 'button', className: 'neko-community neko-bilibili', disabled,
+        'aria-label': 'B站', 'aria-busy': opening ? 'true' : undefined,
+        title: disabled ? (opening ? '正在打开 B站…' : 'B站尚未就绪') : 'B站（在右侧内容区打开）',
+        onClick: (event) => { event.stopPropagation(); if (!disabled) return store.runAction('open-bilibili') },
+      }, h('svg', { className: 'neko-community__glyph', viewBox: '0 0 20 20', 'aria-hidden': 'true', focusable: 'false' },
+        h('rect', { x: 2, y: 5, width: 16, height: 12, rx: 3, fill: 'none', stroke: 'currentColor', strokeWidth: 1.4 }),
+        h('path', { d: 'M6 2.5 8.5 5m5-2.5L11 5M6.5 10v2m7-2v2', fill: 'none', stroke: 'currentColor', strokeWidth: 1.4, strokeLinecap: 'round' })),
+      h('span', { className: 'neko-community__label' }, opening ? '打开中…' : 'B站'))
+    }
+
     // This mode describes the visible surface, not a new DSH session. The
     // existing community pane owns transitions so every close path updates it.
     let workspaceMode = 'work'
@@ -1420,7 +1436,9 @@ function SidebarMark({ size }) {
       return h(
         'div',
         { className: 'neko-sidebar-items' },
-        h(CommunityEntry, { snap: workbenchSnap, store: workbenchStore }),
+        h('div', { className: 'neko-social-actions' },
+          h(CommunityEntry, { snap: workbenchSnap, store: workbenchStore }),
+          h(BilibiliEntry, { snap: workbenchSnap, store: workbenchStore })),
         h(Notice, { notice: workbenchSnap.notice, scope: 'community' }),
         h(WorkspaceModeSwitch, { snap: workbenchSnap, store: workbenchStore }),
         h('div', { className: 'neko-roles', role: 'group', 'aria-label': '角色' },
@@ -2204,24 +2222,30 @@ function installNekoAccountHabitat(ctx, options) {
       toolbar.className = 'neko-community-pane__toolbar'
       const back = doc.createElement('button')
       back.type = 'button'; back.textContent = '← 返回工作台'
+      const pageBack = doc.createElement('button')
+      pageBack.type = 'button'; pageBack.textContent = '上一页'; pageBack.disabled = true
+      pageBack.setAttribute('aria-label', '返回上一页')
       const heading = doc.createElement('strong')
       heading.textContent = 'N.E.K.O. 社区'
       const reload = doc.createElement('button')
       reload.type = 'button'; reload.textContent = '刷新'
-      toolbar.append(back, heading, reload)
+      toolbar.append(back, pageBack, heading, reload)
       const status = doc.createElement('p')
       status.className = 'neko-community-pane__status'
       status.setAttribute('role', 'status')
       panel.append(toolbar, status)
       doc.body.appendChild(panel)
-      let active = false, disposed = false, revision = 0, frame = 0, lastBounds = '', root = null, cancelWaiting = null
+      let active = false, disposed = false, revision = 0, frame = 0, lastBounds = '', root = null, cancelWaiting = null, currentSite = 'community'
       const inertRegions = new Map()
       const sizes = typeof win.ResizeObserver === 'function' ? new win.ResizeObserver(schedule) : null
       const call = (request) => Promise.resolve().then(() => bridge.community(request))
       const hideNative = () => { void call({ action: 'hide' }).catch(() => {}) }
       function mark(value) {
         setWorkspaceMode(value ? 'leisure' : 'work')
-        for (const button of doc.querySelectorAll('.neko-community')) button.setAttribute('aria-pressed', String(value))
+        for (const button of doc.querySelectorAll('.neko-community')) {
+          const buttonSite = button.classList.contains('neko-bilibili') ? 'bilibili' : 'community'
+          button.setAttribute('aria-pressed', String(value && currentSite === buttonSite))
+        }
         if (value) {
           for (const main of doc.querySelectorAll('main')) {
             if (main.contains(root) || main.contains(panel) || inertRegions.has(main)) continue
@@ -2268,7 +2292,7 @@ function installNekoAccountHabitat(ctx, options) {
           })
         })
       }
-      async function show(action = 'open') {
+      async function show(action = 'open', site = currentSite) {
         if (disposed) throw new Error('社区内容区已关闭')
         const bounds = place()
         if (!bounds) throw new Error('工作台内容区尚未就绪，请稍后重试')
@@ -2277,21 +2301,28 @@ function installNekoAccountHabitat(ctx, options) {
         const cancelled = new Promise(resolve => { releaseWait = () => resolve({ ok: true, cancelled: true }) })
         cancelWaiting = releaseWait
         const ticket = ++revision
+        if (action === 'open') currentSite = site === 'bilibili' ? 'bilibili' : 'community'
+        const name = currentSite === 'bilibili' ? 'B站' : 'N.E.K.O. 社区'
+        panel.setAttribute('aria-label', `${name}内容区`)
+        heading.textContent = name
+        pageBack.disabled = true
         active = true; panel.hidden = false; mark(true)
         // DSH may render the coding surface as divs instead of a <main>.
         // Move off its composer before the remote view becomes available.
         back.focus()
-        status.textContent = '正在加载 N.E.K.O. 社区…'
+        status.textContent = `正在加载 ${name}…`
         reload.disabled = true; lastBounds = JSON.stringify(bounds)
         try {
-          const result = await Promise.race([call({ action, bounds }), cancelled])
+          const request = action === 'open' ? { action, site: currentSite, bounds } : { action, bounds }
+          const result = await Promise.race([call(request), cancelled])
           if (disposed || !active || ticket !== revision) return { ok: true, cancelled: true }
-          if (!result?.ok) throw new Error('社区未确认加载')
+          if (!result?.ok) throw new Error(`${name}未确认加载`)
+          if (typeof result.canGoBack === 'boolean') pageBack.disabled = !result.canGoBack
           if (active && ticket === revision) status.textContent = ''
           return result
         } catch (error) {
           if (disposed || !active || ticket !== revision) return { ok: true, cancelled: true }
-          if (active && ticket === revision) status.textContent = '社区未能加载，请点击“刷新”重试，或返回工作台。'
+          if (active && ticket === revision) status.textContent = `${name}未能加载，请点击“刷新”重试，或返回工作台。`
           throw error
         } finally {
           if (cancelWaiting === releaseWait) cancelWaiting = null
@@ -2304,9 +2335,17 @@ function installNekoAccountHabitat(ctx, options) {
         if (cancelWaiting) { cancelWaiting(); cancelWaiting = null }
         sizes?.disconnect(); root = null; lastBounds = ''
         hideNative()
-        if (focus) doc.querySelector('.neko-community')?.focus()
+        if (focus) doc.querySelector(currentSite === 'bilibili' ? '.neko-bilibili' : '.neko-community:not(.neko-bilibili)')?.focus()
       }
       const onBack = () => hide({ focus: true })
+      const onPageBack = () => {
+        if (!active || pageBack.disabled) return
+        const ticket = revision
+        pageBack.disabled = true
+        void call({ action: 'back' }).then(result => {
+          if (active && revision === ticket && typeof result?.canGoBack === 'boolean') pageBack.disabled = !result.canGoBack
+        }).catch(() => {})
+      }
       const onReload = () => { void show('reload').catch(() => {}) }
       const onClick = (event) => { if (active && isCodingNavigation(event.target)) hide() }
       const onFocus = (event) => {
@@ -2319,9 +2358,12 @@ function installNekoAccountHabitat(ctx, options) {
       }
       const unsubscribe = typeof bridge.subscribeCommunity === 'function' ? bridge.subscribeCommunity((state) => {
         if (!active || disposed) return
-        if (state?.status === 'loading') { status.textContent = '正在加载 N.E.K.O. 社区…'; reload.disabled = true }
+        if (state?.site && state.site !== currentSite) return
+        const name = currentSite === 'bilibili' ? 'B站' : 'N.E.K.O. 社区'
+        if (typeof state?.canGoBack === 'boolean') pageBack.disabled = !state.canGoBack
+        if (state?.status === 'loading') { status.textContent = `正在加载 ${name}…`; reload.disabled = true }
         if (state?.status === 'ready') { status.textContent = ''; reload.disabled = false }
-        if (state?.status === 'error') { status.textContent = '社区未能加载，请点击“刷新”重试，或返回工作台。'; reload.disabled = false }
+        if (state?.status === 'error') { status.textContent = `${name}未能加载，请点击“刷新”重试，或返回工作台。`; reload.disabled = false }
         if (state?.status === 'hidden') hide()
       }) : null
       // Opening fish settings hides the native child view from the host. Keep
@@ -2344,7 +2386,7 @@ function installNekoAccountHabitat(ctx, options) {
       }, () => {}) } catch {}
       const observer = new win.MutationObserver(schedule)
       observer.observe(doc.body, { subtree: true, childList: true })
-      back.addEventListener('click', onBack); reload.addEventListener('click', onReload)
+      back.addEventListener('click', onBack); pageBack.addEventListener('click', onPageBack); reload.addEventListener('click', onReload)
       doc.addEventListener('click', onClick, true)
       // Native child views paint above DOM popovers. Return before opening
       // local menus so tools/account panels can use the full content area.
@@ -2353,7 +2395,7 @@ function installNekoAccountHabitat(ctx, options) {
       doc.addEventListener('focusin', onFocus, true)
       win.addEventListener('resize', schedule)
       return {
-        open: () => show(), hide,
+        open: (site = 'community') => show('open', site), hide,
         dispose() {
           if (disposed) return
           hide(); disposed = true; revision++
@@ -2361,7 +2403,7 @@ function installNekoAccountHabitat(ctx, options) {
           observer.disconnect(); sizes?.disconnect()
           if (typeof unsubscribe === 'function') unsubscribe()
           if (typeof unsubscribeWorkbench === 'function') unsubscribeWorkbench()
-          back.removeEventListener('click', onBack); reload.removeEventListener('click', onReload)
+          back.removeEventListener('click', onBack); pageBack.removeEventListener('click', onPageBack); reload.removeEventListener('click', onReload)
           doc.removeEventListener('click', onClick, true); win.removeEventListener('resize', schedule)
           doc.removeEventListener('pointerdown', onClick, true); doc.removeEventListener('contextmenu', onClick, true)
           doc.removeEventListener('focusin', onFocus, true)
@@ -2697,10 +2739,12 @@ button[data-neko-new-session="plus"]::after {
   content: '+'; display: block; font: 500 25px/1 var(--dsh-font-family-text-default, system-ui, sans-serif); pointer-events: none;
 }
 button[data-neko-new-session="plus"]:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary, ${L.head}); outline-offset: -2px; }
-.neko-role-host[data-neko-actions-paired] .neko-community {
+.neko-role-host[data-neko-actions-paired] .neko-social-actions {
   position: absolute; left: var(--neko-community-left); top: var(--neko-community-top);
   width: var(--neko-community-width); height: var(--neko-community-height); margin: 0;
 }
+.neko-social-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px; }
+.neko-social-actions .neko-community { min-width: 0; overflow: hidden; }
 .neko-sidebar-items { display: grid; gap: 4px; }
 .neko-mode-switch { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px; padding: 3px; margin: 3px 0 5px; border-radius: 8px; background: var(--dsw-alias-bg-layer-2, #E4ECF4); }
 .neko-mode-switch__button { min-width: 0; min-height: 32px; padding: 0 6px; border: 0; border-radius: 6px; color: var(--dsw-alias-label-secondary, #4C5F73); background: transparent; font: 500 12px/1.2 var(--dsh-font-family-text-default, system-ui, sans-serif); cursor: pointer; }
@@ -2739,7 +2783,8 @@ button[data-neko-new-session="plus"]:focus-visible { outline: 2px solid var(--ds
 /* Native collapsed rail keeps the same button, accessible name and tab order. */
 @container (max-width: 84px) {
   .neko-community { justify-content: center; width: 36px; height: 36px; padding: 0; margin: 0 auto; }
-  .neko-role-host[data-neko-actions-paired] .neko-community { min-width: 12px; margin: 0; }
+  .neko-role-host[data-neko-actions-paired] .neko-community { min-width: 0; width: 100%; margin: 0; }
+  .neko-social-actions { gap: 0; }
   .neko-community__glyph { width: 16px; height: 16px; }
   .neko-community__label { display: none; }
 }

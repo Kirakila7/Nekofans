@@ -90,6 +90,7 @@ let baseline = live.size
 
 const calls = []
 const subs = new Set()
+const communitySubs = new Set()
 let state = {
   avatar: { builtinId: 'yui', customDataUrl: null },
   neko: { enabled: true, connection: 'connected', character: 'YUi', error: '' },
@@ -98,6 +99,7 @@ let state = {
 let deferred = null
 window.nekoWorkbench = {
   community: async request => { calls.push(['community', request]); return { ok: true } },
+  subscribeCommunity(fn) { communitySubs.add(fn); return () => communitySubs.delete(fn) },
   getState: async () => state,
   setAvatar: async (id) => { calls.push(['setAvatar', id]); state = { ...state, avatar: { ...state.avatar, builtinId: id } }; return state },
   uploadAvatar: async () => { calls.push(['uploadAvatar']); return null },
@@ -410,7 +412,7 @@ assert.equal(originalNewSession.parentElement, originalNewParent, 'native React 
 assert.equal(roleHost.hasAttribute('data-neko-actions-paired'), true)
 assert.equal(roleHost.style.getPropertyValue('--neko-community-top'), '-40px')
 assert.equal(roleHost.style.getPropertyValue('--neko-community-left'), '44px')
-assert.equal($$('.neko-community').length, 1)
+assert.equal($$('.neko-community').length, 2)
 await click(originalNewSession)
 assert.equal(newSessionClicks, 1, 'the original new-session click still runs exactly once')
 const communityEntry = $('.neko-community')
@@ -433,7 +435,7 @@ assert.equal(leisureMode.getAttribute('aria-pressed'), 'false')
 assert.equal($('#composer').value, '保留未发送的草稿')
 await click(communityEntry)
 assert.equal(calls.at(-1)[0], 'community')
-assert.deepEqual(JSON.parse(JSON.stringify(calls.at(-1)[1])), { action:'open', bounds:{x:248,y:48,width:852,height:704} })
+assert.deepEqual(JSON.parse(JSON.stringify(calls.at(-1)[1])), { action:'open', site:'community', bounds:{x:248,y:48,width:852,height:704} })
 assert.equal($('.neko-community-pane').hidden, false)
 assert.equal($('main').hasAttribute('inert'), true, 'covered coding content leaves keyboard navigation')
 assert.equal($('textarea').value, '保留未发送的草稿', 'coding composer stays mounted')
@@ -459,6 +461,22 @@ assert.equal($('.neko-community-pane').hidden, true)
 assert.equal(workMode.getAttribute('aria-pressed'), 'true', 'native return synchronizes mode')
 assert.equal($('main').hasAttribute('inert'), false)
 assert.equal(document.activeElement, communityEntry)
+const biliEntry = $('.neko-bilibili')
+assert.equal(biliEntry.parentElement, communityEntry.parentElement, 'B站 and community share the existing action row')
+await click(biliEntry)
+assert.deepEqual(JSON.parse(JSON.stringify(calls.at(-1)[1])), { action:'open', site:'bilibili', bounds:{x:248,y:48,width:852,height:704} })
+assert.equal($('.neko-community-pane strong').textContent, 'B站')
+assert.equal(biliEntry.getAttribute('aria-pressed'), 'true')
+assert.equal(communityEntry.getAttribute('aria-pressed'), 'false')
+await act(async () => { for (const fn of communitySubs) fn({status:'hidden',site:'community'}) })
+assert.equal($('.neko-community-pane').hidden, false, 'a late hidden event from community cannot close B站')
+await act(async () => { for (const fn of communitySubs) fn({status:'ready',site:'bilibili',canGoBack:true}) })
+const pageBack = $('[aria-label="返回上一页"]')
+assert.equal(pageBack.disabled, false)
+await click(pageBack)
+assert.deepEqual(JSON.parse(JSON.stringify(calls.at(-1)[1])), {action:'back'})
+await click($('.neko-community-pane__toolbar button'))
+assert.equal(document.activeElement, biliEntry)
 await click(communityEntry)
 await act(async () => { for (const fn of subs) fn({ ...state, navigation: { fishSettingsRevision: 1 } }) })
 assert.equal($('.neko-community-pane').hidden, true, 'fish settings navigation releases the covered workbench')
@@ -605,7 +623,7 @@ assert.equal(originalNewSession.style.getPropertyValue('--neko-new-session-size'
 assert.equal(replacementNewSession.getAttribute('data-neko-new-session'), 'plus')
 await click(replacementNewSession)
 assert.equal(replacementClicks, 1)
-assert.equal($$('.neko-community').length, 1)
+assert.equal($$('.neko-community').length, 2)
 
 // Sidebar re-render: native nav replaced -> adapter follows, no duplicate host.
 const freshNav = nativeNav.cloneNode(true)
@@ -641,7 +659,7 @@ assert.notEqual($('#new-session'), reactOriginal)
 assert.equal($('#new-session').parentElement.id, 'react-sidebar')
 assert.equal(reactOriginal.getAttribute('data-neko-new-session'), null)
 assert.equal($('#new-session').getAttribute('data-neko-new-session'), 'plus')
-assert.equal($$('.neko-community').length, 1)
+assert.equal($$('.neko-community').length, 2)
 await click($('#new-session'))
 assert.equal(reactNewClicks, 2, 'React click dispatch remains intact after native re-render')
 await act(async () => { nativeRoot.unmount(); nativeFixture.remove() })
