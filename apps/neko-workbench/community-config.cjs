@@ -52,6 +52,18 @@ function classifyBilibiliNavigation(value) {
   return { kind: target.protocol === 'https:' && BILIBILI_ORIGINS.has(target.origin) ? 'internal' : 'external', url: target.href };
 }
 
+// Only share public video identifiers, never authentication, tracking or
+// redirect parameters. Preserve a valid multipart selection when present.
+function bilibiliVideoShareUrl(value) {
+  const url = parseWebUrl(value);
+  if (!url || url.protocol !== 'https:' || !['https://m.bilibili.com', 'https://www.bilibili.com'].includes(url.origin)) return null;
+  const match = /^\/video\/(BV[0-9A-Za-z]{10}|av[0-9]{1,20})\/?$/.exec(url.pathname);
+  if (!match) return null;
+  const page = url.searchParams.get('p');
+  const part = page && /^[1-9][0-9]{0,3}$/.test(page) ? `?p=${page}` : '';
+  return `https://www.bilibili.com/video/${match[1]}${part}`;
+}
+
 function communityWebPreferences(partition = COMMUNITY_PARTITION) {
   return { partition, nodeIntegration: false,
     contextIsolation: true, sandbox: true, webSecurity: true, webviewTag: false,
@@ -107,8 +119,9 @@ function installCommunityNavigation(target, { communityUrl, parent, openExternal
 
 function validateCommunityRequest(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)
-      || Object.keys(value).some(key => !['action', 'bounds', 'site'].includes(key))
-      || !['open', 'layout', 'hide', 'reload', 'back'].includes(value.action)
+      || Object.keys(value).some(key => !['action', 'bounds', 'site', 'requestId'].includes(key))
+      || !['open', 'layout', 'hide', 'reload', 'back', 'copy-video-link'].includes(value.action)
+      || (value.requestId !== undefined && (!['open', 'hide'].includes(value.action) || !Number.isSafeInteger(value.requestId) || value.requestId < 1))
       || (value.site !== undefined && (value.action !== 'open' || !['community', 'bilibili'].includes(value.site)))) throw new Error('未知社区操作');
   if (value.action === 'open' || value.action === 'layout' || value.bounds !== undefined) {
     const bounds = value.bounds;
@@ -117,7 +130,7 @@ function validateCommunityRequest(value) {
           Object.hasOwn(bounds, key) && Number.isFinite(bounds[key]) && Math.abs(bounds[key]) <= 1000000)
         || bounds.width <= 0 || bounds.height <= 0) throw new Error('社区布局无效');
   }
-  return { action: value.action, ...(value.site ? { site: value.site } : {}), ...(value.bounds ? { bounds: { ...value.bounds } } : {}) };
+  return { action: value.action, ...(value.site ? { site: value.site } : {}), ...(value.requestId !== undefined ? { requestId: value.requestId } : {}), ...(value.bounds ? { bounds: { ...value.bounds } } : {}) };
 }
 
 function communityBounds(host, bounds) {
@@ -133,7 +146,7 @@ function communityBounds(host, bounds) {
 
 const LOAD_ERROR = '社区页面未能打开，请检查网络后重试';
 const CANCEL_ERROR = '社区已隐藏或工作台页面已离开';
-function createCommunityController({ WebContentsView, openExternal, env = process.env, site = 'community',
+function createCommunityController({ WebContentsView, openExternal, copyText, env = process.env, site = 'community',
   onState = () => {}, onExternalError } = {}) {
   if (!['community', 'bilibili'].includes(site)) throw new Error('未知内容入口');
   const isBilibili = site === 'bilibili';
@@ -144,8 +157,12 @@ function createCommunityController({ WebContentsView, openExternal, env = proces
     const history = record.webContents.navigationHistory;
     try { return !!(history ? history.canGoBack() : record.webContents.canGoBack?.()); } catch { return false; }
   }
+  function canShare(record) {
+    return !!(isBilibili && record.wanted && record.attached && record.loaded && !record.loading &&
+      !record.webContents.isDestroyed() && bilibiliVideoShareUrl(record.webContents.getURL()));
+  }
   function state(record, status, error) {
-    if (current === record && (record.wanted || status === 'hidden')) onState(record.host, { status, ...(isBilibili ? { canGoBack: canGoBack(record) } : {}), ...(error ? { error } : {}) });
+    if (current === record && (record.wanted || status === 'hidden')) onState(record.host, { status, ...(record.requestId !== undefined ? { requestId: record.requestId } : {}), ...(isBilibili ? { canGoBack: canGoBack(record), canShare: canShare(record) } : {}), ...(error ? { error } : {}) });
   }
   function detach(record) {
     if (!record.attached) return;
@@ -204,10 +221,10 @@ function createCommunityController({ WebContentsView, openExternal, env = proces
     record.failed = true; record.loaded = false; detach(record);
     state(record, 'error', LOAD_ERROR);
   }
-  function create(host, bounds) {
+  function create(host, bounds, requestId) {
     const communityUrl = isBilibili ? BILIBILI_URL : resolveCommunityUrl(env.NEKO_WORKBENCH_COMMUNITY_URL);
     const view = new WebContentsView({ webPreferences: communityWebPreferences(isBilibili ? BILIBILI_PARTITION : COMMUNITY_PARTITION) });
-    const record = { host, view, webContents: view.webContents, communityUrl, bounds,
+    const record = { host, view, webContents: view.webContents, communityUrl, bounds, requestId,
       epoch: 0, loadId: 0, loading: null, loaded: false, failed: false, wanted: true,
       attached: false, popups: new Set(), responseCode: 0 };
     current = record;
@@ -226,6 +243,7 @@ function createCommunityController({ WebContentsView, openExternal, env = proces
     contents.on('did-start-navigation', (_event, _url, isInPlace, isMainFrame) => {
       if (!isMainFrame || isInPlace || current !== record) return;
       record.failed = false; record.loaded = false; record.responseCode = 0;
+      if (isBilibili && record.wanted && !record.loading) state(record, 'loading');
     });
     contents.on('did-navigate', (_event, _url, responseCode) => {
       if (current !== record) return;
@@ -287,6 +305,7 @@ function createCommunityController({ WebContentsView, openExternal, env = proces
     if (request.action === 'hide') {
       if (current) {
         const record = current;
+        if (request.requestId !== undefined && request.requestId !== record.requestId) return { ok: true, stale: true };
         const wasWanted = record.wanted;
         // Destroy pending navigations so a new open never joins an old load or
         // receives its eventual ERR_ABORTED. Cookies stay in the partition.
@@ -312,6 +331,13 @@ function createCommunityController({ WebContentsView, openExternal, env = proces
       state(record, record.failed ? 'error' : 'ready', record.failed ? LOAD_ERROR : undefined);
       return { ok: true };
     }
+    if (request.action === 'copy-video-link') {
+      const record = current;
+      if (!record || !canShare(record) || typeof copyText !== 'function') throw new Error('请先打开 B 站视频');
+      const url = bilibiliVideoShareUrl(record.webContents.getURL());
+      try { await copyText(url); } catch { throw new Error('复制链接失败，请重试'); }
+      return { ok: true };
+    }
     if (request.action === 'open') {
       const projected = communityBounds(host, request.bounds);
       if (!projected.width || !projected.height) throw new Error('社区布局无效');
@@ -319,8 +345,9 @@ function createCommunityController({ WebContentsView, openExternal, env = proces
     let record = current;
     if (!record) {
       if (request.action !== 'open') throw new Error('请先打开社区');
-      record = create(host, request.bounds);
+      record = create(host, request.bounds, request.requestId);
     }
+    if (request.action === 'open') record.requestId = request.requestId;
     if (request.bounds) record.bounds = request.bounds;
     record.wanted = true;
     const epoch = record.epoch;
@@ -345,7 +372,7 @@ function createSocialController(options = {}) {
   const publish = options.onState || (() => {});
   const controllers = Object.fromEntries(['community', 'bilibili'].map(site => [site,
     createCommunityController({ ...options, site, onState: (host, value) => publish(host, { ...value, site }) })]));
-  let active = 'community', generation = 0;
+  let active = 'community', generation = 0, activeRequestId;
   async function action(host, value) {
     const request = validateCommunityRequest(value);
     if (request.action === 'open') {
@@ -353,11 +380,15 @@ function createSocialController(options = {}) {
       const previous = active;
       const version = ++generation;
       active = next;
+      activeRequestId = request.requestId;
       if (previous !== next) await controllers[previous].action(host, { action: 'hide' });
       if (version !== generation) throw new Error(CANCEL_ERROR);
-      return controllers[next].action(host, { action: 'open', bounds: request.bounds });
+      return controllers[next].action(host, { action: 'open', bounds: request.bounds, ...(request.requestId !== undefined ? { requestId: request.requestId } : {}) });
     }
-    if (request.action === 'hide') ++generation;
+    if (request.action === 'hide') {
+      if (request.requestId !== undefined && request.requestId !== activeRequestId) return { ok: true, stale: true };
+      ++generation;
+    }
     return controllers[active].action(host, request);
   }
   return Object.freeze({ action,
@@ -368,5 +399,5 @@ function createSocialController(options = {}) {
 
 module.exports = { DEFAULT_COMMUNITY_URL, OFFICIAL_AUTH_ORIGIN, COMMUNITY_PARTITION, BILIBILI_URL, BILIBILI_PARTITION, BILIBILI_MOBILE_USER_AGENT,
   resolveCommunityUrl, classifyCommunityNavigation, communityWebPreferences, communityWindowOptions,
-  classifyBilibiliNavigation, installCommunityNavigation, validateCommunityRequest, communityBounds,
+  classifyBilibiliNavigation, bilibiliVideoShareUrl, installCommunityNavigation, validateCommunityRequest, communityBounds,
   createCommunityController, createSocialController };

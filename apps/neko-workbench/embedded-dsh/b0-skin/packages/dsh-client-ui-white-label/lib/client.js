@@ -2229,17 +2229,55 @@ function installNekoAccountHabitat(ctx, options) {
       heading.textContent = 'N.E.K.O. 社区'
       const reload = doc.createElement('button')
       reload.type = 'button'; reload.textContent = '刷新'
-      toolbar.append(back, pageBack, heading, reload)
+      const immersion = doc.createElement('button')
+      immersion.type = 'button'; immersion.textContent = '沉浸观看'; immersion.hidden = true
+      immersion.setAttribute('aria-pressed', 'false')
+      const share = doc.createElement('button')
+      share.type = 'button'; share.textContent = '复制视频链接'; share.hidden = true; share.disabled = true
+      share.setAttribute('aria-label', '复制当前视频链接')
+      const shareFeedback = doc.createElement('span')
+      shareFeedback.className = 'neko-community-pane__feedback'
+      shareFeedback.setAttribute('role', 'status')
+      shareFeedback.setAttribute('aria-live', 'polite')
+      toolbar.append(back, pageBack, heading, reload, immersion, shareFeedback, share)
       const status = doc.createElement('p')
       status.className = 'neko-community-pane__status'
       status.setAttribute('role', 'status')
       panel.append(toolbar, status)
       doc.body.appendChild(panel)
       let active = false, disposed = false, revision = 0, frame = 0, lastBounds = '', root = null, cancelWaiting = null, currentSite = 'community'
+      let openRequestId = 0
+      let immersive = false, immersiveRoot = null, rootWasInert = false
+      let canShare = false, sharePending = false, shareTicket = 0
       const inertRegions = new Map()
       const sizes = typeof win.ResizeObserver === 'function' ? new win.ResizeObserver(schedule) : null
       const call = (request) => Promise.resolve().then(() => bridge.community(request))
-      const hideNative = () => { void call({ action: 'hide' }).catch(() => {}) }
+      const hideNative = (requestId) => { void call({ action: 'hide', requestId }).catch(() => {}) }
+      function refreshShare() {
+        share.hidden = currentSite !== 'bilibili'
+        share.disabled = !active || currentSite !== 'bilibili' || !canShare || sharePending
+        share.title = canShare ? '复制当前视频链接' : '打开 B 站视频后可分享'
+      }
+      function resetShare() {
+        shareTicket++; canShare = false; sharePending = false; shareFeedback.textContent = ''
+        refreshShare()
+      }
+      function releaseImmersiveRoot() {
+        if (immersiveRoot && !rootWasInert) immersiveRoot.removeAttribute('inert')
+        immersiveRoot = null; rootWasInert = false
+      }
+      function setImmersive(value) {
+        immersive = !!value && currentSite === 'bilibili'
+        immersion.setAttribute('aria-pressed', String(immersive))
+        immersion.textContent = immersive ? '退出沉浸' : '沉浸观看'
+        panel.setAttribute('data-immersive', String(immersive))
+        if (immersive && root) {
+          if (immersiveRoot !== root) {
+            releaseImmersiveRoot(); immersiveRoot = root; rootWasInert = root.hasAttribute('inert')
+          }
+          root.setAttribute('inert', '')
+        } else releaseImmersiveRoot()
+      }
       function mark(value) {
         setWorkspaceMode(value ? 'leisure' : 'work')
         for (const button of doc.querySelectorAll('.neko-community')) {
@@ -2260,10 +2298,17 @@ function installNekoAccountHabitat(ctx, options) {
         const found = locate()
         if (!found?.root?.isConnected) return null
         if (root !== found.root) {
+          releaseImmersiveRoot()
           sizes?.disconnect(); root = found.root
           sizes?.observe(root)
           const strip = doc.querySelector('.neko-strip')
           if (strip) sizes?.observe(strip)
+        }
+        if (immersive) {
+          setImmersive(true)
+          const width = Math.floor(win.innerWidth), height = Math.floor(win.innerHeight)
+          if (![width, height].every(Number.isFinite) || width < 240 || height < 160) return null
+          return { x: 0, y: 0, width, height }
         }
         return communityPaneBounds(root.getBoundingClientRect(),
           { width: win.innerWidth, height: win.innerHeight }, doc.querySelector('.neko-strip')?.getBoundingClientRect())
@@ -2294,6 +2339,7 @@ function installNekoAccountHabitat(ctx, options) {
       }
       async function show(action = 'open', site = currentSite) {
         if (disposed) throw new Error('社区内容区已关闭')
+        if (action === 'open' && site !== 'bilibili') setImmersive(false)
         const bounds = place()
         if (!bounds) throw new Error('工作台内容区尚未就绪，请稍后重试')
         if (cancelWaiting) cancelWaiting()
@@ -2301,19 +2347,25 @@ function installNekoAccountHabitat(ctx, options) {
         const cancelled = new Promise(resolve => { releaseWait = () => resolve({ ok: true, cancelled: true }) })
         cancelWaiting = releaseWait
         const ticket = ++revision
-        if (action === 'open') currentSite = site === 'bilibili' ? 'bilibili' : 'community'
+        if (action === 'open') {
+          currentSite = site === 'bilibili' ? 'bilibili' : 'community'
+          openRequestId = openRequestId >= Number.MAX_SAFE_INTEGER ? 1 : openRequestId + 1
+        }
+        immersion.hidden = currentSite !== 'bilibili'
+        resetShare()
         const name = currentSite === 'bilibili' ? 'B站' : 'N.E.K.O. 社区'
         panel.setAttribute('aria-label', `${name}内容区`)
         heading.textContent = name
         pageBack.disabled = true
         active = true; panel.hidden = false; mark(true)
+        refreshShare()
         // DSH may render the coding surface as divs instead of a <main>.
         // Move off its composer before the remote view becomes available.
         back.focus()
         status.textContent = `正在加载 ${name}…`
         reload.disabled = true; lastBounds = JSON.stringify(bounds)
         try {
-          const request = action === 'open' ? { action, site: currentSite, bounds } : { action, bounds }
+          const request = action === 'open' ? { action, site: currentSite, bounds, requestId: openRequestId } : { action, bounds }
           const result = await Promise.race([call(request), cancelled])
           if (disposed || !active || ticket !== revision) return { ok: true, cancelled: true }
           if (!result?.ok) throw new Error(`${name}未确认加载`)
@@ -2331,13 +2383,30 @@ function installNekoAccountHabitat(ctx, options) {
       }
       function hide({ focus = false } = {}) {
         if (!active || disposed) return
+        setImmersive(false)
         active = false; revision++; panel.hidden = true; reload.disabled = false; mark(false)
+        resetShare()
         if (cancelWaiting) { cancelWaiting(); cancelWaiting = null }
         sizes?.disconnect(); root = null; lastBounds = ''
-        hideNative()
+        hideNative(openRequestId)
         if (focus) doc.querySelector(currentSite === 'bilibili' ? '.neko-bilibili' : '.neko-community:not(.neko-bilibili)')?.focus()
       }
       const onBack = () => hide({ focus: true })
+      const onImmersion = () => { if (active && currentSite === 'bilibili') { setImmersive(!immersive); schedule() } }
+      const onShare = () => {
+        if (!active || share.disabled || currentSite !== 'bilibili') return
+        const ticket = ++shareTicket
+        sharePending = true; shareFeedback.textContent = ''; refreshShare()
+        void call({ action: 'copy-video-link' }).then(result => {
+          if (!active || ticket !== shareTicket) return
+          if (!result?.ok) throw new Error('copy failed')
+          shareFeedback.textContent = '链接已复制'
+        }).catch(() => {
+          if (active && ticket === shareTicket) shareFeedback.textContent = '复制失败，请重试'
+        }).finally(() => {
+          if (active && ticket === shareTicket) { sharePending = false; refreshShare() }
+        })
+      }
       const onPageBack = () => {
         if (!active || pageBack.disabled) return
         const ticket = revision
@@ -2359,9 +2428,15 @@ function installNekoAccountHabitat(ctx, options) {
       const unsubscribe = typeof bridge.subscribeCommunity === 'function' ? bridge.subscribeCommunity((state) => {
         if (!active || disposed) return
         if (state?.site && state.site !== currentSite) return
+        if (state?.requestId !== undefined && state.requestId !== openRequestId) return
         const name = currentSite === 'bilibili' ? 'B站' : 'N.E.K.O. 社区'
         if (typeof state?.canGoBack === 'boolean') pageBack.disabled = !state.canGoBack
-        if (state?.status === 'loading') { status.textContent = `正在加载 ${name}…`; reload.disabled = true }
+        if (state?.status === 'loading') { resetShare(); status.textContent = `正在加载 ${name}…`; reload.disabled = true }
+        if (state?.status !== 'loading' && typeof state?.canShare === 'boolean') {
+          canShare = state.canShare
+          if (!canShare) shareFeedback.textContent = ''
+          refreshShare()
+        }
         if (state?.status === 'ready') { status.textContent = ''; reload.disabled = false }
         if (state?.status === 'error') { status.textContent = `${name}未能加载，请点击“刷新”重试，或返回工作台。`; reload.disabled = false }
         if (state?.status === 'hidden') hide()
@@ -2386,7 +2461,7 @@ function installNekoAccountHabitat(ctx, options) {
       }, () => {}) } catch {}
       const observer = new win.MutationObserver(schedule)
       observer.observe(doc.body, { subtree: true, childList: true })
-      back.addEventListener('click', onBack); pageBack.addEventListener('click', onPageBack); reload.addEventListener('click', onReload)
+      back.addEventListener('click', onBack); pageBack.addEventListener('click', onPageBack); reload.addEventListener('click', onReload); immersion.addEventListener('click', onImmersion); share.addEventListener('click', onShare)
       doc.addEventListener('click', onClick, true)
       // Native child views paint above DOM popovers. Return before opening
       // local menus so tools/account panels can use the full content area.
@@ -2403,7 +2478,7 @@ function installNekoAccountHabitat(ctx, options) {
           observer.disconnect(); sizes?.disconnect()
           if (typeof unsubscribe === 'function') unsubscribe()
           if (typeof unsubscribeWorkbench === 'function') unsubscribeWorkbench()
-          back.removeEventListener('click', onBack); pageBack.removeEventListener('click', onPageBack); reload.removeEventListener('click', onReload)
+          back.removeEventListener('click', onBack); pageBack.removeEventListener('click', onPageBack); reload.removeEventListener('click', onReload); immersion.removeEventListener('click', onImmersion); share.removeEventListener('click', onShare)
           doc.removeEventListener('click', onClick, true); win.removeEventListener('resize', schedule)
           doc.removeEventListener('pointerdown', onClick, true); doc.removeEventListener('contextmenu', onClick, true)
           doc.removeEventListener('focusin', onFocus, true)
@@ -2760,10 +2835,11 @@ button[data-neko-new-session="plus"]:focus-visible { outline: 2px solid var(--ds
 }
 .neko-community-pane[hidden] { display: none; }
 .neko-community-pane__toolbar {
-  display: flex; align-items: center; gap: 12px; box-sizing: border-box; height: 48px; padding: 6px 12px;
+  display: flex; align-items: center; gap: 8px; box-sizing: border-box; height: 48px; padding: 6px 12px; overflow-x: auto;
   border-bottom: 1px solid var(--dsw-alias-border-l1, #CDD6EA);
 }
 .neko-community-pane__toolbar strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.neko-community-pane__feedback { flex: none; white-space: nowrap; font-size: 12px; }
 .neko-community-pane__toolbar button { flex: none; padding: 7px 10px; border: 1px solid var(--dsw-alias-border-l1, #CDD6EA); border-radius: 8px; background: var(--dsw-alias-bg-layer-1, #FDFEFF); color: inherit; cursor: pointer; }
 .neko-community-pane__toolbar button:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary, #3F5F9E); outline-offset: 2px; }
 .neko-community-pane__toolbar button:disabled { opacity: .55; cursor: default; }
