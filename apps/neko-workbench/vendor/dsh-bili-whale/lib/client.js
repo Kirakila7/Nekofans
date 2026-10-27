@@ -633,7 +633,7 @@ window.__ModuleLoader__.load({
         h("div",{className:"blw-actions",style:{marginTop:0,paddingTop:0,borderTop:0}},
           h("button",{className:"blw-btn",onClick:()=>control(fishState.enabled||['checking','login-required','model-login-required'].includes(fishState.phase)?'pause':'start')},fishState.enabled||['checking','login-required','model-login-required'].includes(fishState.phase)?'暂停养鱼':'开始养鱼'),
           h("span",{role:"status",className:"blw-hint"},fishState.reason)),
-        fishState.phase==='model-login-required'?h('button',{type:'button',className:'blw-btn blw-btn2',onClick:()=>document.querySelector('[data-slot="settings.launcher"] button[aria-haspopup="menu"]')?.click()},'登录 DeepSeek'):null,
+        fishState.phase==='model-login-required'?h('button',{type:'button',className:'blw-btn blw-btn2',onClick:()=>document.querySelector('[data-slot="settings.launcher"] button[aria-haspopup="menu"]')?.click()},'登录账号'):null,
 
         h("div", { className: "blw-group" }, "B 站登录"),
         h("div", { className: "blw-row" },

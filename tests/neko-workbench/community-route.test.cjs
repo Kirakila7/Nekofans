@@ -178,7 +178,8 @@ test('hide cancels a pending native call immediately; new open never waits on th
   contents.behavior = () => gate.promise; await tick(); const stateCount = f.states.length;
   await f.action({ action: 'hide' }); await canceled;
   assert.equal(contents.isDestroyed(), true); assert.equal(f.host.children.size, 0);
-  assert.equal(f.states.length, stateCount, 'explicit hide emits no delayed hidden event');
+  assert.equal(f.states.length, stateCount + 1);
+  assert.equal(f.states.at(-1).status, 'hidden');
   await f.open(); assert.equal(f.views.length, 2); assert.equal(f.host.children.has(f.views[1]), true);
   const readyCount = f.states.length;
   gate.reject(Error('ERR_ABORTED from retired navigation')); await tick();
@@ -196,10 +197,12 @@ test('open and reload focus only the child view of an already focused host; layo
   f.controller.dispose();
 });
 
-test('host close-to-tray notifies hidden before disposing; loaded explicit hide keeps the view and emits nothing', async () => {
+test('host and explicit hide notify hidden; loaded explicit hide keeps the view', async () => {
   const f = fixture(); await f.open(); const contents = f.views[0].webContents;
   const stateCount = f.states.length;
-  await f.action({ action: 'hide' }); assert.equal(f.states.length, stateCount);
+  await f.action({ action: 'hide' }); assert.equal(f.states.length, stateCount + 1);
+  assert.equal(f.states.at(-1).status, 'hidden');
+  await f.action({ action: 'hide' }); assert.equal(f.states.length, stateCount + 1);
   assert.equal(contents.isDestroyed(), false); await f.open(); assert.equal(f.views.length, 1);
   f.host.emit('close'); assert.equal(f.states.at(-1).status, 'hidden');
   assert.equal(contents.isDestroyed(), true); assert.equal(f.controller.view, null);
@@ -228,7 +231,8 @@ test('concurrent refreshes coalesce and neither may attach or publish stale stat
   const rejected = [assert.rejects(first, /已隐藏/), assert.rejects(second, /已隐藏/)];
   const stateCount = f.states.length;
   await f.action({ action: 'hide' }); await Promise.all(rejected); gate.resolve(); await tick();
-  assert.equal(f.host.children.size, 0); assert.equal(f.states.length, stateCount); f.controller.dispose();
+  assert.equal(f.host.children.size, 0); assert.equal(f.states.length, stateCount + 1);
+  assert.equal(f.states.at(-1).status, 'hidden'); f.controller.dispose();
 });
 
 test('repeated refresh clicks share one navigation and all return the real successful outcome', async () => {
@@ -246,5 +250,6 @@ test('failure from a canceled hidden view cannot publish an error or reattach co
   contents.behavior = () => gate.promise; await tick(); const stateCount = f.states.length;
   await f.action({ action: 'hide' }); await canceled;
   gate.reject(Error('fixture failure')); await tick();
-  assert.equal(f.states.length, stateCount); assert.equal(f.host.children.size, 0); f.controller.dispose();
+  assert.equal(f.states.length, stateCount + 1); assert.equal(f.states.at(-1).status, 'hidden');
+  assert.equal(f.host.children.size, 0); f.controller.dispose();
 });

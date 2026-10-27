@@ -103,6 +103,9 @@ test('runtime preflight and opt-in credentials validate only the selected fixtur
   assert.deepEqual(buildDshPatch(explicit)[0], { id: 'credentials', config: { path: credentialsFile } });
   const skin = { rows: [{ id: 'ui-brand-official', disabled: true }], insert: [{ id: 'fixture-skin', name: '/fixture/skin.js' }] };
   const patch = buildDshPatch(runtime, { baseDir: f.baseDir, skin });
+  assert.deepEqual(patch.find(row => row.id === 'ui-settings-models'), {
+    id: 'ui-settings-models', config: { credentialOnboarding: false },
+  }, 'startup credential onboarding is disabled without replacing the account service');
   assert.equal(patch.at(-1).insert[0].name, path.join(f.baseDir, 'bridge.cjs'));
   assert.equal(patch.at(-1).insert[1].id, 'fixture-skin');
   assert(!fs.existsSync(path.join(f.homeDir, '.dsh')));

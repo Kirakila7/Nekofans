@@ -51,7 +51,7 @@ function deferred() {
     assert.equal(reader.getSnapshot().amount, '$0.00', 'only a reported genuine zero may render as zero');
     assert.equal(reader.getSnapshot().currency, 'USD');
     assert.equal(balanceLabel(reader.getSnapshot()), 'USD 余额 $0.00');
-    assert.equal(reader.getSnapshot().source, 'DeepSeek 官方充值钱包');
+    assert.equal(reader.getSnapshot().source, '官方充值钱包');
     const balanceCall = ctx.calls.find(call => call.key === 'getBalance');
     assert.equal(balanceCall.args[0].locale, 'zh-CN');
     assert.equal(balanceCall.args[0].version, '0.2.1-rc.3');

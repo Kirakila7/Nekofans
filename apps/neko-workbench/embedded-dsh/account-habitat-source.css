@@ -61,17 +61,17 @@ button.hjANda_trigger[data-neko-account-habitat][data-collapsed="true"] .neh-hab
   background: var(--dsw-alias-bg-layer-1, #fcfdff) !important;
 }
 [data-neko-account-habitat-menu] button[role="menuitem"] { min-height: 36px; border-radius: 9px; }
-.neh-menu-card { padding: 10px 10px 12px; }
-.neh-menu-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.neh-menu-card { padding: 12px 12px 10px; border-bottom: 1px solid var(--dsw-alias-border-l1, #d3dee9); }
+.neh-menu-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
 .neh-menu-heading h3 { margin: 0; font-size: 15px; line-height: 22px; font-weight: 600; }
-.neh-login-status { font-size: 11px; color: var(--dsw-alias-label-secondary, #62758a); }
-.neh-service-summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.neh-login-status { font-size: 11px; color: var(--dsw-alias-label-secondary, #62758a); padding: 2px 8px; border-radius: 999px; background: var(--dsw-alias-bg-layer-2, #edf3f8); }
+.neh-service-summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
 .neh-service-summary strong { font-size: 12px; font-weight: 600; }
 .neh-service-summary > span { font-size: 10px; color: var(--dsw-alias-label-secondary, #62758a); }
-.neh-habitat-column--menu { gap: 8px; grid-template-rows: auto 72px; }
+.neh-habitat-column--menu { gap: 8px; grid-template-rows: auto 88px; }
 .neh-habitat-column--menu .neh-wallet { font-size: 14px; line-height: 20px; }
 .neh-habitat-column--menu .neh-source { font-size: 10px; line-height: 14px; }
-.neh-habitat-column--menu .neh-world { height: 72px; border-radius: 12px; }
-.neh-habitat-column--menu .neh-pet { width: 66px; height: 66px; left: calc(50% - 33px); bottom: 3px; }
-.neh-menu-help { margin: 9px 0 0; font-size: 10px; line-height: 16px; color: var(--dsw-alias-label-secondary, #62758a); }
+.neh-habitat-column--menu .neh-world { height: 88px; border-radius: 12px; }
+.neh-habitat-column--menu .neh-pet { width: 80px; height: 80px; left: calc(50% - 40px); bottom: 3px; }
+.neh-menu-help { margin: 9px 0 0; font-size: 11px; line-height: 16px; color: var(--dsw-alias-label-secondary, #62758a); }
 .neh-screen-reader { position: fixed; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }

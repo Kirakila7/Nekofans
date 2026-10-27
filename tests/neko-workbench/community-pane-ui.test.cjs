@@ -24,7 +24,7 @@ class Element extends EventTarget {
   remove() { this.isConnected = false; }
   focus() { this.focused = true; }
 }
-function fixture() {
+function fixture(options = {}) {
   const api = bundle(), win = new EventTarget(), body = new Element('body'), main = new Element('main'), button = new Element('button'), root = new Element('aside');
   let right = 280;
   root.getBoundingClientRect = () => ({ right, top: 0 });
@@ -39,12 +39,15 @@ function fixture() {
     MutationObserver: class { constructor(callback) { this.callback = callback; observer = this; } observe() {} disconnect() { this.disconnected = true; } },
     ResizeObserver: class { constructor(callback) { this.callback = callback; resizeObserver = this; } observe() {} disconnect() { this.disconnected = true; } } });
   const calls = [];
-  let notify = () => {}, unsubscribed = false;
+  let notify = () => {}, notifyWorkbench = () => {}, unsubscribed = false, workbenchUnsubscribed = false;
   const bridge = { community: async request => { calls.push(JSON.parse(JSON.stringify(request))); return { ok: true }; },
+    getState: options.getState || (() => Promise.resolve({})),
+    subscribe(callback) { notifyWorkbench = callback; return () => { workbenchUnsubscribed = true; }; },
     subscribeCommunity(callback) { notify = callback; return () => { unsubscribed = true; }; } };
   const pane = api.createCommunityPane({ window: win, document: doc, bridge, locate: () => ({ root }) });
   return { api, pane, bridge, calls, doc, win, main, button, root, body, panel: body.children[0], observer, resizeObserver,
-    notify(state) { notify(state); }, get unsubscribed() { return unsubscribed; }, setRight(value) { right = value; } };
+    notify(state) { notify(state); }, navigate(state) { notifyWorkbench(state); }, get unsubscribed() { return unsubscribed; },
+    get workbenchUnsubscribed() { return workbenchUnsubscribed; }, setRight(value) { right = value; } };
 }
 const tick = () => new Promise(resolve => setImmediate(resolve));
 
@@ -81,6 +84,20 @@ test('opening, resizing and returning preserve the original coding DOM and focus
   assert.equal(f.panel.isConnected, false);
   assert.equal(f.observer.disconnected, true);
   assert.equal(f.unsubscribed, true);
+  assert.equal(f.workbenchUnsubscribed, true);
+});
+
+test('a late old navigation snapshot cannot close leisure, but new fish settings can', async () => {
+  let resolveState;
+  const f = fixture({ getState: () => new Promise(resolve => { resolveState = resolve; }) });
+  await f.pane.open();
+  resolveState({ navigation: { fishSettingsRevision: 3 } }); await tick();
+  assert.equal(f.panel.hidden, false);
+  assert.equal(f.api.getWorkspaceMode(), 'leisure');
+  f.navigate({ navigation: { fishSettingsRevision: 4 } });
+  assert.equal(f.panel.hidden, true);
+  assert.equal(f.api.getWorkspaceMode(), 'work');
+  f.pane.dispose();
 });
 
 test('returning while loading cannot reopen the pane when the late response arrives', async () => {
