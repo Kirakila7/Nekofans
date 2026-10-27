@@ -5,6 +5,18 @@
 const DEFAULT_COMMUNITY_URL = 'https://community.project-neko.cn/feed';
 const OFFICIAL_AUTH_ORIGIN = 'https://auth.project-neko.cn';
 const COMMUNITY_PARTITION = 'persist:neko-community';
+const BILIBILI_URL = 'https://m.bilibili.com/';
+const BILIBILI_PARTITION = 'persist:neko-bilibili';
+// The mobile site otherwise redirects desktop user agents to the desktop site.
+const BILIBILI_MOBILE_USER_AGENT = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36';
+// Main-frame destinations only. Other resources remain subject to Chromium's
+// normal origin rules; third-party destinations open outside this view.
+const BILIBILI_ORIGINS = new Set([
+  'https://m.bilibili.com', 'https://www.bilibili.com',
+  'https://passport.bilibili.com', 'https://account.bilibili.com',
+  'https://space.bilibili.com', 'https://search.bilibili.com',
+  'https://t.bilibili.com', 'https://live.bilibili.com',
+]);
 
 function parseWebUrl(value) {
   if (typeof value !== 'string' || value.length > 4096 || /[\u0000-\u0020\u007f]/.test(value)) return null;
@@ -34,8 +46,14 @@ function classifyCommunityNavigation(value, communityUrl = DEFAULT_COMMUNITY_URL
   return { kind: target.protocol === 'https:' && [origin, OFFICIAL_AUTH_ORIGIN].includes(target.origin) ? 'internal' : 'external', url: target.href };
 }
 
-function communityWebPreferences() {
-  return { partition: COMMUNITY_PARTITION, nodeIntegration: false,
+function classifyBilibiliNavigation(value) {
+  const target = parseWebUrl(value);
+  if (!target) return { kind: 'blocked' };
+  return { kind: target.protocol === 'https:' && BILIBILI_ORIGINS.has(target.origin) ? 'internal' : 'external', url: target.href };
+}
+
+function communityWebPreferences(partition = COMMUNITY_PARTITION) {
+  return { partition, nodeIntegration: false,
     contextIsolation: true, sandbox: true, webSecurity: true, webviewTag: false,
     allowRunningInsecureContent: false };
 }
@@ -48,11 +66,12 @@ function communityWindowOptions({ show = false, parent } = {}) {
 }
 
 function installCommunityNavigation(target, { communityUrl, parent, openExternal,
+  classify = url => classifyCommunityNavigation(url, communityUrl), allowAuthPopup = true,
   onExternalError = () => {}, onInternalPopup, onPopup = () => {}, canOpenPopup = () => true }) {
   const contents = target.webContents;
   const external = url => Promise.resolve().then(() => openExternal(url)).catch(onExternalError);
   const navigate = (event, value) => {
-    const destination = classifyCommunityNavigation(value, communityUrl);
+    const destination = classify(value);
     if (destination.kind === 'internal') return;
     event.preventDefault();
     if (destination.kind === 'external') void external(destination.url);
@@ -61,9 +80,9 @@ function installCommunityNavigation(target, { communityUrl, parent, openExternal
   contents.on('will-redirect', navigate);
   contents.setWindowOpenHandler(({ url }) => {
     if (!canOpenPopup()) return { action: 'deny' };
-    const destination = classifyCommunityNavigation(url, communityUrl);
+    const destination = classify(url);
     if (destination.kind === 'internal') {
-      if (new URL(destination.url).origin === OFFICIAL_AUTH_ORIGIN) {
+      if (allowAuthPopup && new URL(destination.url).origin === OFFICIAL_AUTH_ORIGIN) {
         return { action: 'allow', overrideBrowserWindowOptions: communityWindowOptions({ show: true, parent }) };
       }
       // target=_blank community links remain in the embedded page.
@@ -74,7 +93,7 @@ function installCommunityNavigation(target, { communityUrl, parent, openExternal
   const childCreated = child => {
     if (!canOpenPopup()) { child.destroy(); return; }
     onPopup(child);
-    installCommunityNavigation(child, { communityUrl, parent, openExternal, onExternalError,
+    installCommunityNavigation(child, { communityUrl, parent, openExternal, onExternalError, classify, allowAuthPopup,
       canOpenPopup, onPopup, onInternalPopup: url => Promise.resolve(child.loadURL(url)).catch(onExternalError) });
   };
   contents.on('did-create-window', childCreated);
@@ -88,8 +107,9 @@ function installCommunityNavigation(target, { communityUrl, parent, openExternal
 
 function validateCommunityRequest(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)
-      || Object.keys(value).some(key => !['action', 'bounds'].includes(key))
-      || !['open', 'layout', 'hide', 'reload'].includes(value.action)) throw new Error('未知社区操作');
+      || Object.keys(value).some(key => !['action', 'bounds', 'site'].includes(key))
+      || !['open', 'layout', 'hide', 'reload', 'back'].includes(value.action)
+      || (value.site !== undefined && (value.action !== 'open' || !['community', 'bilibili'].includes(value.site)))) throw new Error('未知社区操作');
   if (value.action === 'open' || value.action === 'layout' || value.bounds !== undefined) {
     const bounds = value.bounds;
     if (!bounds || typeof bounds !== 'object' || Array.isArray(bounds)
@@ -97,7 +117,7 @@ function validateCommunityRequest(value) {
           Object.hasOwn(bounds, key) && Number.isFinite(bounds[key]) && Math.abs(bounds[key]) <= 1000000)
         || bounds.width <= 0 || bounds.height <= 0) throw new Error('社区布局无效');
   }
-  return { action: value.action, ...(value.bounds ? { bounds: { ...value.bounds } } : {}) };
+  return { action: value.action, ...(value.site ? { site: value.site } : {}), ...(value.bounds ? { bounds: { ...value.bounds } } : {}) };
 }
 
 function communityBounds(host, bounds) {
@@ -113,11 +133,19 @@ function communityBounds(host, bounds) {
 
 const LOAD_ERROR = '社区页面未能打开，请检查网络后重试';
 const CANCEL_ERROR = '社区已隐藏或工作台页面已离开';
-function createCommunityController({ WebContentsView, openExternal, env = process.env,
+function createCommunityController({ WebContentsView, openExternal, env = process.env, site = 'community',
   onState = () => {}, onExternalError } = {}) {
+  if (!['community', 'bilibili'].includes(site)) throw new Error('未知内容入口');
+  const isBilibili = site === 'bilibili';
+  const LOAD_ERROR = isBilibili ? 'B 站页面未能打开，请检查网络后重试' : '社区页面未能打开，请检查网络后重试';
+  const classify = (url, communityUrl) => isBilibili ? classifyBilibiliNavigation(url) : classifyCommunityNavigation(url, communityUrl);
   let current = null, binding = null;
+  function canGoBack(record) {
+    const history = record.webContents.navigationHistory;
+    try { return !!(history ? history.canGoBack() : record.webContents.canGoBack?.()); } catch { return false; }
+  }
   function state(record, status, error) {
-    if (current === record && (record.wanted || status === 'hidden')) onState(record.host, { status, ...(error ? { error } : {}) });
+    if (current === record && (record.wanted || status === 'hidden')) onState(record.host, { status, ...(isBilibili ? { canGoBack: canGoBack(record) } : {}), ...(error ? { error } : {}) });
   }
   function detach(record) {
     if (!record.attached) return;
@@ -177,17 +205,24 @@ function createCommunityController({ WebContentsView, openExternal, env = proces
     state(record, 'error', LOAD_ERROR);
   }
   function create(host, bounds) {
-    const communityUrl = resolveCommunityUrl(env.NEKO_WORKBENCH_COMMUNITY_URL);
-    const view = new WebContentsView({ webPreferences: communityWebPreferences() });
+    const communityUrl = isBilibili ? BILIBILI_URL : resolveCommunityUrl(env.NEKO_WORKBENCH_COMMUNITY_URL);
+    const view = new WebContentsView({ webPreferences: communityWebPreferences(isBilibili ? BILIBILI_PARTITION : COMMUNITY_PARTITION) });
     const record = { host, view, webContents: view.webContents, communityUrl, bounds,
       epoch: 0, loadId: 0, loading: null, loaded: false, failed: false, wanted: true,
       attached: false, popups: new Set(), responseCode: 0 };
     current = record;
     const contents = record.webContents;
+    if (isBilibili) contents.setUserAgent(BILIBILI_MOBILE_USER_AGENT);
     record.cleanupNavigation = installCommunityNavigation(view, { communityUrl, parent: host, openExternal, onExternalError,
+      classify: url => classify(url, communityUrl), allowAuthPopup: !isBilibili,
       canOpenPopup: () => current === record && record.wanted && !host.isDestroyed(),
       onPopup: child => { record.popups.add(child); child.once('closed', () => record.popups.delete(child)); },
-      onInternalPopup: async url => { try { await load(record, url); place(record); } catch { /* load reports safe errors */ } } });
+      onInternalPopup: async url => {
+        try {
+          await load(record, url);
+          if (current === record && record.wanted) { place(record); state(record, 'ready'); }
+        } catch { /* load reports safe errors */ }
+      } });
     contents.on('did-start-navigation', (_event, _url, isInPlace, isMainFrame) => {
       if (!isMainFrame || isInPlace || current !== record) return;
       record.failed = false; record.loaded = false; record.responseCode = 0;
@@ -196,6 +231,9 @@ function createCommunityController({ WebContentsView, openExternal, env = proces
       if (current !== record) return;
       record.responseCode = responseCode;
       if (responseCode >= 400) fail(record);
+    });
+    contents.on('did-navigate-in-page', (_event, _url, isMainFrame) => {
+      if (isBilibili && isMainFrame && current === record && record.wanted) state(record, 'ready');
     });
     contents.on('did-fail-load', (_event, code, _description, _url, isMainFrame) => {
       if (current === record && isMainFrame && code !== -3) fail(record);
@@ -264,6 +302,16 @@ function createCommunityController({ WebContentsView, openExternal, env = proces
       if (current) { current.bounds = request.bounds; place(current); }
       return { ok: true };
     }
+    if (request.action === 'back') {
+      const record = current;
+      if (!record || !record.wanted || record.webContents.isDestroyed()) throw new Error('请先打开内容');
+      if (canGoBack(record)) {
+        const history = record.webContents.navigationHistory;
+        if (history) history.goBack(); else record.webContents.goBack();
+      }
+      state(record, record.failed ? 'error' : 'ready', record.failed ? LOAD_ERROR : undefined);
+      return { ok: true };
+    }
     if (request.action === 'open') {
       const projected = communityBounds(host, request.bounds);
       if (!projected.width || !projected.height) throw new Error('社区布局无效');
@@ -279,7 +327,7 @@ function createCommunityController({ WebContentsView, openExternal, env = proces
     if (request.action === 'reload') {
       detach(record);
       const url = record.webContents.getURL();
-      await load(record, classifyCommunityNavigation(url, record.communityUrl).kind === 'internal' ? url : record.communityUrl);
+      await load(record, classify(url, record.communityUrl).kind === 'internal' ? url : record.communityUrl);
     } else if (record.loading) await record.loading;
     else if (!record.loaded) await load(record, record.communityUrl);
     if (current !== record || !record.wanted || epoch !== record.epoch) throw new Error(CANCEL_ERROR);
@@ -290,6 +338,35 @@ function createCommunityController({ WebContentsView, openExternal, env = proces
   return Object.freeze({ action, bindHost, dispose: () => unbind(true), get view() { return current?.view || null; } });
 }
 
-module.exports = { DEFAULT_COMMUNITY_URL, OFFICIAL_AUTH_ORIGIN, COMMUNITY_PARTITION,
+// Independent sessions preserve each site's history while only one view is
+// attached to the workbench at a time. The renderer can switch back and forth
+// without creating tabs or sharing community cookies with Bilibili.
+function createSocialController(options = {}) {
+  const publish = options.onState || (() => {});
+  const controllers = Object.fromEntries(['community', 'bilibili'].map(site => [site,
+    createCommunityController({ ...options, site, onState: (host, value) => publish(host, { ...value, site }) })]));
+  let active = 'community', generation = 0;
+  async function action(host, value) {
+    const request = validateCommunityRequest(value);
+    if (request.action === 'open') {
+      const next = request.site || 'community';
+      const previous = active;
+      const version = ++generation;
+      active = next;
+      if (previous !== next) await controllers[previous].action(host, { action: 'hide' });
+      if (version !== generation) throw new Error(CANCEL_ERROR);
+      return controllers[next].action(host, { action: 'open', bounds: request.bounds });
+    }
+    if (request.action === 'hide') ++generation;
+    return controllers[active].action(host, request);
+  }
+  return Object.freeze({ action,
+    bindHost(host) { Object.values(controllers).forEach(controller => controller.bindHost(host)); },
+    dispose() { ++generation; Object.values(controllers).forEach(controller => controller.dispose()); },
+    get view() { return controllers[active].view; } });
+}
+
+module.exports = { DEFAULT_COMMUNITY_URL, OFFICIAL_AUTH_ORIGIN, COMMUNITY_PARTITION, BILIBILI_URL, BILIBILI_PARTITION, BILIBILI_MOBILE_USER_AGENT,
   resolveCommunityUrl, classifyCommunityNavigation, communityWebPreferences, communityWindowOptions,
-  installCommunityNavigation, validateCommunityRequest, communityBounds, createCommunityController };
+  classifyBilibiliNavigation, installCommunityNavigation, validateCommunityRequest, communityBounds,
+  createCommunityController, createSocialController };
