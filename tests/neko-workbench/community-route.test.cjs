@@ -5,7 +5,7 @@ const { EventEmitter } = require('node:events');
 const { DEFAULT_COMMUNITY_URL, COMMUNITY_PARTITION, resolveCommunityUrl,
   classifyCommunityNavigation, createCommunityController, validateCommunityRequest,
   communityBounds, createSocialController, BILIBILI_URL, BILIBILI_PARTITION, BILIBILI_MOBILE_USER_AGENT,
-  classifyBilibiliNavigation, bilibiliVideoShareUrl } = require('../../apps/neko-workbench/community-config.cjs');
+  classifyBilibiliNavigation, bilibiliVideoShareUrl, bilibiliOfficialPlayerUrl } = require('../../apps/neko-workbench/community-config.cjs');
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const bounds = { x: 300, y: 80, width: 800, height: 650 };
@@ -24,6 +24,7 @@ function fixture(env = {}, useSocial = false) {
     }
     setWindowOpenHandler(handler) { this.popup = handler; }
     setUserAgent(value) { this.userAgent = value; }
+    getUserAgent() { return this.userAgent || 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) TestApp/0.1 Chrome/150.0.7871.212 Electron/43.3.0 Safari/537.36'; }
     isDestroyed() { return this.destroyed; }
     getURL() { return this.url; }
     focus() { this.focused = (this.focused || 0) + 1; }
@@ -88,6 +89,107 @@ test('only official Bilibili video URLs become clean public links', () => {
   assert.equal(bilibiliVideoShareUrl('https://m.bilibili.com/video/BV1WYnd6DEAw?p=2&token=secret&share_source=copy#fragment'), 'https://www.bilibili.com/video/BV1WYnd6DEAw?p=2');
   assert.equal(bilibiliVideoShareUrl('https://www.bilibili.com/video/av12345/?p=0&secret=x'), 'https://www.bilibili.com/video/av12345');
   for (const invalid of ['https://m.bilibili.com/', 'https://m.bilibili.com/video/BV1', 'https://m.bilibili.com/video/BV1WYnd6DEAw/extra', 'https://m.bilibili.com.evil.invalid/video/BV1WYnd6DEAw', 'https://u:p@m.bilibili.com/video/BV1WYnd6DEAw', 'http://m.bilibili.com/video/BV1WYnd6DEAw', 'https://m.bilibili.com:8443/video/BV1WYnd6DEAw', 'file:///video/BV1WYnd6DEAw']) assert.equal(bilibiliVideoShareUrl(invalid), null);
+});
+
+test('official player URLs are reconstructed from supported Bilibili video identities only', () => {
+  const source = 'https://m.bilibili.com/video/BV1WYnd6DEAw?p=2&token=private#fragment';
+  const player = 'https://player.bilibili.com/player.html?bvid=BV1WYnd6DEAw&p=2&autoplay=0';
+  assert.equal(bilibiliOfficialPlayerUrl(source), player);
+  assert.equal(bilibiliVideoShareUrl(player), 'https://www.bilibili.com/video/BV1WYnd6DEAw?p=2');
+  assert.equal(classifyBilibiliNavigation(player).kind, 'internal');
+  for (const url of ['https://m.bilibili.com/', 'https://m.bilibili.com/video/av123',
+    'https://m.bilibili.com/video/BV1WYnd6DEAw?p=1&p=2', 'https://m.bilibili.com/video/BV1WYnd6DEAw?p=1001',
+    'https://m.bilibili.com.evil.invalid/video/BV1WYnd6DEAw', 'https://u:p@m.bilibili.com/video/BV1WYnd6DEAw']) {
+    assert.equal(bilibiliOfficialPlayerUrl(url), null);
+  }
+  for (const url of ['https://player.bilibili.com/player.html?bvid=BV1WYnd6DEAw&next=https://evil.invalid',
+    'https://player.bilibili.com/player.html?bvid=BV1WYnd6DEAw&bvid=BV1BBnb6aEww',
+    'https://player.bilibili.com/player.html?bvid=BV1WYnd6DEAw&p=1001',
+    'https://player.bilibili.com/player.html?bvid=BV1WYnd6DEAw&autoplay=1',
+    'https://player.bilibili.com/other?bvid=BV1WYnd6DEAw',
+    'https://player.bilibili.com.evil.invalid/player.html?bvid=BV1WYnd6DEAw']) {
+    assert.notEqual(classifyBilibiliNavigation(url).kind, 'internal');
+    assert.equal(bilibiliVideoShareUrl(url), null);
+  }
+});
+
+test('official playback is user initiated, stays in the same isolated view, copies identity, and returns to the video', async () => {
+  const f = fixture({}, true);
+  assert.throws(() => validateCommunityRequest({ action: 'play-official', url: 'https://evil.invalid' }));
+  await f.action({ action: 'open', site: 'bilibili', bounds });
+  const contents = f.views[0].webContents;
+  assert.equal(f.states.at(-1).canPlayOfficial, false);
+  await assert.rejects(f.action({ action: 'play-official' }), /请先打开/);
+  await contents.loadURL('https://m.bilibili.com/video/BV1WYnd6DEAw?p=2&token=private');
+  assert.equal(f.states.at(-1).canPlayOfficial, true);
+  assert.deepEqual(await f.action({ action: 'play-official' }), { ok: true });
+  assert.equal(contents.getURL(), 'https://player.bilibili.com/player.html?bvid=BV1WYnd6DEAw&p=2&autoplay=0');
+  assert.equal(contents.userAgent, 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7871.212 Safari/537.36');
+  assert.equal(f.views.length, 1); assert.equal(f.host.children.size, 1);
+  assert.equal(f.states.at(-1).isOfficialPlayer, true); assert.equal(f.states.at(-1).canPlayOfficial, false);
+  assert.equal(f.states.at(-1).canShare, true);
+  await f.action({ action: 'copy-video-link' });
+  assert.deepEqual(f.copied, ['https://www.bilibili.com/video/BV1WYnd6DEAw?p=2']);
+  await f.action({ action: 'back' });
+  assert.match(contents.getURL(), /^https:\/\/m\.bilibili\.com\/video\/BV1WYnd6DEAw/);
+  assert.equal(contents.userAgent, BILIBILI_MOBILE_USER_AGENT);
+  assert.equal(f.states.at(-1).canPlayOfficial, true);
+  await f.action({ action: 'back' }); assert.equal(contents.getURL(), BILIBILI_URL);
+  assert.equal(f.states.at(-1).canPlayOfficial, false);
+  f.controller.dispose();
+});
+
+test('pending official player navigation is canceled when leaving, with no stale attachment', async () => {
+  const f = fixture({}, true); await f.action({ action: 'open', site: 'bilibili', bounds });
+  const contents = f.views[0].webContents;
+  await contents.loadURL('https://m.bilibili.com/video/BV1WYnd6DEAw');
+  const gate = deferred(); contents.behavior = () => gate.promise;
+  const playing = f.action({ action: 'play-official' });
+  const canceled = assert.rejects(playing, /已隐藏|离开|未能打开/);
+  await tick(); await f.action({ action: 'open', site: 'community', bounds }); await canceled;
+  assert.equal(contents.isDestroyed(), true);
+  assert.equal(f.host.children.has(f.views[0]), false);
+  const states = f.states.length; gate.resolve(); await tick(); assert.equal(f.states.length, states);
+  f.controller.dispose();
+});
+
+test('asynchronous history back publishes loading instead of stale player state and prevents overlapping back clicks', async () => {
+  const f = fixture({}, true); await f.action({ action: 'open', site: 'bilibili', bounds });
+  const contents = f.views[0].webContents;
+  await contents.loadURL('https://m.bilibili.com/video/BV1WYnd6DEAw');
+  await f.action({ action: 'play-official' });
+  const playerUrl = contents.url;
+  let traversals = 0;
+  contents.navigationHistory.goBack = () => { traversals++; }; // real Electron begins asynchronously
+  await f.action({ action: 'back' });
+  assert.equal(contents.url, playerUrl);
+  assert.equal(f.states.at(-1).status, 'loading');
+  assert.equal(f.states.at(-1).canGoBack, false);
+  assert.equal(f.states.at(-1).canPlayOfficial, false);
+  assert.equal(f.states.at(-1).canShare, false);
+  await f.action({ action: 'back' }); assert.equal(traversals, 1);
+  contents.url = 'https://m.bilibili.com/video/BV1WYnd6DEAw';
+  contents.emit('did-start-navigation', {}, contents.url, false, true);
+  contents.emit('did-navigate', {}, contents.url, 200, 'OK');
+  contents.emit('did-finish-load');
+  assert.equal(f.states.at(-1).status, 'ready');
+  assert.equal(f.states.at(-1).canPlayOfficial, true);
+  assert.equal(f.states.at(-1).canShare, true);
+  assert.equal(f.host.children.has(f.views[0]), true);
+  f.controller.dispose();
+});
+
+test('same-document history completion clears pending state and recomputes the page identity', async () => {
+  const f = fixture({}, true); await f.action({ action: 'open', site: 'bilibili', bounds });
+  const contents = f.views[0].webContents;
+  await contents.loadURL('https://m.bilibili.com/video/BV1WYnd6DEAw');
+  contents.navigationHistory.goBack = () => {};
+  await f.action({ action: 'back' }); assert.equal(f.states.at(-1).status, 'loading');
+  contents.url = BILIBILI_URL;
+  contents.emit('did-navigate-in-page', {}, contents.url, true);
+  assert.equal(f.states.at(-1).status, 'ready'); assert.equal(f.states.at(-1).canShare, false);
+  assert.equal(f.states.at(-1).canPlayOfficial, false);
+  f.controller.dispose();
 });
 
 test('copy uses the visible loaded Bilibili video, strips private parameters, and never accepts a supplied URL', async () => {
