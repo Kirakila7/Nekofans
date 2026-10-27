@@ -3032,6 +3032,91 @@ function installAvatarTheme(options) { return NekoAvatarTheme.install(options) }
 
 // @neko-avatar-theme:end
 
+    // The native DSH RunningStatus exists only while the session is running.
+    // Keep its real clock and live-region semantics; adapt only the two native
+    // Chinese labels within that status, never transcript/reasoning content.
+    function compactRunningStatus(value) {
+      if (typeof value !== 'string') return value
+      const match = value.match(/^\s*深度(?:求索|思考)中(?:[，,]\s*用时\s*(.*?))?\s*(?:[·.…．]{1,})?\s*$/u)
+      if (!match) return value
+      const duration = (match[1] || '').trim()
+      return duration ? `思考中 · ${duration}` : '思考中…'
+    }
+
+    function installCompactRunningStatus(doc = document, win = window) {
+      if (!doc?.body || typeof doc.createTreeWalker !== 'function' || typeof win?.MutationObserver !== 'function') return () => {}
+      const statusSelector = '[data-chat-running]'
+      const textSources = new WeakMap()
+      const attributeSources = new WeakMap()
+      let stopped = false
+
+      function textNodes(element) {
+        const result = []
+        const walker = doc.createTreeWalker(element, 4) // NodeFilter.SHOW_TEXT
+        while (walker.nextNode()) result.push(walker.currentNode)
+        return result
+      }
+      function patchText(node) {
+        const original = node.nodeValue
+        const replacement = compactRunningStatus(original)
+        if (replacement === original) return
+        textSources.set(node, { original, replacement })
+        node.nodeValue = replacement
+      }
+      function patchAttribute(element) {
+        const original = element.getAttribute('data-shimmer-text')
+        const replacement = compactRunningStatus(original)
+        if (replacement === original) return
+        attributeSources.set(element, { original, replacement })
+        element.setAttribute('data-shimmer-text', replacement)
+      }
+      function visit(root, restore = false) {
+        for (const element of root.querySelectorAll('[role="status"][aria-live], [data-shimmer]')) {
+          for (const node of textNodes(element)) {
+            if (!restore) patchText(node)
+            else {
+              const saved = textSources.get(node)
+              if (saved && node.nodeValue === saved.replacement) node.nodeValue = saved.original
+            }
+          }
+        }
+        for (const element of root.querySelectorAll('[data-shimmer] [data-shimmer-text]')) {
+          if (!restore) patchAttribute(element)
+          else {
+            const saved = attributeSources.get(element)
+            if (saved && element.getAttribute('data-shimmer-text') === saved.replacement) element.setAttribute('data-shimmer-text', saved.original)
+          }
+        }
+      }
+      function within(node, roots) {
+        const element = node?.nodeType === 1 ? node : node?.parentElement
+        const root = element?.closest?.(statusSelector)
+        if (root) roots.add(root)
+      }
+      function discover(element, roots) {
+        if (element?.nodeType !== 1) return
+        if (element.matches?.(statusSelector)) roots.add(element)
+        for (const root of element.querySelectorAll?.(statusSelector) || []) roots.add(root)
+      }
+      const observer = new win.MutationObserver((records) => {
+        if (stopped) return
+        const roots = new Set()
+        for (const record of records) {
+          within(record.target, roots)
+          if (record.type === 'childList') for (const added of record.addedNodes) discover(added, roots)
+        }
+        for (const root of roots) visit(root)
+      })
+      observer.observe(doc.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['data-chat-running', 'data-shimmer', 'data-shimmer-text'] })
+      for (const root of doc.querySelectorAll(statusSelector)) visit(root)
+      return () => {
+        if (stopped) return
+        stopped = true
+        observer.disconnect()
+        for (const root of doc.querySelectorAll(statusSelector)) visit(root, true)
+      }
+    }
+
     function apply(ctx) {
       ctx.effect(() => installStyles(), 'neko-brand: styles')
       ctx.effect(() => installNekoAccountHabitat(ctx, {cssText: ACCOUNT_HABITAT_CSS, developerAvatarSrc: builtinSrc('devcat'), idleVideoSrc: ACCOUNT_PET_ART.video, idlePosterSrc: ACCOUNT_PET_ART.still, version: '0.2.1-rc.3'}), 'neko-brand: native account habitat')
@@ -3041,6 +3126,7 @@ function installAvatarTheme(options) { return NekoAvatarTheme.install(options) }
       ctx.effect(() => installStore(), 'neko-brand: workbench bridge')
       ctx.effect(() => installRolesStore(ctx), 'neko-brand: roles bridge')
       ctx.effect(() => installCommunityPane(), 'neko-brand: community coding pane')
+      ctx.effect(() => installCompactRunningStatus(), 'neko-brand: compact running status')
 
       // Sidebar roles: the controller lives in shell.overlay, nested in the
       // sidebar.panellist declaration so it is disposed whenever the native
@@ -3065,6 +3151,8 @@ function installAvatarTheme(options) { return NekoAvatarTheme.install(options) }
     }
 
     exports.apply = apply
+    exports.compactRunningStatus = compactRunningStatus
+    exports.installCompactRunningStatus = installCompactRunningStatus
     exports.inject = ['slots', 'uiWorkspace', 'remote', 'remote.account', 'locale']
     // Exposed for tests/tools only; not used by the loader.
     exports.PRODUCT_BRAND = PRODUCT_BRAND

@@ -162,6 +162,54 @@ const ctx = {
 exportsObj.apply(ctx)
 assert.equal(document.title, 'New chat — N.E.K.O. 工作台')
 
+// Native DSH RunningStatus markup, including TextShimmer's plain text and
+// its aria-hidden decoration. Transcript content and tool labels can contain
+// the same words but must never be rewritten.
+const runningFixture = document.createElement('section')
+runningFixture.innerHTML = `
+  <div data-chat-running="true">
+    <span role="status" aria-live="polite" aria-atomic="true">深度求索中</span>
+    <span data-shimmer="true"><span><span id="running-live">深度求索中，用时 27 秒 ···</span></span>
+      <span aria-hidden="true" inert><span data-shimmer-text="深度求索中，用时 27 秒 ···"></span></span></span>
+  </div>
+  <div id="actual-message">深度求索中，用时 27 秒 ···</div>
+  <button data-process-activity="read">正在读取文件</button>`
+document.body.appendChild(runningFixture)
+await new Promise((resolve) => setTimeout(resolve, 0))
+const liveStatus = runningFixture.querySelector('[role="status"]')
+const liveText = runningFixture.querySelector('#running-live')
+const shimmerText = runningFixture.querySelector('[data-shimmer-text]')
+assert.equal(liveStatus.textContent, '思考中…')
+assert.equal(liveStatus.getAttribute('aria-live'), 'polite')
+assert.equal(liveText.textContent, '思考中 · 27 秒')
+assert.equal(shimmerText.getAttribute('data-shimmer-text'), '思考中 · 27 秒')
+assert.equal(runningFixture.querySelector('#actual-message').textContent, '深度求索中，用时 27 秒 ···')
+assert.equal(runningFixture.querySelector('[data-process-activity]').textContent, '正在读取文件')
+liveText.firstChild.nodeValue = '深度求索中，用时 28 秒 ···'
+shimmerText.setAttribute('data-shimmer-text', '深度求索中，用时 28 秒 ···')
+await new Promise((resolve) => setTimeout(resolve, 0))
+assert.equal(liveText.textContent, '思考中 · 28 秒', 'real elapsed time keeps updating')
+assert.equal(shimmerText.getAttribute('data-shimmer-text'), '思考中 · 28 秒')
+assert.equal(exportsObj.compactRunningStatus('深度思考中'), '思考中…')
+assert.equal(exportsObj.compactRunningStatus('正在读取文件'), '正在读取文件')
+
+// Exercise React-owned nodes as the native elapsed clock rerenders and then
+// disappears at turn end. Changing their text/attribute must not break React.
+const reactStatusHost = document.createElement('div')
+document.body.appendChild(reactStatusHost)
+const reactStatusRoot = ReactDOMClient.createRoot(reactStatusHost)
+const nativeRunning = (seconds) => React.createElement('div', { 'data-chat-running': 'true' },
+  React.createElement('span', { role: 'status', 'aria-live': 'polite' }, '深度求索中'),
+  React.createElement('span', { 'data-shimmer': 'true' },
+    React.createElement('span', null, `深度求索中，用时 ${seconds} 秒 ···`),
+    React.createElement('span', { 'aria-hidden': 'true', 'data-shimmer-text': `深度求索中，用时 ${seconds} 秒 ···` })))
+await act(async () => { reactStatusRoot.render(nativeRunning(30)); await new Promise((resolve) => setTimeout(resolve, 0)) })
+assert.match(reactStatusHost.textContent, /思考中 · 30 秒/)
+await act(async () => { reactStatusRoot.render(nativeRunning(31)); await new Promise((resolve) => setTimeout(resolve, 0)) })
+assert.match(reactStatusHost.textContent, /思考中 · 31 秒/)
+assert.equal(reactStatusHost.querySelector('[data-shimmer-text]').getAttribute('data-shimmer-text'), '思考中 · 31 秒')
+await act(async () => { reactStatusRoot.unmount(); reactStatusHost.remove() })
+
 const mounts = {
   'sidebar.brand.mark': ['seat-sidebar-mark', { size: 24 }],
   'sidebar.brand.name': ['seat-sidebar-name', {}],
@@ -588,5 +636,8 @@ assert.equal(replacementNewSession.style.getPropertyValue('--neko-new-session-si
 assert.equal(replacementNewSession.parentElement, originalNewParent)
 assert.equal(replacementNewSession.getAttribute('aria-label'), 'New chat')
 assert.equal(freshNav.parentElement, $('#sb-root'))
+assert.equal(liveStatus.textContent, '深度求索中', 'native live status restored on unload')
+assert.equal(liveText.textContent, '深度求索中，用时 28 秒 ···', 'native latest elapsed text restored on unload')
+assert.equal(shimmerText.getAttribute('data-shimmer-text'), '深度求索中，用时 28 秒 ···')
 
-console.log('ok: hero gallery, avatar picker, workbench options, plus/community row, sidebar roles, folded native tools, focus, dismissal, pending/error states and unload are consistent')
+console.log('ok: hero gallery, avatar picker, workbench options, plus/community row, sidebar roles, native running status, folded tools, focus, dismissal, pending/error states and unload are consistent')
