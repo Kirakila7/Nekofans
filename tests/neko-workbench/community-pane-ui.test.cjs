@@ -170,6 +170,70 @@ test('late share result after navigating away does not claim a copy of the new p
   f.pane.dispose();
 });
 
+test('official player opens only a confirmed B站 video and never claims actual playback', async () => {
+  const f = fixture();
+  const feedback = f.panel.children[0].children[5], official = f.panel.children[0].children[7];
+  assert.equal(official.hidden, true);
+  await f.pane.open('bilibili');
+  assert.equal(official.hidden, false);
+  assert.equal(official.disabled, true);
+  official.dispatchEvent(new Event('click')); await tick();
+  assert.notEqual(f.calls.at(-1).action, 'play-official');
+  f.notify({ site: 'bilibili', requestId: 1, status: 'ready', canPlayOfficial: true, isOfficialPlayer: false });
+  assert.equal(official.disabled, false);
+  official.dispatchEvent(new Event('click')); await tick(); await tick();
+  assert.deepEqual(f.calls.at(-1), { action: 'play-official' });
+  assert.equal(feedback.textContent, '', 'loading the page must not claim the video played');
+  f.notify({ site: 'bilibili', requestId: 1, status: 'loading', canPlayOfficial: true });
+  assert.equal(official.disabled, true, 'loading prevents a second navigation');
+  f.notify({ site: 'bilibili', requestId: 1, status: 'ready', canPlayOfficial: false, isOfficialPlayer: true });
+  assert.equal(official.disabled, true, 'already in the official player');
+  f.notify({ site: 'bilibili', requestId: 1, status: 'ready', canPlayOfficial: true, isOfficialPlayer: false });
+  assert.equal(official.disabled, false, 'returning to a video page restores the action');
+  await f.pane.open('community');
+  assert.equal(official.hidden, true);
+  f.pane.dispose();
+});
+
+test('official player errors are visible and late outcomes cannot affect another site', async () => {
+  const f = fixture();
+  const feedback = f.panel.children[0].children[5], official = f.panel.children[0].children[7];
+  let finish;
+  f.bridge.community = request => request.action === 'play-official'
+    ? new Promise(resolve => { finish = resolve; }) : Promise.resolve({ ok: true });
+  await f.pane.open('bilibili');
+  f.notify({ site: 'bilibili', requestId: 1, status: 'ready', canPlayOfficial: true });
+  official.dispatchEvent(new Event('click')); await tick();
+  assert.equal(official.disabled, true);
+  assert.equal(official.textContent, '正在打开…');
+  await f.pane.open('community');
+  finish({ ok: false }); await tick(); await tick();
+  assert.equal(feedback.textContent, '', 'an old failure must not affect the new page');
+  await f.pane.open('bilibili');
+  f.notify({ site: 'bilibili', requestId: 3, status: 'ready', canPlayOfficial: true });
+  f.bridge.community = async request => request.action === 'play-official' ? { ok: false } : { ok: true };
+  official.dispatchEvent(new Event('click')); await tick(); await tick();
+  assert.match(feedback.textContent, /官方播放器未能打开/);
+  f.pane.dispose();
+});
+
+test('a user back while the player opens suppresses a late player error', async () => {
+  const f = fixture();
+  const feedback = f.panel.children[0].children[5], official = f.panel.children[0].children[7];
+  const back = f.panel.children[0].children[1];
+  let finish;
+  f.bridge.community = request => request.action === 'play-official'
+    ? new Promise(resolve => { finish = resolve; }) : Promise.resolve({ ok: true });
+  await f.pane.open('bilibili');
+  f.notify({ site: 'bilibili', requestId: 1, status: 'ready', canPlayOfficial: true, canGoBack: true });
+  official.dispatchEvent(new Event('click')); await tick();
+  back.dispatchEvent(new Event('click')); await tick();
+  finish({ ok: false }); await tick(); await tick();
+  assert.equal(feedback.textContent, '', 'previous page must not display a stale player failure');
+  assert.equal(official.disabled, true, 'the returned page needs fresh state to re-enable');
+  f.pane.dispose();
+});
+
 test('a late old navigation snapshot cannot close leisure, but new fish settings can', async () => {
   let resolveState;
   const f = fixture({ getState: () => new Promise(resolve => { resolveState = resolve; }) });

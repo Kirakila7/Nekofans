@@ -2239,7 +2239,9 @@ function installNekoAccountHabitat(ctx, options) {
       shareFeedback.className = 'neko-community-pane__feedback'
       shareFeedback.setAttribute('role', 'status')
       shareFeedback.setAttribute('aria-live', 'polite')
-      toolbar.append(back, pageBack, heading, reload, immersion, shareFeedback, share)
+      const officialPlayer = doc.createElement('button')
+      officialPlayer.type = 'button'; officialPlayer.textContent = '官方播放'; officialPlayer.hidden = true; officialPlayer.disabled = true
+      toolbar.append(back, pageBack, heading, reload, immersion, shareFeedback, share, officialPlayer)
       const status = doc.createElement('p')
       status.className = 'neko-community-pane__status'
       status.setAttribute('role', 'status')
@@ -2249,6 +2251,7 @@ function installNekoAccountHabitat(ctx, options) {
       let openRequestId = 0
       let immersive = false, immersiveRoot = null, rootWasInert = false
       let canShare = false, sharePending = false, shareTicket = 0
+      let canPlayOfficial = false, isOfficialPlayer = false, playerPending = false, playerTicket = 0
       const inertRegions = new Map()
       const sizes = typeof win.ResizeObserver === 'function' ? new win.ResizeObserver(schedule) : null
       const call = (request) => Promise.resolve().then(() => bridge.community(request))
@@ -2261,6 +2264,16 @@ function installNekoAccountHabitat(ctx, options) {
       function resetShare() {
         shareTicket++; canShare = false; sharePending = false; shareFeedback.textContent = ''
         refreshShare()
+      }
+      function refreshOfficialPlayer() {
+        officialPlayer.hidden = currentSite !== 'bilibili'
+        officialPlayer.disabled = !active || currentSite !== 'bilibili' || !canPlayOfficial || isOfficialPlayer || playerPending
+        officialPlayer.textContent = playerPending ? '正在打开…' : '官方播放'
+        officialPlayer.title = canPlayOfficial ? '在当前窗口打开 B 站官方播放器' : '打开 B 站视频后可使用官方播放器'
+      }
+      function resetOfficialPlayer() {
+        playerTicket++; canPlayOfficial = false; isOfficialPlayer = false; playerPending = false
+        refreshOfficialPlayer()
       }
       function releaseImmersiveRoot() {
         if (immersiveRoot && !rootWasInert) immersiveRoot.removeAttribute('inert')
@@ -2353,12 +2366,13 @@ function installNekoAccountHabitat(ctx, options) {
         }
         immersion.hidden = currentSite !== 'bilibili'
         resetShare()
+        resetOfficialPlayer()
         const name = currentSite === 'bilibili' ? 'B站' : 'N.E.K.O. 社区'
         panel.setAttribute('aria-label', `${name}内容区`)
         heading.textContent = name
         pageBack.disabled = true
         active = true; panel.hidden = false; mark(true)
-        refreshShare()
+        refreshShare(); refreshOfficialPlayer()
         // DSH may render the coding surface as divs instead of a <main>.
         // Move off its composer before the remote view becomes available.
         back.focus()
@@ -2385,7 +2399,7 @@ function installNekoAccountHabitat(ctx, options) {
         if (!active || disposed) return
         setImmersive(false)
         active = false; revision++; panel.hidden = true; reload.disabled = false; mark(false)
-        resetShare()
+        resetShare(); resetOfficialPlayer()
         if (cancelWaiting) { cancelWaiting(); cancelWaiting = null }
         sizes?.disconnect(); root = null; lastBounds = ''
         hideNative(openRequestId)
@@ -2393,6 +2407,19 @@ function installNekoAccountHabitat(ctx, options) {
       }
       const onBack = () => hide({ focus: true })
       const onImmersion = () => { if (active && currentSite === 'bilibili') { setImmersive(!immersive); schedule() } }
+      const onOfficialPlayer = () => {
+        if (!active || currentSite !== 'bilibili' || officialPlayer.disabled) return
+        const ticket = ++playerTicket
+        playerPending = true; shareFeedback.textContent = ''; refreshOfficialPlayer()
+        void call({ action: 'play-official' }).then(result => {
+          if (!active || ticket !== playerTicket) return
+          if (!result?.ok) throw new Error('player open failed')
+        }).catch(() => {
+          if (active && ticket === playerTicket) shareFeedback.textContent = '官方播放器未能打开，可返回上一页或刷新重试'
+        }).finally(() => {
+          if (active && ticket === playerTicket) { playerPending = false; refreshOfficialPlayer() }
+        })
+      }
       const onShare = () => {
         if (!active || share.disabled || currentSite !== 'bilibili') return
         const ticket = ++shareTicket
@@ -2410,6 +2437,9 @@ function installNekoAccountHabitat(ctx, options) {
       const onPageBack = () => {
         if (!active || pageBack.disabled) return
         const ticket = revision
+        // A user-initiated back takes precedence over a pending player open.
+        // Its eventual error must not be displayed on the page returned to.
+        if (playerPending) { playerTicket++; playerPending = false; canPlayOfficial = false; shareFeedback.textContent = ''; refreshOfficialPlayer() }
         pageBack.disabled = true
         void call({ action: 'back' }).then(result => {
           if (active && revision === ticket && typeof result?.canGoBack === 'boolean') pageBack.disabled = !result.canGoBack
@@ -2431,11 +2461,16 @@ function installNekoAccountHabitat(ctx, options) {
         if (state?.requestId !== undefined && state.requestId !== openRequestId) return
         const name = currentSite === 'bilibili' ? 'B站' : 'N.E.K.O. 社区'
         if (typeof state?.canGoBack === 'boolean') pageBack.disabled = !state.canGoBack
-        if (state?.status === 'loading') { resetShare(); status.textContent = `正在加载 ${name}…`; reload.disabled = true }
+        if (state?.status === 'loading') { resetShare(); canPlayOfficial = false; refreshOfficialPlayer(); status.textContent = `正在加载 ${name}…`; reload.disabled = true }
         if (state?.status !== 'loading' && typeof state?.canShare === 'boolean') {
           canShare = state.canShare
           if (!canShare) shareFeedback.textContent = ''
           refreshShare()
+        }
+        if (state?.status !== 'loading' && typeof state?.canPlayOfficial === 'boolean') {
+          canPlayOfficial = state.canPlayOfficial
+          if (typeof state?.isOfficialPlayer === 'boolean') isOfficialPlayer = state.isOfficialPlayer
+          refreshOfficialPlayer()
         }
         if (state?.status === 'ready') { status.textContent = ''; reload.disabled = false }
         if (state?.status === 'error') { status.textContent = `${name}未能加载，请点击“刷新”重试，或返回工作台。`; reload.disabled = false }
@@ -2461,7 +2496,7 @@ function installNekoAccountHabitat(ctx, options) {
       }, () => {}) } catch {}
       const observer = new win.MutationObserver(schedule)
       observer.observe(doc.body, { subtree: true, childList: true })
-      back.addEventListener('click', onBack); pageBack.addEventListener('click', onPageBack); reload.addEventListener('click', onReload); immersion.addEventListener('click', onImmersion); share.addEventListener('click', onShare)
+      back.addEventListener('click', onBack); pageBack.addEventListener('click', onPageBack); reload.addEventListener('click', onReload); immersion.addEventListener('click', onImmersion); share.addEventListener('click', onShare); officialPlayer.addEventListener('click', onOfficialPlayer)
       doc.addEventListener('click', onClick, true)
       // Native child views paint above DOM popovers. Return before opening
       // local menus so tools/account panels can use the full content area.
@@ -2478,7 +2513,7 @@ function installNekoAccountHabitat(ctx, options) {
           observer.disconnect(); sizes?.disconnect()
           if (typeof unsubscribe === 'function') unsubscribe()
           if (typeof unsubscribeWorkbench === 'function') unsubscribeWorkbench()
-          back.removeEventListener('click', onBack); pageBack.removeEventListener('click', onPageBack); reload.removeEventListener('click', onReload); immersion.removeEventListener('click', onImmersion); share.removeEventListener('click', onShare)
+          back.removeEventListener('click', onBack); pageBack.removeEventListener('click', onPageBack); reload.removeEventListener('click', onReload); immersion.removeEventListener('click', onImmersion); share.removeEventListener('click', onShare); officialPlayer.removeEventListener('click', onOfficialPlayer)
           doc.removeEventListener('click', onClick, true); win.removeEventListener('resize', schedule)
           doc.removeEventListener('pointerdown', onClick, true); doc.removeEventListener('contextmenu', onClick, true)
           doc.removeEventListener('focusin', onFocus, true)
