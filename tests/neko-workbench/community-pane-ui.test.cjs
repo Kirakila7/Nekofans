@@ -62,7 +62,7 @@ test('opening, resizing and returning preserve the original coding DOM and focus
   const f = fixture();
   f.main.textContent = 'unsent coding draft';
   await f.pane.open();
-  assert.deepEqual(f.calls[0], { action: 'open', site: 'community', bounds: { x: 280, y: 48, width: 820, height: 652 } });
+  assert.deepEqual(f.calls[0], { action: 'open', site: 'community', bounds: { x: 280, y: 48, width: 820, height: 652 }, requestId: 1 });
   assert.equal(f.panel.hidden, false);
   assert.equal(f.main.hasAttribute('inert'), true);
   assert.equal(f.root.hasAttribute('inert'), false);
@@ -87,6 +87,89 @@ test('opening, resizing and returning preserve the original coding DOM and focus
   assert.equal(f.workbenchUnsubscribed, true);
 });
 
+test('B站 immersion expands the same view and restores sidebar, bounds and draft on exit', async () => {
+  const f = fixture();
+  f.main.textContent = 'unsent coding draft';
+  const immersion = f.panel.children[0].children[4];
+  await f.pane.open('bilibili');
+  assert.equal(immersion.hidden, false);
+  immersion.dispatchEvent(new Event('click'));
+  await tick(); await tick();
+  assert.equal(immersion.textContent, '退出沉浸');
+  assert.equal(immersion.getAttribute('aria-pressed'), 'true');
+  assert.equal(f.root.hasAttribute('inert'), true);
+  assert.deepEqual(f.calls.at(-1), { action: 'layout', bounds: { x: 0, y: 48, width: 1100, height: 676 } });
+  f.win.innerWidth = 1200; f.win.innerHeight = 800;
+  f.win.dispatchEvent(new Event('resize')); await tick(); await tick();
+  assert.deepEqual(f.calls.at(-1), { action: 'layout', bounds: { x: 0, y: 48, width: 1200, height: 752 } });
+  immersion.dispatchEvent(new Event('click')); await tick(); await tick();
+  assert.equal(f.root.hasAttribute('inert'), false);
+  assert.equal(immersion.textContent, '沉浸观看');
+  assert.deepEqual(f.calls.at(-1), { action: 'layout', bounds: { x: 280, y: 48, width: 920, height: 652 } });
+  assert.equal(f.main.textContent, 'unsent coding draft');
+  immersion.dispatchEvent(new Event('click')); await tick(); await tick();
+  await f.pane.open('community');
+  assert.equal(f.root.hasAttribute('inert'), false);
+  assert.equal(immersion.hidden, true);
+  assert.deepEqual(f.calls.at(-1), { action: 'open', site: 'community', bounds: { x: 280, y: 48, width: 920, height: 652 }, requestId: 2 });
+  f.pane.dispose();
+});
+
+test('hiding immersion preserves a previously inert sidebar and restores on disposal', async () => {
+  const f = fixture();
+  f.root.setAttribute('inert', '');
+  await f.pane.open('bilibili');
+  f.panel.children[0].children[4].dispatchEvent(new Event('click'));
+  await tick(); await tick();
+  f.pane.hide();
+  assert.equal(f.root.hasAttribute('inert'), true);
+  assert.equal(f.panel.hidden, true);
+  f.pane.dispose();
+});
+
+test('share copies only enabled B站 video links, reports success and failure, and clears on navigation', async () => {
+  const f = fixture();
+  const feedback = f.panel.children[0].children[5], share = f.panel.children[0].children[6];
+  await f.pane.open('bilibili');
+  assert.equal(share.hidden, false);
+  assert.equal(share.textContent, '复制视频链接');
+  assert.equal(share.disabled, true, 'no share before current video is confirmed');
+  share.dispatchEvent(new Event('click')); await tick();
+  assert.notEqual(f.calls.at(-1).action, 'copy-video-link');
+  f.notify({ site: 'bilibili', status: 'ready', canShare: true });
+  assert.equal(share.disabled, false);
+  share.dispatchEvent(new Event('click')); await tick(); await tick();
+  assert.deepEqual(f.calls.at(-1), { action: 'copy-video-link' });
+  assert.equal(feedback.textContent, '链接已复制');
+  f.bridge.community = async request => { f.calls.push(request); if (request.action === 'copy-video-link') return { ok: false }; return { ok: true }; };
+  share.dispatchEvent(new Event('click')); await tick(); await tick();
+  assert.equal(feedback.textContent, '复制失败，请重试');
+  f.notify({ site: 'bilibili', status: 'loading', canShare: true });
+  assert.equal(share.disabled, true, 'old page cannot remain shareable during navigation');
+  assert.equal(feedback.textContent, '');
+  f.notify({ site: 'bilibili', status: 'ready', canShare: false });
+  assert.equal(share.disabled, true);
+  await f.pane.open('community');
+  assert.equal(share.hidden, true);
+  f.pane.dispose();
+});
+
+test('late share result after navigating away does not claim a copy of the new page', async () => {
+  const f = fixture();
+  const feedback = f.panel.children[0].children[5], share = f.panel.children[0].children[6];
+  let finish;
+  f.bridge.community = request => request.action === 'copy-video-link' ? new Promise(resolve => { finish = resolve; }) : Promise.resolve({ ok: true });
+  await f.pane.open('bilibili');
+  f.notify({ site: 'bilibili', status: 'ready', canShare: true });
+  share.dispatchEvent(new Event('click')); await tick();
+  assert.equal(share.disabled, true);
+  f.notify({ site: 'bilibili', status: 'loading', canShare: false });
+  finish({ ok: true }); await tick(); await tick();
+  assert.equal(feedback.textContent, '');
+  assert.equal(share.disabled, true);
+  f.pane.dispose();
+});
+
 test('a late old navigation snapshot cannot close leisure, but new fish settings can', async () => {
   let resolveState;
   const f = fixture({ getState: () => new Promise(resolve => { resolveState = resolve; }) });
@@ -97,6 +180,30 @@ test('a late old navigation snapshot cannot close leisure, but new fish settings
   f.navigate({ navigation: { fishSettingsRevision: 4 } });
   assert.equal(f.panel.hidden, true);
   assert.equal(f.api.getWorkspaceMode(), 'work');
+  f.pane.dispose();
+});
+
+test('same-site reopen ignores stale hidden and ready events but honors current host hide', async () => {
+  const f = fixture();
+  const share = f.panel.children[0].children[6];
+  await f.pane.open('bilibili');
+  const oldId = f.calls.at(-1).requestId;
+  f.pane.hide();
+  const reopen = f.pane.open('bilibili');
+  await tick(); await reopen;
+  const newId = f.calls.findLast(call => call.action === 'open').requestId;
+  assert.equal(newId, oldId + 1);
+  assert(f.calls.some(call => call.action === 'hide' && call.requestId === oldId));
+  f.notify({ site: 'bilibili', requestId: oldId, status: 'hidden' });
+  f.notify({ site: 'bilibili', requestId: oldId, status: 'ready', canShare: true });
+  assert.equal(f.panel.hidden, false, 'late hidden from the old view does not close the new one');
+  assert.equal(share.disabled, true, 'late state cannot enable share for the new view');
+  f.notify({ site: 'bilibili', requestId: newId, status: 'ready', canShare: true });
+  assert.equal(share.disabled, false);
+  f.notify({ site: 'bilibili', requestId: newId, status: 'hidden' });
+  assert.equal(f.panel.hidden, true, 'current host-initiated hide is honored');
+  await tick();
+  assert(f.calls.some(call => call.action === 'hide' && call.requestId === newId));
   f.pane.dispose();
 });
 
