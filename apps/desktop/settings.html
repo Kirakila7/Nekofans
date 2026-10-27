@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'" />
+  <title>大肥鱼 · 设置</title>
+  <link rel="stylesheet" href="settings.css" />
+</head>
+<body>
+  <header><p class="eyebrow">大肥鱼 · 桌面上的伙伴</p><h1>给相处留一点空间</h1><p>聊天、人设和记忆，属于这里的大肥鱼。</p></header>
+  <nav aria-label="设置分类"><button id="api-tab" type="button" aria-pressed="true">聊天 API</button><button id="persona-tab" type="button" aria-pressed="false">角色设定</button></nav>
+  <main>
+    <form id="api-form">
+      <h2>连接你选择的模型</h2>
+      <p class="hint">这里配置文字聊天模型；语音合成（TTS）尚未接入。</p>
+      <p class="hint">只有你发送消息时，才会请求下面的地址。保存设置不会发送测试请求。</p>
+      <label for="protocol">接口协议</label>
+      <select id="protocol"><option value="openai-compatible">OpenAI 兼容</option><option value="anthropic">Anthropic Messages</option></select>
+      <label for="base-url">API 基础地址</label>
+      <input id="base-url" type="url" maxlength="2048" placeholder="https://你的服务地址/v1" autocomplete="off" spellcheck="false" />
+      <p id="endpoint-hint" class="hint small">基础地址后会添加 /chat/completions；请勿填写完整接口路径。</p>
+      <label for="model">模型名称</label>
+      <input id="model" maxlength="200" placeholder="填写服务商提供的模型名称" autocomplete="off" spellcheck="false" />
+      <div class="label-row"><label for="api-key">API 密钥</label><span id="key-status">尚未保存</span></div>
+      <input id="api-key" type="password" maxlength="16384" placeholder="留空保留当前密钥" autocomplete="new-password" spellcheck="false" />
+      <label class="checkbox"><input id="clear-key" type="checkbox" />删除已保存的密钥</label>
+      <p class="hint small">密钥由 Windows 当前用户加密保存在本机，保存后不再显示。</p>
+      <div class="field-grid"><div><label for="timeout">响应超时（秒）</label><input id="timeout" type="number" min="1" max="300" step="1" value="60" required /></div><div><label for="max-tokens">最多输出 token</label><input id="max-tokens" type="number" min="1" max="32000" step="1" value="1024" required /></div></div>
+      <p class="hint small">应用设置会停止当前回复，并重新打开桌宠。聊天记录和已确认记忆会保留。</p>
+      <button class="primary" type="submit">保存并应用</button>
+    </form>
+    <form id="persona-form" hidden>
+      <h2>让大肥鱼更像你熟悉的伙伴</h2>
+      <label for="name">名字</label><input id="name" maxlength="80" required />
+      <label for="persona">角色设定</label><textarea id="persona" rows="7" maxlength="12000" required></textarea>
+      <label for="boundaries">相处边界</label><textarea id="boundaries" rows="5" maxlength="30000" placeholder="每行一条"></textarea>
+      <p class="hint">修改名字和设定会停止当前回复；角色身份和记忆仍保留。你可以从桌宠右键菜单管理记忆。</p>
+      <button class="primary" type="submit">保存角色设定</button>
+    </form>
+    <p id="status" role="status" aria-live="polite"></p>
+  </main>
+  <footer>开发版 · 主角色聊天与记忆</footer>
+  <script src="settings.js"></script>
+</body>
+</html>

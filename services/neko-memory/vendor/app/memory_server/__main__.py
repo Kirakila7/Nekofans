@@ -1,0 +1,68 @@
+# -*- coding: utf-8 -*-
+# Copyright 2025-2026 Project N.E.K.O. Team
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Standalone entry point: ``python -m app.memory_server``.
+
+Body of the former ``if __name__ == "__main__":`` block of the monolithic
+``app/memory_server.py`` (the launcher's merged mode imports the package and
+mounts ``memory_server.app`` itself; this path is for standalone dev runs).
+"""
+
+import argparse
+import os
+import signal
+import sys
+import threading
+import time
+
+# Support direct file invocation (``python app/memory_server/__main__.py``,
+# used by docker/entrypoint.sh) where sys.path[0] is this package dir and
+# ``import app`` would otherwise fail. Three dirname hops to the repo root;
+# no-op under ``python -m app.memory_server`` (cwd already on sys.path).
+_repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if sys.path[0:1] != [_repo_root]:
+    sys.path.insert(0, _repo_root)
+
+import uvicorn
+
+from app.memory_server import runtime
+from app.memory_server._shared import logger
+from config import MEMORY_SERVER_PORT
+
+if __name__ == "__main__":
+    # Parse command-line arguments.
+    parser = argparse.ArgumentParser(description='Memory Server')
+    parser.add_argument('--enable-shutdown', action='store_true',
+                       help='启用响应退出请求功能（仅在终端用户环境使用）')
+    args = parser.parse_args()
+
+    # Set globals (/shutdown reads runtime module attributes via `global enable_shutdown`).
+    runtime.enable_shutdown = args.enable_shutdown
+
+    # Create a background thread to monitor shutdown signals.
+    def monitor_shutdown():
+        while not runtime.shutdown_event.is_set():
+            time.sleep(0.1)
+        logger.info("检测到关闭信号，正在关闭memory_server...")
+        # Send SIGTERM to the current process.
+        os.kill(os.getpid(), signal.SIGTERM)
+
+    # Start the monitoring thread only when shutdown is enabled.
+    if runtime.enable_shutdown:
+        shutdown_monitor = threading.Thread(target=monitor_shutdown, daemon=True)
+        shutdown_monitor.start()
+
+    # Start the server.
+    uvicorn.run(runtime.app, host="127.0.0.1", port=MEMORY_SERVER_PORT)

@@ -1,0 +1,14 @@
+{
+  "source": "https://github.com/PC2005-cloud/dsh-pet",
+  "installedVersion": "0.3.7",
+  "note": "工作状态函数和气泡 CSS 原样复用；host reducer 仅擦除 TypeScript 类型。每只角色独立接入会话事件。",
+  "onWorkTickSHA256": "ad6baeb959d0444aa49273c1db6992cc539aa01e2f4b2ac67146e00bcb84079b",
+  "sourceFiles": [
+    "runtime/electron-helper/events.js",
+    "runtime/electron-helper/index.html",
+    "runtime/electron-helper/shared-core.js",
+    "src/host/work-status.ts",
+    "assets/config.jsonc",
+    "assets/fonts/上首软糖体.ttf"
+  ]
+}

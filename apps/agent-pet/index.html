@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; media-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>DSH 子代理</title><link rel="stylesheet" href="style.css"></head>
+<body>
+  <main>
+    <section id="hint" hidden><p id="task"></p><p id="work"></p><p id="last"></p></section>
+    <aside id="notice" hidden>任务已完成，可在 DSH 查看成果</aside>
+    <section id="dialog" hidden>
+      <form id="composer"><span aria-hidden="true">🐳</span><input id="input" maxlength="8000" aria-label="发给此 DSH 子代理" placeholder="继续这个任务…"><button id="send" aria-label="发送">↑</button></form>
+      <div class="tools"><span id="status"></span><button id="open" type="button">工作台 / 成果</button><button id="hide" type="button" aria-label="收起">×</button></div>
+      <p id="error" role="status" hidden></p>
+    </section>
+    <form id="rename" hidden><label for="nickname">本地昵称</label><input id="nickname" maxlength="40" required><button>保存</button><button id="rename-cancel" type="button">取消</button></form>
+    <button id="pet" type="button" aria-label="打开子代理输入框"><video id="video" autoplay muted loop playsinline></video><span id="fallback">🐳</span></button>
+  </main>
+  <script src="main.js"></script>
+</body></html>

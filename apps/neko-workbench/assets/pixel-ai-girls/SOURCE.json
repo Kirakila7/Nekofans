@@ -1,0 +1,512 @@
+{
+  "repository": "https://github.com/Hjh-12138/DSH-Pixel-Toons",
+  "commit": "973c6bdbeffd272e2bc35f7065ba2f7d42fbe7e8",
+  "sourcePacks": [
+    {
+      "role": "claude",
+      "pack": "orange-flower",
+      "upstreamPath": "examples/character-packs/orange-flower.toons.zip",
+      "gitBlob": "76513225dd66a438ae9c9449b28a482f27681d12",
+      "sha256": "acceaf6d6e50bc7ae1e3fb9235271d2849bd50e57305cc7c053dd7148ef44c7a",
+      "bytes": 4341337,
+      "manifestSha256": "96d215538cfba71c3d81ce4f866ae697ee9b0ebdc9cece6a14913390acd735a8"
+    },
+    {
+      "role": "gemini",
+      "pack": "purple-star-cat",
+      "upstreamPath": "examples/character-packs/purple-star-cat.toons.zip",
+      "gitBlob": "3516bf1852e5552634757803e95ff144ffcc36b2",
+      "sha256": "024c05c8604b1fec3ade2717552dbf65f1903ef4fdc6e4803e308f9973216999",
+      "bytes": 4460412,
+      "manifestSha256": "a633349345746df051962205fc9ddc04b5b2358302ad6b85dcfb8f4d16bab367"
+    }
+  ],
+  "licenseFile": "LICENSE",
+  "noticeFile": "THIRD_PARTY_NOTICES.md",
+  "production": "Lossless animated WebP encoded from the upstream manifest rectangles and exact 125 ms timings. Every decoded visible RGBA frame matches its original PNG frame; no generated, redrawn or stretched pixels. Each still.png is idle frame 0.",
+  "files": [
+    {
+      "file": "claude/SOURCE_MANIFEST.json",
+      "sha256": "96d215538cfba71c3d81ce4f866ae697ee9b0ebdc9cece6a14913390acd735a8"
+    },
+    {
+      "file": "claude/idle.webp",
+      "sha256": "a0f398613294aec6a37febc3392d17babfd0be89fb7d55ba8f69c615a7ba6172",
+      "frames": 8,
+      "uniqueFrames": 8,
+      "size": [
+        256,
+        256
+      ],
+      "durationMs": 1000,
+      "loop": 0,
+      "sourceAction": "idle",
+      "sourceFrames": [
+        "31c5e91ab14164662ba49037c679f7ec1e7de64a6223ba41b3ffdc3b20c25f33",
+        "9ecb2765d0c2737ee0dda2a7612cc8a32beeede9d6de6a84355bd5b1b4e32f05",
+        "c1b5c65420bef251bdc2482abb456cfe025b65ad256c4574ccef0adfa3c2cd3a",
+        "935b4f4dfb3f9d20fcb6b9cbd855a8c41c385e3191c92776115a48aea94b7e17",
+        "f3507a2978915c0acbc3723ffb66e1d9f56235885fb6c2a930d6c8bb6b2c47f4",
+        "7fe658825212d59a0a7f0ba1fef0ed46222a9fba3316f69888ba0eff5473a955",
+        "c02472a54f105e14fdcd1728792d6538c2acec71f33c4fe89c7aeb7e13fa80cc",
+        "07eea6937df884a857824ffd8ee17d759a3ed21f26d1c624fe3dcdd640c26a06"
+      ]
+    },
+    {
+      "file": "claude/still.png",
+      "sha256": "7a159bddc32d614c14f9456b563fa209981f9f122dfedc81a8b834cbe3edab74",
+      "derivedFrom": "claude/idle.webp",
+      "frame": 0
+    },
+    {
+      "file": "claude/think.webp",
+      "sha256": "93a7cf65da70875853a3e0ce8113cbf0c4cd7b389e7ead5a70d7439e75ad1eca",
+      "frames": 8,
+      "uniqueFrames": 8,
+      "size": [
+        256,
+        256
+      ],
+      "durationMs": 1000,
+      "loop": 0,
+      "sourceAction": "think",
+      "sourceFrames": [
+        "b831c0371fb7547a0fb4760735824e3b9cc1495f3a416d807908b86166d0cb8e",
+        "98405624f4d6c4af55185a6a041f16380539a0fdfeb6e0b78dd5e4bb7a84e78b",
+        "20281f54ae4ba26c4ac41360143148d7bfc72194bdc2261bdf94cbf6479bf96b",
+        "db42095f6c1f92ab84940b5b05db8e28f686c21ab063e569b802e6a57f36b521",
+        "046f5422acefc13d86e0e10b179c5ce175c90e8b628a12721c6e53cf7c94552f",
+        "dd9408000bb53e332f128deeffc77accb78ecd589a4b56fb83dc02067d85356a",
+        "ff3f087b3f8a1f175cb5148cad56c1ea116fc84c940d641e8ef1ffe916f57350",
+        "d42bda51c210d54c954d7a1155d528a70512cd75133535b0728b9e228d516b4c"
+      ]
+    },
+    {
+      "file": "claude/search.webp",
+      "sha256": "3ed417b9d8e26984726c072b3a396ebe97127cd8989e24f5d5f80a016e1a2a57",
+      "frames": 8,
+      "uniqueFrames": 8,
+      "size": [
+        256,
+        256
+      ],
+      "durationMs": 1000,
+      "loop": 0,
+      "sourceAction": "search",
+      "sourceFrames": [
+        "ab2d77a60103b5aea5e02dfa5afb2f1c6841bc8207922610dd6c4c0af3092206",
+        "d2a92ceaf5acc016a2b9c653f6bb4e88d9f29eb0c2bb90efe03181ab1929b4cd",
+        "9eba6821b4d9db5128ba0d93e63a44b35f9a42cb65e16c0ad8d904957914bf86",
+        "bc49727745fe9ef2fd2f8b7caa766f6af21c0dc1b442584a867dce010620105a",
+        "dff1cd092190521bc5c966d6b7df61e461a4641a1e790aea0e9e8884387808ab",
+        "2dbc36cf9beaedd3556b5818576cd52430a98e7b0f36606232ad0c3e5e6b2a7b",
+        "f5cdacb0f61d65bb4a8ef3783ab5cd497e69a26cfabbb333706e9ade0b63e3b9",
+        "e271edb8f0f4f6930ad66a0ad7329a0f3d6ce0cf61e62d05a83f6aa588ad7a53"
+      ]
+    },
+    {
+      "file": "claude/read.webp",
+      "sha256": "cb0bcc77bf9f4dc1ad164531c83b04c432fc2d16a1ed00b8e388cabd157df5c0",
+      "frames": 8,
+      "uniqueFrames": 8,
+      "size": [
+        256,
+        256
+      ],
+      "durationMs": 1000,
+      "loop": 0,
+      "sourceAction": "read",
+      "sourceFrames": [
+        "8c493954ca08a87e0077cc4099a3f68f2e5993cdba8e60a3fbdc90ea2f5021a4",
+        "bc5f3b04e528155a24640c5b7513e19b4a911333c0f82720c33322ee7248ed37",
+        "1adb10faf1b39b2d0638ae7d682026f8a5443b654a617751a023d57dbb52758e",
+        "a8514335002a532bc791d911a52f56e367f9682267b5aa808ced19aa65339f96",
+        "b8e4f7b987b767f27c85016ee30f0522d23568bf60c80cb9a7f5e24ce2679dee",
+        "ff73e7ee2acc73e57c1f510348e2ca8a3a3584bb20100a60f4920b7135a15d44",
+        "c54e05f10b7b689381f34599ce21c0790e83c60701401be7f7f543619743e60c",
+        "59e85eae9b7016af4501234ad41f432981866a738707796305df8df004a62bed"
+      ]
+    },
+    {
+      "file": "claude/type.webp",
+      "sha256": "40c0ee427480414b2c77cf97386ac11a595f9789509deede5071c7cf4a3f3b6a",
+      "frames": 8,
+      "uniqueFrames": 8,
+      "size": [
+        256,
+        256
+      ],
+      "durationMs": 1000,
+      "loop": 0,
+      "sourceAction": "type",
+      "sourceFrames": [
+        "57eed087986431b677fcc17a7a7e60229a7c97ad4c7078b6c47beba4be4c04a9",
+        "3eb27151f4ab31153997de4f5fa60a1409474fef5288b689c0b274f66eeb9501",
+        "4972178201c3405460094394aba34d821d52a3b5778994d2ff32e6ae79735159",
+        "7c7746ff0166f2cd3b180d1f933f001eee9ef2b7728461ebc5351a904cb8e3f8",
+        "3ea610ecb885d5a6861159883c1934465d752c9950abf6f8b11a836c26be4a6d",
+        "033877c92a4828f5fcd9a73ab3f41748d0e4f5925212180e81e8102c4b4b5e5d",
+        "88e3413344c8cc1170401d2100b2c47d6bd134e5e5ba17342de792cb23f17cae",
+        "05b06e852bfbbbd6cee8cbcd80d491691f0fb050c65e161bee62584a238bf537"
+      ]
+    },
+    {
+      "file": "claude/check.webp",
+      "sha256": "ad6bda1d1d59d1c49cbba3a05b0c78f7426900d040a84788f22c404c600e8ed0",
+      "frames": 8,
+      "uniqueFrames": 8,
+      "size": [
+        256,
+        256
+      ],
+      "durationMs": 1000,
+      "loop": 0,
+      "sourceAction": "check",
+      "sourceFrames": [
+        "7bc8cb1ef2b35572ce72e9059391a4727328b9e1acd0db5ea1086af5b3eca576",
+        "86365710103d1054a30164365af635965186854a4294a79deeb90d7ed5cbd904",
+        "262597214074dceee43d277847c1a23641e51c9c36e87e6c2f58b3b7f6dd8636",
+        "d53505ee28d15ef6bcf1a092a7a0e2f3197fcb9ea913855708b11afd5923076f",
+        "99ad6b25b473212cba29de25af95fff10a9ec8ec5b42345cda48d7f429a9a59d",
+        "9076bf59d96bddc56cb5569c2a01627f997129c574663cd1608c7c735a92c45f",
+        "cf4b3e53a8b769daa794db321ae68630605138ec54bb99c49ab8580bcea05ad4",
+        "74e1c8198bd517326dd306f255755581f924653bb18852a20e86562815539912"
+      ]
+    },
+    {
+      "file": "claude/success.webp",
+      "sha256": "6f562ff0de968dadfa277e39a13cf78782ec38f678fcc80f8eb781f02395eae8",
+      "frames": 8,
+      "uniqueFrames": 8,
+      "size": [
+        256,
+        256
+      ],
+      "durationMs": 1000,
+      "loop": 0,
+      "sourceAction": "success",
+      "sourceFrames": [
+        "6f7ec369aafc515d0d9a44e81bd5456492851d12cab92b27ea722b57b99d64b2",
+        "89d6988376a88b58ccc5ba30fc416015866c672301e3a062a69f24070a111e2a",
+        "eaa3b7abe9f919b1cbb5b8866c818d2bfd6fa12c1c88572a5c546c2098fd0f4b",
+        "1f0d8966d2f92bb45b3b53a94ae64a44ae4ed7fd83bd7b2dddd90faa5cc10194",
+        "26442a5ddae18bff8071c3c091340f3e899c1d6ce456acc8ce4cdeece2f5dcba",
+        "35ba84c26231286b62f3853be11c2887d9d84ceb2be84c3dd33e269c130170e2",
+        "a847387c6e8ca8bf83b973d9845f924c8becb4b98739c05f8d72fb5aa10860cb",
+        "55cc4d01325ecae334f48a55adb45b6e18458255ee424cb2e115723129e8fc87"
+      ]
+    },
+    {
+      "file": "claude/failed.webp",
+      "sha256": "9aec864e4bac682482a7b9d9e5cc1c6be9cea9a7a51941fc7ba9f9e944f4341f",
+      "frames": 8,
+      "uniqueFrames": 8,
+      "size": [
+        256,
+        256
+      ],
+      "durationMs": 1000,
+      "loop": 0,
+      "sourceAction": "failed",
+      "sourceFrames": [
+        "a5117c72de77289b665bd44f95bdeab1d7d6b8b87563e9653c92211cbc6ebba2",
+        "7186c1bc506a92720260422fc6322523f1b0fc0c35a61614a1aadfa7d0fc0f44",
+        "1b3852586e000a3f1bfde539fb172ab58caa25cf077dda75f387f3818d1d4856",
+        "a2e67a8a4207c64b49d2e8a63d504be9c50074599bd0c17ab3a7326176fc0ae1",
+        "0ff8eedd4d22840000ff9f67d8faf264c91049aca7cdf9a7839ee56f450ffbc0",
+        "c84960acda54d60a862d040e90fe6918daba7a1739f89fb2535c1515f020b0ca",
+        "d69f11536dbb63dd226ae3e519a3ee5883a7b76ff7620ba5d2df35443dd93268",
+        "78fb7e6bdf00be03fa80360d87440833c4a4d0c96963df71a1435cb349f91123"
+      ]
+    },
+    {
+      "file": "claude/walk-left.webp",
+      "sha256": "f82fbfc32656b50b821df16d9045d552170bae620047b39978c600157dc70d92",
+      "frames": 8,
+      "uniqueFrames": 8,
+      "size": [
+        256,
+        256
+      ],
+      "durationMs": 1000,
+      "loop": 0,
+      "sourceAction": "walk-left",
+      "sourceFrames": [
+        "a67137205da185849afc5e7c9f55766796a59c1167bce3cc5ccb60b69da4032b",
+        "4b9c5341e199887210a8268d5c48ad002fc793207c75fb5bd77cad5b9d039250",
+        "a44acde1ec6408ac0008868a286e2ff4cc1b968f1de6672ce1e5f4aefca50cf4",
+        "b9adef5f9f0b041342a5b50c6813b1d11a7dacc545eb9c982aa57ab9879109ba",
+        "011d5b35d34cd2f675d7dc32dfb2bd8541ab385e9cb142d10345a8a36ac2037b",
+        "9f316fd14e0dea7ad63a9bb1c23b8ee2b0fcb1a8e6ec83a9dacc00d791281c50",
+        "ccabae93cece1633c53a331c15f1256f58daad7474da714e442b474744c83fcf",
+        "3d9ce5a76e2f055a0d289a9b17d2dbb69e546bdf9e1e63dd3c5a05d4301d6aa8"
+      ]
+    },
+    {
+      "file": "gemini/SOURCE_MANIFEST.json",
+      "sha256": "a633349345746df051962205fc9ddc04b5b2358302ad6b85dcfb8f4d16bab367"
+    },
+    {
+      "file": "gemini/idle.webp",
+      "sha256": "546cd73de8787c830180d9dc452b39729a97686e0bffb1a8ed220eb27865f5f6",
+      "frames": 8,
+      "uniqueFrames": 8,
+      "size": [
+        256,
+        256
+      ],
+      "durationMs": 1000,
+      "loop": 0,
+      "sourceAction": "idle",
+      "sourceFrames": [
+        "351996b05cff29f872c5888e6488e2ee0d1a7c827da6ebfcbf61bba780a5f9e6",
+        "edb74711004486efbeda90a11564b983d8a4b3a8438b0765b23701836d4def3b",
+        "12bdbfda06296329e31e9bf0a55782f41180d989dee96d6c11f20f5f6c3ffb85",
+        "3479fd599ddeb91f9ec9c20eb1428adec2422fa828ab87c4009fafedcb624669",
+        "5a4634331cab9618efa653ea5b6453146f941814f2cb97d79711a08a785b7731",
+        "f6bd96b2caa0607ae73e5b09feddf678f48c93e27d5e897571202639f711a76b",
+        "36d51db5c20eb28295077af6b14f8fe05a735ef6312883eada213d50badb2814",
+        "c138abcf2c1de47300f6b45e7949c22a03637954d936c76ba8645f0a83cd32d5"
+      ]
+    },
+    {
+      "file": "gemini/still.png",
+      "sha256": "c91fafba8720ea3b98e2164e0d6aa937322171895b3f537ba731cb73721cbf99",
+      "derivedFrom": "gemini/idle.webp",
+      "frame": 0
+    },
+    {
+      "file": "gemini/think.webp",
+      "sha256": "7683f111ab756d63f4b77d69f5d81913aff8c81617af80eadcf357f5226bd98a",
+      "frames": 8,
+      "uniqueFrames": 8,
+      "size": [
+        256,
+        256
+      ],
+      "durationMs": 1000,
+      "loop": 0,
+      "sourceAction": "think",
+      "sourceFrames": [
+        "c91634c8f39cb8f92033f3e4db61d6d2864439d125e5cdb1f99acd5b6a30e26f",
+        "43392bb9d7334abba4be7150615853189e47bbcaf95c8bbe09b918288c0ba0f8",
+        "9d63aa8b5ca8a26b1f05cd3fccacf48cad769100068a99024b08e82af1ab08db",
+        "6cf2f7fab9eb5a24cf73eeb5e7c73b928fb20ffa34875d30eeeb28363ce094b9",
+        "84f93b0df8640e0c4a84cbcc7bf9ac089d9650e8361125ecd024494f6dc7c6ab",
+        "92487de909d8617c2d1c9f0e568bc6681d5cc48df9c73aa5ac91fe044b4011e7",
+        "cd9e82f8b0469614b70d7b950711ee8dedef3d7dbfe3d18179b56beca3ff5b5e",
+        "d6e9ff776a28ed3a11e72066f183091441673c38e1b69dadf075e23636c1842c"
+      ]
+    },
+    {
+      "file": "gemini/search.webp",
+      "sha256": "a8277149a19d882aada2bbd3cd2e48936ce022f383d0a2ed1162fe29d5fdb713",
+      "frames": 8,
+      "uniqueFrames": 8,
+      "size": [
+        256,
+        256
+      ],
+      "durationMs": 1000,
+      "loop": 0,
+      "sourceAction": "search",
+      "sourceFrames": [
+        "da5c42b0c099ea5d2a596e4534bf6771b9af993323d48fcf292dc28dd8c7d081",
+        "b9100388b24f0ee9625ca106e7af033485d00cdbeefc8588322abbb943f9cef5",
+        "9d0add4a4cf4b48a1ab34815a308e67267cadd030bb87a27fc60f52396e45006",
+        "ce28035b5353e169cae0dc81d0ada516c8bffefed0563eff408e92ddaf828167",
+        "3bdf506f76d446331ee143e5bc4b86ebbc18b0bfe25e7fdc9762a5413940a74d",
+        "1e68962772d21b7035409364556ee3db21e43e5923047031cb7b30e0ef00f8dc",
+        "40177ee1c3c3b094e7bedecc9a6946b3df3153f9137e4a56fe5cb48a0f552994",
+        "61092cb76c14ae4fa7e7b7cc7c66d2cc8898d121a8a300f5ae2877f2f57b8172"
+      ]
+    },
+    {
+      "file": "gemini/read.webp",
+      "sha256": "1d13e41befedaf596493d388fb9736a15650a7892ac8c32fb8611a8fd7443650",
+      "frames": 8,
+      "uniqueFrames": 8,
+      "size": [
+        256,
+        256
+      ],
+      "durationMs": 1000,
+      "loop": 0,
+      "sourceAction": "read",
+      "sourceFrames": [
+        "9cedf18471ccb7dd435c4cc1d24e296b7082a94ec8013d164f382a1d59bbfdee",
+        "2b818a1fe1f85cdbfd54b7728c6b5211329bffd60e06f898278e9cd49c29a916",
+        "b5b804677edbe4668fae866392018cb9207be9c0e2c12e8e39ccd9ce9b56ccd6",
+        "f9d5879cffdab06218b4657636a0b10685f048ae83023b0566cc1049e3097018",
+        "b4cf6a98ae223ec461a039d48b664ccf190d9dfadeed9bcc44f7962d94be2a36",
+        "993cb2c9807bee26e91ef9adcc391e0204effaf6cb82d0326fe18b3b9a33a4c1",
+        "6f88271ee32281e9cbd1f1fa97ac688c7ad7f78b79f674bd26dbe1e5cb6e5cea",
+        "f5672040e6159808c207902472c836edae5d39d9163228bebdef90ef5d019252"
+      ]
+    },
+    {
+      "file": "gemini/type.webp",
+      "sha256": "c30501d501d99b7d4a354beadf08e63627c8d3f4df0c7f2b7775ebaf049cbe23",
+      "frames": 8,
+      "uniqueFrames": 8,
+      "size": [
+        256,
+        256
+      ],
+      "durationMs": 1000,
+      "loop": 0,
+      "sourceAction": "type",
+      "sourceFrames": [
+        "62b02bc5f2b77642961db3a32fbc0e27bfe31f9dddf53fb0e7aaffd1151d340a",
+        "d155b3262389207c841fbb27101f623b30e2dcdcbdd00de3bcab121497ebae30",
+        "9c8dc8dc217db8f29a26608fb6e871f28f88cbbb234c49206cb9f3fd13f3ec96",
+        "d9afeaad3bc8ead1483bd5baeb7ccfd8257633a119403c5697b70f18f52a2a51",
+        "9c6f3fddc4876be780bb4e0afeca79353ca31373c644f81fb3dc2dbeab3d042e",
+        "0637feb572cf82acd74c80d8405f856dff5367af38fdfaa457bf096473416a59",
+        "999dc1083aae3481486736390da2f7f8cbe338e0fe817c7d63f4e544116ab2b6",
+        "0cda531e696a9093fe1a659da8b1a4d00dbef096fc7d8b9f8e34cc1ff3c785a4"
+      ]
+    },
+    {
+      "file": "gemini/check.webp",
+      "sha256": "84bc8b1b3000f2d882ef490620f39ada1f05631a34bb1a9206b7626fc70da967",
+      "frames": 8,
+      "uniqueFrames": 8,
+      "size": [
+        256,
+        256
+      ],
+      "durationMs": 1000,
+      "loop": 0,
+      "sourceAction": "check",
+      "sourceFrames": [
+        "0f94d306d71a9ceffb56bbae8f884b3b1c7555032563706a0f3de84043b4eeb2",
+        "cdff751c70e72c05e6001c1017d392c1ef3cdfbec7fb7b1c8c11c4f1a11e1cef",
+        "d9c58234124ce3baae71ef4a5892d235479ed3f1292cd48dc63ed384ffb2ac61",
+        "cd6b02ae094521d2d75b917686056b805f73564a2d5048853ce0d8b43f68aaab",
+        "12605c8e1f312fdc360500400660f5f5ad9c56a83bdc683eb46afc7f29732c08",
+        "4aa22171dbaea59eb5be7ed754c70d41f756a46bbe4371d90c9c333251b077bf",
+        "29ab15ba6cbb629b113b0a8e4d35825e561e299ee37afce1a273279444555741",
+        "43b3063a4d9d7b1732bf9f6ab501e81e41bc77640668538cec1d2dc665e97f23"
+      ]
+    },
+    {
+      "file": "gemini/success.webp",
+      "sha256": "31a91fcec914529c10c4a3146cb712b074c988adee252cfca3cfbebac9c2d57b",
+      "frames": 8,
+      "uniqueFrames": 8,
+      "size": [
+        256,
+        256
+      ],
+      "durationMs": 1000,
+      "loop": 0,
+      "sourceAction": "success",
+      "sourceFrames": [
+        "8c9e97d0b6baa7d8fec2f3a8e1c2076ad0df1c9327972204337f837c251e120a",
+        "2b01d17f96de5a9e913377521e014cea312b53a071dc507cfd1a804607fc145a",
+        "ce21d64e6677d32c61bf4d9624fce8c5eef559c8b46fbe09161f4e899bd8e76c",
+        "bf70f6e764d6d986c69d77515bb030e95ab461b96ee77b0fa6fc03521c31e3a6",
+        "1b191171ae020ed67507e4a3557f2da17e6ee20a183d8f05fe59a17e2405c6f0",
+        "93735f234845039a374c5f6d65aa6a00e7fb64cbcd2853363e9e41d7e57108d7",
+        "b37d982ebe28dc58bacec3957baf3b809d99be6b188463e52696ad0877eb870f",
+        "db85e6278e33aed2559164194be836aae9e657780bbea7e0af1a26a6182498e1"
+      ]
+    },
+    {
+      "file": "gemini/failed.webp",
+      "sha256": "b7a3f58927e16dfc1f18fad6ab31ddf9d798a7734ea6f50595a9500055efc13b",
+      "frames": 8,
+      "uniqueFrames": 8,
+      "size": [
+        256,
+        256
+      ],
+      "durationMs": 1000,
+      "loop": 0,
+      "sourceAction": "failed",
+      "sourceFrames": [
+        "f1ef5ef70caa250e24127a55d083af0a6a2b5f660208a7399a23c36f9c21acba",
+        "740ed66f3a6db92419129eb52e8e7474f55f496c307a8c5f4b133e7dd349cb52",
+        "156cbb7510e7bf76f73a90c7f2d44f1f609d0bd7d8e2d610198fdb88cbd6ce56",
+        "a8d4887dea8008c9f856154c5cdeba8fb46f73985c2434c665fee9e0e01671b6",
+        "00316a7d99f33d8134392a04c2271b81007a81204ee01c32cf72ceb792e46fb4",
+        "393ee97b9d501685a4c826298230c45ae4edeb701c8894622cf2b32e2f859cf3",
+        "e5ff0b54843e3b181f4abef50b8789d0c3c30a6e968b56e624fdf9f1ed6098e2",
+        "b70a5f730a3d1263439a83dffea4e973b3cbfecb72000f4639ae9d41f0b5fb05"
+      ]
+    },
+    {
+      "file": "gemini/walk-left.webp",
+      "sha256": "7e2c00ecabc90daff9f138cf86a15b3fd00c9f1684ec0fc74ce3a795e08e8e12",
+      "frames": 8,
+      "uniqueFrames": 8,
+      "size": [
+        256,
+        256
+      ],
+      "durationMs": 1000,
+      "loop": 0,
+      "sourceAction": "walk-left",
+      "sourceFrames": [
+        "12535898a67fbd154ad69cba42d17d2c1992aeb4076a10061a50224d43b656ec",
+        "a32fa90b93f2d13ecc7d22ae92e4cc9c1c0a1fe8c71d17ce4283571300fa31e3",
+        "1e064976b91fc51e1cdb02683c4103398d3013ca7d50e1b9c0a9692db1429238",
+        "971f52407b0a6134eb5b83290c80b70ed2eb1ef4b386fc0e5740443a0eb8497f",
+        "7572280b4513e4b72c314ee6c59474554e8935a982d02ec93754cf4cdd83c907",
+        "cb1b022489ab8ec11224070bdabd9bcd28a1f0f3ee4688323f82fd6189d04dac",
+        "42d9e40fc96b91b7e08ffc885ccc68282a79a95edf68ca0c96cf845b9e0bcbb0",
+        "ccbddbae57377d3b113617c3bbda54f9409338fad21e76f16cd067301a3a04b0"
+      ]
+    },
+    {
+      "file": "LICENSE",
+      "sha256": "1607e9149a254c619d0ceb4119ed9346e13048c28c1d437d80ff2837e40159da",
+      "upstreamPath": "LICENSE",
+      "gitBlob": "dd54a3e60d5fe9e2296c4745c5b826d74158c852"
+    },
+    {
+      "file": "THIRD_PARTY_NOTICES.md",
+      "sha256": "adcf5540e5c607160322a97cb8ce8f16d9290085637b86f2e83cbfa87d340fb4",
+      "upstreamPath": "THIRD_PARTY_NOTICES.md",
+      "gitBlob": "77211934603f15bda483124c3db53858cafe0fe9"
+    }
+  ],
+  "creator": "Hjh-12138 / DSH-Pixel-Toons",
+  "displayViewports": {
+    "claude": {
+      "x": 43,
+      "y": 35,
+      "width": 170,
+      "height": 187,
+      "tops": {
+        "idle": 57,
+        "think": 62,
+        "search": 66,
+        "read": 98,
+        "type": 81,
+        "check": 52,
+        "success": 35,
+        "failed": 61,
+        "walk-left": 57
+      }
+    },
+    "gemini": {
+      "x": 48,
+      "y": 57,
+      "width": 164,
+      "height": 165,
+      "tops": {
+        "idle": 62,
+        "think": 61,
+        "search": 61,
+        "read": 97,
+        "type": 81,
+        "check": 57,
+        "success": 58,
+        "failed": 59,
+        "walk-left": 63
+      }
+    }
+  }
+}

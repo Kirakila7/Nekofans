@@ -1,0 +1,26 @@
+{
+  "name": "bigfish-pet",
+  "version": "0.1.0-dev",
+  "private": true,
+  "main": "apps/desktop/main.cjs",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "setup:electron": "install-electron --no",
+    "start": "node scripts/start-desktop.mjs",
+    "start:neko": "node scripts/start-neko-workbench.mjs",
+    "test": "node scripts/test-v1.mjs",
+    "test:neko": "node scripts/test-neko-workbench.mjs",
+    "check:neko": "npm --prefix apps/neko-workbench run check",
+    "test:desktop": "node tests/desktop/run-smoke.mjs",
+    "test:dsh": "node tests/desktop/dsh-host-smoke.mjs",
+    "check:distribution": "node scripts/check-distribution.mjs",
+    "build:portable": "node scripts/build-portable.mjs",
+    "test:portable": "node tests/desktop/portable-smoke.mjs"
+  },
+  "devDependencies": {
+    "electron": "44.7.0"
+  }
+}

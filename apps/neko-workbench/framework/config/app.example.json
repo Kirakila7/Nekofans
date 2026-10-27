@@ -1,0 +1,97 @@
+{
+  "productBrand": {
+    "name": "N.E.K.O.",
+    "workbenchTitle": "N.E.K.O. 工作台"
+  },
+  "appearance": {
+    "skinId": "bigfish",
+    "skinChangesPersona": false
+  },
+  "mainChat": {
+    "provider": "chat-api",
+    "personaId": "bigfish",
+    "baseUrl": "https://api.example.com/v1",
+    "model": "填写模型名",
+    "apiKeyStorage": "system-keychain",
+    "stream": true,
+    "requestTimeoutMs": 60000,
+    "maxOutputTokens": 1024
+  },
+  "memory": {
+    "namespace": "bigfish",
+    "activeProvider": "diary",
+    "providers": {
+      "diary": {
+        "adapter": "whale-diary",
+        "enabled": true,
+        "managedRoot": "${APP_DATA}/personas/bigfish/diary",
+        "sourceBinding": null,
+        "nativeFilesReadOnlyByDefault": true
+      },
+      "neko": {
+        "adapter": "neko-memory",
+        "enabled": false,
+        "profileBinding": null,
+        "autoCreateProfile": false
+      }
+    },
+    "sync": {
+      "enabled": true,
+      "direction": "bidirectional",
+      "scope": "same-persona-only",
+      "outbox": "${APP_DATA}/personas/bigfish/sync/outbox",
+      "privateEntries": "private-to-private-only",
+      "conflicts": "preserve-both",
+      "deletePropagation": "explicit-tombstone",
+      "preserveNativeData": true
+    },
+    "confirmedFactsOnly": true,
+    "preserveRawMessages": true
+  },
+  "dsh": {
+    "entry": "main-pet-context-menu",
+    "mainChatCanDispatchTasks": false,
+    "mainFollowsSubagentState": false,
+    "helperLimit": 5,
+    "order": "dsh-catalog",
+    "pinnedFirst": true
+  },
+  "futureAdapters": {
+    "neko": {
+      "enabled": false,
+      "purpose": "optional-native-chat",
+      "memoryConfiguredSeparately": true
+    },
+    "voiceMemory": {
+      "enabled": false
+    },
+    "pngtuber": {
+      "enabled": false
+    }
+  },
+  "fishKeeping": {
+    "entry": "main-agent-context-menu",
+    "firstRun": "one-click-setup",
+    "defaults": {
+      "mode": "diary",
+      "biliEnabled": false,
+      "biliWriteActions": false,
+      "mainFollowsSubagentState": false
+    },
+    "switchRequires": [
+      "target-ready",
+      "snapshot-saved",
+      "sync-checkpoint"
+    ],
+    "onFailure": "keep-current-mode"
+  },
+  "workbench": {
+    "config": "./workbench.example.json",
+    "enabled": true,
+    "configurationOnly": true,
+    "desktopSource": "../../",
+    "mainChatIntegration": "planned",
+    "dualMemoryIntegration": "planned",
+    "preserveExistingPersonaAndMemory": true
+  }
+}

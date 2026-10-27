@@ -1,0 +1,17 @@
+{
+  "source": "PC2005-cloud/dsh-pet",
+  "upstream_commit": "dfc03961bdb4d26898838cb72c9c2ac09699b1e2",
+  "production": "Original upstream VP9-alpha video assets; copied from installed dsh-pet. No generated replacement.",
+  "mapping": {
+    "idle": "待机呼吸休闲",
+    "thinking": "工作状态-思考冒泡",
+    "working": "写代码",
+    "sorting": "工作状态-清点归档",
+    "waiting": "工作状态-原地踱步张望",
+    "success": "工作状态-雀跃庆祝",
+    "error": "工作状态-垂头叹气冒汗",
+    "speaking": "碎碎念-对屏碎碎念",
+    "drag": "被鼠标拖拽悬空反馈",
+    "hello": "点击回应-元气挥手"
+  }
+}

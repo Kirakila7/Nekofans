@@ -1,0 +1,43 @@
+{
+  "order": [
+    "yui",
+    "devcat",
+    "bigfish",
+    "claude",
+    "gemini"
+  ],
+  "userReferenceRoles": {
+    "bigfish": "blue-haired whale maid",
+    "gemini": "purple-haired catgirl, pink and gold heterochromia",
+    "claude": "long orange-haired maid with sun brooch"
+  },
+  "rejectedArt": "Initial atlas was rejected; do not embed its Gemini kitten or bob-haired Claude design.",
+  "artRevision": "v2 - corrected to the three user supplied references",
+  "files": [
+    {
+      "file": "bigfish.webp",
+      "sha256": "b5cb6e176572c2bd20e644d643900dab12eda644887ebe787043c332eedb078a",
+      "bytes": 22374
+    },
+    {
+      "file": "claude.webp",
+      "sha256": "91d896ca817b863fbbcf728f14f518a0cb1e16681f16ae0b598d0fb7f61fd067",
+      "bytes": 24182
+    },
+    {
+      "file": "devcat.webp",
+      "sha256": "dc719235cc7c592ed38b21303e2d34a04146e0e700fbfcc2720244e748fe6f27",
+      "bytes": 23880
+    },
+    {
+      "file": "gemini.webp",
+      "sha256": "7d83857b93ae60e17e0f8251892978bb950e9810152315b727728e95879befcf",
+      "bytes": 29602
+    },
+    {
+      "file": "yui.webp",
+      "sha256": "db9ff281d4bf37384a005a96e6f624d33840701f9f4e8479d8d5861b3618a1c6",
+      "bytes": 24604
+    }
+  ]
+}

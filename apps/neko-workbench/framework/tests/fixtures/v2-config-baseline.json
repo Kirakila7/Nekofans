@@ -1,0 +1,177 @@
+{
+  "source": "v2 dual-memory framework, 2026-10-26",
+  "app": {
+    "productBrand": {
+      "name": "N.E.K.O.",
+      "workbenchTitle": "N.E.K.O. 工作台"
+    },
+    "appearance": {
+      "skinId": "bigfish",
+      "skinChangesPersona": false
+    },
+    "mainChat": {
+      "provider": "chat-api",
+      "personaId": "bigfish",
+      "baseUrl": "https://api.example.com/v1",
+      "model": "填写模型名",
+      "apiKeyStorage": "system-keychain",
+      "stream": true,
+      "requestTimeoutMs": 60000,
+      "maxOutputTokens": 1024
+    },
+    "memory": {
+      "namespace": "bigfish",
+      "activeProvider": "diary",
+      "providers": {
+        "diary": {
+          "adapter": "whale-diary",
+          "enabled": true,
+          "managedRoot": "${APP_DATA}/personas/bigfish/diary",
+          "sourceBinding": null,
+          "nativeFilesReadOnlyByDefault": true
+        },
+        "neko": {
+          "adapter": "neko-memory",
+          "enabled": false,
+          "profileBinding": null,
+          "autoCreateProfile": false
+        }
+      },
+      "sync": {
+        "enabled": true,
+        "direction": "bidirectional",
+        "scope": "same-persona-only",
+        "outbox": "${APP_DATA}/personas/bigfish/sync/outbox",
+        "privateEntries": "private-to-private-only",
+        "conflicts": "preserve-both",
+        "deletePropagation": "explicit-tombstone",
+        "preserveNativeData": true
+      },
+      "confirmedFactsOnly": true,
+      "preserveRawMessages": true
+    },
+    "dsh": {
+      "entry": "main-pet-context-menu",
+      "mainChatCanDispatchTasks": false,
+      "mainFollowsSubagentState": false,
+      "helperLimit": 5,
+      "order": "dsh-catalog",
+      "pinnedFirst": true
+    },
+    "futureAdapters": {
+      "neko": {
+        "enabled": false,
+        "purpose": "optional-native-chat",
+        "memoryConfiguredSeparately": true
+      },
+      "voiceMemory": {
+        "enabled": false
+      },
+      "pngtuber": {
+        "enabled": false
+      }
+    },
+    "fishKeeping": {
+      "entry": "main-agent-context-menu",
+      "firstRun": "one-click-setup",
+      "defaults": {
+        "mode": "diary",
+        "biliEnabled": false,
+        "biliWriteActions": false,
+        "mainFollowsSubagentState": false
+      },
+      "switchRequires": [
+        "target-ready",
+        "snapshot-saved",
+        "sync-checkpoint"
+      ],
+      "onFailure": "keep-current-mode"
+    }
+  },
+  "mainAgentMenu": {
+    "schemaVersion": 1,
+    "mount": "main-agent.context-menu",
+    "label": "养鱼",
+    "items": [
+      {
+        "id": "fish.start",
+        "label": "一键开始养鱼…",
+        "action": "onboarding-or-resume"
+      },
+      {
+        "id": "fish.pause",
+        "label": "暂停养鱼",
+        "scope": "fish-life-only"
+      },
+      {
+        "id": "memory.mode",
+        "label": "记忆方式",
+        "items": [
+          {
+            "id": "memory.mode.diary",
+            "label": "日记模式（轻量）",
+            "type": "radio",
+            "value": "diary",
+            "default": true
+          },
+          {
+            "id": "memory.mode.neko",
+            "label": "N.E.K.O. 记忆（进阶）",
+            "type": "radio",
+            "value": "neko",
+            "requires": "neko-memory-ready"
+          }
+        ]
+      },
+      {
+        "id": "memory.autosync",
+        "label": "两边自动同步",
+        "type": "checkbox",
+        "default": true
+      },
+      {
+        "id": "memory.sync",
+        "label": "立即同步",
+        "action": "sync-connected-providers"
+      },
+      {
+        "id": "memory.status",
+        "label": "同步状态 / 处理冲突…"
+      },
+      {
+        "id": "fish.settings",
+        "label": "养鱼设置…",
+        "sections": [
+          "聊天 API 与模型",
+          "大肥鱼人设",
+          "N.E.K.O. 记忆连接",
+          "B站扫码与作息"
+        ]
+      },
+      {
+        "id": "fish.memories",
+        "label": "记忆与日记…",
+        "sections": [
+          "聊天记录",
+          "给你的日记",
+          "私人日记（仅本机）",
+          "记忆查看与编辑",
+          "备份 / 恢复"
+        ]
+      }
+    ],
+    "constraints": {
+      "desktopHasPermanentPanel": false,
+      "subagentMenuUnchanged": true,
+      "pauseDoesNotStopDSHTasks": true
+    }
+  },
+  "unchangedFiles": {
+    "config/persona.bigfish.json": "a1ff89e64dcf4093fe3c9e206509652c4f14447bfdcb8c2847ce38cec061a8f4",
+    "config/skin.bigfish.json": "4dfa0c17a310de5735a01232ab69044e8657ab466ec4311040a63531abb8e054",
+    "src/contracts.ts": "6be406ffb16816073c3b336fd303f40f94fee6764c2e5c841ea8e01fd7b47e08",
+    "src/memory-contracts.ts": "26f84de09bc2ae60038cbe76af66628b8d4383a52cc5d64059fa3290ab2ea006",
+    "reference/memory-hub.mjs": "e495875b947d8d264f41ed0f820213fe83ce23b259250dbc033398a9bf5636e5",
+    "tests/memory-hub.test.mjs": "1ddb3e0cf5014c7ca7e8a6e9a24008b6abb75248577544ef5112b79fc84a8672"
+  }
+}

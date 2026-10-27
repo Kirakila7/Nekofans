@@ -1,0 +1,281 @@
+{
+  "schemaVersion": 1,
+  "product": {
+    "name": "N.E.K.O.",
+    "title": "N.E.K.O. 工作台",
+    "desktopSource": "../../",
+    "desktopBaseline": "0.13.0",
+    "configurationOnly": true
+  },
+  "runtime": {
+    "backend": "embedded-dsh",
+    "dshVersion": "0.2.1-rc.3",
+    "workspaceSessionId": null,
+    "sessionBinding": {
+      "kind": "existing-dsh-root",
+      "source": "runtime.state.dshRoot.sessionId",
+      "resolution": "native-runtime-only",
+      "createOnSelection": false
+    },
+    "autoStartServices": false,
+    "autoAuthenticate": false,
+    "autoTopUp": false,
+    "autoSelectModel": false
+  },
+  "appearance": {
+    "globalAvatar": {
+      "selectedId": "yui",
+      "builtinIds": [
+        "yui",
+        "devcat",
+        "bigfish",
+        "claude",
+        "gemini"
+      ],
+      "allowCustomUpload": true,
+      "customImageSource": "native-picker",
+      "customImagePersistence": "local-only",
+      "customColorExtraction": "local-only",
+      "changesPersona": false,
+      "changesMemoryNamespace": false,
+      "changesAccount": false
+    },
+    "theme": {
+      "followGlobalAvatar": true,
+      "presetIds": [
+        "yui",
+        "devcat",
+        "bigfish",
+        "claude",
+        "gemini"
+      ],
+      "customPalette": "local-image-dominant-color",
+      "mode": "follow-native-light-dark",
+      "habitatBackgroundToken": "--neko-account-habitat-bg",
+      "changesModelOrQuota": false
+    },
+    "accountLauncher": {
+      "name": "开发喵",
+      "avatarId": "devcat",
+      "namePlacement": "above-avatar",
+      "accountMenuOwner": "native-account-menu",
+      "preserveNativeEvents": true,
+      "preserveLoginExpiryAndSignOutConfirmation": true
+    }
+  },
+  "roles": [
+    {
+      "id": "yui",
+      "name": "Yui",
+      "avatarId": "yui",
+      "enabled": false,
+      "sessionBinding": null,
+      "customizable": [
+        "name",
+        "avatarId"
+      ],
+      "stateLabel": "未接入"
+    },
+    {
+      "id": "bigfish",
+      "name": "大肥鱼",
+      "avatarId": "bigfish",
+      "enabled": true,
+      "sessionBinding": {
+        "kind": "existing-dsh-root",
+        "source": "runtime.state.dshRoot.sessionId",
+        "sessionId": null,
+        "createOnSelection": false
+      },
+      "customizable": [
+        "name",
+        "avatarId"
+      ],
+      "stateLabel": "运行时绑定真实 DSH 会话"
+    },
+    {
+      "id": "claude",
+      "name": "Claude小姐",
+      "avatarId": "claude",
+      "enabled": false,
+      "sessionBinding": null,
+      "customizable": [
+        "name",
+        "avatarId"
+      ],
+      "stateLabel": "未接入"
+    }
+  ],
+  "roleBoundary": {
+    "roleIdIsNotPersonaId": true,
+    "avatarIsNotPersona": true,
+    "accountIsNotRoleRuntime": true,
+    "selectionDoesNotCreatePersona": true,
+    "selectionDoesNotSendPrompt": true,
+    "selectionDoesNotCreateSession": true,
+    "memoryNamespaceSource": "existing-mainChat.personaId"
+  },
+  "accounts": {
+    "connectionSource": "native-dsh-account-projection",
+    "connections": [],
+    "providers": [
+      {
+        "id": "deepseek",
+        "enabled": true,
+        "status": "runtime-read-only-projection"
+      },
+      {
+        "id": "neko",
+        "enabled": false,
+        "status": "planned"
+      },
+      {
+        "id": "codex",
+        "enabled": false,
+        "status": "planned"
+      },
+      {
+        "id": "claude",
+        "enabled": false,
+        "status": "planned"
+      },
+      {
+        "id": "gemini",
+        "enabled": false,
+        "status": "planned"
+      }
+    ],
+    "security": {
+      "credentialRefLocation": "native-secure-storage-only",
+      "frontendSecretFieldsForbidden": [
+        "credentialRef",
+        "apiKey",
+        "accessToken",
+        "refreshToken",
+        "password"
+      ],
+      "frontendProjection": [
+        "accountId",
+        "providerId",
+        "status",
+        "redactedLabel",
+        "wallet"
+      ],
+      "reuseGlobalCliLogin": false
+    },
+    "wallet": {
+      "readOnly": true,
+      "source": "DeepSeek 官方充值钱包",
+      "supportedCurrencies": [
+        "CNY",
+        "USD"
+      ],
+      "selection": "zh-prefers-CNY-otherwise-USD",
+      "fallback": "other-supported-currency-only-if-preferred-absent",
+      "combineCurrencies": false,
+      "convertCurrencies": false,
+      "includeBonusInNormalBalance": false,
+      "unknownText": "暂不可读取",
+      "unknownAmount": null,
+      "unknownIsZero": false,
+      "isPercentageQuota": false,
+      "nativeMethods": [
+        "account.getState",
+        "account.getBalance"
+      ]
+    },
+    "pets": {
+      "source": "actual-connected-accounts-only",
+      "showOnlyWhenAuthenticated": true,
+      "onePerConnection": true,
+      "initialSupportedProviders": [
+        "deepseek"
+      ],
+      "providerAppearance": {
+        "deepseek": "bigfish"
+      },
+      "videoAsset": "assets/idle.webm",
+      "videoFit": "cover-center",
+      "reducedMotion": "static-poster",
+      "backgroundToken": "--neko-account-habitat-bg"
+    }
+  },
+  "options": [
+    {
+      "id": "nekoSettings",
+      "label": "N.E.K.O. 聊天设置",
+      "nativeAction": "neko-settings"
+    },
+    {
+      "id": "openNeko",
+      "label": "打开 N.E.K.O.",
+      "nativeAction": "open-neko"
+    },
+    {
+      "id": "taskNotes",
+      "label": "任务备注",
+      "nativeAction": "task-notes"
+    },
+    {
+      "id": "connect",
+      "label": "连接 N.E.K.O.（可选）",
+      "nativeAction": "connect-neko",
+      "explicitUserActionOnly": true
+    },
+    {
+      "id": "status",
+      "label": "连接状态",
+      "nativeAction": "connection-status"
+    },
+    {
+      "id": "reconnect",
+      "label": "重新连接工作台",
+      "nativeAction": "reconnect-workbench"
+    }
+  ],
+  "globalTools": {
+    "presentation": "inside-active-role-options",
+    "owner": "native-dsh",
+    "preserveOriginalNodesAndEvents": true,
+    "entries": [
+      "plugins",
+      "schedules",
+      "more"
+    ],
+    "runtimeScope": "shared-current-dsh-profile",
+    "perRolePluginRuntime": false
+  },
+  "plannedIntegrations": {
+    "chatApi": {
+      "status": "planned",
+      "connected": false,
+      "configurationRef": "app.example.json#/mainChat"
+    },
+    "dualMemory": {
+      "status": "planned",
+      "nativeAdaptersConnected": false,
+      "configurationRef": "app.example.json#/memory",
+      "referenceKernel": "../reference/memory-hub.mjs"
+    },
+    "fishKeeping": {
+      "status": "planned",
+      "connected": false,
+      "configurationRef": "app.example.json#/fishKeeping"
+    }
+  },
+  "navigation": {
+    "community": {
+      "id": "community",
+      "label": "社区",
+      "placement": "after-new-session-before-roles",
+      "nativeAction": "open-community",
+      "defaultUrl": "https://community.project-neko.cn/feed",
+      "targetSource": "native-config",
+      "openIn": "isolated-native-window",
+      "sharesDshCredentials": false,
+      "createsTask": false,
+      "nativeAccountIntegration": "planned",
+      "sessionPartition": "persist:neko-community"
+    }
+  }
+}

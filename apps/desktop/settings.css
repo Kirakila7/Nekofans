@@ -1,0 +1,32 @@
+:root { color-scheme: light; font-family: "Microsoft YaHei", "Segoe UI", sans-serif; color: #223e52; background: #f2f8fc; font-size: 14px; }
+* { box-sizing: border-box; }
+body { margin: 0 auto; max-width: 760px; padding: 28px 34px 20px; }
+header { margin-bottom: 22px; }
+.eyebrow { color: #4d8baf; letter-spacing: .12em; font-size: 12px; }
+h1 { margin: 7px 0 9px; font-weight: 650; font-size: 26px; }
+h2 { font-size: 18px; margin: 0 0 8px; }
+header > p:last-child, .hint { color: #678092; line-height: 1.7; }
+nav { display: flex; gap: 8px; padding: 5px; background: #e6f0f6; border-radius: 13px; margin-bottom: 20px; }
+nav button { flex: 1; border: 0; border-radius: 9px; padding: 10px; background: transparent; color: #5b788c; font-weight: 600; }
+nav button[aria-pressed="true"] { color: #246b98; background: white; box-shadow: 0 2px 8px #2847630c; }
+main { background: #fff; border: 1px solid #e0ecf3; border-radius: 18px; padding: 24px; }
+label { display: block; font-weight: 600; margin: 17px 0 7px; }
+input, select, textarea, button { font: inherit; }
+input:not([type="checkbox"]), select, textarea { display: block; width: 100%; border: 1px solid #cddfe9; border-radius: 8px; padding: 10px 11px; color: #223e52; background: #fcfeff; }
+textarea { resize: vertical; line-height: 1.7; }
+input::placeholder, textarea::placeholder { color: #92a7b4; }
+:focus-visible { outline: 3px solid #8ed0f5; outline-offset: 2px; }
+.hint { margin: 8px 0 14px; font-size: 13px; }
+.small { font-size: 12px; }
+.label-row { display: flex; align-items: baseline; justify-content: space-between; }
+.label-row span { color: #63859b; font-size: 12px; }
+.checkbox { font-weight: 400; display: flex; align-items: center; gap: 7px; margin: 10px 0; color: #667e8e; font-size: 12px; }
+.field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+button { cursor: pointer; }
+.primary { width: 100%; padding: 11px 16px; border: 0; border-radius: 10px; background: #478eb8; color: white; font-weight: 600; }
+button:hover { filter: brightness(.97); }
+:disabled { opacity: .6; cursor: default; }
+#status { margin: 14px 0 0; line-height: 1.7; min-height: 1.7em; color: #367b62; }
+#status.is-error { color: #aa4c46; }
+footer { padding: 16px 0 0; color: #8ba0ad; text-align: center; font-size: 12px; }
+[hidden] { display: none !important; }

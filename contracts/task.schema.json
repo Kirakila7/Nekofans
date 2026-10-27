@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Task and delivery proposal",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "task_id", "character_id", "session_id", "project_id", "kind", "status", "required_artifact_kinds", "artifacts", "billing"],
+  "properties": {
+    "schema_version": {"const": "0.1-draft"},
+    "sample_only": {"type": "boolean", "default": false},
+    "task_id": {"type": "string", "minLength": 1},
+    "character_id": {"type": "string", "minLength": 1},
+    "session_id": {"type": "string", "minLength": 1},
+    "project_id": {"type": "string", "minLength": 1},
+    "kind": {"enum": ["text", "data", "video", "code", "mixed"]},
+    "status": {"enum": ["queued", "running", "waiting_user", "waiting_approval", "waiting_quota", "waiting_external", "succeeded", "failed", "cancelled", "interrupted"]},
+    "required_artifact_kinds": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["text", "data", "video", "code", "image", "subtitle", "project"]}},
+    "artifacts": {"type": "array", "items": {"$ref": "#/$defs/artifact"}},
+    "billing": {"type": "array", "items": {"$ref": "#/$defs/billingItem"}},
+    "external_job_id": {"type": ["string", "null"], "minLength": 1},
+    "idempotency_key": {"type": ["string", "null"], "minLength": 1}
+  },
+  "$defs": {
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact_id", "kind", "path", "version", "production_method", "technical_check", "user_acceptance"],
+      "properties": {
+        "artifact_id": {"type": "string", "minLength": 1},
+        "kind": {"enum": ["text", "data", "video", "code", "image", "subtitle", "project"]},
+        "path": {"type": "string", "minLength": 1},
+        "version": {"type": "integer", "minimum": 1},
+        "production_method": {"enum": ["authored", "analysis", "generated", "edited", "mixed"]},
+        "technical_check": {"enum": ["not_checked", "passed", "failed"]},
+        "user_acceptance": {"enum": ["pending", "accepted", "rejected"]}
+      }
+    },
+    "billingItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["billing_source", "provider", "quote_type", "amount", "currency"],
+      "properties": {
+        "billing_source": {"enum": ["dsh_account", "third_party", "local"]},
+        "provider": {"type": "string", "minLength": 1},
+        "quote_type": {"enum": ["unknown", "estimate", "provider_quote", "settled"]},
+        "amount": {"type": ["string", "null"], "pattern": "^[0-9]+(?:\\.[0-9]+)?$"},
+        "currency": {"type": ["string", "null"], "minLength": 1}
+      }
+    }
+  }
+}

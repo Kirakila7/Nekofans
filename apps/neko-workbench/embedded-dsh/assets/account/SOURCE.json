@@ -1,0 +1,9 @@
+{
+  "source": "PC2005-cloud/dsh-pet",
+  "input": "assets/idle.webm",
+  "inputSha256": "deb965d05a85dacf5ff4a20faa757846f0d11679598c3ec578a5571487660395",
+  "nativeLauncher": "The unchanged original WebM is embedded for native video playback.",
+  "poster": "First original frame, alpha retained, center 360x360 crop resized to128x128; no generated replacement.",
+  "license": "assets/LICENSE.dsh-pet",
+  "reducedMotion": "Static original frame"
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": "0.1-draft",
+  "sample_only": true,
+  "task_id": "demo-task-001",
+  "character_id": "demo-character-001",
+  "session_id": "demo-session-001",
+  "project_id": "demo-project-001",
+  "kind": "video",
+  "status": "waiting_external",
+  "required_artifact_kinds": ["video", "subtitle"],
+  "artifacts": [],
+  "billing": [
+    {"billing_source": "dsh_account", "provider": "official-account", "quote_type": "unknown", "amount": null, "currency": null},
+    {"billing_source": "third_party", "provider": "demo-video-service", "quote_type": "unknown", "amount": null, "currency": null}
+  ],
+  "external_job_id": "demo-job-001",
+  "idempotency_key": "demo-task-001-step-001"
+}

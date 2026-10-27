@@ -1,0 +1,16 @@
+{
+  "name": "@bigfish/neko-workbench",
+  "productName": "N.E.K.O. 桌宠工作台",
+  "version": "0.20.0",
+  "private": true,
+  "main": "main.cjs",
+  "scripts": {
+    "start": "node scripts/start.cjs",
+    "check": "node scripts/check.cjs",
+    "test": "node scripts/test.cjs"
+  },
+  "type": "commonjs",
+  "engines": {
+    "node": ">=24"
+  }
+}

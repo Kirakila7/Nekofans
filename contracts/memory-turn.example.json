@@ -1,0 +1,19 @@
+{
+  "schema_version": "0.1-draft",
+  "sample_only": true,
+  "character_id": "demo-character-001",
+  "turn_id": "demo-turn-001",
+  "source_kind": "voice",
+  "created_at": "2026-10-25T20:00:00+08:00",
+  "scope": "project",
+  "project_id": "demo-project-001",
+  "session_id": "demo-session-001",
+  "task_id": null,
+  "utterance_id": "demo-utterance-001",
+  "audio_ref": null,
+  "user_text": "这个项目的介绍写短一点，先给我结论。",
+  "assistant_text": "好，这个项目我会先给结论，再补必要说明。",
+  "assistant_delivery": "audio_complete",
+  "user_explicit_confirmation": false,
+  "supersedes_turn_id": null
+}

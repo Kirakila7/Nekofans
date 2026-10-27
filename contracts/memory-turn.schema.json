@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Memory turn input proposal",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "character_id", "turn_id", "source_kind", "created_at", "scope", "user_text", "assistant_text", "assistant_delivery"],
+  "properties": {
+    "schema_version": {"const": "0.1-draft"},
+    "sample_only": {"type": "boolean", "default": false},
+    "character_id": {"type": "string", "minLength": 1},
+    "turn_id": {"type": "string", "minLength": 1},
+    "source_kind": {"enum": ["text", "voice", "task_feedback"]},
+    "created_at": {"type": "string", "format": "date-time"},
+    "scope": {"enum": ["user", "character", "project"]},
+    "project_id": {"type": ["string", "null"], "minLength": 1},
+    "session_id": {"type": ["string", "null"], "minLength": 1},
+    "task_id": {"type": ["string", "null"], "minLength": 1},
+    "utterance_id": {"type": ["string", "null"], "minLength": 1},
+    "audio_ref": {"type": ["string", "null"], "minLength": 1},
+    "user_text": {"type": "string", "minLength": 1},
+    "assistant_text": {"type": "string"},
+    "assistant_delivery": {"enum": ["text_only", "audio_complete", "audio_partial", "audio_not_played"]},
+    "user_explicit_confirmation": {"type": "boolean", "default": false},
+    "supersedes_turn_id": {"type": ["string", "null"], "minLength": 1}
+  },
+  "allOf": [
+    {"if": {"properties": {"source_kind": {"const": "voice"}}}, "then": {"required": ["utterance_id"], "properties": {"utterance_id": {"type": "string", "minLength": 1}}}},
+    {"if": {"properties": {"scope": {"const": "project"}}}, "then": {"required": ["project_id"], "properties": {"project_id": {"type": "string", "minLength": 1}}}}
+  ]
+}

@@ -1,0 +1,125 @@
+{
+  "schemaVersion": 1,
+  "mount": "main-agent.context-menu",
+  "label": "养鱼",
+  "items": [
+    {
+      "id": "fish.start",
+      "label": "一键开始养鱼…",
+      "action": "onboarding-or-resume"
+    },
+    {
+      "id": "fish.pause",
+      "label": "暂停养鱼",
+      "scope": "fish-life-only"
+    },
+    {
+      "id": "memory.mode",
+      "label": "记忆方式",
+      "items": [
+        {
+          "id": "memory.mode.diary",
+          "label": "日记模式（轻量）",
+          "type": "radio",
+          "value": "diary",
+          "default": true
+        },
+        {
+          "id": "memory.mode.neko",
+          "label": "N.E.K.O. 记忆（进阶）",
+          "type": "radio",
+          "value": "neko",
+          "requires": "neko-memory-ready"
+        }
+      ]
+    },
+    {
+      "id": "memory.autosync",
+      "label": "两边自动同步",
+      "type": "checkbox",
+      "default": true
+    },
+    {
+      "id": "memory.sync",
+      "label": "立即同步",
+      "action": "sync-connected-providers"
+    },
+    {
+      "id": "memory.status",
+      "label": "同步状态 / 处理冲突…"
+    },
+    {
+      "id": "fish.settings",
+      "label": "养鱼设置…",
+      "sections": [
+        "聊天 API 与模型",
+        "大肥鱼人设",
+        "N.E.K.O. 记忆连接",
+        "B站扫码与作息"
+      ]
+    },
+    {
+      "id": "fish.memories",
+      "label": "记忆与日记…",
+      "sections": [
+        "聊天记录",
+        "给你的日记",
+        "私人日记（仅本机）",
+        "记忆查看与编辑",
+        "备份 / 恢复"
+      ]
+    }
+  ],
+  "constraints": {
+    "desktopHasPermanentPanel": false,
+    "subagentMenuUnchanged": true,
+    "pauseDoesNotStopDSHTasks": true
+  },
+  "topLevel": [
+    {
+      "id": "workbench.open",
+      "label": "打开工作台",
+      "kind": "action",
+      "runtimeHandler": "openDsh",
+      "status": "implemented-in-desktop-source"
+    },
+    {
+      "id": "workbench.options",
+      "label": "工作台选项",
+      "kind": "submenu",
+      "configRef": "workbench.example.json#/options",
+      "status": "implemented-in-desktop-source"
+    },
+    {
+      "id": "fish.keeping",
+      "label": "养鱼",
+      "kind": "submenu",
+      "itemsRef": "#/items",
+      "status": "planned",
+      "enabled": false,
+      "reason": "保留原 v2 养鱼与双记忆规划，真实适配器尚未接入"
+    },
+    {
+      "id": "outputs.open",
+      "label": "产出文件",
+      "kind": "submenu",
+      "runtimeHandler": "artifacts/preview",
+      "status": "implemented-in-desktop-source"
+    },
+    {
+      "id": "app.settings",
+      "label": "设置",
+      "kind": "submenu",
+      "runtimeHandler": "mainMenu.settings",
+      "preserveAllNativeItems": true,
+      "status": "implemented-in-desktop-source"
+    },
+    {
+      "id": "workbench.reconnect",
+      "label": "重新连接工作台",
+      "kind": "action",
+      "nativeAction": "reconnect-workbench",
+      "status": "implemented-in-desktop-source"
+    }
+  ]
+}

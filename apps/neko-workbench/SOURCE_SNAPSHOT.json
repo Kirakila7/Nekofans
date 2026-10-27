@@ -1,0 +1,978 @@
+{
+  "sourceProject": "dsh-pet-desktop-lab-20261026",
+  "sourceVersion": "0.13.0",
+  "capturedAt": "2026-10-26T09:04:48.163078+00:00",
+  "scope": "Fixed source snapshot; runtime isolation and local README are adapted in this repository. No source UI synchronization.",
+  "excludes": [
+    "data",
+    "runtime",
+    "workspaces",
+    "evidence",
+    "node_modules",
+    "ZIP archives",
+    "claude-delivery",
+    "neko-character-reference.jpg",
+    "old live/evidence-dependent checks",
+    "historical handoff/acceptance documents",
+    "all source avatar reference photographs (embedded-dsh/assets/avatars/references)",
+    "historical framework verification.json and reference-test-results.txt"
+  ],
+  "files": [
+    {
+      "path": "assets/LICENSE.dsh-pet",
+      "bytes": 1069,
+      "sha256": "22757dc9c895b2729a2fc684d227cadfb54d5af3dd300029926839e8c4e269ce"
+    },
+    {
+      "path": "assets/drag.webm",
+      "bytes": 464764,
+      "sha256": "31373a86026636eecc890db763760309360310eb095cf5575b13c9ca2a6cc80e"
+    },
+    {
+      "path": "assets/error.webm",
+      "bytes": 198937,
+      "sha256": "ab00c844e62221905574b4c070e0d7b6fa14fb2afa1064c27a160f10e25f7196"
+    },
+    {
+      "path": "assets/hello.webm",
+      "bytes": 421669,
+      "sha256": "48cd729ccdcf746369942ea954d242e9afdd5643e1dac3827fa5e67450eb8776"
+    },
+    {
+      "path": "assets/idle.webm",
+      "bytes": 441437,
+      "sha256": "deb965d05a85dacf5ff4a20faa757846f0d11679598c3ec578a5571487660395"
+    },
+    {
+      "path": "assets/original-bubble.ttf",
+      "bytes": 4083908,
+      "sha256": "5f5099a065b5eb3ba55e9bd293af7707fdbd7858bf99d9381b7c6319445c2e62"
+    },
+    {
+      "path": "assets/original-status/三球抛接.webm",
+      "bytes": 549316,
+      "sha256": "a64c08a4b7e5c3549616faf9dcd418e17f156b4b72d906646e4d57067df70d23"
+    },
+    {
+      "path": "assets/original-status/下五子棋.webm",
+      "bytes": 514704,
+      "sha256": "0802b6b808f44846b3d194a857fb0ffd38bdea2d7cdb91c9e5e6f311e44f1953"
+    },
+    {
+      "path": "assets/original-status/东张西望.webm",
+      "bytes": 427005,
+      "sha256": "a20ed02ccc5e72075a3ca83fabb57d9aac5ded699f52d00ec6de72069799fcd5"
+    },
+    {
+      "path": "assets/original-status/中秋赏月吃月饼.webm",
+      "bytes": 512341,
+      "sha256": "3f64003262d3f129470721495695ecd231795d859693a748914c02c6e3883a3a"
+    },
+    {
+      "path": "assets/original-status/优雅女仆舞.webm",
+      "bytes": 578915,
+      "sha256": "74209c4c668545ab1e2366e0d1c0709b7bea0312eeba7e89b553d5b977bfe649"
+    },
+    {
+      "path": "assets/original-status/偷吃零食被抓住.webm",
+      "bytes": 432201,
+      "sha256": "c3b783351ad38fdd931e80b188ecb12d273f21e4794aed2c41f267bdb75ff897"
+    },
+    {
+      "path": "assets/original-status/写代码.webm",
+      "bytes": 383960,
+      "sha256": "0441287737cdbb993ce90dfa74c67ea4ea3549d8c8ea98946604668464589ed7"
+    },
+    {
+      "path": "assets/original-status/写福字.webm",
+      "bytes": 500314,
+      "sha256": "7841a47a6997bb7c90d81671d524c44b1afc87ca2e8fceb17d06d99003a67181"
+    },
+    {
+      "path": "assets/original-status/凭空生花.webm",
+      "bytes": 620252,
+      "sha256": "d1c336bc54c57a282bec180859c7b7b58912b70b5bca7b2f49495cd30cc7d5d6"
+    },
+    {
+      "path": "assets/original-status/动物环绕.webm",
+      "bytes": 981435,
+      "sha256": "814d41e7d619f9a61f38e5494a0cfd703f8bcfd829a14fa921e1c59acf3ce872"
+    },
+    {
+      "path": "assets/original-status/原地专心玩魔方.webm",
+      "bytes": 442948,
+      "sha256": "ad54da175ba86b19a84b73b3169fb418b2df016560bb274283f200aca351e712"
+    },
+    {
+      "path": "assets/original-status/原地小憩沉眠.webm",
+      "bytes": 433769,
+      "sha256": "31d4a6b36a29b2a4fe097384173d3bbeb3fa2f40f526b13191791456bf7507a1"
+    },
+    {
+      "path": "assets/original-status/原地敲击桌面互动.webm",
+      "bytes": 403033,
+      "sha256": "a40f481e89abcc726c89f30b01d085ca8c17a090e71facdd5e7f747e771093eb"
+    },
+    {
+      "path": "assets/original-status/原地跳跃抓碎头顶物品.webm",
+      "bytes": 619282,
+      "sha256": "ccb906c677c7b739eb0dbf5307160e66583562c2a6caec72a9d3d14a202fcccd"
+    },
+    {
+      "path": "assets/original-status/原地蹲下玩玩具汽车.webm",
+      "bytes": 505114,
+      "sha256": "3ec9978ce3663d9bc4bfe5f5223f0a4e3d9ea6fcd0a6acdbaa802e0cfba36bf2"
+    },
+    {
+      "path": "assets/original-status/原地重力下蹲压缩.webm",
+      "bytes": 215047,
+      "sha256": "1c8972478a7f347818165db62b468f1624ec11d0862f38aec3078e3870831d24"
+    },
+    {
+      "path": "assets/original-status/变鸽子.webm",
+      "bytes": 509462,
+      "sha256": "796eba8ebe705e9339035e533e4f913fb8b9810432dcd6e7ae4fc1602e9ce3cf"
+    },
+    {
+      "path": "assets/original-status/可爱宅舞.webm",
+      "bytes": 576307,
+      "sha256": "4f737e44ea67c20368bdce474b951902c87c37991fb0750da8ed7794df6ec55c"
+    },
+    {
+      "path": "assets/original-status/吃Token.webm",
+      "bytes": 574754,
+      "sha256": "d46ef798fb189cd7652f63d03a35e6f314e5a598b4a65f76202ec95852eb719c"
+    },
+    {
+      "path": "assets/original-status/吃冰淇淋融化.webm",
+      "bytes": 509816,
+      "sha256": "17d73682926d6ce4203ad12d9049527e604d448bcc5c82ac5b12950b4ceb0447"
+    },
+    {
+      "path": "assets/original-status/吃午餐.webm",
+      "bytes": 495122,
+      "sha256": "e48a70e61d93195c611c2d4041be32a26a114f78c835ff6b2345459ae39a90ce"
+    },
+    {
+      "path": "assets/original-status/吃大闸蟹.webm",
+      "bytes": 545299,
+      "sha256": "fbd0f445c15fda1f827e6eb485270ddf9025ac29b3edcac28a5eff7d9aa80f46"
+    },
+    {
+      "path": "assets/original-status/吃年糕.webm",
+      "bytes": 451257,
+      "sha256": "ba0c86988687801a5b19d055d728bb182c8a95a0bdd7071dea16b83c1162135c"
+    },
+    {
+      "path": "assets/original-status/吃早餐.webm",
+      "bytes": 441484,
+      "sha256": "893b61587aeda8ca146e32b596b00903461aab04684a146d84b31965968d60e4"
+    },
+    {
+      "path": "assets/original-status/吃晚餐.webm",
+      "bytes": 741965,
+      "sha256": "8902602fb012c29d33392822ab534ed119a136610f6bc2e8c0c51d60afec673a"
+    },
+    {
+      "path": "assets/original-status/吃汤圆.webm",
+      "bytes": 437152,
+      "sha256": "53a0f93612bb59c7279010f993a1101b033fc01df1998dd9874d8aea175afa6f"
+    },
+    {
+      "path": "assets/original-status/吃白饭.webm",
+      "bytes": 459590,
+      "sha256": "b620413d6fa303a0ed9168dc71453c3bddc10141a0b7edeff87dc2e6e054d502"
+    },
+    {
+      "path": "assets/original-status/吃粽子.webm",
+      "bytes": 446268,
+      "sha256": "f3af3217674427fdc5609bf50b170f69669c84cf229cd7b44261c00da7876ade"
+    },
+    {
+      "path": "assets/original-status/吃糖葫芦.webm",
+      "bytes": 469809,
+      "sha256": "6900468dc166bfb90e1cfb73de9b41a08c62513483ce1300658340cf942be3cd"
+    },
+    {
+      "path": "assets/original-status/吃腊八粥.webm",
+      "bytes": 460665,
+      "sha256": "f821527812875262cc0dda50fe023c603fc89ec566172777c6bff4fa45943011"
+    },
+    {
+      "path": "assets/original-status/吃西瓜.webm",
+      "bytes": 482918,
+      "sha256": "0dd992fb7fb51d707d6589cb813a450437a2bd54046709f424a73353e2d7f78d"
+    },
+    {
+      "path": "assets/original-status/吃重阳糕.webm",
+      "bytes": 468951,
+      "sha256": "d2b6b466fcb1ee689ae130680bf38311e9988d995879ca3b5b1d9aa0b5438058"
+    },
+    {
+      "path": "assets/original-status/吃长寿面.webm",
+      "bytes": 489038,
+      "sha256": "2881e1cd4ca31fd56ca578ce2ee73d21222f0006f237c865d9b2dc1ebc436edd"
+    },
+    {
+      "path": "assets/original-status/吃青团.webm",
+      "bytes": 377524,
+      "sha256": "0d99393dd64ddf0b1ec4ab4cf392c86092ab5edf58d12f5b72e325035da23606"
+    },
+    {
+      "path": "assets/original-status/吃饺子.webm",
+      "bytes": 554828,
+      "sha256": "a607391c206cb2a1a977d72f318a6b5bfe95aee4da9b11c9de8724bd9981cc06"
+    },
+    {
+      "path": "assets/original-status/吹气球.webm",
+      "bytes": 751040,
+      "sha256": "3258f91b2000d949ba38f34c1f161b0d5fa148ecffb5a95eb8a3e10b5df7fc87"
+    },
+    {
+      "path": "assets/original-status/吹笛子.webm",
+      "bytes": 768350,
+      "sha256": "9c8b754a3256778cddd88fbb073b649d5b1d2e5f96e70231bc2c3bee06fa7c78"
+    },
+    {
+      "path": "assets/original-status/哈欠连天.webm",
+      "bytes": 424352,
+      "sha256": "2b23372e1ff2bc2f9078c09740708c960d4ea021f9fc3cca294d9df11e393ec8"
+    },
+    {
+      "path": "assets/original-status/堆雪人.webm",
+      "bytes": 519196,
+      "sha256": "478bdc31cc60e55e3efa139b81c7d8680a8cf83aca2304495e6da50a20a09cf5"
+    },
+    {
+      "path": "assets/original-status/大口吃零食.webm",
+      "bytes": 806998,
+      "sha256": "fdacb534a828b0c669f22a54e8da9bb9b5d731e0132dd5ea946f7badc9229a39"
+    },
+    {
+      "path": "assets/original-status/女仆屈膝礼仪.webm",
+      "bytes": 365712,
+      "sha256": "6536fb519ba73bbc338d30cf7286b14ffde1278b6d469c64573536dc0f896918"
+    },
+    {
+      "path": "assets/original-status/小幅度原地360度旋转展示.webm",
+      "bytes": 585715,
+      "sha256": "9f1a927f63c73e3c35ee5f4d2eb58f4a46ac7eca2af69388f320d10cdef8d29c"
+    },
+    {
+      "path": "assets/original-status/小提琴演奏.webm",
+      "bytes": 605350,
+      "sha256": "03816be0fcd499b63ed667e8b87c234094e64c59f1cd222455cf6a27ac832d1c"
+    },
+    {
+      "path": "assets/original-status/工作状态-原地踱步张望.webm",
+      "bytes": 471725,
+      "sha256": "a56c17ef901fa531324a46a04def2381f65922d319ec83dadde34d2a4669e411"
+    },
+    {
+      "path": "assets/original-status/工作状态-垂头叹气冒汗.webm",
+      "bytes": 198937,
+      "sha256": "ab00c844e62221905574b4c070e0d7b6fa14fb2afa1064c27a160f10e25f7196"
+    },
+    {
+      "path": "assets/original-status/工作状态-忙碌点按.webm",
+      "bytes": 475613,
+      "sha256": "b5d702e0c04adb7b255ac702001c24da36c8bf95efc891f693f4976986ab2435"
+    },
+    {
+      "path": "assets/original-status/工作状态-思考冒泡.webm",
+      "bytes": 408849,
+      "sha256": "b4a36cfa28ea5d7089e362a01972c6e880297c6dcd0d39f1994efd889a3c1be5"
+    },
+    {
+      "path": "assets/original-status/工作状态-清点归档.webm",
+      "bytes": 362510,
+      "sha256": "8c84f58f3a9e7b912e1cbfd89f77eb3652053fc9b2844295c8440cb636305d3b"
+    },
+    {
+      "path": "assets/original-status/工作状态-雀跃庆祝.webm",
+      "bytes": 488024,
+      "sha256": "3ff681051a0bb4f152d7535d64b7f3194c30298bf56d41e521216a278f135d3e"
+    },
+    {
+      "path": "assets/original-status/待机呼吸休闲.webm",
+      "bytes": 441437,
+      "sha256": "deb965d05a85dacf5ff4a20faa757846f0d11679598c3ec578a5571487660395"
+    },
+    {
+      "path": "assets/original-status/悠闲哼歌.webm",
+      "bytes": 584008,
+      "sha256": "358905afc2c81a9ed478bcf121a8f2f19276766b1d382d0067456bd57d1d7dbb"
+    },
+    {
+      "path": "assets/original-status/扑克魔术.webm",
+      "bytes": 461997,
+      "sha256": "1d44a7624fb027e5f615c747014ab040ddc497f6bdbcb67194a23a53a5dba78c"
+    },
+    {
+      "path": "assets/original-status/打瞌睡被惊醒.webm",
+      "bytes": 454028,
+      "sha256": "7e10c87cfcbd63b20b5a3787be71b0500381d54ea04a5ac0e9d99f59ed49a6d7"
+    },
+    {
+      "path": "assets/original-status/抽陀螺.webm",
+      "bytes": 521068,
+      "sha256": "693689d7b4d02ae8cda53f8d580de5087287fc339360dd20909342f566e969ba"
+    },
+    {
+      "path": "assets/original-status/拆礼物.webm",
+      "bytes": 517803,
+      "sha256": "6f781e7eac2b295417c80ff9468902280fdcf3ae5921d59977daa8dab537940c"
+    },
+    {
+      "path": "assets/original-status/插茱萸赏菊.webm",
+      "bytes": 486358,
+      "sha256": "4e1ba56724da3663e2f5480001ab1141a82e8618c316e6e81e3dae84998452f3"
+    },
+    {
+      "path": "assets/original-status/摇扇纳凉.webm",
+      "bytes": 510022,
+      "sha256": "87d4b9454692484e4809b45071751b2144fc82fd8696fafabb32e19af98350f2"
+    },
+    {
+      "path": "assets/original-status/撸猫.webm",
+      "bytes": 348432,
+      "sha256": "068d84e944dfce17de1c5a2ee2a4bc391e2848dad88a7df4877ebf23cf38bcec"
+    },
+    {
+      "path": "assets/original-status/收红包.webm",
+      "bytes": 472277,
+      "sha256": "a0e7a9a5997aff1357c76eeaaad7a01503c320f7017766dd5a42e643daa505c1"
+    },
+    {
+      "path": "assets/original-status/放孔明灯.webm",
+      "bytes": 594144,
+      "sha256": "cc6540b4651f6603363dd326801921d6ba220ecaaf00828b42d248eb28beeb31"
+    },
+    {
+      "path": "assets/original-status/放河灯.webm",
+      "bytes": 379124,
+      "sha256": "af744bed1ff20cc1b0492247add45f2b16433fde0b0897c31d6b0579429b788d"
+    },
+    {
+      "path": "assets/original-status/放烟花.webm",
+      "bytes": 1330462,
+      "sha256": "539ac09ae29ed0a11bd828df096f3e72f606529b3c59e29a5fcf3b051779a4d0"
+    },
+    {
+      "path": "assets/original-status/放风筝.webm",
+      "bytes": 770134,
+      "sha256": "9d9ac75871b1c70a77fc4aaa63dd24778d79cbf492c2c5df42167199c7dd2132"
+    },
+    {
+      "path": "assets/original-status/整体换装试色.webm",
+      "bytes": 524724,
+      "sha256": "e8e599b12da7f3437c98425f6b192dd0c81a6b63bbba5e7927f53c22f757b094"
+    },
+    {
+      "path": "assets/original-status/是啊，吃什么.webm",
+      "bytes": 588163,
+      "sha256": "94e1d69e05cc66cc1dc8bf6986efc51dfd71fe22fd34166f9efe7ca2d21c1e8c"
+    },
+    {
+      "path": "assets/original-status/晨间刷牙.webm",
+      "bytes": 425460,
+      "sha256": "017e384e7e13732fb12428d024ef686e79df5b79bfab0d83faa7fa50653d1bc4"
+    },
+    {
+      "path": "assets/original-status/涮火锅.webm",
+      "bytes": 466547,
+      "sha256": "f0b345c22cf2841137d215a7b9d50252b8be0ede64887e91fdc9bd09843e3c8f"
+    },
+    {
+      "path": "assets/original-status/深度思考碎碎念.webm",
+      "bytes": 433031,
+      "sha256": "db66867cd1f5bf68b0638fe1f966d0fdf95d1573523e60c77aa8913706118e82"
+    },
+    {
+      "path": "assets/original-status/点击回应-傲娇生气.webm",
+      "bytes": 392336,
+      "sha256": "6b7176b98408cb649d1d37b6a6222a21aa6b128187e3e0b2d18550d35ab81064"
+    },
+    {
+      "path": "assets/original-status/点击回应-元气挥手.webm",
+      "bytes": 421669,
+      "sha256": "48cd729ccdcf746369942ea954d242e9afdd5643e1dac3827fa5e67450eb8776"
+    },
+    {
+      "path": "assets/original-status/点击回应-害羞惊讶.webm",
+      "bytes": 538281,
+      "sha256": "a04968bbc46d1ebea07f81e5dabd93b0b67a9d07f1371e9887b33075134ad00d"
+    },
+    {
+      "path": "assets/original-status/点击回应-开心跃动.webm",
+      "bytes": 538110,
+      "sha256": "86dcb0c3dd7b651de9c107e927d57a5c4224599101706dbdcc782fa48bcd0ad7"
+    },
+    {
+      "path": "assets/original-status/点击回应-挠痒咯咯笑.webm",
+      "bytes": 425393,
+      "sha256": "f228279219f4084323ca1bfef1604f7c77bb3f505d45a8d1747b5ac3f9f2393b"
+    },
+    {
+      "path": "assets/original-status/照镜子.webm",
+      "bytes": 504127,
+      "sha256": "13dc61c003e500d906b6526765072b7a78c0709491a397d4e70a88ec7ea63310"
+    },
+    {
+      "path": "assets/original-status/玩水枪.webm",
+      "bytes": 523346,
+      "sha256": "448f732417ac4dcb6ca140cd3d73896aaea7f5dac2876a9a0f7c0776478d7128"
+    },
+    {
+      "path": "assets/original-status/玩游戏气急败坏.webm",
+      "bytes": 525022,
+      "sha256": "8e406bc52cf2a20c9d288867367c4df7c45a5dc78443bc5c2fdc83835ac0b4c3"
+    },
+    {
+      "path": "assets/original-status/用鲸鱼尾巴拍打地面.webm",
+      "bytes": 352213,
+      "sha256": "e3f92df2cf182fdcb109ad0a865689d66e0a0d10db14c1528e5b3cb2f0bf090d"
+    },
+    {
+      "path": "assets/original-status/穿针乞巧.webm",
+      "bytes": 480887,
+      "sha256": "cf16647ec4cb5634e4ff022bfc139a2233cd8be82f2391472bc842f7014ddc90"
+    },
+    {
+      "path": "assets/original-status/舞狮头.webm",
+      "bytes": 632110,
+      "sha256": "6d2006b4023d44087cf4c7dc055d1d8f2a8cec32e22610807a2dfea7bb0dc367"
+    },
+    {
+      "path": "assets/original-status/荡秋千.webm",
+      "bytes": 644126,
+      "sha256": "f32ea98e9c04553ae39939cd76c469192ebc19d98b90ebf93ec4b88bf95b25c9"
+    },
+    {
+      "path": "assets/original-status/萌化小幽灵.webm",
+      "bytes": 421990,
+      "sha256": "ac2012601d05bf7de7c7cced415b8793b0be3b7cfa569da06c2325f135f7e94f"
+    },
+    {
+      "path": "assets/original-status/蓝鲸现世.webm",
+      "bytes": 482896,
+      "sha256": "ed72f0ede7c6cd9482d44aa31002214d461b833c456f3ea40a52c3a0ddc20230"
+    },
+    {
+      "path": "assets/original-status/蝴蝶蜜蜂环绕头顶开花.webm",
+      "bytes": 852828,
+      "sha256": "fd286c78001fe57fc093c06a4b79ef077ade2dacd2a77e011d3f393f587707ec"
+    },
+    {
+      "path": "assets/original-status/被吓一跳.webm",
+      "bytes": 282771,
+      "sha256": "537dde496e0f776e775dec1bb7bfe3fbc5eebf89112469a1a910ad0433ccde66"
+    },
+    {
+      "path": "assets/original-status/被落叶淹没.webm",
+      "bytes": 766832,
+      "sha256": "91fc8e3dbfcd24546bc30366beb120fb5de7823ed67986dd8032c9c1b29ff079"
+    },
+    {
+      "path": "assets/original-status/被鼠标拖拽悬空反馈.webm",
+      "bytes": 464764,
+      "sha256": "31373a86026636eecc890db763760309360310eb095cf5575b13c9ca2a6cc80e"
+    },
+    {
+      "path": "assets/original-status/装点圣诞树.webm",
+      "bytes": 818456,
+      "sha256": "25da448acdbba49c2d4b209d24053b6dd1b79e656273d1f3e659385dc2bc3759"
+    },
+    {
+      "path": "assets/original-status/讨糖南瓜灯.webm",
+      "bytes": 483293,
+      "sha256": "9535d1a29f780aa2d78ffaabd7ee1765952bf34b2b380e9edc25dc6a3003070b"
+    },
+    {
+      "path": "assets/original-status/超大伸懒腰.webm",
+      "bytes": 396987,
+      "sha256": "0ac66d918cc5efd49be1273c3830de73eae5f9bdcd5fcb968d1b2f9b487705ad"
+    },
+    {
+      "path": "assets/original-status/踢毽子.webm",
+      "bytes": 531015,
+      "sha256": "68937b619a44e9ca7ccdfe77e5657f7a9bfa238beb33768378b6f254a16f3dbd"
+    },
+    {
+      "path": "assets/original-status/轻快摇摆舞.webm",
+      "bytes": 542928,
+      "sha256": "c621d00e1b959b991df8fc420e409b569e768fad7f75d1fb489375d101fee630"
+    },
+    {
+      "path": "assets/original-status/轻快记录.webm",
+      "bytes": 447726,
+      "sha256": "1da04162fed5cd52bd4a6a6027a6902f50bda0969d34465bc2d332cf3679bbd5"
+    },
+    {
+      "path": "assets/original-status/骑木马.webm",
+      "bytes": 697580,
+      "sha256": "5f54a98ccac97eac000d799043411f4fc0732096dc51a2ad766552737578f313"
+    },
+    {
+      "path": "assets/original-status/鲸鱼吐泡泡特效.webm",
+      "bytes": 452096,
+      "sha256": "d64d02059dc1602f7de5aa3135d381351363f021b2bceed47655db322cc71db3"
+    },
+    {
+      "path": "assets/sorting.webm",
+      "bytes": 362510,
+      "sha256": "8c84f58f3a9e7b912e1cbfd89f77eb3652053fc9b2844295c8440cb636305d3b"
+    },
+    {
+      "path": "assets/sources.json",
+      "bytes": 663,
+      "sha256": "60169583bfbd1725ea8337a6f7c1eea781258dec37ddee4633c71a3d3e5ed281"
+    },
+    {
+      "path": "assets/speaking.webm",
+      "bytes": 364946,
+      "sha256": "fda85ca286e173b7cf868c91829c3445e55c395e0c788b6be310a855b9b37973"
+    },
+    {
+      "path": "assets/success.webm",
+      "bytes": 488024,
+      "sha256": "3ff681051a0bb4f152d7535d64b7f3194c30298bf56d41e521216a278f135d3e"
+    },
+    {
+      "path": "assets/thinking.webm",
+      "bytes": 408849,
+      "sha256": "b4a36cfa28ea5d7089e362a01972c6e880297c6dcd0d39f1994efd889a3c1be5"
+    },
+    {
+      "path": "assets/waiting.webm",
+      "bytes": 471725,
+      "sha256": "a56c17ef901fa531324a46a04def2381f65922d319ec83dadde34d2a4669e411"
+    },
+    {
+      "path": "assets/working.webm",
+      "bytes": 383960,
+      "sha256": "0441287737cdbb993ce90dfa74c67ea4ea3549d8c8ea98946604668464589ed7"
+    },
+    {
+      "path": "bridge.cjs",
+      "bytes": 10171,
+      "sha256": "195ecd26b8e4f45a112e72f413bd9ce8c65bec305585fdb47df289df4d7dee4c"
+    },
+    {
+      "path": "chat-routing.cjs",
+      "bytes": 1394,
+      "sha256": "972f228ebc4e49c3433e6276e6196dbcaa9041998e580d1ee1154650d4b2c9d9"
+    },
+    {
+      "path": "check-workbench-roles.cjs",
+      "bytes": 10046,
+      "sha256": "5a56abeb8756ab6d12cbe7940d5a0da26198f1f6e40b28beb7ce2d72b83c494b"
+    },
+    {
+      "path": "check-workbench.cjs",
+      "bytes": 5729,
+      "sha256": "bba2b44f9f6ac95d4d3103b7bd06677f3f24e8e30e9fc5c423af5d150b744b94"
+    },
+    {
+      "path": "embedded-dsh/AVATARS.md",
+      "bytes": 1228,
+      "sha256": "a1f13d74dcba27fe8d9cdea5f192f6e0af6a67a4b7c14f8f562abd5baa629a6f"
+    },
+    {
+      "path": "embedded-dsh/AVATAR_THEME.md",
+      "bytes": 3241,
+      "sha256": "cfe499dee63a366cf32ea2e73938db510805106acb67901fa88b234a1a394efb"
+    },
+    {
+      "path": "embedded-dsh/BRAND_AND_SKINS.md",
+      "bytes": 785,
+      "sha256": "48f69986ab5d490e42bffa281263707934e7f4c2713a212f4945f0496a8b0809"
+    },
+    {
+      "path": "embedded-dsh/ROLE_BRIDGE.md",
+      "bytes": 3333,
+      "sha256": "c18a969ede94fdb8f22c737540e18229bee009d57b5d03509e4bc4d906f0fe46"
+    },
+    {
+      "path": "embedded-dsh/SIDEBAR_API.md",
+      "bytes": 14672,
+      "sha256": "d4721a42c166ed42cabcffeb1b6ab00b49c7fa75551f4b8c53add352dc376c69"
+    },
+    {
+      "path": "embedded-dsh/SIDEBAR_AVATAR_ACCESSIBILITY.md",
+      "bytes": 2504,
+      "sha256": "68f04315006e9968f62496742714421a2b44828dcb656c6eca004a461924ac30"
+    },
+    {
+      "path": "embedded-dsh/SOURCE.json",
+      "bytes": 734,
+      "sha256": "719166563ad2a82ce1467e03f7593e62eab250de4d25080e5d638a3baa0ea281"
+    },
+    {
+      "path": "embedded-dsh/account-habitat-source.css",
+      "bytes": 5481,
+      "sha256": "c449500224a88e443f963cad01a6d05c5d3e4e2b239f5c754ff0672c095fcc14"
+    },
+    {
+      "path": "embedded-dsh/account-habitat-source.js",
+      "bytes": 19499,
+      "sha256": "a389ae8ad11a29d3ab358b71c0813a1fcdf49a4c01f3b32d9a39a896721b6e41"
+    },
+    {
+      "path": "embedded-dsh/assets/account/SOURCE.json",
+      "bytes": 446,
+      "sha256": "ebe0ab99b212af8d80fe01e275986e8c2e4a2df266143bdf37100a3d334b8441"
+    },
+    {
+      "path": "embedded-dsh/assets/account/bigfish-idle.png",
+      "bytes": 17766,
+      "sha256": "2a918fc86abd5e8707675c2f60ca3a930f261f929d1dec6441a2857b6ec80328"
+    },
+    {
+      "path": "embedded-dsh/assets/account/bigfish-idle.webp",
+      "bytes": 408682,
+      "sha256": "3f87f6456780152bb778bd3e789fb22925bd3af5512e2db83490e8e6a7cd5709"
+    },
+    {
+      "path": "embedded-dsh/assets/avatars/SOURCE.json",
+      "bytes": 1215,
+      "sha256": "2438bdce7244c3417ca1e6dd9c3947411e971eef4e8521f1de38640065df072e"
+    },
+    {
+      "path": "embedded-dsh/assets/avatars/atlas-source.png",
+      "bytes": 2261653,
+      "sha256": "a7360e6150c40b2fc6ff3b8e32222f623d084cdc48ab7119625c8caf339e5f8a"
+    },
+    {
+      "path": "embedded-dsh/assets/avatars/bigfish.webp",
+      "bytes": 22374,
+      "sha256": "b5cb6e176572c2bd20e644d643900dab12eda644887ebe787043c332eedb078a"
+    },
+    {
+      "path": "embedded-dsh/assets/avatars/claude.webp",
+      "bytes": 24182,
+      "sha256": "91d896ca817b863fbbcf728f14f518a0cb1e16681f16ae0b598d0fb7f61fd067"
+    },
+    {
+      "path": "embedded-dsh/assets/avatars/devcat.webp",
+      "bytes": 23880,
+      "sha256": "dc719235cc7c592ed38b21303e2d34a04146e0e700fbfcc2720244e748fe6f27"
+    },
+    {
+      "path": "embedded-dsh/assets/avatars/gemini.webp",
+      "bytes": 29602,
+      "sha256": "7d83857b93ae60e17e0f8251892978bb950e9810152315b727728e95879befcf"
+    },
+    {
+      "path": "embedded-dsh/assets/avatars/yui.webp",
+      "bytes": 24604,
+      "sha256": "db9ff281d4bf37384a005a96e6f624d33840701f9f4e8479d8d5861b3618a1c6"
+    },
+    {
+      "path": "embedded-dsh/assets/neko-hero-source.png",
+      "bytes": 1768807,
+      "sha256": "440fe895655235ce9b54a2a2e5b910b7ffac1999270302f6cd1fe02008cee410"
+    },
+    {
+      "path": "embedded-dsh/assets/neko-hero.webp",
+      "bytes": 59456,
+      "sha256": "4594f1cafc7536cb24c3567b1fbcd13345cbb30f6bc63f487c634bb927e36265"
+    },
+    {
+      "path": "embedded-dsh/avatar-theme-source.js",
+      "bytes": 11100,
+      "sha256": "c9d727fdf787f3ed2760943dfc5ffc3f5333598a1ae16489824aea490451b29a"
+    },
+    {
+      "path": "embedded-dsh/b0-skin/README.md",
+      "bytes": 873,
+      "sha256": "0bac8b2d7de127fb215d76d8b13c792aa305b51bc0ab161e7dbd3e357fb63ff3"
+    },
+    {
+      "path": "embedded-dsh/b0-skin/packages/dsh-client-ui-skin/lib/client.js",
+      "bytes": 8163,
+      "sha256": "c7b38cf9d28f07472da23bc58ba63362c2544fe786e9dca9b1e077f6e0108fb0"
+    },
+    {
+      "path": "embedded-dsh/b0-skin/packages/dsh-client-ui-skin/lib/index.js",
+      "bytes": 331,
+      "sha256": "a626035d83a71d13cb249fffa089bace06360f669588de946a2ac8ea23eaa4ba"
+    },
+    {
+      "path": "embedded-dsh/b0-skin/packages/dsh-client-ui-skin/package.json",
+      "bytes": 668,
+      "sha256": "22986e92dfb8a2faedd7354dd7fbfd207e5a64c23fad9c7c756225ba7174e818"
+    },
+    {
+      "path": "embedded-dsh/b0-skin/packages/dsh-client-ui-skin/scripts/smoke.mjs",
+      "bytes": 7009,
+      "sha256": "00b253362cb40d780f87bcbfcc3b02c10b89696c4bf3d46de218842ba317da24"
+    },
+    {
+      "path": "embedded-dsh/b0-skin/packages/dsh-client-ui-white-label/lib/client.js",
+      "bytes": 905845,
+      "sha256": "b797da10e050d51fa73345cac98df40a990248bd70fd68b2c5b8939766b8e146"
+    },
+    {
+      "path": "embedded-dsh/b0-skin/packages/dsh-client-ui-white-label/lib/index.js",
+      "bytes": 177,
+      "sha256": "42157584ed3ab474f0685f0609ff4ecd7a11e675d8df9994750641b5c9f2795c"
+    },
+    {
+      "path": "embedded-dsh/b0-skin/packages/dsh-client-ui-white-label/package.json",
+      "bytes": 999,
+      "sha256": "6ee577125beeed0f214c26c956ea6604665edf19cf2089941cd4bc57ad5030d4"
+    },
+    {
+      "path": "embedded-dsh/b0-skin/packages/dsh-client-ui-white-label/scripts/dom-check.mjs",
+      "bytes": 23264,
+      "sha256": "7d8882b56c1f4336d2ce2e145fa69e53cfb15c6079c4fbbbe5d3ecdc33949fed"
+    },
+    {
+      "path": "embedded-dsh/b0-skin/packages/dsh-client-ui-white-label/scripts/embed-avatars.mjs",
+      "bytes": 4305,
+      "sha256": "39ef933bdce2e20165795a297c6110ba20b41185ad8043a5d9c26a819aca74ae"
+    },
+    {
+      "path": "embedded-dsh/b0-skin/packages/dsh-client-ui-white-label/scripts/smoke.mjs",
+      "bytes": 21810,
+      "sha256": "935e2d85a90a4c4a06ee2b13643aff96d090b40483203db18b66ef880a75ee09"
+    },
+    {
+      "path": "embedded-dsh/b0-skin/profile/cordis.patch.yml",
+      "bytes": 998,
+      "sha256": "41d60b9fb1919d30e4d7c40ffe6a17a615a8ce4f018676c3e7f8ee757f0142a7"
+    },
+    {
+      "path": "embedded-dsh/check-account-habitat.cjs",
+      "bytes": 7743,
+      "sha256": "c343eba5513fd3310a584202a00490e811fe802a1626a099bfc41c4219145f67"
+    },
+    {
+      "path": "embedded-dsh/check-avatar-theme.cjs",
+      "bytes": 3799,
+      "sha256": "09556227cf6365873704e539ef8f8c90b7d5d42e14827913463e9e357fa2df02"
+    },
+    {
+      "path": "embedded-dsh/check-sidebar-avatar-accessibility.cjs",
+      "bytes": 6933,
+      "sha256": "6fda26e235559c0afd995324cb8e6bb0e71c22585a031aacd9548723fe2d0852"
+    },
+    {
+      "path": "embedded-dsh/check-skin-patch.cjs",
+      "bytes": 4208,
+      "sha256": "d32900f76a1da750d0adc6dd06d9740caaa9b11ee9010dab0be9c9ec3492ffbe"
+    },
+    {
+      "path": "embedded-dsh/dsh-skin-patch.cjs",
+      "bytes": 3478,
+      "sha256": "41ac7a9b9802ab1fb3a7fc2efbb7cf88dc43ea19e810ff509f1a587d1b2155b3"
+    },
+    {
+      "path": "embedded-dsh/sidebar-avatar-accessibility-patch.css",
+      "bytes": 480,
+      "sha256": "d85a7101927c79318f444091ead197e1d4aa4e0c755fcb5aeec9eaf3b2810a07"
+    },
+    {
+      "path": "embedded-dsh/sidebar-avatar-accessibility-patch.js",
+      "bytes": 7713,
+      "sha256": "141904d286e9e122befe5effdbe9b623198d56771db47e34f9441e2693b2e080"
+    },
+    {
+      "path": "framework/README.md",
+      "bytes": 1404,
+      "sha256": "0c47883ed9645ec3b03030badb36bbe14b250e1251f455c45730d84af89ee5ca"
+    },
+    {
+      "path": "framework/config/app.example.json",
+      "bytes": 2178,
+      "sha256": "4d3d594094d44497228a50e67d5c01890564917b94b472a9bbc4caee2c4bf6f0"
+    },
+    {
+      "path": "framework/config/main-agent-menu.json",
+      "bytes": 1755,
+      "sha256": "80944a773c46317c1f682ca463d0e4a5c08bd19248abbb8685a81c830ebadf3a"
+    },
+    {
+      "path": "framework/config/persona.bigfish.json",
+      "bytes": 715,
+      "sha256": "a1ff89e64dcf4093fe3c9e206509652c4f14447bfdcb8c2847ce38cec061a8f4"
+    },
+    {
+      "path": "framework/config/skin.bigfish.json",
+      "bytes": 276,
+      "sha256": "4dfa0c17a310de5735a01232ab69044e8657ab466ec4311040a63531abb8e054"
+    },
+    {
+      "path": "framework/distribution/manifest.example.json",
+      "bytes": 803,
+      "sha256": "d4945778ac8296a97aeab6a477607f8d37eb83fbeebddedb54d4c03b08b96500"
+    },
+    {
+      "path": "framework/docs/双记忆与一键养鱼.md",
+      "bytes": 8163,
+      "sha256": "9259015a03d8c26605d425e4277a41e7288bb81c8b4e2fd808e2de03d0ad177b"
+    },
+    {
+      "path": "framework/docs/接入与发布验收.md",
+      "bytes": 3076,
+      "sha256": "3f657996454ba2fe364dd2daa96eac4a320214ece22be6d94332d68c7417bdbd"
+    },
+    {
+      "path": "framework/docs/项目框架.md",
+      "bytes": 7570,
+      "sha256": "b00abe9af7fcfc6174225fb2f6ae954ec6ef0be51acb3e2c5a66fec18a02b69f"
+    },
+    {
+      "path": "framework/reference/memory-hub.mjs",
+      "bytes": 6287,
+      "sha256": "e495875b947d8d264f41ed0f820213fe83ce23b259250dbc033398a9bf5636e5"
+    },
+    {
+      "path": "framework/src/contracts.ts",
+      "bytes": 2633,
+      "sha256": "6be406ffb16816073c3b336fd303f40f94fee6764c2e5c841ea8e01fd7b47e08"
+    },
+    {
+      "path": "framework/src/memory-contracts.ts",
+      "bytes": 1850,
+      "sha256": "26f84de09bc2ae60038cbe76af66628b8d4383a52cc5d64059fa3290ab2ea006"
+    },
+    {
+      "path": "framework/tests/memory-hub.test.mjs",
+      "bytes": 5318,
+      "sha256": "1ddb3e0cf5014c7ca7e8a6e9a24008b6abb75248577544ef5112b79fc84a8672"
+    },
+    {
+      "path": "index.html",
+      "bytes": 752,
+      "sha256": "615d4e87750bc381444c163abb53703882f0cf1dd3c6295f56f7d2ee3486ed7c"
+    },
+    {
+      "path": "main.cjs",
+      "bytes": 46233,
+      "sha256": "528a745934ec74a1fe02053541b4c6c9bd7b54402cd9a230019881b657472630"
+    },
+    {
+      "path": "neko-bigfish.json",
+      "bytes": 893,
+      "sha256": "449c44e396332ee771874c64af6330e069e013c1436795651711c453bc11c089"
+    },
+    {
+      "path": "neko-chat.cjs",
+      "bytes": 6341,
+      "sha256": "b9f21bbf03f3756bcb09be8aac1140e6fb7ff3bad3e1cc4a3fa5ef01015e3772"
+    },
+    {
+      "path": "original/SOURCE.json",
+      "bytes": 571,
+      "sha256": "4310291ef6b5bd838f82cf346a77637a08d2a1511a653d097172acb3c3e05a5d"
+    },
+    {
+      "path": "original/bubble.css",
+      "bytes": 2172,
+      "sha256": "3952cb899d4d5fd487719f155a174a1d5459a54b560fce3fb3b83296d083e8b1"
+    },
+    {
+      "path": "original/feedback.js",
+      "bytes": 9619,
+      "sha256": "3ef44cf36d0a3fae8e7065e13427fa76b5a8aa879cd3244c51727704bbf83153"
+    },
+    {
+      "path": "original/on-work-tick.js",
+      "bytes": 4238,
+      "sha256": "7a5f0e44b7ea5250c190ef868079aa09d4d4f7c998e4150177f5fbdea205bd96"
+    },
+    {
+      "path": "original/shared-core.js",
+      "bytes": 54850,
+      "sha256": "c9c8b555001a8246effa15b80ecb20ba09633e9195b15bc6146272b6f0f77459"
+    },
+    {
+      "path": "original/work-config.js",
+      "bytes": 3590,
+      "sha256": "716f175116392b98d7702cd842aa6c8a26fc5ea9be5f574d999a08b751444239"
+    },
+    {
+      "path": "original/work-status.cjs",
+      "bytes": 12173,
+      "sha256": "800647460069f61b2e0aff5d913c73fda571cfbfef99cb0b4b2aba36a78db01b"
+    },
+    {
+      "path": "original/work-status.ts",
+      "bytes": 12148,
+      "sha256": "e122e005283cda1ca7f5e49bf047f70a8bcb9a41d70bc1f4c418f20f241de66b"
+    },
+    {
+      "path": "package.json",
+      "bytes": 1643,
+      "sha256": "f84ecbf15fc7268fd3774e12aeaf6048cfcdfc6fe6c33730f81081240be7e132"
+    },
+    {
+      "path": "pet-context.js",
+      "bytes": 3728,
+      "sha256": "10213ac2952668df3f6b736dc96472594dbcd80fbc0f663b6af195867dd0e29a"
+    },
+    {
+      "path": "pet-layout.cjs",
+      "bytes": 1253,
+      "sha256": "b776a4727c65217db470ed44649882ff03bb13a0d47b77b2cc09fa1c1a630910"
+    },
+    {
+      "path": "pet-roster.cjs",
+      "bytes": 1770,
+      "sha256": "3c2f1f51f3c8c3d5c4367763e8c872c90b8c925a7d97494b84b6775975965245"
+    },
+    {
+      "path": "preload.cjs",
+      "bytes": 467,
+      "sha256": "7b1c26e2b371413b497969d61736a30a6def13969438f63847655849fe51dc16"
+    },
+    {
+      "path": "renderer.js",
+      "bytes": 13252,
+      "sha256": "c9b9323d089f6f623eea6b2ad60124dd2f5b818fd20ef063a18f471130bcda88"
+    },
+    {
+      "path": "style.css",
+      "bytes": 6677,
+      "sha256": "41beb3fec45ebffb4ef833dc718a59444601b95dcd364d34a075c7a594f04101"
+    },
+    {
+      "path": "team-work.cjs",
+      "bytes": 1394,
+      "sha256": "a932d0f96508b0bb293cf51ed0f58cb68b6fecbbc745ac84ee6f68153e2e8364"
+    },
+    {
+      "path": "workbench-appearance.cjs",
+      "bytes": 1478,
+      "sha256": "ce28c4fccbe391245dda5614487698ec73ff2813bb23f455a44d53e70d586fd9"
+    },
+    {
+      "path": "workbench-preload.cjs",
+      "bytes": 1224,
+      "sha256": "4f13283df8ad0889097aa133661f80fcc1220a9c5a7f660b989b72816d4ecb8c"
+    },
+    {
+      "path": "workbench-roles.cjs",
+      "bytes": 8407,
+      "sha256": "144c6ab2eaa6eea6aa2b1ad6842a3deedde508e0bb3948e0a2ac55c84290bc4e"
+    },
+    {
+      "path": "启动NEKO工作台.command",
+      "bytes": 90,
+      "sha256": "cb5083946d22db3a5b3e07cce3f555e543b525f1c44445ede4f59401ac53c55a"
+    },
+    {
+      "path": "启动大肥鱼皮肤.command",
+      "bytes": 118,
+      "sha256": "9911f7a6b7c07b2e949220c1fb55f8165dd9fd47b5714852e5b7684ae2ec4254"
+    },
+    {
+      "path": "启动工作小队.command",
+      "bytes": 437,
+      "sha256": "ba487157ba96c7e2fc87e432fa6d500e8ba332b803d6dadf3a14b6a803488dc2"
+    }
+  ],
+  "sourceFilesChangedDuringCapture": []
+}

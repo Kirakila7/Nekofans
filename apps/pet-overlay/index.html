@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; media-src 'self' blob:; connect-src 'self'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>大肥鱼</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main id="root">
+      <section id="dialog" class="dialog" data-hit hidden aria-label="和大肥鱼聊天" role="dialog">
+        <form id="composer" class="composer">
+          <svg class="whale-mark" viewBox="0 0 36 26" aria-hidden="true">
+            <path d="M5 9c-3 0-4-3-4-3s-1 6 4 8c1 7 8 10 16 8 7-2 11-7 10-13-4 1-6 0-8-2-2-2-5-3-8-2-5 1-7 5-6 8-2 0-3-2-4-4Z" fill="currentColor"/>
+            <path d="M16 3V1m3 3 2-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <circle cx="25" cy="11" r="1" fill="#fff"/>
+          </svg>
+          <label class="sr-only" for="input">输入消息</label>
+          <input id="input" type="text" maxlength="8000" placeholder="说点什么，回车发送…" autocomplete="off" />
+          <button id="send" class="send-btn" type="submit" aria-label="发送消息" title="发送（Enter）">↑</button>
+          <button id="stop" class="stop-btn" type="button" aria-label="停止回复" hidden>停止</button>
+        </form>
+        <div class="dialog-tools">
+          <span id="chat-status" class="chat-status" aria-live="polite"></span>
+          <button id="show-history" class="tool-btn" type="button" aria-controls="history-panel" aria-expanded="false">对话记录</button>
+          <button id="show-memories" class="tool-btn" type="button" aria-controls="memory-panel" aria-expanded="false" hidden>记忆<span id="memory-count" class="memory-count" hidden></span></button>
+          <button id="hide" class="icon-btn" type="button" aria-label="收起聊天框" title="收起（Esc）">×</button>
+        </div>
+      </section>
+
+      <section id="history-panel" class="detail-panel" data-hit hidden aria-label="完整对话记录" role="dialog">
+        <header class="panel-head">
+          <div><h1>对话记录</h1><p>和大肥鱼说过的话，都在这里。</p></div>
+          <button id="close-history" class="icon-btn" type="button" aria-label="关闭对话记录">×</button>
+        </header>
+        <ol id="history" class="history" aria-label="消息列表"></ol>
+      </section>
+
+      <section id="memory-panel" class="detail-panel" data-hit hidden aria-label="记忆管理" role="dialog">
+        <header class="panel-head">
+          <div><h1>记忆</h1><p>事实需你确认，历史摘要单独保留。</p></div>
+          <button id="close-memories" class="icon-btn" type="button" aria-label="关闭记忆面板">×</button>
+        </header>
+        <p id="memory-error" class="memory-error" role="alert" hidden></p>
+        <div class="memory-scroll">
+          <section class="memory-section" aria-labelledby="pending-heading">
+            <h2 id="pending-heading">待你确认</h2>
+            <ul id="pending-memories" class="memory-list"></ul>
+          </section>
+          <section class="memory-section" aria-labelledby="confirmed-heading">
+            <h2 id="confirmed-heading">已经记住</h2>
+            <ul id="confirmed-memories" class="memory-list"></ul>
+          </section>
+          <section id="summary-section" class="memory-section" aria-labelledby="summary-heading" hidden>
+            <h2 id="summary-heading">会话摘要 · 未确认</h2>
+            <p class="summary-note">自动摘录旧聊天，仅作对话参考，可能遗漏上下文。原始记录保留；删除摘要后不再使用该段摘要。</p>
+            <p id="summary-error" class="memory-error" role="alert" hidden></p>
+            <ul id="conversation-summaries" class="memory-list"></ul>
+          </section>
+        </div>
+      </section>
+
+      <div id="toasts" class="toasts" role="status" aria-live="polite"></div>
+
+      <div id="bubble" class="bubble" data-hit hidden aria-label="大肥鱼的回复" role="status" aria-live="polite"></div>
+
+      <button id="pet" class="pet" data-hit type="button" aria-label="桌宠，点击打开或隐藏对话框" aria-expanded="false">
+        <video id="clip-a" class="clip is-front" muted playsinline></video>
+        <video id="clip-b" class="clip" muted playsinline></video>
+        <span id="pet-fallback" class="pet-fallback" hidden>=￣ω￣=</span>
+      </button>
+    </main>
+    <script type="module" src="src/main.ts"></script>
+  </body>
+</html>

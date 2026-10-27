@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>N.E.K.O. 加号与社区 · 离线布局预览</title>
+<style>
+  :root{font-family:system-ui,"PingFang SC",sans-serif;color:#17283a;background:#edf3f8;font-size:14px}
+  *{box-sizing:border-box}body{margin:0}button{font:inherit;color:inherit;cursor:pointer}
+  .preview-note{margin:0;padding:12px 20px;background:#fff5d9;color:#69521f;border-bottom:1px solid #ecdbab}
+  .preview-shell{display:flex;min-height:calc(100vh - 45px)}
+  .preview-sidebar{width:248px;padding:16px;border-right:1px solid #d3dee9;background:#e5eef6;transition:width 100ms ease}
+  .preview-sidebar.compact{width:72px}
+  .preview-brand{display:flex;align-items:center;gap:8px;height:40px;margin-bottom:18px;font-weight:650;white-space:nowrap;overflow:hidden}
+  .preview-brand img{width:28px;height:28px;border-radius:50%}
+  .preview-sidebar.compact .preview-brand span,.preview-sidebar.compact .neko-role__name,.preview-sidebar.compact .neko-role__tag{display:none}
+  .native-new-session{display:flex;align-items:center;justify-content:flex-start;width:100%;height:36px;margin:0 0 4px;padding:0 10px;border:1px solid #c4d4e2;border-radius:8px;background:#f8fbfe}
+  #community-seat{display:contents}.native-nav{display:none}.preview-main{padding:48px 48px;max-width:840px;flex:1}
+  .preview-main h1{font-size:28px;letter-spacing:.02em;margin:0 0 16px}.preview-main p{line-height:1.7;color:#52667b}
+  .preview-controls{display:flex;gap:10px;flex-wrap:wrap;margin:24px 0}.preview-controls button{padding:8px 12px;border:1px solid #cad7e3;border-radius:8px;background:#fff}
+  #status{padding:14px 16px;border:1px solid #d1dfe9;border-radius:10px;background:#f8fbfe;line-height:1.7}
+  @media(max-width:600px){.preview-main{padding:24px 16px}.preview-main h1{font-size:22px}}
+</style>
+<p class="preview-note">离线布局预览：模拟定制 DSH 侧栏，使用实际主题 CSS、社区按钮及并排布局代码；未连接 DSH、账号或社区。</p>
+<div class="preview-shell">
+  <aside class="preview-sidebar" id="sidebar">
+    <div class="preview-brand"><img id="brand" alt=""><span>N.E.K.O. 工作台</span></div>
+    <button class="native-new-session" id="new-session" aria-label="新建会话">新建会话</button>
+    <div class="neko-role-host" data-neko-role-host id="role-host"><div class="neko-sidebar-items"><div id="community-seat"></div><div class="neko-roles" role="group" aria-label="角色" id="roles"></div></div></div>
+    <nav class="native-nav"><button>插件</button><button>自动化任务</button></nav>
+  </aside>
+  <main class="preview-main">
+    <h1>加号与社区，同一行</h1>
+    <p>左侧加号保留原按钮节点和点击行为。社区复用主题中的固定 <code>open-community</code> 动作，正式工作台会在独立窗口打开 N.E.K.O. 原生社区。</p>
+    <div class="preview-controls"><button id="compact">收起／展开侧栏</button><button id="replace">模拟新会话按钮重渲染</button><button id="unload">卸载主题适配</button></div>
+    <div id="status" role="status">等待操作。这里的交互均为布局测试，不创建真实会话或模型任务。</div>
+  </main>
+</div>
+<script>window.__ModuleLoader__={load(entry){window.nekoPreviewEntry=entry}}</script>
+<script src="../lib/client.js"></script>
+<script>
+  const React = {
+    createElement: (type, props, ...children) => ({type, props:props||{}, children}),
+    useState: value => [typeof value==='function'?value():value,()=>{}],
+    useEffect(){},useRef(){return{current:null}},
+  };
+  const api=window.nekoPreviewEntry.factory(name=>{
+    if(name==='react')return React;
+    if(name==='react-dom')return{createPortal(){}};
+    throw Error('Unexpected preview dependency');
+  });
+  const theme=document.createElement('style');theme.textContent=api.CSS;document.head.appendChild(theme);
+  const status=document.getElementById('status'),sidebar=document.getElementById('sidebar'),host=document.getElementById('role-host');
+  document.getElementById('brand').src=api.AVATAR_ART.yui;
+  let newCount=0,unloaded=false;
+  const nativeClick=()=>{newCount++;status.textContent='原按钮的模拟新建会话事件已执行 '+newCount+' 次；没有创建真实会话。'};
+  document.getElementById('new-session').addEventListener('click',nativeClick);
+  const layout=api.createSidebarActionsLayout({host});
+  const position=()=>{if(!unloaded)layout.update(document.getElementById('new-session'))};
+  const sizes=new ResizeObserver(position);sizes.observe(sidebar);sizes.observe(host);window.addEventListener('resize',position);
+  function node(value,svg=false){
+    if(value==null||value===false)return document.createTextNode('');
+    if(typeof value==='string'||typeof value==='number')return document.createTextNode(String(value));
+    if(typeof value.type==='function')return node(value.type({...value.props,children:value.children}),svg);
+    const isSvg=svg||value.type==='svg',el=isSvg?document.createElementNS('http://www.w3.org/2000/svg',value.type):document.createElement(value.type);
+    for(const[key,item]of Object.entries(value.props)){
+      if(item==null||item===false)continue;
+      if(key==='className')el.setAttribute('class',item);
+      else if(key.startsWith('on')&&typeof item==='function')el.addEventListener(key.slice(2).toLowerCase(),item);
+      else if(key==='disabled')el.disabled=!!item;
+      else el.setAttribute(key.replace(/[A-Z]/g,m=>'-'+m.toLowerCase()),item===true?'':String(item));
+    }
+    for(const child of value.children.flat(Infinity))el.appendChild(node(child,isSvg));
+    return el;
+  }
+  const store=api.createStore({getState:async()=>({workbench:{connection:'ready'}}),subscribe:()=>()=>{},setAvatar:async()=>{},uploadAvatar:async()=>{},action:async name=>{status.textContent='模拟社区按钮已发送固定动作：'+name+'。正式入口是 https://community.project-neko.cn/feed；此预览不打开网络页面。';return{ok:true}}});
+  const seat=document.getElementById('community-seat');
+  function paint(){if(!unloaded){seat.replaceChildren(node(api.CommunityEntry({snap:store.get(),store})));position()}}
+  store.subscribe(paint);paint();
+  const roles=document.getElementById('roles');
+  for(const role of api.ROLE_DEFAULTS){
+    const row=document.createElement('div');row.className='neko-role';row.dataset.active=role.id==='bigfish'?'true':'false';row.dataset.enabled=role.enabled?'true':'false';
+    row.innerHTML='<div class="neko-role__row"><button class="neko-role__main"><img class="neko-avatar neko-role__img" width="22" height="22" alt=""><span class="neko-role__name"></span><span class="neko-role__tag"></span></button></div>';
+    row.querySelector('img').src=api.AVATAR_ART[role.avatarId];row.querySelector('.neko-role__name').textContent=role.name;if(role.enabled)row.querySelector('.neko-role__tag').remove();else row.querySelector('.neko-role__tag').textContent='未接入';roles.appendChild(row);
+  }
+  document.getElementById('compact').onclick=()=>{sidebar.classList.toggle('compact');position()};
+  document.getElementById('replace').onclick=()=>{if(unloaded)return;const next=document.createElement('button');next.id='new-session';next.className='native-new-session';next.textContent='新建会话';next.setAttribute('aria-label','新建会话');next.addEventListener('click',nativeClick);document.getElementById('new-session').replaceWith(next);position();status.textContent='模拟原按钮重渲染完成：仍是一个加号和一个社区入口。'};
+  document.getElementById('unload').onclick=()=>{if(unloaded)return;unloaded=true;sizes.disconnect();window.removeEventListener('resize',position);layout.release();store.dispose();theme.remove();host.remove();status.textContent='已卸载自有主题适配，原新建会话按钮及其事件保留。'};
+  requestAnimationFrame(position);
+</script>
+</html>

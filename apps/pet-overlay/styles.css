@@ -1,0 +1,107 @@
+/* Transparent overlay: only [data-hit] surfaces take desktop clicks. */
+:root {
+  --ink: #25435a;
+  --muted: #638297;
+  --paper: rgba(248, 253, 255, 0.98);
+  --line: #d3e8f2;
+  --accent: #3e91bb;
+  --accent-soft: #e1f3fc;
+  --bad: #b24d56;
+  font: 13px/1.5 "Microsoft YaHei UI", "Segoe UI", system-ui, sans-serif;
+  color: var(--ink);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; user-select: none; }
+#root { position: relative; width: 100%; height: 100%; }
+.dialog, .detail-panel, .bubble, .toasts { z-index: 1; }
+[hidden] { display: none !important; }
+button, input, textarea { font: inherit; }
+button { cursor: pointer; }
+button:focus-visible, input:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+button:disabled { cursor: default; opacity: 0.55; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* The bundled dsh-pet clips have a 640 x 360 transparent canvas. Keep their
+   original 462px stage width: fitting that whole canvas into the body hit box
+   would shrink the character. Transparent stage edges may overflow this box;
+   pointer-events remain on the 200 x 240 body area, never the full video. */
+.pet { position: absolute; right: 8px; bottom: 0; width: 200px; height: 240px; padding: 0; border: 0; overflow: visible; background: transparent; cursor: grab; touch-action: none; }
+.pet:focus-visible { outline-offset: -4px; border-radius: 12px; }
+.pet.is-dragging { cursor: grabbing; }
+.clip { position: absolute; left: 50%; bottom: 0; width: 462px; height: 259.875px; transform: translateX(-50%); object-fit: contain; opacity: 0; transition: opacity 0.18s ease; pointer-events: none; }
+.clip.is-front { opacity: 1; }
+.pet-fallback { position: absolute; left: 50%; bottom: 45px; width: 108px; height: 80px; transform: translateX(-50%); display: grid; place-items: center; border-radius: 50%; background: var(--paper); font-size: 22px; white-space: nowrap; }
+
+/* A small one-line composer above the character, with tools only while open. */
+.dialog { position: absolute; right: 20px; bottom: 224px; width: min(356px, calc(100% - 32px)); padding: 7px 8px 4px; border: 1px solid #bcdeef; border-radius: 19px 19px 7px 19px; background: #eaf7ff; box-shadow: 0 5px 20px rgba(43, 92, 118, 0.14); user-select: text; }
+.composer { display: flex; align-items: center; gap: 7px; }
+.whale-mark { width: 30px; height: 24px; flex: 0 0 30px; color: #75b9dc; }
+#input { min-width: 0; flex: 1; height: 32px; padding: 4px 0; border: 0; outline: none; background: transparent; color: var(--ink); }
+#input::placeholder { color: #7a9bb0; }
+#input:focus-visible { outline: none; }
+.composer:focus-within { border-radius: 12px; box-shadow: 0 0 0 1px rgba(62, 145, 187, 0.22); }
+.send-btn { flex: 0 0 29px; height: 29px; padding: 0; border: 0; border-radius: 50%; background: #83bedc; color: #fff; font-size: 21px; line-height: 1; }
+.send-btn:hover { background: var(--accent); }
+.stop-btn { padding: 4px 7px; border: 1px solid #bfdaea; border-radius: 10px; background: #fff; color: var(--muted); font-size: 11px; }
+.dialog-tools { min-height: 23px; display: flex; align-items: center; gap: 4px; padding-left: 4px; }
+.chat-status { flex: 1; min-width: 0; color: var(--muted); font-size: 10px; }
+.chat-status.is-error { color: var(--bad); }
+.tool-btn { display: inline-flex; align-items: center; gap: 4px; padding: 2px 5px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 11px; }
+.tool-btn:hover, .tool-btn[aria-expanded="true"], .icon-btn:hover { background: #d9edf8; color: var(--ink); }
+.icon-btn { flex: 0 0 25px; width: 25px; height: 25px; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--muted); font-size: 18px; line-height: 1; }
+.memory-count { min-width: 15px; padding: 0 4px; border-radius: 10px; background: #c8e8f8; color: #376f8e; font-size: 10px; }
+
+/* Replies remain bubbles even while typing. Full text is retained in history. */
+.bubble { position: absolute; right: 25px; bottom: 228px; max-width: min(310px, calc(100% - 40px)); max-height: 154px; padding: 11px 14px; border: 1px solid var(--line); border-radius: 17px 17px 5px 17px; background: var(--paper); color: var(--ink); font-size: 13px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; overflow-y: auto; user-select: text; box-shadow: 0 4px 18px rgba(43, 92, 118, 0.12); }
+#root.has-dialog .bubble { bottom: 308px; }
+.bubble.is-error { border-color: #e8c8ca; }
+
+/* History and memories are deliberate, independent reading panels. */
+.detail-panel { position: absolute; right: 16px; bottom: 308px; width: min(388px, calc(100% - 32px)); height: min(330px, calc(100% - 324px)); min-height: 160px; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--line); border-radius: 18px; background: var(--paper); box-shadow: 0 7px 28px rgba(43, 92, 118, 0.16); user-select: text; }
+.panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 14px 15px 11px; border-bottom: 1px solid #e2eff5; }
+.panel-head h1 { margin: 0; font-size: 15px; font-weight: 600; }
+.panel-head p { margin: 3px 0 0; color: var(--muted); font-size: 11px; }
+.history { flex: 1; min-height: 0; margin: 0; padding: 13px; list-style: none; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+.msg { flex-shrink: 0; max-width: 88%; padding: 8px 11px; border-radius: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.msg-user { align-self: flex-end; background: #def0fb; border-bottom-right-radius: 4px; }
+.msg-assistant { align-self: flex-start; background: #edf4f7; border-bottom-left-radius: 4px; }
+.msg-assistant.is-streaming { color: var(--muted); }
+.msg-system { align-self: center; max-width: 95%; padding: 3px 5px; color: var(--muted); font-size: 11px; }
+.msg.is-focus { outline: 2px solid #87bedb; }
+.msg-status { display: block; margin-top: 3px; color: var(--muted); font-size: 10px; }
+.history-empty { margin: auto; padding: 28px 12px; text-align: center; color: var(--muted); font-size: 12px; }
+
+.memory-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 0 14px 14px; }
+.memory-section h2 { margin: 13px 0 8px; color: #53758c; font-size: 11px; font-weight: 600; }
+.memory-list { margin: 0; padding: 0; list-style: none; }
+.memory-item { margin-bottom: 8px; padding: 10px; border: 1px solid #dfedf4; border-radius: 10px; background: #fff; }
+.memory-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.memory-meta { margin: 0 0 5px; color: var(--muted); font-size: 10px; }
+.memory-actions { display: flex; justify-content: flex-end; align-items: center; gap: 6px; margin-top: 9px; }
+.memory-empty { margin: 5px 0 15px; padding: 9px 0; color: var(--muted); font-size: 12px; }
+.summary-note { color: var(--muted); font-size: 11px; line-height: 1.6; }
+.summary-sources { margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--line); }
+.summary-sources .memory-meta { margin-top: 10px; overflow-wrap: anywhere; }
+.summary-source-title { cursor: pointer; font-size: 11px; color: var(--muted); }
+.memory-error { margin: 0; padding: 8px 14px; background: #fff1f2; color: var(--bad); font-size: 12px; }
+.memory-editor { width: 100%; min-height: 72px; max-height: 170px; padding: 7px; border: 1px solid #a9cfe4; border-radius: 7px; background: #f8fcff; color: inherit; resize: vertical; }
+.quiet-btn, .primary-btn, .danger-btn { padding: 4px 8px; border: 1px solid transparent; border-radius: 7px; background: #edf5f9; color: #557a91; font-size: 11px; }
+.primary-btn { background: #d8edf9; color: #2d7096; }
+.danger-btn { background: transparent; color: #a7676c; }
+.quiet-btn:hover, .primary-btn:hover { border-color: #a8cfe4; }
+.danger-btn:hover { background: #fff0f1; }
+
+/* Task notifications remain separate from the character's replies. */
+.toasts { position: absolute; right: 14px; top: 14px; width: min(310px, calc(100% - 28px)); display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+.toast { display: flex; gap: 8px; align-items: center; max-width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-left: 3px solid #81b8a5; border-radius: 12px; background: var(--paper); box-shadow: 0 4px 14px rgba(43, 92, 118, 0.12); }
+.toast.is-failed { border-left-color: #ce858e; }
+.toast-open { flex: 1; min-width: 0; padding: 0; border: 0; background: none; color: inherit; text-align: left; overflow-wrap: anywhere; }
+@media (prefers-reduced-motion: reduce) { .clip { transition: none; } }
+@media (max-height: 480px) {
+  .detail-panel { bottom: 90px; height: calc(100% - 108px); }
+  .dialog { bottom: 8px; }
+  #root.has-dialog .bubble { bottom: 90px; }
+}

@@ -1,0 +1,19 @@
+{
+  "source": "用户提供 b0-skin.zip",
+  "sha256": "da82853303be14111e2f6ac3269c1cfec21c783445d36e581ab00214926a4131",
+  "integration": "DSH Web 客户端插件；限当前桌宠的独立 DSH_HOME",
+  "product": "N.E.K.O. 工作台",
+  "skin": "大肥鱼为可替换皮肤之一",
+  "leadDesigner": "Claude Desktop · Opus 5.5 High",
+  "integrationAndArt": "Codex",
+  "defaultWorkbenchSkin": "neko-mist",
+  "optionalWorkbenchSkin": "bigfish",
+  "avatar": {
+    "file": "assets/neko-hero.webp",
+    "source": "Codex built-in image generation, original generic catgirl for the workbench",
+    "width": 512,
+    "height": 512,
+    "bytes": 59456,
+    "sha256": "4594f1cafc7536cb24c3567b1fbcd13345cbb30f6bc63f487c634bb927e36265"
+  }
+}

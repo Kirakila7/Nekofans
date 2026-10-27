@@ -1,0 +1,19 @@
+# N.E.K.O. 工作台 · 手动挂载示例（YAML 版，供直接用 dsh web 调试）
+#
+# 桌宠内置 DSH 不用这个文件：main.cjs 通过 integration/dsh-skin-patch.cjs
+# 生成同等行并写入 data/bridge.patch.json（独立 DSH_HOME）。
+# 不要把它追加到全局 ~/.dsh/profiles/web。name 用本地 lib/index.js 的绝对路径。
+
+# 1) 官方品牌插件与本包注册同样的品牌槽位，停用它；功能插件全部保留
+- id: ui-brand-official
+  disabled: true
+
+# 2) 产品品牌：N.E.K.O. 标识 / 名称 / 首页 / 标题 / favicon / 底部条
+- insert:
+    - id: neko-brand
+      name: /ABS/PATH/embedded-dsh/b0-skin/packages/dsh-client-ui-white-label/lib/index.js
+    # 3) 皮肤：配色 + 可选皮肤标签（默认 neko-mist；bigfish 由 cookie neko_skin 选择）
+    - id: neko-skin
+      name: /ABS/PATH/embedded-dsh/b0-skin/packages/dsh-client-ui-skin/lib/index.js
+
+# 账号设置页 ui-settings-account、模型标签等官方插件不做任何停用。

@@ -1,0 +1,11 @@
+'use strict';
+const fs = require('node:fs');
+const path = require('node:path');
+const { spawnSync } = require('node:child_process');
+const base = path.resolve(__dirname, '..');
+const tests = path.resolve(base, '../../tests/neko-workbench');
+const files = fs.readdirSync(tests).filter(name => /\.test\.(?:cjs|mjs)$/.test(name)).map(name => path.join(tests, name));
+const references = path.join(base, 'framework/tests');
+files.push(...fs.readdirSync(references).filter(name => name.endsWith('.test.mjs')).map(name => path.join(references, name)));
+const result = spawnSync(process.execPath, ['--test', ...files.sort()], { stdio: 'inherit' });
+process.exitCode = result.status ?? 1;

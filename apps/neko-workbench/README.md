@@ -1,0 +1,131 @@
+# N.E.K.O. 桌宠工作台（可选并列应用）
+
+本目录基于本机定制桌宠工作台 **0.13.0** 源码快照开发，当前接入版本为 **0.20.0**。它与现有 `apps/desktop` 并行，拥有独立数据、DSH_HOME、工作区和 Electron 用户目录；两套应用的聊天、角色存档和记忆分别保存。上游 DSH 的设备级账号状态隔离仍须单独验证。
+
+保留内容包括透明桌宠、dsh-pet 原动作视频、头顶单行输入、真实 DSH 子 agent 目录和任务反馈、常驻/昵称/数量限制，以及 N.E.K.O. 品牌、头像和工作台主题。界面只在用户选择本应用入口时启动。
+
+定制 DSH 侧栏将新会话显示为“＋”，与“社区”并排一行。加号沿用新会话原有操作与键盘可访问名，三个角色位保留在下方。点击社区后，现有喵宇宙 `/feed` 显示在同一个工作台的右侧 coding 内容区，顶部提供“返回工作台”和“刷新”。点击加号、已有 coding 会话或大肥鱼角色也可切回工作台；原会话和未发送输入保持挂载，社区页面在切换时保留浏览位置。
+
+社区使用独立的沙盒 WebContentsView，不共享 DSH 登录分区，也不向远程页面提供本机原生桥。默认浏览不新建窗口；原社区主动发起的官方认证弹窗沿用隔离策略，第三方链接由系统浏览器打开。社区账号和功能继续由原社区提供；桌面社区单点登录和本地同步另行接入。
+
+## 启动
+
+需要 Node.js 24 或更新版本，以及本机可用的 Electron 和兼容 DSH 运行时。本源码不捆绑它们，也不安装或修改已有 DeepSeek Harness。
+
+从仓库根目录运行：
+
+```sh
+npm run start:neko -- --check  # 仅检查路径，不启动 Electron 或 DSH
+npm run start:neko            # 打开这个工作台
+```
+
+macOS 也可双击本目录的 `启动NEKO工作台.command`；它通过仓库统一启动器启动。`启动大肥鱼皮肤.command` 仅选择大肥鱼配色。未配置独立 Node 命令时，这些脚本会查找 PATH、Homebrew 的 Node。
+
+macOS 的 DSH 默认路径来自已安装的 DeepSeek Harness；其他安装位置通过下列环境变量指定。当前快照没有在 Windows 或 Linux 实机验证；仓库 Windows 默认应用与本工作台的界面和功能分别验收。
+
+| 环境变量 | 含义 |
+| --- | --- |
+| `NEKO_WORKBENCH_ELECTRON` | Electron 可执行文件，由仓库启动器处理 |
+| `NEKO_WORKBENCH_DSH_CLI` | DSH CLI 的绝对路径 |
+| `NEKO_WORKBENCH_DSH_MODULES` | DSH `@deepseek-ai` 模块目录的绝对路径 |
+| `NEKO_WORKBENCH_DATA_DIR` | 本工作台数据目录，默认本目录的 `data/` |
+| `NEKO_WORKBENCH_WORKSPACE` | DSH 产出与任务工作区，默认本目录的 `workspaces/` |
+| `NEKO_WORKBENCH_ELECTRON_USER_DATA` | Electron 存储与单实例锁目录，默认 `data/electron/` |
+| `NEKO_WORKBENCH_DSH_CREDENTIALS` | 可选：显式选定凭据文件。默认使用独立 `data/dsh/.credentials.yaml` |
+| `NEKO_WORKBENCH_COMMUNITY_URL` | 默认官方 `https://community.project-neko.cn/feed`；可显式配置无凭据的 HTTPS 目标 |
+| `PET_DSH_SKIN` | `neko-mist`（默认）、`bigfish` 或 `off` |
+
+`NEKO_WORKBENCH_DSH_MODULES_DIR`、`NEKO_WORKBENCH_WORKSPACE_DIR` 是对应路径的兼容别名，以上原名优先。所有路径覆盖都要求绝对路径。
+
+默认不会读取全局 `~/.dsh` 账号文件；首次运行需在独立工作台登录。显式指定凭据文件才会复用该文件，但仍不复用其他项目的 DSH_HOME、会话和工作区。工作区与数据目录必须分开，也不能指向全局 `~/.dsh`（包括符号链接）。
+
+DSH 子进程固定使用本副本的 `DSH_HOME`、所选工作目录和动态回环端口；退出应用或收到终端退出信号时关闭本副本 DSH。诊断截图与日志保存在忽略的 `data/diagnostics/`，不作为源码交付物。
+
+## 聊天与记忆边界
+
+主角色陪伴入口和 DSH 工作会话分离。主角色不会随着 DSH 任务进入工作状态；任务从内置工作台发起，子 agent 输入继续发给对应真实 DSH 会话。
+
+0.14.0 在工作台主进程复用仓库已有 `openMainChat` 服务，加入可配置 Chat API、流式回复、停止回复、失败恢复，以及按 `bigfish` 隔离的轻量记忆/摘要界面。它使用同一套共享服务代码，数据位于本应用的 `data/main-chat/`，不会读取 Windows 应用存档。
+
+从主角色右键的聊天设置，或“工作台选项 → N.E.K.O. 聊天设置”打开统一设置，可选 OpenAI 兼容 / Anthropic 协议，配置 API 地址、模型与密钥；配置完成前不自动发送请求。密钥由 Electron safeStorage 加密保存，设置页仅返回是否已保存；安全存储不可用或落入不受保护的回退后端时拒绝保存，不退回明文文件。
+
+“聊天记忆”使用既有 scoped memory / summary 接口查看、确认、编辑和删除本角色条目，保留原始聊天及来源；候选未确认不作为事实。它仍是现有关键词召回和摘要服务，不等同完整 N.E.K.O. 语义记忆。DSH 的“任务备注”继续独立，不自动升级为人格记忆或已确认事实。
+
+可选 `neko-chat.cjs` 本机连接器与 Chat API 模式互斥，切换会取消旧请求、关闭旧连接；同一条输入只进入一个后端。本机连接器只有用户显式启用后才连接已有 N.E.K.O. 服务，可能创建“大肥鱼”角色。原生语音、完整双记忆适配和 PNGTuber 尚待对应合同及后续接入，本轮不宣称已完成。
+
+`framework/` 已按用户提供的 v3 整合包加入工作台/共居区合同、配置和离线测试，同时保留原 v2 双记忆合同、来源与冲突规则、同步参考内核和模拟测试。原附件 `desktop/` 映射到当前应用目录，说明见 `framework/README.md`。参考内核不表示真实日记/N.E.K.O. 双向同步已接通，也不表示已交付“一键养鱼”安装器。当前工作台不会自动导入仓库 Windows 应用的角色或记忆。
+
+## 离线验证
+
+```sh
+npm run check:neko  # 源码语法及两个主题插件的离线 smoke
+npm run test:neko   # 路径隔离、纯模块和同步参考内核
+```
+
+也可分别运行 `npm --prefix apps/neko-workbench run check` 和 `npm --prefix apps/neko-workbench test`。测试只用临时目录或内存 fixture，不启动 Electron、DSH 或真实 N.E.K.O.，不请求模型、账号或余额。
+
+可复用的原离线检查：`check-workbench.cjs`、`check-workbench-roles.cjs`、`embedded-dsh/check-{skin-patch,avatar-theme,account-habitat,sidebar-avatar-accessibility}.cjs` 及两个 B0 插件的 `scripts/smoke.mjs`。它们检查状态持久化、IPC、主题、账号读取竞态和无障碍交互；其中账号数据均为模拟 fixture。
+
+原项目依赖本机会话、历史 `evidence/`、真实窗口或已有账号的检查，以及旧 `package-source.py`、`verify.cjs`，未迁入本仓库。离线通过不代表本副本已完成真实 DSH、桌面视觉、聊天或记忆联调。
+
+0.14.0 第一批接入的具体测试与实际定制窗口核对见 [IMPLEMENTATION_v0.14.md](IMPLEMENTATION_v0.14.md)，模拟验证、实机界面与仍待接入的功能分别记录。
+
+0.14.1 将社区改为右侧内嵌，交付与核对记录见 [IMPLEMENTATION_v0.14.1.md](IMPLEMENTATION_v0.14.1.md)。
+
+0.14.2 保留最近一条聊天 API 回复与错误提示，直到下一条消息或切换后端；输入时仍可查看、滚动长回复。实际 API 文字聊天不会自行创建 DSH 子代理。需要子代理时，从工作台发起明确的原生子代理任务；真实子代理完成后短暂显示，也可从主角色菜单的“设置 → 常驻子代理”留在桌面。
+
+## 三档桌面角色
+
+0.15.0 依据真实来源显示三档：主角色负责陪伴聊天（100%，默认画面宽 462）；有本人输入且运行过的 DSH 工作会话显示中号任务角色（70%，323）；只有原生子代理目录或 descriptor 确认的子会话显示小号帮手（约 52%，239）。空会话不会产生任务角色，普通 fork 和后台命令不因此成为 subagent；迟到的原生子代理身份会替换中号角色，保留昵称、常驻和位置。
+
+任务和帮手共用数量上限（默认 5，主角色另计）。常驻优先，超限的非固定角色按 15 秒轮换；默认布局按实际窗口尺寸换行，窄屏共同缩放。已拖动的位置继续保留并限制在工作区内。任务结束后显示约 10 秒反馈再退场，常驻的角色保留。后台 job 未结束时继续显示工作中，停止操作只针对所属会话，失败会提示。
+
+点击中号角色或其“在工作台继续任务”菜单，会打开对应的真实 coding 会话，并收起右侧社区。中号角色不另建聊天；小号 continuable 子代理沿用原生继续对话入口。主角色的 API 回复、独立记忆、＋与社区并排入口和右侧原生社区继续使用。
+
+实施与验收记录见 [IMPLEMENTATION_v0.15.md](IMPLEMENTATION_v0.15.md)。
+
+## 可选 N.E.K.O. 小猫形象
+
+0.16.0 为中号任务与小号 subagent 增加“原有角色 / N.E.K.O. 跑动小猫”两种形象。主角色菜单 → 设置 → 任务默认形象 / 子代理默认形象，可以分别选择两类角色的默认值；角色右键 → 形象，可以单独选择或恢复“跟随默认”。选择即时生效并保存在当前工作台存档，重启、任务恢复与原生身份修正后仍保留；0.17.0 进一步开放了主角色的形象切换。
+
+0.17.0 根据桌面目视反馈，将小猫画面与点击区域缩到先前的 65%，沿用任务/子代理的相对大小，输入框和气泡随小猫头顶位置调整。
+
+小猫素材沿用 N.E.K.O. 原生白猫：运行中走动、完成后伸展、空闲张望，拖拽时显示悬空反馈。走动限定在自身画面内，保留中号/小号尺寸、任务归属、点击导航和自动退场。系统启用减少动态效果时显示静帧；素材加载失败也回退到本地静帧。
+
+固定素材版本、原始文件哈希和许可见 `assets/neko-cat/SOURCE.json`；实现与验证见 [IMPLEMENTATION_v0.16.md](IMPLEMENTATION_v0.16.md)。
+
+## 主角色、任务与帮手的自定义形象
+
+0.17.0 将形象库开放给主角色、中号任务和小号 subagent。每只角色右键 → 形象，可选大肥鱼、N.E.K.O. 跑动小猫、Claude 娘、Gemini 小猫，或通过“导入自定义动图…”导入自己的动画 GIF/WebP（4 MB 以内，长宽最多 2048 像素，并且至少两帧）。导入动图保存在当前存档，不上传到服务端；保留原始动画字节，减少动态效果使用本地首帧。静态 WebP、PNG 和 JPEG 不作为动态形象导入。
+
+“形象大小”支持默认值和 40% / 55% / 65% / 80% / 100%，点击区域与图像同步缩放；N.E.K.O. 小猫默认 65%。主角色设置也提供三类默认形象，各角色可覆盖或恢复“跟随默认”。形象与大小即时生效并持久保存，不切换模型、任务会话或记忆。
+
+Claude 橙书娘与 Gemini 星猫娘使用 [fywdy/chatgpt-chibi-pets](https://github.com/fywdy/chatgpt-chibi-pets) 的原始多帧动画 WebP；每人九种动作，实际工作状态分别映射到待机、审查、跑动、跳跃、失败、等待和挥手。每个源文件已检查动画帧数与不同帧，原始字节保持不变。素材采用 CC BY-NC 4.0，原许可、NOTICE 和固定版本哈希在 `assets/ai-girls/` 中独立保留。代码和其他素材继续遵循各自许可。完整记录见 [IMPLEMENTATION_v0.17.md](IMPLEMENTATION_v0.17.md)。
+
+## 紧凑名字与正常比例
+
+0.18.0 将名字移到角色右上方，只显示当前名字前三个字，不再占用底部一行；悬停和辅助功能保留完整名字、角色类型及原始 DSH 身份。透明窗口按画面比例与所选尺寸收紧，输入与回复仍在头顶。Claude 的原待机、跳跃与失败素材行偏扁，显示时改用同一来源中比例正常的 review / waving / waiting 多帧动作；未拉伸原像素，减少动态效果也改用正常比例首帧。详见 [IMPLEMENTATION_v0.18.md](IMPLEMENTATION_v0.18.md)。
+
+## 像素 Q 版形象
+
+0.19.0 增加“Claude 娘 · 像素 Q 版”和“Gemini 小猫 · 像素 Q 版”，来自 [Hjh-12138/DSH-Pixel-Toons](https://github.com/Hjh-12138/DSH-Pixel-Toons)。主 agent、中号任务（subsection）和小号 subagent 均可右键 → 形象选择；主角色菜单 → 设置也可分别设置三类默认形象，单只覆盖与大小设置照常持久保存。六种内置形象可以并存。
+
+两套新素材共 18 个无损动画 WebP，每个 8 帧、每帧 125 毫秒、无限循环。思考、执行、结果检查、等待、成功、失败与拖拽会切换相应动作，减少动态效果或加载失败使用各自的首帧。转换后的可见像素已逐帧与固定上游包核对一致；固定版本、源包/文件哈希和原始 LICENSE、THIRD_PARTY_NOTICES 保存在 `assets/pixel-ai-girls/`。完整记录见 [IMPLEMENTATION_v0.19.md](IMPLEMENTATION_v0.19.md)。
+
+## 工作台养鱼
+
+0.20.0 内置固定版本的 [dsh-bili-whale](https://github.com/Alterssss/dsh-bili-whale)，入口免费，模型费用由用户自己的 DeepSeek 工作台账号承担。没有首次引导：主角色右键 **开始养鱼 / 暂停养鱼**；工作台左下角 **养鱼** 或工作台选项 **养鱼设置…** 打开右侧设置面板。
+
+角色人设、B站扫码登录、喜好、作息、日记与互动开关均在工作台内设置。启动时先检查 DeepSeek 登录，再检查 B站登录；缺失时在设置面板显示入口，完成登录后继续原来的启动请求。随时暂停可取消等待中的启动。未登录不会伪装成已运行。模型余额不足等执行失败会暂停并提示检查会话。
+
+默认暂停，每天最多一次唤醒、初筛三个视频，只阅读与写本地日记。评论、私信、收藏、弹幕等需用户在设置中明确开启 B站写操作与相应功能。工作台和电脑需要保持运行；不承诺离线或关机后继续活动。
+
+养鱼使用当前工作区内独立的 `fish-care/` 目录，凭据不出现在产出文件菜单；两个日记可以从产出菜单打开。主角色 API 聊天、人设记忆和其他 coding 会话继续沿用各自连接。没有自动安装全局插件或改变 DSH 权限。运行仍需可用的 DSH / Electron，扫码与模型账号登录由用户完成。
+
+来源、适配及验证边界见 [IMPLEMENTATION_v0.20.md](IMPLEMENTATION_v0.20.md)，固定上游版本与原始哈希见 `vendor/dsh-bili-whale/UPSTREAM.json`。
+
+## 来源与固定快照
+
+来源记录见 `SOURCE.json`，捕获时每个源文件的哈希见 `SOURCE_SNAPSHOT.json`。源项目后续仍可独立修改，本目录不会自动同步它的变化。`main.cjs`、`bridge.cjs`、启动器、尺寸配置和验证入口已为本仓库的数据隔离作适配。
+
+`assets/LICENSE.dsh-pet`、`assets/sources.json` 和 `original/SOURCE.json` 保留上游 dsh-pet 的许可与素材来源。工作台主题源自用户提供的 B0 套件，头像来源见 `embedded-dsh/assets/` 中的记录。快照排除了本机数据、凭据、会话、运行时、缓存、截图、余额验证、历史交接文档、重复交付和个人参考图片。

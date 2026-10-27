@@ -1,0 +1,273 @@
+{
+  "repository": "https://github.com/fywdy/chatgpt-chibi-pets",
+  "commit": "d5bbb27c79e5c08e8b8ab44d4023cd35a67418e2",
+  "creator": "fywdy / chatgpt-chibi-pets",
+  "license": "CC BY-NC 4.0",
+  "licenseFile": "LICENSE",
+  "noticeFile": "NOTICE.md",
+  "production": "Original multi-frame animated WebP previews copied unchanged. Claude uses upright review/waving/waiting clips instead of the flattened idle/jumping/failed source rows. Claude still.png is review frame 0; Gemini still.png is idle frame 0, for reduced motion and load fallback.",
+  "packs": {
+    "claude": "claude-orange-scholar-chibi-v3",
+    "gemini": "gemini-star-cat-chibi-v1"
+  },
+  "files": [
+    {
+      "file": "LICENSE",
+      "upstreamPath": "LICENSE",
+      "sha256": "16e11fba88f0fa3d266e0540bc695747d7dd513ed7d065e44445e8d3ef5d0cd0",
+      "bytes": 17465
+    },
+    {
+      "file": "NOTICE.md",
+      "upstreamPath": "NOTICE.md",
+      "sha256": "18590cb91c023dfec4e8a92c927213e0caa826e1a3264c8387cb20353c8299c0",
+      "bytes": 1919
+    },
+    {
+      "file": "claude/idle.webp",
+      "upstreamPath": "claude-orange-scholar-chibi-v3/qa/previews/idle.webp",
+      "sha256": "bc8ad881bb13b3530e81c60110dce3544bc1c59948f72588c29485f2dae21084",
+      "bytes": 155306,
+      "frames": 6,
+      "uniqueFrames": 6,
+      "size": [
+        192,
+        208
+      ],
+      "durationMs": 1100
+    },
+    {
+      "file": "claude/running-right.webp",
+      "upstreamPath": "claude-orange-scholar-chibi-v3/qa/previews/running-right.webp",
+      "sha256": "85608bf8949685154fe5c252db1ebec9bc47315e28f2994f829fb9350f10da1c",
+      "bytes": 313656,
+      "frames": 8,
+      "uniqueFrames": 8,
+      "size": [
+        192,
+        208
+      ],
+      "durationMs": 1060
+    },
+    {
+      "file": "claude/running-left.webp",
+      "upstreamPath": "claude-orange-scholar-chibi-v3/qa/previews/running-left.webp",
+      "sha256": "a12bed19730947936fcba5bbe54891be8f523fba7193a938edc695c42325c567",
+      "bytes": 268002,
+      "frames": 8,
+      "uniqueFrames": 8,
+      "size": [
+        192,
+        208
+      ],
+      "durationMs": 1060
+    },
+    {
+      "file": "claude/waving.webp",
+      "upstreamPath": "claude-orange-scholar-chibi-v3/qa/previews/waving.webp",
+      "sha256": "40bfc5094d945be9a3e548103d66426ae61bd1111a2b6b8caa4cd2cfc89c878f",
+      "bytes": 168948,
+      "frames": 4,
+      "uniqueFrames": 4,
+      "size": [
+        192,
+        208
+      ],
+      "durationMs": 700
+    },
+    {
+      "file": "claude/jumping.webp",
+      "upstreamPath": "claude-orange-scholar-chibi-v3/qa/previews/jumping.webp",
+      "sha256": "29c3df346b2006bbfc31cd38876a70726e3865eae9fca3897144d5a26ae9008c",
+      "bytes": 139412,
+      "frames": 5,
+      "uniqueFrames": 5,
+      "size": [
+        192,
+        208
+      ],
+      "durationMs": 840
+    },
+    {
+      "file": "claude/failed.webp",
+      "upstreamPath": "claude-orange-scholar-chibi-v3/qa/previews/failed.webp",
+      "sha256": "69644658ea4cfc0309692fcd98569c086d59fc52f278c9b0776301269cb0b622",
+      "bytes": 105128,
+      "frames": 8,
+      "uniqueFrames": 8,
+      "size": [
+        192,
+        208
+      ],
+      "durationMs": 1220
+    },
+    {
+      "file": "claude/waiting.webp",
+      "upstreamPath": "claude-orange-scholar-chibi-v3/qa/previews/waiting.webp",
+      "sha256": "49700749aecf515afb3abc7bdf0a72a1b8c560b3fcf130e739e9d273e6794d76",
+      "bytes": 139332,
+      "frames": 6,
+      "uniqueFrames": 6,
+      "size": [
+        192,
+        208
+      ],
+      "durationMs": 1010
+    },
+    {
+      "file": "claude/running.webp",
+      "upstreamPath": "claude-orange-scholar-chibi-v3/qa/previews/running.webp",
+      "sha256": "1caf9b84bcb80db1c25bf26d3ed0266fd7f58bc504f103de3fb69cd322bb5d16",
+      "bytes": 156740,
+      "frames": 6,
+      "uniqueFrames": 6,
+      "size": [
+        192,
+        208
+      ],
+      "durationMs": 820
+    },
+    {
+      "file": "claude/review.webp",
+      "upstreamPath": "claude-orange-scholar-chibi-v3/qa/previews/review.webp",
+      "sha256": "5936fdc9aac245489aa2cdef09cabbd499a40ec97a0aad9dbc73898254e02b44",
+      "bytes": 212672,
+      "frames": 6,
+      "uniqueFrames": 6,
+      "size": [
+        192,
+        208
+      ],
+      "durationMs": 1030
+    },
+    {
+      "file": "gemini/idle.webp",
+      "upstreamPath": "gemini-star-cat-chibi-v1/qa/previews/idle.webp",
+      "sha256": "40bd981adeb20d28f2dd756ad28c325bd30b64b0e7a17912ac4ef4b4a7330d40",
+      "bytes": 224522,
+      "frames": 6,
+      "uniqueFrames": 6,
+      "size": [
+        192,
+        208
+      ],
+      "durationMs": 1100
+    },
+    {
+      "file": "gemini/running-right.webp",
+      "upstreamPath": "gemini-star-cat-chibi-v1/qa/previews/running-right.webp",
+      "sha256": "82bdf0a2687ac85c0ed5e0db463e66cd82810963a6a94654b3c493b8ae72691f",
+      "bytes": 205588,
+      "frames": 8,
+      "uniqueFrames": 8,
+      "size": [
+        192,
+        208
+      ],
+      "durationMs": 1060
+    },
+    {
+      "file": "gemini/running-left.webp",
+      "upstreamPath": "gemini-star-cat-chibi-v1/qa/previews/running-left.webp",
+      "sha256": "284e4e2d373bbe196d827638320b9c72a06cd2882674f611476c8658983e2bd5",
+      "bytes": 204992,
+      "frames": 8,
+      "uniqueFrames": 8,
+      "size": [
+        192,
+        208
+      ],
+      "durationMs": 1060
+    },
+    {
+      "file": "gemini/waving.webp",
+      "upstreamPath": "gemini-star-cat-chibi-v1/qa/previews/waving.webp",
+      "sha256": "33a7733933bf51b8e2715cd5ac1aafc90bab9c1104a57f5af1700fc189ab081a",
+      "bytes": 209900,
+      "frames": 4,
+      "uniqueFrames": 4,
+      "size": [
+        192,
+        208
+      ],
+      "durationMs": 700
+    },
+    {
+      "file": "gemini/jumping.webp",
+      "upstreamPath": "gemini-star-cat-chibi-v1/qa/previews/jumping.webp",
+      "sha256": "3d2608278913ba8e4bdd917143ed96669227e6419445e71bd5e7236f0627284e",
+      "bytes": 238612,
+      "frames": 5,
+      "uniqueFrames": 5,
+      "size": [
+        192,
+        208
+      ],
+      "durationMs": 840
+    },
+    {
+      "file": "gemini/failed.webp",
+      "upstreamPath": "gemini-star-cat-chibi-v1/qa/previews/failed.webp",
+      "sha256": "a656314c652d51372674b752cfc95091aa26e6b35fab7af46fb863641a00bc92",
+      "bytes": 381122,
+      "frames": 8,
+      "uniqueFrames": 8,
+      "size": [
+        192,
+        208
+      ],
+      "durationMs": 1220
+    },
+    {
+      "file": "gemini/waiting.webp",
+      "upstreamPath": "gemini-star-cat-chibi-v1/qa/previews/waiting.webp",
+      "sha256": "cc003e872846bb60d9d0e638175bae419fcf89c9a62e8f9a1c6d93f75fdb4ba4",
+      "bytes": 305124,
+      "frames": 6,
+      "uniqueFrames": 6,
+      "size": [
+        192,
+        208
+      ],
+      "durationMs": 1010
+    },
+    {
+      "file": "gemini/running.webp",
+      "upstreamPath": "gemini-star-cat-chibi-v1/qa/previews/running.webp",
+      "sha256": "a911c7b50006c5767d4630dd84a5817e109964c5db54a6958ac6143fe5c5b559",
+      "bytes": 261392,
+      "frames": 6,
+      "uniqueFrames": 6,
+      "size": [
+        192,
+        208
+      ],
+      "durationMs": 820
+    },
+    {
+      "file": "gemini/review.webp",
+      "upstreamPath": "gemini-star-cat-chibi-v1/qa/previews/review.webp",
+      "sha256": "67ca4afe27c4dceff21ce7bb07a1148126a93dc2224d5dc692f977b02d5bb3a9",
+      "bytes": 203084,
+      "frames": 6,
+      "uniqueFrames": 6,
+      "size": [
+        192,
+        208
+      ],
+      "durationMs": 1030
+    },
+    {
+      "file": "claude/still.png",
+      "derivedFrom": "claude/review.webp",
+      "frame": 0,
+      "sha256": "d1636c72b54b63f7b951793fa6c152d20feef38f3c4e01a18f2206f34297dc9e"
+    },
+    {
+      "file": "gemini/still.png",
+      "derivedFrom": "gemini/idle.webp",
+      "frame": 0,
+      "sha256": "53d2d9eeb66e3cebe84816238d09c62c4dc59d943ff91ce513fdda154d6ebf7b"
+    }
+  ]
+}

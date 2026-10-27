@@ -1,0 +1,45 @@
+{
+  "source": "Project-N-E-K-O/N.E.K.O",
+  "repository": "https://github.com/Project-N-E-K-O/N.E.K.O",
+  "commit": "a3c82b5a8eeb63afcc0a344fa1113a176b8defd2",
+  "sourceLicense": "LICENSE.N.E.K.O",
+  "production": "Native N.E.K.O. GIF bytes copied unchanged from the pinned source version. still.png is its idle first frame for reduced motion and load fallback.",
+  "files": [
+    {
+      "file": "cat-idle-cat4-1.gif",
+      "upstreamPath": "static/assets/neko-idle/cat-idle-cat4-1.gif",
+      "sha256": "68042fe035292e8f3f9825dda73323bde52afbbbff83060cc85edb7644db8ac1",
+      "gitBlob": "896d206c221f625f55e5973fe12d4dc0005d1e90",
+      "bytes": 2916640
+    },
+    {
+      "file": "cat-idle-cat4-2.gif",
+      "upstreamPath": "static/assets/neko-idle/cat-idle-cat4-2.gif",
+      "sha256": "4849742486e7d24781e15402a81fd19616d8359b6c1bd5c02ba1157c8576e3d6",
+      "gitBlob": "7bcf1a90be0c1f87ebf29213357fd6937f925fb8",
+      "bytes": 1122630
+    },
+    {
+      "file": "cat-idle-cat4-3.gif",
+      "upstreamPath": "static/assets/neko-idle/cat-idle-cat4-3.gif",
+      "sha256": "aefeb44e21ca0ff9cbb06123663cc244de06cb2cfaa2dbda8f47bec85b81e1c4",
+      "gitBlob": "687c03b45fd9fc06be48c103be00da8e4aa9819e",
+      "bytes": 352326
+    },
+    {
+      "file": "cat-idle-cat-move-3.gif",
+      "upstreamPath": "static/assets/neko-idle/cat-idle-cat-move-3.gif",
+      "sha256": "8b1f4b00dd4a9575826be54326f9923ba3d2d3e9ee5e1b361c4bf394151608c4",
+      "gitBlob": "73857ac14e70cddf97242d26074e269b8c8c555d",
+      "bytes": 928840
+    }
+  ],
+  "derived": [
+    {
+      "file": "still.png",
+      "from": "cat-idle-cat4-3.gif",
+      "frame": 0,
+      "sha256": "ac28252bfa9c6feb52402cd9e9bc9a8124ba3e30b48cc45aa552bb6c6e833fa8"
+    }
+  ]
+}

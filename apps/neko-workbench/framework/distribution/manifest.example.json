@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 2,
+  "product": "N.E.K.O. 桌宠工作台",
+  "frameworkVersion": 3,
+  "presetPersona": "bigfish",
+  "memoryDefault": "diary",
+  "memoryIntegrationStatus": "reference-only-not-connected-to-desktop",
+  "fishKeepingMenuStatus": "contract-only",
+  "desktop": {
+    "path": "../",
+    "version": "0.13.0",
+    "status": "source-prototype-requires-local-official-runtimes",
+    "platformCurrentlyTargeted": "macOS arm64",
+    "localDependencies": [
+      "official-deepseek-harness-dsh",
+      "official-electron-runtime-compatible-with-dsh-pet"
+    ],
+    "accountBalance": "read-only-official-wallet-in-original-currency",
+    "excluded": [
+      "data/",
+      "runtime/",
+      "workspaces/",
+      "real-account-balance-screenshots"
+    ]
+  },
+  "artifacts": [
+    {
+      "platform": "macOS arm64",
+      "target": "signed-and-notarized-dmg",
+      "status": "planned"
+    },
+    {
+      "platform": "Windows x64",
+      "target": "signed-installer",
+      "status": "planned"
+    }
+  ],
+  "bundled": [],
+  "includedSource": [
+    "desktop-prototype-v0.13.0",
+    "memory-contracts",
+    "memory-hub-reference",
+    "original-memory-hub-tests"
+  ],
+  "plannedBundled": [
+    "desktop-runtime",
+    "dsh-runtime-with-license-review",
+    "pet-assets-with-license-review",
+    "diary-adapter",
+    "sync-coordinator",
+    "setup-ui"
+  ],
+  "optional": [
+    "neko-memory-component",
+    "bilibili-login"
+  ],
+  "requiredUserSetup": [
+    "local-official-dsh-and-electron-installation",
+    "official-account-login-if-live-account-features-are-used"
+  ],
+  "plannedMainChatSetup": [
+    "chat-api-key-or-supported-login"
+  ],
+  "secrets": "system-keychain",
+  "secretsStatus": "future-chat-and-memory-distribution-contract",
+  "upgrade": "preserve-user-data",
+  "status": "source-prototype-plus-memory-reference-not-a-shipped-installer"
+}

@@ -1,0 +1,11 @@
+{
+  "name": "neko-desktop-framework",
+  "version": "3.0.0",
+  "private": true,
+  "description": "N.E.K.O. workbench prototype with dual-memory reference contracts",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "check:desktop": "npm --prefix .. run check",
+    "start": "npm --prefix .. start"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "name": "@bigfish/dsh-client-ui-skin",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "N.E.K.O. 工作台 skins for the DSH Web GUI: palette token layer plus an optional skin chip (default neko-mist, optional bigfish)",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib"
+  ],
+  "scripts": {
+    "smoke": "node scripts/smoke.mjs"
+  },
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-client-ui-theme"
+      ]
+    }
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "purpose": "source_review_snapshot_not_release_lock",
+  "reviewed_on": "2026-10-25",
+  "neko": {"repository": "Project-N-E-K-O/N.E.K.O", "ref": "b4821ecb003dd913a4f592b2296616cd8ea7e870"},
+  "dsh": {"repository": "deepseek-ai/deepseek-harness", "ref": "22ddee3792402c3e70ec5f86a63c3e3e895a2f60"},
+  "dsh_pet": {"repository": "PC2005-cloud/dsh-pet", "ref": "dfc03961bdb4d26898838cb72c9c2ac09699b1e2", "package_version": "0.3.8"}
+}

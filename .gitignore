@@ -1,0 +1,47 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Node
+node_modules/
+
+# Local runtime data (memory, app.sqlite, logs)
+services/neko-memory/data_*/
+services/neko-asr/models/
+*.sqlite
+*.sqlite-*
+*.db
+*.log
+
+# Local verification evidence (screenshots, driver logs, scratch data)
+_sandbox/
+
+# Secrets
+.env
+.env.*
+*.pem
+*.key
+.credentials.yaml
+*.dpapi
+*.pfx
+secrets/
+/app-config.json
+/dsh-pets.json
+/workspaces/
+
+# Generated portable packages and local runtime payloads
+/dist/
+/release/
+/resources/
+
+# Agent worktrees
+.claude/worktrees/
+
+# Independent N.E.K.O. workbench development state
+apps/neko-workbench/data/
+apps/neko-workbench/runtime/
+apps/neko-workbench/workspaces/
+apps/neko-workbench/evidence/
+apps/neko-workbench/*.zip

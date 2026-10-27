@@ -1,0 +1,4 @@
+Bundled with esbuild 0.25.11 for offline QR login.
+dijkstrajs@1.0.3
+pngjs@5.0.0
+qrcode@1.5.4

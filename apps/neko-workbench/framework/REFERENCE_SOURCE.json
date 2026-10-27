@@ -1,0 +1,35 @@
+{
+  "referenceArchive": "NEKO桌宠_项目框架_v3_工作台共居整合_20261026.zip",
+  "archiveSha256": "9afa92b4bae7814e40b5a0c515185b4b2abb88eab4de7a36bab97d9b5c918cc2",
+  "frameworkVersion": 3,
+  "selectedFiles": [
+    "README.md",
+    "config/app.example.json",
+    "config/main-agent-menu.json",
+    "config/persona.bigfish.json",
+    "config/skin.bigfish.json",
+    "config/workbench.example.json",
+    "distribution/manifest.example.json",
+    "docs/双记忆与一键养鱼.md",
+    "docs/工作台与共居区整合.md",
+    "docs/接入与发布验收.md",
+    "docs/项目框架.md",
+    "package.json",
+    "reference/memory-hub.mjs",
+    "src/contracts.ts",
+    "src/memory-contracts.ts",
+    "src/workbench-contracts.ts",
+    "tests/fixtures/v2-config-baseline.json",
+    "tests/memory-hub.test.mjs",
+    "tests/workbench-config.test.mjs"
+  ],
+  "excluded": [
+    "desktop (separate adapted application)",
+    "design (optional example preview and third-party assets)",
+    "historical verification and manifest reports"
+  ],
+  "layoutAdaptations": [
+    "Application source maps to parent directory; config desktopSource ../../",
+    "README and integration docs reflect same-repository optional entry"
+  ]
+}

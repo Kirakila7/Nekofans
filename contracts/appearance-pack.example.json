@@ -1,0 +1,26 @@
+{
+  "schema_version": "0.1-draft",
+  "sample_only": true,
+  "pack_id": "demo-blue-fish-pack",
+  "appearance_id": "demo-blue-fish-look",
+  "display_name": "大肥鱼示例外观",
+  "character_template": {
+    "name": "大肥鱼",
+    "persona": "语气自然简短，记住经过用户确认的偏好，清楚说明任务和成果状态。",
+    "voice_selection": "choose_at_import"
+  },
+  "default_renderer": "pngtuber",
+  "renderers": {
+    "pngtuber": {"model_path": "pngtuber/model.json"},
+    "video": {
+      "clips": {
+        "idle": ["video/idle.webm"],
+        "thinking": ["video/thinking.webm"],
+        "working": ["video/working.webm"],
+        "speaking": ["video/speaking.webm"],
+        "success": ["video/success.webm"],
+        "error": ["video/error.webm"]
+      }
+    }
+  }
+}

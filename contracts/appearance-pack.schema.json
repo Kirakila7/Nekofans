@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Appearance pack proposal",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "pack_id", "appearance_id", "display_name", "character_template", "default_renderer", "renderers"],
+  "properties": {
+    "schema_version": {"const": "0.1-draft"},
+    "sample_only": {"type": "boolean", "default": false},
+    "pack_id": {"type": "string", "minLength": 1},
+    "appearance_id": {"type": "string", "minLength": 1},
+    "display_name": {"type": "string", "minLength": 1},
+    "character_template": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "persona"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "persona": {"type": "string"},
+        "voice_selection": {"enum": ["choose_at_import", "keep_existing"]}
+      }
+    },
+    "default_renderer": {"enum": ["pngtuber", "video"]},
+    "renderers": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "pngtuber": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["model_path"],
+          "properties": {"model_path": {"$ref": "#/$defs/relativePath"}}
+        },
+        "video": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["clips"],
+          "properties": {
+            "clips": {
+              "type": "object",
+              "required": ["idle"],
+              "properties": {"idle": {"$ref": "#/$defs/clipList"}},
+              "additionalProperties": {"$ref": "#/$defs/clipList"}
+            }
+          }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {"if": {"properties": {"default_renderer": {"const": "pngtuber"}}}, "then": {"properties": {"renderers": {"required": ["pngtuber"]}}}},
+    {"if": {"properties": {"default_renderer": {"const": "video"}}}, "then": {"properties": {"renderers": {"required": ["video"]}}}}
+  ],
+  "$defs": {
+    "relativePath": {"type": "string", "minLength": 1, "pattern": "^(?!/)(?!.*\\\\)(?![A-Za-z]:)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"},
+    "clipList": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/relativePath"}}
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "id": "bigfish",
+  "name": "大肥鱼",
+  "productBrand": "N.E.K.O.",
+  "renderer": "action-video",
+  "assetPack": "dsh-pet-original",
+  "description": "蓝色鲸鱼娘外观与原版动作；仅控制外观，不承载角色记忆。",
+  "status": "框架配置示例"
+}
