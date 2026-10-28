@@ -1,9 +1,10 @@
-# Unified daily workbench 0.28.1
+# Local test workbench 0.28.2
 
 The daily artifact is built from this repository. `config/daily-release.json` is the version authority; every app includes `Contents/Resources/WORKBENCH_BUILD.json` with the source commit and SHA-256 of every shipped source file. Historical QA checkouts and profiles are not release inputs.
 
 ## Included local workbench changes
 
+- Workbench PR #10 (`d5ff80619f23fa279c670e0355f954503ad23e27`) sidebar hide/expand ported onto the 0.28.1 Codex model-picker source (`4567f2e`). Collapse removes the sidebar grid track completely; a native-expand action appears above Bilibili in the persistent rail. Dragging the sidebar divider past the left threshold invokes native collapse. Only the side-rail source and its generated block were taken from the older trial branch. This is a local test build, separate from the published 0.28.1 release.
 - Shared native DSH accounts, plugins and sessions; Codex app-server workspace and read-only account/quota entry.
 - Existing switch positions preserved. Picking a bound assistant updates its sidebar selection and right-hand engine together; DSH and Codex drafts stay separate.
 - Codex model and reasoning selectors read the native `model/list` catalog and send explicit choices with `turn/start`. Only advertised reasoning options are shown. Native-default mode preserves existing Codex configuration. Per-conversation choices are stored in a private local workbench file, independent of the DSH port; they do not rewrite native Codex configuration. Listing a model does not prove permission to execute it.

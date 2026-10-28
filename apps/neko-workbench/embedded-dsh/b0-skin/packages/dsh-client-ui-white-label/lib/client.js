@@ -1854,7 +1854,7 @@ function installWorkspaceShell(options = {}) {
 // @neko-workspace-shell:end
 
 // @neko-side-rail:start
-const SIDE_RAIL_CSS = "/* One independent rail; the native session/sidebar/composer layout remains. */\nbody[data-neko-side-rail-layout] { --neko-rail-width: 64px; }\nbody[data-neko-side-rail-layout] [data-neko-rail-app] {\n  width: calc(100% - var(--neko-rail-width)) !important;\n  margin-left: var(--neko-rail-width) !important; min-width: 0;\n}\n.neko-side-rail {\n  position: fixed; inset: 0 auto 0 0; z-index: 40;\n  display: flex; flex-direction: column; align-items: center;\n  width: var(--neko-rail-width, 64px); box-sizing: border-box; padding: 14px 12px 12px;\n  border-right: 1px solid var(--dsw-alias-border-l1, #c4dbe6);\n  background: var(--dsw-alias-bg-layer-1, #fbfeff);\n  color: var(--dsw-alias-label-primary, #17303d);\n  -webkit-app-region: no-drag;\n}\n.neko-side-rail__theme { width: 40px; height: 40px; flex: none; }\n.neko-side-rail__space { flex: 1; min-height: 32px; }\n.neko-side-rail__bottom { display: flex; flex-direction: column; gap: 12px; }\n.neko-side-rail__button {\n  display: grid; place-items: center; width: 40px; height: 40px; padding: 4px;\n  border: 0; border-radius: 12px; background: transparent; color: inherit; cursor: pointer;\n}\n.neko-side-rail__button:hover { background: var(--dsw-alias-interactive-bg-hover, #ddedf4); }\n.neko-side-rail__button:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary, #246b91); outline-offset: 2px; }\n.neko-side-rail__button[aria-busy=\"true\"] { opacity: .55; cursor: progress; }\n.neko-side-rail__button[aria-expanded=\"true\"], .neko-side-rail__button[aria-pressed=\"true\"] { background: var(--dsw-alias-interactive-bg-active, #d0e5ef); }\n.neko-side-rail__button svg { display: block; width: 24px; height: 24px; }\n.neko-side-rail__button img { display: block; width: 36px; height: 36px; object-fit: contain; border-radius: 10px; }\n.neko-side-rail__notice {\n  position: absolute; bottom: 60px; left: 72px; width: 190px; padding: 10px 12px; margin: 0;\n  border: 1px solid var(--dsw-alias-border-l1, #c4dbe6); border-radius: 10px;\n  background: var(--dsw-alias-bg-layer-1, #fbfeff); color: inherit; font: 12px/1.5 system-ui, sans-serif;\n}\n.neko-side-rail__notice[hidden] { display: none; }\nbody[data-neko-side-rail-layout] .neko-avatar-anchor {\n  position: fixed; left: 12px; top: 14px; width: 40px !important; height: 40px !important; z-index: 41;\n}\nbody[data-neko-side-rail-layout] .neko-avatar-portal .neko-avatar--mark {\n  width: 100%; height: 100%; object-fit: contain;\n}\nbody[data-neko-side-rail-layout] .neko-role-host .neko-bilibili,\nbody[data-neko-side-rail-layout] [data-neko-rail-fish-original] { display: none !important; }\nbody[data-neko-side-rail-layout] .neko-role-host .neko-social-actions { grid-template-columns: 1fr; }\nbody[data-neko-side-rail-layout] [data-slot=\"settings.launcher\"] { height: 0; min-height: 0; margin: 0; padding: 0; }\nbody[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-account-habitat][data-neko-unified-account] {\n  position: fixed; left: 12px; bottom: 12px; z-index: 41;\n  display: grid !important; place-items: center; width: 40px !important; height: 40px !important;\n  min-height: 40px !important; padding: 4px !important; margin: 0 !important;\n  border: 0 !important; border-radius: 12px; background: transparent;\n  opacity: 0 !important; pointer-events: none !important;\n}\nbody[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account] .neh-launcher {\n  display: block !important; width: 32px !important; height: 32px !important;\n}\nbody[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account] .neh-identity { display: block; }\nbody[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account] .neh-developer-avatar { width: 32px; height: 32px; }\nbody[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account] .neh-developer-name,\nbody[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account] .neh-providers { display: none; }\nbody[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account]:hover { background: var(--dsw-alias-interactive-bg-hover, #ddedf4); }\nbody[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account]:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary, #246b91); outline-offset: 2px; }\n";
+const SIDE_RAIL_CSS = "/* One independent rail; the native session/sidebar/composer layout remains. */\nbody[data-neko-side-rail-layout] { --neko-rail-width: 64px; }\nbody[data-neko-side-rail-layout] [data-neko-rail-app] {\n  width: calc(100% - var(--neko-rail-width)) !important;\n  margin-left: var(--neko-rail-width) !important; min-width: 0;\n}\nbody[data-neko-side-rail-layout] [data-sidebar-collapsed=\"true\"][data-neko-sidebar-hidden-grid] {\n  grid-template-columns: var(--neko-hidden-grid) !important;\n}\n.neko-side-rail {\n  position: fixed; inset: 0 auto 0 0; z-index: 40;\n  display: flex; flex-direction: column; align-items: center;\n  width: var(--neko-rail-width, 64px); box-sizing: border-box; padding: 14px 12px 12px;\n  border-right: 1px solid var(--dsw-alias-border-l1, #c4dbe6);\n  background: var(--dsw-alias-bg-layer-1, #fbfeff);\n  color: var(--dsw-alias-label-primary, #17303d);\n  -webkit-app-region: no-drag;\n}\n.neko-side-rail__theme { width: 40px; height: 40px; flex: none; }\n.neko-side-rail__space { flex: 1; min-height: 32px; }\n.neko-side-rail__bottom { display: flex; flex-direction: column; gap: 12px; }\n.neko-side-rail__button {\n  display: grid; place-items: center; width: 40px; height: 40px; padding: 4px;\n  border: 0; border-radius: 12px; background: transparent; color: inherit; cursor: pointer;\n}\n.neko-side-rail__button[hidden] { display: none !important; }\n.neko-side-rail__button:hover { background: var(--dsw-alias-interactive-bg-hover, #ddedf4); }\n.neko-side-rail__button:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary, #246b91); outline-offset: 2px; }\n.neko-side-rail__button[aria-busy=\"true\"] { opacity: .55; cursor: progress; }\n.neko-side-rail__button[aria-expanded=\"true\"], .neko-side-rail__button[aria-pressed=\"true\"] { background: var(--dsw-alias-interactive-bg-active, #d0e5ef); }\n.neko-side-rail__button svg { display: block; width: 24px; height: 24px; }\n.neko-side-rail__button img { display: block; width: 36px; height: 36px; object-fit: contain; border-radius: 10px; }\n.neko-side-rail__notice {\n  position: absolute; bottom: 60px; left: 72px; width: 190px; padding: 10px 12px; margin: 0;\n  border: 1px solid var(--dsw-alias-border-l1, #c4dbe6); border-radius: 10px;\n  background: var(--dsw-alias-bg-layer-1, #fbfeff); color: inherit; font: 12px/1.5 system-ui, sans-serif;\n}\n.neko-side-rail__notice[hidden] { display: none; }\nbody[data-neko-side-rail-layout] .neko-avatar-anchor {\n  position: fixed; left: 12px; top: 14px; width: 40px !important; height: 40px !important; z-index: 41;\n}\nbody[data-neko-side-rail-layout] .neko-avatar-portal .neko-avatar--mark {\n  width: 100%; height: 100%; object-fit: contain;\n}\nbody[data-neko-side-rail-layout] .neko-role-host .neko-bilibili,\nbody[data-neko-side-rail-layout] [data-neko-rail-fish-original] { display: none !important; }\nbody[data-neko-side-rail-layout] .neko-role-host .neko-social-actions { grid-template-columns: 1fr; }\nbody[data-neko-side-rail-layout] [data-slot=\"settings.launcher\"] { height: 0; min-height: 0; margin: 0; padding: 0; }\nbody[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-account-habitat][data-neko-unified-account] {\n  position: fixed; left: 12px; bottom: 12px; z-index: 41;\n  display: grid !important; place-items: center; width: 40px !important; height: 40px !important;\n  min-height: 40px !important; padding: 4px !important; margin: 0 !important;\n  border: 0 !important; border-radius: 12px; background: transparent;\n  opacity: 0 !important; pointer-events: none !important;\n}\nbody[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account] .neh-launcher {\n  display: block !important; width: 32px !important; height: 32px !important;\n}\nbody[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account] .neh-identity { display: block; }\nbody[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account] .neh-developer-avatar { width: 32px; height: 32px; }\nbody[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account] .neh-developer-name,\nbody[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account] .neh-providers { display: none; }\nbody[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account]:hover { background: var(--dsw-alias-interactive-bg-hover, #ddedf4); }\nbody[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account]:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary, #246b91); outline-offset: 2px; }\n";
 // Own navigation only. Native avatar and account React controls keep their
 // original owners, parents, login handlers and popup anchoring.
 function installWorkbenchSideRail(options = {}) {
@@ -1869,6 +1869,13 @@ function installWorkbenchSideRail(options = {}) {
   const theme = doc.createElement('div'); theme.className = 'neko-side-rail__theme'; theme.setAttribute('aria-hidden', 'true');
   const space = doc.createElement('div'); space.className = 'neko-side-rail__space'; space.setAttribute('aria-hidden', 'true');
   const bottom = doc.createElement('nav'); bottom.className = 'neko-side-rail__bottom'; bottom.setAttribute('aria-label', 'B站与养鱼');
+  const expand = doc.createElement('button'); expand.type = 'button'; expand.className = 'neko-side-rail__button neko-side-rail__expand';
+  expand.setAttribute('aria-label', '展开侧边栏'); expand.title = '展开侧边栏'; expand.hidden = true;
+  const expandIcon = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  expandIcon.setAttribute('viewBox', '0 0 24 24'); expandIcon.setAttribute('aria-hidden', 'true');
+  const expandPath = doc.createElementNS('http://www.w3.org/2000/svg', 'path');
+  for (const [key, value] of Object.entries({ d: 'M5 4.5h14a1.5 1.5 0 0 1 1.5 1.5v12a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 18V6A1.5 1.5 0 0 1 5 4.5Zm4.5 0v15M13 9l3 3-3 3', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.6, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' })) expandPath.setAttribute(key, value);
+  expandIcon.appendChild(expandPath); expand.appendChild(expandIcon);
   const bili = doc.createElement('button'); bili.type = 'button'; bili.className = 'neko-side-rail__button neko-side-rail__bilibili neko-community neko-bilibili';
   bili.setAttribute('aria-label', '哔哩哔哩主页'); bili.title = '哔哩哔哩主页';
   const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -1889,10 +1896,17 @@ function installWorkbenchSideRail(options = {}) {
   if (/^data:image\/(?:png|webp|jpeg);base64,/.test(options.accountAvatar || '')) accountImage.src = options.accountAvatar;
   account.appendChild(accountImage);
   const notice = doc.createElement('p'); notice.className = 'neko-side-rail__notice'; notice.hidden = true; notice.setAttribute('role', 'status');
-  bottom.append(bili, fish, account); rail.append(theme, space, bottom, notice);
+  bottom.append(expand, bili, fish, account); rail.append(theme, space, bottom, notice);
   const style = doc.createElement('style'); style.dataset.nekoSideRailStyle = ''; style.textContent = options.cssText || '';
   const originalBodyMarker = doc.body.getAttribute('data-neko-side-rail-layout');
-  const claimed = new Map(); let stopped = false, queued = false, pending = false, appRoot = null, nativeAccount = null;
+  const claimed = new Map(); let stopped = false, queued = false, pending = false, appRoot = null, nativeAccount = null, nativeToggle = null, hiddenFrame = null, previousGrid = null, sidebarDrag = null;
+  function releaseFrame() {
+    if (!hiddenFrame) return;
+    release(hiddenFrame, 'data-neko-sidebar-hidden-grid');
+    if (previousGrid?.value) hiddenFrame.style.setProperty('--neko-hidden-grid', previousGrid.value, previousGrid.priority);
+    else hiddenFrame.style.removeProperty('--neko-hidden-grid');
+    hiddenFrame = null; previousGrid = null;
+  }
   function mark(node, name, value = '') {
     if (!node) return;
     if (!claimed.has(node)) claimed.set(node, new Map());
@@ -1912,6 +1926,17 @@ function installWorkbenchSideRail(options = {}) {
   function sync() {
     queued = false; if (stopped) return;
     const sidebar = doc.querySelector('[data-slot="sidebar"]');
+    const frame = sidebar?.closest('[data-sidebar-collapsed="true"]');
+    nativeToggle = frame ? [...sidebar.querySelectorAll('button')].find(button => /^(打开侧边栏|展开侧边栏|open sidebar|expand sidebar)$/i.test((button.getAttribute('aria-label') || button.getAttribute('title') || '').trim())) : null;
+    const columns = frame?.style.gridTemplateColumns || '';
+    const hiddenColumns = /^\s*\S+\s+/.test(columns) ? columns.replace(/^\s*\S+\s+/, '0px ') : '';
+    if (hiddenFrame && (hiddenFrame !== frame || !nativeToggle || !hiddenColumns)) releaseFrame();
+    if (frame && nativeToggle && hiddenColumns) {
+      if (!hiddenFrame) { hiddenFrame = frame; previousGrid = { value: frame.style.getPropertyValue('--neko-hidden-grid'), priority: frame.style.getPropertyPriority('--neko-hidden-grid') }; }
+      if (frame.style.getPropertyValue('--neko-hidden-grid') !== hiddenColumns) frame.style.setProperty('--neko-hidden-grid', hiddenColumns);
+      mark(frame, 'data-neko-sidebar-hidden-grid');
+    }
+    expand.hidden = !hiddenFrame;
     let next = sidebar;
     while (next?.parentElement && next.parentElement !== doc.body) next = next.parentElement;
     if (!next || next === doc.body || next === rail || next.parentElement !== doc.body) next = null;
@@ -1947,6 +1972,21 @@ function installWorkbenchSideRail(options = {}) {
     finally { pending = false; if (!stopped) button.removeAttribute('aria-busy'); }
   }
   const onBili = () => act(bili, () => options.openBilibiliHome());
+  const onExpand = () => { if (!stopped && nativeToggle?.isConnected) nativeToggle.click(); };
+  const onDragStart = event => {
+    const handle = event.target?.closest?.('[data-side="sidebar"]');
+    if (event.button !== 0 || !handle) return;
+    const sidebar = doc.querySelector('[data-slot="sidebar"]');
+    if (!sidebar || !handle.parentElement?.contains(sidebar)) return;
+    sidebarDrag = { pointerId: event.pointerId, frame: handle.parentElement };
+  };
+  const onDragEnd = event => {
+    const drag = sidebarDrag; sidebarDrag = null;
+    if (!drag || drag.pointerId !== event.pointerId || event.type !== 'pointerup' || stopped) return;
+    const sidebar = doc.querySelector('[data-slot="sidebar"]');
+    const close = [...(sidebar?.querySelectorAll('button') || [])].find(button => /^(收起侧边栏|关闭侧边栏|close sidebar|collapse sidebar)$/i.test((button.getAttribute('aria-label') || button.getAttribute('title') || '').trim()));
+    if (close && event.clientX - drag.frame.getBoundingClientRect().left < 160) close.click();
+  };
   const onFish = () => act(fish, () => bridge.action('fish-settings'));
   const onAccount = () => {
     if (!nativeAccount?.isConnected || stopped) return;
@@ -1956,16 +1996,19 @@ function installWorkbenchSideRail(options = {}) {
     if (event.target !== nativeAccount) return;
     Promise.resolve().then(() => { if (!stopped && nativeAccount?.getAttribute('aria-expanded') !== 'true') account.focus(); });
   };
-  bili.addEventListener('click', onBili); fish.addEventListener('click', onFish);
+  expand.addEventListener('click', onExpand); bili.addEventListener('click', onBili); fish.addEventListener('click', onFish);
   account.addEventListener('click', onAccount); doc.addEventListener('focusin', onFocus);
+  doc.addEventListener('pointerdown', onDragStart, true); doc.addEventListener('pointerup', onDragEnd); doc.addEventListener('pointercancel', onDragEnd);
   doc.head.appendChild(style); doc.body.prepend(rail); doc.body.setAttribute('data-neko-side-rail-layout', '');
   const observer = new win.MutationObserver(schedule);
-  observer.observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-label', 'aria-expanded'] });
+  observer.observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-label', 'aria-expanded', 'data-sidebar-collapsed', 'style'] });
   sync();
   return () => {
     if (stopped) return; stopped = true; observer.disconnect();
-    bili.removeEventListener('click', onBili); fish.removeEventListener('click', onFish);
+    expand.removeEventListener('click', onExpand); bili.removeEventListener('click', onBili); fish.removeEventListener('click', onFish);
     account.removeEventListener('click', onAccount); doc.removeEventListener('focusin', onFocus);
+    doc.removeEventListener('pointerdown', onDragStart, true); doc.removeEventListener('pointerup', onDragEnd); doc.removeEventListener('pointercancel', onDragEnd);
+    releaseFrame();
     for (const [node, attrs] of [...claimed]) for (const name of [...attrs.keys()]) release(node, name);
     if (doc.body.getAttribute('data-neko-side-rail-layout') === '') {
       if (originalBodyMarker === null) doc.body.removeAttribute('data-neko-side-rail-layout');
