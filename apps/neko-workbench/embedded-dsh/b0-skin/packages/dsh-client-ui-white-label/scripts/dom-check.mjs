@@ -90,6 +90,7 @@ let baseline = live.size
 
 const calls = []
 const subs = new Set()
+const communitySubs = new Set()
 let state = {
   avatar: { builtinId: 'yui', customDataUrl: null },
   neko: { enabled: true, connection: 'connected', character: 'YUi', error: '' },
@@ -98,6 +99,7 @@ let state = {
 let deferred = null
 window.nekoWorkbench = {
   community: async request => { calls.push(['community', request]); return { ok: true } },
+  subscribeCommunity(fn) { communitySubs.add(fn); return () => communitySubs.delete(fn) },
   getState: async () => state,
   setAvatar: async (id) => { calls.push(['setAvatar', id]); state = { ...state, avatar: { ...state.avatar, builtinId: id } }; return state },
   uploadAvatar: async () => { calls.push(['uploadAvatar']); return null },
@@ -120,13 +122,14 @@ let roleState = {
   ],
 }
 const roleCalls = []
+let failSelect = false
 const roleSubs = new Set()
 window.nekoRoles = {
   getState: async () => roleState,
-  selectRole: async (id) => { roleCalls.push(['selectRole', id]); if (id !== 'bigfish') throw new Error('未接入'); return roleState },
+  selectRole: async (id) => { roleCalls.push(['selectRole', id]); if (failSelect) throw new Error('选择失败'); const r=roleState.roles.find(x=>x.id===id); if (id !== 'bigfish' && r?.backend !== 'codex') throw new Error('未接入'); roleState={...roleState,activeId:id}; return roleState },
   updateRole: async (id, patch) => {
     roleCalls.push(['updateRole', id, patch])
-    roleState = { ...roleState, roles: roleState.roles.map((r) => (r.id === id ? { ...r, ...patch } : r)) }
+    roleState = { ...roleState, roles: roleState.roles.map((r) => (r.id === id ? { ...r, ...patch, ...(Object.hasOwn(patch, 'backend') ? { enabled: !!patch.backend } : {}) } : r)) }
     return roleState
   },
   uploadAvatar: async (id) => {
@@ -149,6 +152,8 @@ const exportsObj = entry.factory((id) => {
   throw new Error(`unexpected ${id}`)
 })
 const seats = {}
+const seatsById = {}
+const seatSpecs = {}
 const disposers = []
 const opened = []
 const ctx = {
@@ -156,11 +161,26 @@ const ctx = {
   effect(fn) { const d = fn(); if (typeof d === 'function') disposers.push(d) },
   slots: {
     inject(_key, cb) { const d = cb(); disposers.push(d); return () => {} },
-    register(spec, component) { seats[spec.name] = component; return () => { delete seats[spec.name] } },
+    register(spec, component) { if (spec.id) seatsById[spec.id] = component; seats[spec.name] = component; seatSpecs[spec.name] = spec; return () => { delete seats[spec.name]; delete seatSpecs[spec.name] } },
   },
 }
 exportsObj.apply(ctx)
 assert.equal(document.title, 'New chat — N.E.K.O. 工作台')
+
+// The welcome notice is overridden only by its own list id. Rendering it
+// advances the existing queue once without creating content or persistence.
+assert.deepEqual({ ...seatSpecs['settings.onboarding'] }, {
+  name: 'settings.onboarding', id: 'welcome-notice', order: -100, priority: -1,
+})
+const welcomeHost = document.createElement('div')
+document.body.appendChild(welcomeHost)
+const welcomeRoot = ReactDOMClient.createRoot(welcomeHost)
+let welcomeCompleted = 0
+await act(async () => { welcomeRoot.render(React.createElement(seats['settings.onboarding'], { complete: () => { welcomeCompleted++ } })) })
+assert.equal(welcomeCompleted, 1)
+assert.equal(welcomeHost.childNodes.length, 0)
+await act(async () => welcomeRoot.unmount())
+welcomeHost.remove()
 
 // Native DSH RunningStatus markup, including TextShimmer's plain text and
 // its aria-hidden decoration. Transcript content and tool labels can contain
@@ -234,6 +254,68 @@ const $$ = (s) => [...document.querySelectorAll(s)]
 const click = async (el) => act(async () => { el.dispatchEvent(new window.MouseEvent('click', { bubbles: true })) })
 const key = async (el, k) => act(async () => { el.dispatchEvent(new window.KeyboardEvent('keydown', { key: k, bubbles: true })) })
 const flush = () => act(async () => { await new Promise((r) => setTimeout(r, 5)) })
+
+
+// Codex consumes the live DSH registry and selection. All backend calls here
+// are mocks; real protocol and account behavior have separate integration tests.
+const codexEvents = new Set(), codexCalls = [], workspaceSubscribers = new Set(), selectionSubscribers = new Set()
+let selectedSession = 's-a'
+let workspaceItems = [{ workspaceId: 'w-a', title: '项目 A', path: '/tmp/a', sessionIds: ['s-a'] }, { workspaceId: 'w-b', title: '项目 B', path: '/tmp/b', sessionIds: ['s-b'] }]
+ctx.get = (key) => key === 'workspaces' ? { list: { getSnapshot: () => ({ phase: 'ready', items: workspaceItems }), subscribe: (cb) => { workspaceSubscribers.add(cb); return () => workspaceSubscribers.delete(cb) } } } : undefined
+ctx.uiWorkspace.selection = { getSnapshot: () => ({ sessionId: selectedSession }), subscribe: (cb) => { selectionSubscribers.add(cb); return () => selectionSubscribers.delete(cb) } }
+window.nekoWorkbench.codex = {
+  start: async (request) => { codexCalls.push(['start', request]); return { threadId: 't-a' } },
+  send: async (request) => { codexCalls.push(['send', request]); return { turnId: 'turn-a' } },
+  cancel: async () => ({ accepted: true }), approval: async () => ({ accepted: true }),
+  onEvent: (cb) => { codexEvents.add(cb); return () => codexEvents.delete(cb) },
+}
+const codexHost = document.createElement('div'); document.body.appendChild(codexHost)
+const codexRoot = ReactDOMClient.createRoot(codexHost)
+await act(async () => { codexRoot.render(React.createElement(seatsById['neko.codex-workbench'])) })
+await flush()
+assert.equal($('.neko-codex-switch-position'), null, 'no assistant switch in composer')
+await act(async () => { roleState = { ...roleState, roles: roleState.roles.map(r => r.id === 'yui' ? { ...r, backend: 'codex', enabled: true } : r) }; for (const fn of roleSubs) fn(roleState) })
+await click($('.neko-role[data-role="yui"] .neko-role__main'))
+await flush()
+assert.deepEqual(roleCalls.at(-1), ['selectRole', 'yui'])
+assert.match($('.neko-codex-project').textContent, /项目 A/)
+await click([...$$('.neko-codex-compose button')].find((el) => el.textContent === '连接当前工作区'))
+assert.deepEqual(codexCalls[0], ['start', { workspaceId: 'w-a', path: '/tmp/a' }])
+const codexText = $('.neko-codex-compose textarea')
+await act(async () => { Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set.call(codexText, '测试项目'); codexText.dispatchEvent(new window.Event('input', { bubbles: true })) })
+await click([...$$('.neko-codex-compose button')].find((el) => el.textContent === '发送'))
+assert.deepEqual(codexCalls[1], ['send', { text: '测试项目' }])
+await click($('.neko-role[data-role="yui"] .neko-role__settings'))
+let runningBackendPicker = $('.neko-role-panel .neko-role-backend')
+assert.equal(runningBackendPicker.disabled, true, 'last Codex entry cannot be unbound while a real task is running')
+assert.match($('.neko-role-panel').textContent, /Codex 正在连接或运行/)
+const roleCallCount = roleCalls.length
+await act(async () => { runningBackendPicker.value = ''; runningBackendPicker.dispatchEvent(new window.Event('change', { bubbles: true })) })
+assert.equal(roleCalls.length, roleCallCount, 'programmatic unbind is also refused while running')
+await act(async () => { roleState = { ...roleState, roles: roleState.roles.map(r => r.id === 'claude' ? { ...r, backend: 'codex', enabled: true } : r) }; for (const fn of roleSubs) fn(roleState) })
+assert.equal($('.neko-role-panel .neko-role-backend').disabled, false, 'a second real Codex entry permits changing this binding')
+await act(async () => { roleState = { ...roleState, roles: roleState.roles.map(r => r.id === 'claude' ? { ...r, backend: null, enabled: false } : r) }; for (const fn of roleSubs) fn(roleState) })
+assert.equal($('.neko-role-panel .neko-role-backend').disabled, true)
+await click($('.neko-role[data-role="yui"] .neko-role__settings'))
+await click($('.neko-role[data-role="bigfish"] .neko-role__main'))
+assert.equal($('.neko-codex-view'), null, 'DSH remains selectable during a Codex task')
+await click($('.neko-role[data-role="yui"] .neko-role__main'))
+assert.ok($('.neko-codex-view'), 'running Codex task can be revisited')
+await act(async () => { for (const callback of codexEvents) callback({ type: 'turn-completed', threadId: 't-a', turnId: 'turn-a', status: 'interrupted' }) })
+await click($('.neko-role[data-role="yui"] .neko-role__settings'))
+runningBackendPicker = $('.neko-role-panel .neko-role-backend')
+assert.equal(runningBackendPicker.disabled, false, 'binding is editable after the task finishes')
+await click($('.neko-role[data-role="yui"] .neko-role__settings'))
+assert.match($('.neko-codex-error').textContent, /中断/)
+await act(async () => { selectedSession = 's-b'; for (const callback of selectionSubscribers) callback() })
+assert.match($('.neko-codex-project').textContent, /项目 B/)
+assert.equal($('.neko-codex-compose textarea').disabled, true, 'old Codex thread must not send into newly selected project')
+await click($('.neko-role[data-role="bigfish"] .neko-role__main'))
+assert.equal($('.neko-codex-view'), null, 'DSH seat returns to the same selected project')
+assert.equal(selectedSession, 's-b', 'switching seats does not change DSH project')
+await act(async () => { roleState = { ...roleState, roles: roleState.roles.map(r => r.id === 'yui' ? { ...r, backend: null, enabled: false } : r) }; for (const fn of roleSubs) fn(roleState) })
+await act(async () => codexRoot.unmount()); codexHost.remove()
+assert.equal(workspaceSubscribers.size, 0); assert.equal(selectionSubscribers.size, 0); assert.equal(codexEvents.size, 0)
 
 // --- hero gallery + scoped CSS -----------------------------------------------
 
@@ -394,17 +476,33 @@ assert.equal(originalNewSession.parentElement, originalNewParent, 'native React 
 assert.equal(roleHost.hasAttribute('data-neko-actions-paired'), true)
 assert.equal(roleHost.style.getPropertyValue('--neko-community-top'), '-40px')
 assert.equal(roleHost.style.getPropertyValue('--neko-community-left'), '44px')
-assert.equal($$('.neko-community').length, 1)
+assert.equal($$('.neko-community').length, 2)
 await click(originalNewSession)
 assert.equal(newSessionClicks, 1, 'the original new-session click still runs exactly once')
 const communityEntry = $('.neko-community')
 assert.equal(communityEntry.disabled, false)
+const [workMode, leisureMode] = $$('.neko-mode-switch__button')
+assert.equal(workMode.textContent, '工作区')
+assert.equal(leisureMode.textContent, '休闲区')
+assert.equal(workMode.getAttribute('aria-pressed'), 'true')
+assert.equal(leisureMode.getAttribute('aria-pressed'), 'false')
+$('#composer').value = '保留未发送的草稿'
+await click(leisureMode)
+assert.equal($('.neko-community-pane').hidden, false, 'leisure uses the existing native community pane')
+assert.equal(leisureMode.getAttribute('aria-pressed'), 'true')
+assert.equal(workMode.getAttribute('aria-pressed'), 'false')
+assert.equal($('#composer').value, '保留未发送的草稿')
+await click(workMode)
+assert.equal($('.neko-community-pane').hidden, true)
+assert.equal(workMode.getAttribute('aria-pressed'), 'true')
+assert.equal(leisureMode.getAttribute('aria-pressed'), 'false')
+assert.equal($('#composer').value, '保留未发送的草稿')
 await click(communityEntry)
 assert.equal(calls.at(-1)[0], 'community')
-assert.deepEqual(JSON.parse(JSON.stringify(calls.at(-1)[1])), { action:'open', bounds:{x:248,y:48,width:852,height:704} })
+assert.deepEqual(JSON.parse(JSON.stringify(calls.at(-1)[1])), { action:'open', site:'community', bounds:{x:248,y:48,width:852,height:704}, requestId:2 })
 assert.equal($('.neko-community-pane').hidden, false)
 assert.equal($('main').hasAttribute('inert'), true, 'covered coding content leaves keyboard navigation')
-assert.equal($('textarea').value, '', 'coding composer stays mounted')
+assert.equal($('textarea').value, '保留未发送的草稿', 'coding composer stays mounted')
 const coveredDivInput = document.createElement('input')
 document.body.appendChild(coveredDivInput)
 coveredDivInput.focus()
@@ -424,15 +522,59 @@ for (const width of [60, 40, 216]) {
 }
 await click($('.neko-community-pane__toolbar button'))
 assert.equal($('.neko-community-pane').hidden, true)
+assert.equal(workMode.getAttribute('aria-pressed'), 'true', 'native return synchronizes mode')
 assert.equal($('main').hasAttribute('inert'), false)
 assert.equal(document.activeElement, communityEntry)
+const biliEntry = $('.neko-bilibili')
+assert.equal(biliEntry.parentElement, communityEntry.parentElement, 'B站 and community share the existing action row')
+await click(biliEntry)
+assert.deepEqual(JSON.parse(JSON.stringify(calls.at(-1)[1])), { action:'open', site:'bilibili', bounds:{x:248,y:48,width:852,height:704}, requestId:3 })
+assert.equal($('.neko-community-pane strong').textContent, 'B站')
+assert.equal(biliEntry.getAttribute('aria-pressed'), 'true')
+assert.equal(communityEntry.getAttribute('aria-pressed'), 'false')
+await act(async () => { for (const fn of communitySubs) fn({status:'hidden',site:'community'}) })
+assert.equal($('.neko-community-pane').hidden, false, 'a late hidden event from community cannot close B站')
+await act(async () => { for (const fn of communitySubs) fn({status:'ready',site:'bilibili',canGoBack:true,canShare:true}) })
+const pageBack = $('[aria-label="返回上一页"]')
+assert.equal(pageBack.disabled, false)
+await click(pageBack)
+assert.deepEqual(JSON.parse(JSON.stringify(calls.at(-1)[1])), {action:'back'})
+const shareVideo = $('[aria-label="复制当前视频链接"]')
+assert.equal(shareVideo.textContent, '复制视频链接', 'the action does not claim to post into chat')
+assert.equal(shareVideo.disabled, false, 'share is available only for a confirmed video page')
+await click(shareVideo)
+assert.deepEqual(JSON.parse(JSON.stringify(calls.at(-1)[1])), {action:'copy-video-link'})
+assert.equal($('.neko-community-pane__feedback').textContent, '链接已复制')
+await act(async () => { for (const fn of communitySubs) fn({status:'ready',site:'bilibili',canShare:false}) })
+assert.equal(shareVideo.disabled, true, 'non-video page does not offer sharing')
+const immersion = [...$$('.neko-community-pane__toolbar button')].find(button => button.textContent === '沉浸观看')
+assert(immersion && !immersion.hidden, 'B站 exposes an explicit immersion control')
+await click(immersion)
+await act(async () => { await new Promise((r) => setTimeout(r, 40)) })
+assert.equal(immersion.textContent, '退出沉浸')
+assert.equal(immersion.getAttribute('aria-pressed'), 'true')
+assert.equal($('#sb-root').hasAttribute('inert'), true, 'covered sidebar leaves keyboard navigation')
+assert.deepEqual(JSON.parse(JSON.stringify(calls.at(-1)[1])), {action:'layout',bounds:{x:0,y:48,width:1100,height:732}})
+await click(immersion)
+await act(async () => { await new Promise((r) => setTimeout(r, 40)) })
+assert.equal($('#sb-root').hasAttribute('inert'), false, 'exit restores the existing sidebar')
+assert.deepEqual(JSON.parse(JSON.stringify(calls.at(-1)[1])), {action:'layout',bounds:{x:248,y:48,width:852,height:704}})
+assert.equal($('#composer').value, '保留未发送的草稿')
+await click($('.neko-community-pane__toolbar button'))
+assert.equal(document.activeElement, biliEntry)
+await click(communityEntry)
+await act(async () => { for (const fn of subs) fn({ ...state, navigation: { fishSettingsRevision: 1 } }) })
+assert.equal($('.neko-community-pane').hidden, true, 'fish settings navigation releases the covered workbench')
+assert.equal(workMode.getAttribute('aria-pressed'), 'true', 'fish settings navigation synchronizes mode')
 await click(communityEntry)
 await click(originalNewSession)
 assert.equal($('.neko-community-pane').hidden, true, 'native plus returns to coding without replacing the original node')
+assert.equal(workMode.getAttribute('aria-pressed'), 'true', 'new session navigation synchronizes mode')
 assert.equal(newSessionClicks, 2)
 await click(communityEntry)
 await act(async () => { $('.neko-role__tools').dispatchEvent(new window.MouseEvent('pointerdown', { bubbles:true })) })
 assert.equal($('.neko-community-pane').hidden, true, 'local tools are never covered by the native remote view')
+assert.equal(workMode.getAttribute('aria-pressed'), 'true', 'local menus synchronize mode')
 assert.equal(nativeNav.parentElement, $('#sb-root'), 'native nav not moved')
 assert.deepEqual([...nativeNav.querySelectorAll('button')], nativeButtons, 'native buttons untouched (same nodes)')
 assert.equal(nativeNav.getAttribute('data-neko-tools'), 'folded')
@@ -444,7 +586,7 @@ assert.match(css2, /nav\[data-neko-tools="folded"\] \{ display: none !important;
 const rows = $$('.neko-role')
 assert.deepEqual(rows.map((r) => r.querySelector('.neko-role__name').textContent), ['Yui', '大肥鱼', 'Claude小姐'])
 assert.deepEqual(rows.map((r) => r.dataset.enabled), ['false', 'true', 'false'])
-assert.deepEqual(rows.map((r) => (r.querySelector('.neko-role__tag') || {}).textContent || ''), ['未接入', '', '未接入'])
+assert.deepEqual(rows.map((r) => (r.querySelector('.neko-role__tag') || {}).textContent || ''), ['未接入', 'DSH', '未接入'])
 assert.equal($$('.neko-role__tools').length, 1, 'only the live role has tools')
 assert.ok(rows[1].querySelector('.neko-role__tools'))
 assert.equal($$('.neko-role__settings').length, 3, 'every role has settings')
@@ -455,25 +597,19 @@ assert.equal(rows[1].dataset.active, 'true')
 await click(rows[1].querySelector('.neko-role__main'))
 await flush()
 assert.deepEqual(roleCalls.at(-1), ['selectRole', 'bigfish'])
-assert.deepEqual(opened, ['root-session-1'], 'existing root session opened')
+assert.deepEqual(opened, [], 'switching DSH does not reset the selected workspace')
 // Placeholder role: no select, no session, clear message.
 await click(rows[0].querySelector('.neko-role__main'))
 await flush()
-assert.ok(!roleCalls.some((c) => c[0] === 'selectRole' && c[1] === 'yui'))
-assert.equal(opened.length, 1)
+assert.equal(roleCalls.filter((c) => c[0] === 'selectRole' && c[1] === 'yui').length, 2)
+assert.equal(opened.length, 0)
 assert.match($('.neko-role[data-role="yui"] .neko-role__notice').textContent, /暂未接入/)
-// openSession error is reported, not faked.
-await act(async () => {
-  roleState = { ...roleState, workspaceSessionId: 'boom' }
-  for (const fn of roleSubs) fn(roleState)
-})
+// Bridge failure is reported and does not pretend to switch.
+failSelect = true
 await click($('.neko-role[data-role="bigfish"] .neko-role__main'))
 await flush()
-assert.match($('.neko-role[data-role="bigfish"] .neko-role__notice').textContent, /会话已失效/)
-await act(async () => {
-  roleState = { ...roleState, workspaceSessionId: 'root-session-1' }
-  for (const fn of roleSubs) fn(roleState)
-})
+assert.match($('.neko-role[data-role="bigfish"] .neko-role__notice').textContent, /选择失败/)
+failSelect = false
 
 // Tools overlay = the ORIGINAL nav, shown in place.
 const toolsBtn = $('.neko-role__tools')
@@ -527,7 +663,7 @@ await click(claudeRow().querySelector('.neko-role__settings'))
 await flush()
 const rp = $('.neko-role-panel')
 assert.ok(rp)
-assert.match(rp.textContent, /未接入/)
+assert.match(rp.textContent, /未绑定工作助手/)
 const input = rp.querySelector('input')
 assert.equal(document.activeElement, input)
 const setValue = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
@@ -545,6 +681,15 @@ assert.deepEqual(roleCalls.at(-1), ['uploadAvatar', 'claude'])
 assert.equal(claudeRow().querySelector('.neko-role__img').getAttribute('src'), 'data:image/png;base64,iVBORw0KGgo=')
 assert.equal($$('.neko-role-panel .neko-tile').length, 6, 'custom tile appears for the role')
 assert.equal(claudeRow().dataset.enabled, 'false', 'customizing does not connect the role')
+const backendPicker = $('.neko-role-panel .neko-role-backend')
+assert.ok(backendPicker, 'explicit Codex binding setting is available')
+await act(async () => { backendPicker.value = 'codex'; backendPicker.dispatchEvent(new window.Event('change', { bubbles: true })) })
+await flush()
+assert.deepEqual(roleCalls.at(-1), ['updateRole', 'claude', { backend: 'codex' }])
+assert.equal(claudeRow().dataset.enabled, 'true', 'explicit binding enables Codex')
+await act(async () => { backendPicker.value = ''; backendPicker.dispatchEvent(new window.Event('change', { bubbles: true })) })
+await flush()
+assert.equal(claudeRow().dataset.enabled, 'false')
 assert.equal($('.neko-avatar-btn img').getAttribute('src'), globalSrc, 'global avatar unchanged')
 await key(document.activeElement, 'Escape')
 await flush()
@@ -566,7 +711,7 @@ assert.equal(originalNewSession.style.getPropertyValue('--neko-new-session-size'
 assert.equal(replacementNewSession.getAttribute('data-neko-new-session'), 'plus')
 await click(replacementNewSession)
 assert.equal(replacementClicks, 1)
-assert.equal($$('.neko-community').length, 1)
+assert.equal($$('.neko-community').length, 2)
 
 // Sidebar re-render: native nav replaced -> adapter follows, no duplicate host.
 const freshNav = nativeNav.cloneNode(true)
@@ -602,7 +747,7 @@ assert.notEqual($('#new-session'), reactOriginal)
 assert.equal($('#new-session').parentElement.id, 'react-sidebar')
 assert.equal(reactOriginal.getAttribute('data-neko-new-session'), null)
 assert.equal($('#new-session').getAttribute('data-neko-new-session'), 'plus')
-assert.equal($$('.neko-community').length, 1)
+assert.equal($$('.neko-community').length, 2)
 await click($('#new-session'))
 assert.equal(reactNewClicks, 2, 'React click dispatch remains intact after native re-render')
 await act(async () => { nativeRoot.unmount(); nativeFixture.remove() })

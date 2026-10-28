@@ -8,6 +8,16 @@ contextBridge.exposeInMainWorld('nekoWorkbench',Object.freeze({
   uploadAvatar:()=>call('upload-avatar'),
   action:name=>call('action',name),
   fish:action=>call('fish',action),
+  qqbot:action=>call('qqbot',action),
+  codex:Object.freeze({
+    start:options=>ipcRenderer.invoke('workbench:codex','start',options),
+    send:options=>ipcRenderer.invoke('workbench:codex','send',options),
+    cancel:()=>ipcRenderer.invoke('workbench:codex','cancel'),
+    approval:options=>ipcRenderer.invoke('workbench:codex','approval',options),
+    accountStatus:()=>ipcRenderer.invoke('workbench:codex','account-status'),
+    onAccountStatus:callback=>{if(typeof callback!=='function')throw new TypeError('callback must be a function');const listener=(_event,value)=>callback(value);ipcRenderer.on('workbench:codex-account',listener);return()=>ipcRenderer.removeListener('workbench:codex-account',listener);},
+    onEvent:callback=>{if(typeof callback!=='function')throw new TypeError('callback must be a function');const listener=(_event,value)=>callback(value);ipcRenderer.on('workbench:codex-event',listener);return()=>ipcRenderer.removeListener('workbench:codex-event',listener);}
+  }),
   community:request=>ipcRenderer.invoke('workbench:community',request),
   subscribeCommunity:callback=>{const listener=(_event,state)=>callback(state);ipcRenderer.on('workbench:community-state',listener);return()=>ipcRenderer.removeListener('workbench:community-state',listener);},
   subscribe:callback=>{const listener=(_event,state)=>callback(state);ipcRenderer.on('workbench:state',listener);return()=>ipcRenderer.removeListener('workbench:state',listener);}

@@ -76,9 +76,16 @@ const exports = entry.factory((id) => {
 })
 assert.deepEqual(requested, ['react', 'react-dom'], 'only react and react-dom are required')
 assert.equal(typeof exports.apply, 'function')
-assert.deepEqual([...exports.inject], ['slots', 'uiWorkspace', 'remote', 'remote.account', 'locale'])
+assert.deepEqual([...exports.inject], ['slots', 'uiWorkspace', 'workspaces', 'remote', 'remote.account', 'locale'])
 assert.equal(exports.PRODUCT_BRAND.name, 'N.E.K.O. 工作台')
 assert.equal(exports.PRODUCT_BRAND.shortName, 'N.E.K.O.')
+
+const fakeCtx = { uiWorkspace: { selection: { getSnapshot: () => ({ sessionId: 's1' }) } }, get: () => ({ list: { getSnapshot: () => ({ phase: 'ready', items: [{ workspaceId: 'w1', title: 'Project', path: '/tmp/project', sessionIds: ['s1'] }] }) } }) }
+assert.equal(exports.readSharedWorkspace(fakeCtx).project.path, '/tmp/project')
+assert.equal(exports.readSharedWorkspace({}).phase, 'loading')
+fakeCtx.uiWorkspace.selection.getSnapshot = () => ({ sessionId: 'missing' })
+assert.equal(exports.readSharedWorkspace(fakeCtx).phase, 'missing')
+
 assert.ok(Object.isFrozen(exports.PRODUCT_BRAND))
 
 // --- avatars ----------------------------------------------------------------
@@ -86,7 +93,7 @@ assert.ok(Object.isFrozen(exports.PRODUCT_BRAND))
 const IDS = ['yui', 'devcat', 'bigfish', 'claude', 'gemini']
 assert.deepEqual([...exports.AVATARS.map((a) => a.id)], IDS)
 assert.deepEqual([...exports.AVATARS.map((a) => a.name)], ['YUi', '开发喵', '大肥鱼', 'Claude娘', 'Gemini小猫'])
-assert.deepEqual([...exports.ACTION_NAMES], ['neko-settings', 'open-neko', 'task-notes', 'connect-neko', 'connection-status', 'reconnect-workbench', 'open-community'])
+assert.deepEqual([...exports.ACTION_NAMES], ['neko-settings', 'open-neko', 'task-notes', 'connect-neko', 'connection-status', 'reconnect-workbench', 'open-community', 'open-bilibili'])
 for (const id of IDS) assert.match(exports.PLACEHOLDERS[id], /^data:image\/svg\+xml,/, `placeholder ${id}`)
 const art = exports.AVATAR_ART
 const embedded = Object.keys(art)
@@ -141,19 +148,21 @@ const opened = []
 document.title = 'Fix the parser — DeepSeek Harness'
 const run = runApply()
 assert.deepEqual(run.registrations.map((r) => r.spec.name),
-  ['shell.overlay', 'sidebar.brand.mark', 'sidebar.brand.name', 'conversation.hero.brand.mark', 'shell.bottom'])
-assert.deepEqual(run.injected.slice(0, 2), ['sidebar.panellist', 'shell.overlay'], 'role adapter nested in the sidebar declaration')
-assert.equal(run.registrations[0].spec.id, 'neko.role-sidebar-adapter')
-assert.equal(run.registrations[4].spec.order, 100)
+  ['shell.overlay', 'settings.onboarding', 'shell.overlay', 'sidebar.brand.mark', 'sidebar.brand.name', 'conversation.hero.brand.mark', 'shell.bottom'])
+assert.deepEqual(run.injected.slice(0, 4), ['shell.overlay', 'settings.onboarding', 'sidebar.panellist', 'shell.overlay'], 'role adapter nested in the sidebar declaration')
+assert.deepEqual({ ...run.registrations[1].spec }, { name: 'settings.onboarding', id: 'welcome-notice', order: -100, priority: -1 })
+assert.equal(run.registrations[2].spec.id, 'neko.role-sidebar-adapter')
+assert.equal(run.registrations[6].spec.order, 100)
 assert.ok(!run.registrations.some((r) => /^sidebar\.(panellist|workspaces)/.test(r.spec.name)), 'no native sidebar slot replaced')
 assert.ok(!run.registrations.some((r) => /hero\.brand\.name|hero\.(workspace|agentPreset|options)/.test(r.spec.name)), 'feature slots untouched')
-assert.deepEqual(run.effects, ['neko-brand: styles', 'neko-brand: native account habitat', 'neko-brand: avatar theme', 'neko-brand: favicon', 'neko-brand: title observer', 'neko-brand: workbench bridge', 'neko-brand: roles bridge', 'neko-brand: community coding pane', 'neko-brand: compact running status'])
+assert.deepEqual(run.effects, ['neko-brand: styles', 'neko-brand: Codex styles', 'neko-brand: native account habitat', 'neko-brand: avatar theme', 'neko-brand: favicon', 'neko-brand: title observer', 'neko-brand: workbench bridge', 'neko-brand: roles bridge', 'neko-brand: community coding pane', 'neko-brand: compact running status'])
 const byName = Object.fromEntries(run.registrations.map((r) => [r.spec.name, r.component.name]))
 assert.deepEqual(byName, {
   'sidebar.brand.mark': 'SidebarMark', 'sidebar.brand.name': 'SidebarName',
   'conversation.hero.brand.mark': 'HeroGallery', 'shell.bottom': 'ProductStrip', 'shell.overlay': 'RolesSidebarAdapter',
+  'settings.onboarding': 'SkipWelcomeNotice',
 })
-assert.equal(run.registrations[2].component().children[0], 'N.E.K.O. 工作台')
+assert.equal(run.registrations[4].component().children[0], 'N.E.K.O. 工作台')
 
 assert.equal(document.title, 'Fix the parser — N.E.K.O. 工作台')
 document.title = 'New chat — DeepSeek Harness'
@@ -311,7 +320,7 @@ assert.equal(rolesDirty.roles[2].avatarId, 'gemini')
 assert.equal(rolesDirty.roles[2].customDataUrl, null, 'role images are PNG only')
 assert.equal(rolesDirty.activeId, 'bigfish', 'disabled role cannot be active')
 assert.equal(rolesDirty.workspaceSessionId, null, 'malformed session id rejected')
-assert.ok(!('backend' in rolesDirty.roles[0]))
+assert.equal(rolesDirty.roles[0].backend, null, 'unknown backend is not treated as connected')
 assert.equal(sanitizeRoles({ roles: [{ id: 'bigfish', enabled: false }] }).roles[1].enabled, false, 'host may disable the live role')
 assert.equal(checkRoleName('a'.repeat(25)).error !== undefined, true)
 assert.equal(checkRoleName('😺'.repeat(24)).name.length, 48, '24 code points, not UTF-16 units')
@@ -361,22 +370,16 @@ await tick()
 assert.equal(rs.get().state.workspaceSessionId, 'sess_root-01')
 assert.equal(await rs.enter('bigfish'), true)
 assert.deepEqual(rb.calls.at(-1), ['selectRole', 'bigfish'])
-assert.deepEqual(sessions, ['sess_root-01'], 'opens the bridge-provided real root session')
+assert.deepEqual(sessions, [], 'selecting an assistant preserves the existing DSH session')
 assert.equal(await rs.enter('yui'), false)
 assert.ok(!rb.calls.some((c) => c[0] === 'selectRole' && c[1] === 'yui'), 'placeholder roles never reach selectRole')
 assert.match(rs.get().notice.text, /暂未接入/)
 assert.equal(rs.get().notice.scope, 'yui')
 assert.equal(await rs.enter('intruder'), false)
 rb.set({ ...(await rb.getState()), workspaceSessionId: null })
-assert.equal(await rs.enter('bigfish'), false, 'no session id: no fake session')
-assert.equal(sessions.length, 1)
-assert.match(rs.get().notice.text, /会话尚未就绪/)
+assert.equal(await rs.enter('bigfish'), true, 'switching the assistant does not require replacing the DSH session')
+assert.equal(sessions.length, 0)
 rb.set({ ...(await rb.getState()), workspaceSessionId: 'sess_root-01' })
-const throwing = createRolesStore(rb, { openSession: () => { throw new Error('session gone') } })
-await tick()
-assert.equal(await throwing.enter('bigfish'), false)
-assert.match(throwing.get().notice.text, /session gone/, 'real openSession error surfaces')
-throwing.dispose()
 
 assert.equal(await rs.update('claude', { name: '  小克  ' }), true)
 assert.deepEqual(J(rb.calls.at(-1)), ['updateRole', 'claude', { name: '小克' }])
@@ -404,7 +407,7 @@ assert.equal(await rolesPreview.enter('bigfish'), false)
 assert.match(rolesPreview.get().notice.text, /预览模式/)
 assert.equal(await rolesPreview.update('bigfish', { name: '肥鱼' }), true)
 assert.equal(rolesPreview.get().state.roles[1].name, '肥鱼')
-assert.equal(sessions.length, 1, 'preview never opens sessions')
+assert.equal(sessions.length, 0, 'preview never opens sessions')
 rolesPreview.dispose()
 
 assert.ok(!/deepseek-(flash|account|official)/i.test(codeOnly))

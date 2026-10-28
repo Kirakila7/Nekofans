@@ -76,11 +76,22 @@ test('native keyboard button opens the coding pane and leaves role/session state
   store.dispose();
 });
 
-test('community sits before the three role seats and keeps an accessible icon in the collapsed rail', () => {
+test('community and B站 share an accessible action row before the three role seats', () => {
   const api = bundle();
   const roles = { get: () => ({ preview: true, state: { roles: api.ROLE_DEFAULTS }, pending: {}, notice: null }), subscribe: () => () => {} };
   const tree = api.RoleSeats({ store: roles, tools: null });
-  assert.equal(tree.children[0].type, api.CommunityEntry);
+  const actions = tree.children[0];
+  assert.equal(actions.props.className, 'neko-social-actions');
+  assert.equal(actions.children.length, 2);
+  assert.equal(actions.children[0].type, api.CommunityEntry);
+  const bili = actions.children[1].type({ snap: { preview: false, bridgeReady: true, pending: {} }, store: {} });
+  assert.equal(bili.type, 'button');
+  assert.equal(bili.props.type, 'button');
+  assert.equal(bili.props['aria-label'], 'B站');
+  assert.equal(bili.props.tabIndex, undefined, 'retain native keyboard tab order');
+  assert.equal(bili.props.href, undefined);
+  assert.equal(bili.children[0].props['aria-hidden'], 'true');
+  assert.equal(bili.children[0].props.focusable, 'false');
   const group = tree.children.find(node => node?.props?.className === 'neko-roles');
   assert.deepEqual(Array.from(group.children.slice(0, 3), node => node.props.role.id), ['yui', 'bigfish', 'claude']);
   const entry = api.CommunityEntry({ snap: { preview: false, bridgeReady: true, pending: {} }, store: {} });

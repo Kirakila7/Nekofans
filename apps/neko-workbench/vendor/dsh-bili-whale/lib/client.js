@@ -633,7 +633,7 @@ window.__ModuleLoader__.load({
         h("div",{className:"blw-actions",style:{marginTop:0,paddingTop:0,borderTop:0}},
           h("button",{className:"blw-btn",onClick:()=>control(fishState.enabled||['checking','login-required','model-login-required'].includes(fishState.phase)?'pause':'start')},fishState.enabled||['checking','login-required','model-login-required'].includes(fishState.phase)?'暂停养鱼':'开始养鱼'),
           h("span",{role:"status",className:"blw-hint"},fishState.reason)),
-        fishState.phase==='model-login-required'?h('button',{type:'button',className:'blw-btn blw-btn2',onClick:()=>document.querySelector('[data-slot="settings.launcher"] button[aria-haspopup="menu"]')?.click()},'登录 DeepSeek'):null,
+        fishState.phase==='model-login-required'?h('button',{type:'button',className:'blw-btn blw-btn2',onClick:()=>document.querySelector('[data-slot="settings.launcher"] button[aria-haspopup="menu"]')?.click()},'登录账号'):null,
 
         h("div", { className: "blw-group" }, "B 站登录"),
         h("div", { className: "blw-row" },
@@ -684,17 +684,72 @@ window.__ModuleLoader__.load({
     const NS = "bili-whale";
     const NAMES = { nav: "养鱼" };
 
+    // The host controls the QQ plugin lifecycle. Its own UI owns binding and
+    // access settings; mounting this view never starts QQ without a click.
+    function QQBotSettings() {
+      const [state,setState]=useState(null),[busy,setBusy]=useState(false),[section,setSection]=useState(null);
+      const [moduleError,setModuleError]=useState(false),[moduleAttempt,setModuleAttempt]=useState(0),alive=useRef(false),flight=useRef(false);
+      const invoke=useCallback(async action=>{
+        if(flight.current)return;
+        const bridge=window.nekoWorkbench;
+        if(typeof bridge?.qqbot!=='function'){setState({enabled:false,phase:'error',reason:'QQ 服务尚不可用，请检查工作台连接。'});return;}
+        flight.current=true;setBusy(true);
+        try{
+          const next=await bridge.qqbot(action);
+          if(alive.current)setState(next&&typeof next==='object'?next:{enabled:false,phase:'error',reason:'QQ 服务状态不可用。'});
+        }catch{
+          if(alive.current)setState({enabled:false,phase:'error',reason:'QQ 服务操作未完成，请重试。'});
+        }finally{flight.current=false;if(alive.current)setBusy(false);}
+      },[]);
+      useEffect(()=>{alive.current=true;void invoke('status');return()=>{alive.current=false;};},[invoke]);
+      useEffect(()=>{
+        if(!state?.enabled){setSection(null);setModuleError(false);return;}
+        let stopped=false,script;
+        const resolveModule=()=>{
+          if(stopped)return false;
+          try{const mod=require('@bigfish/qqbot-settings');if(typeof mod?.QQBotSettingsSection==='function'){setSection(()=>mod.QQBotSettingsSection);setModuleError(false);return true;}}catch{}
+          return false;
+        };
+        setModuleError(false);
+        if(!resolveModule()){
+          // Same-origin application-owned client bundle; never load a remote
+          // script or expose the QQ credential to this panel.
+          script=document.createElement('script');script.src='/qqbot-workbench/client.js';script.async=true;
+          script.onload=()=>{if(!resolveModule()&&!stopped)setModuleError(true);};
+          script.onerror=()=>{if(!stopped)setModuleError(true);};
+          document.head.appendChild(script);
+        }
+        return()=>{stopped=true;if(script){script.onload=null;script.onerror=null;script.remove();}};
+      },[state?.enabled,moduleAttempt]);
+      useEffect(()=>{
+        if(state?.phase!=='starting')return;
+        const timer=setInterval(()=>void invoke('status'),1000);return()=>clearInterval(timer);
+      },[state?.phase,invoke]);
+      const enabled=state?.enabled===true;
+      return h('div',{className:'blw',role:'region','aria-label':'QQ 机器人设置'},
+        h('h3',{className:'blw-title'},'QQ 机器人'),
+        h('p',{className:'blw-intro'},'连接 QQ 机器人后，可按授权范围参与私聊或群聊。'),
+        h('div',{className:'blw-actions',style:{marginTop:0,paddingTop:0,borderTop:0}},
+          h('button',{className:'blw-btn',type:'button',disabled:busy||!state,onClick:()=>void invoke(enabled?'pause':'start')},
+            busy?'正在处理…':enabled?'暂停 QQ 机器人':'开始连接 QQ'),
+          h('span',{role:'status',className:'blw-hint'},state?.reason||'正在检查 QQ 服务…')),
+        enabled?(section?h(section):moduleError?h('div',null,h('p',{className:'blw-err'},'QQ 设置暂未加载，请重试。'),h('button',{type:'button',className:'blw-btn blw-btn2',onClick:()=>setModuleAttempt(n=>n+1)},'重试 QQ 设置')):h('p',{className:'blw-hint'},'正在打开 QQ 绑定设置…')):null);
+    }
+
     function apply(ctx) {
 
       function FishLauncher(){
-        const [opened,setOpened]=useState(false),seen=useRef(0);
+        const [opened,setOpened]=useState(false),[settingsTab,setSettingsTab]=useState('fish'),seen=useRef(0);
         useEffect(()=>{let alive=true;const update=next=>{const revision=Number(next?.navigation?.fishSettingsRevision||0);if(alive&&revision>seen.current){seen.current=revision;setOpened(true);}};const bridge=window.nekoWorkbench;const off=bridge?.subscribe?.(update);bridge?.getState?.().then(update).catch(()=>{});const escape=e=>{if(e.key==='Escape')setOpened(false);};window.addEventListener('keydown',escape);return()=>{alive=false;off?.();window.removeEventListener('keydown',escape);};},[]);
         const open=()=>{if(window.nekoWorkbench?.action)window.nekoWorkbench.action('fish-settings').catch(()=>{});else setOpened(true);};
         return h(React.Fragment,null,
           h('button',{type:'button',title:'养鱼设置','aria-label':'养鱼设置',style:{cursor:'pointer',color:'inherit',background:'transparent',border:0,padding:'6px 10px',font:'inherit'},onClick:open},'养鱼'),
-          opened?createPortal(h('aside',{role:'region','aria-label':'养鱼设置',style:{position:'fixed',top:16,right:12,bottom:36,width:'min(760px,calc(100vw - 280px))',zIndex:40,overflow:'auto',padding:24,background:'var(--dsw-alias-bg-layer-2)',color:'var(--dsw-alias-label-primary)',borderRadius:16,boxShadow:'0 8px 40px #0003'}},
-            h('header',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12,marginBottom:16}},h('strong',null,'养鱼设置'),h('button',{type:'button',onClick:()=>setOpened(false),style:{cursor:'pointer',color:'inherit',border:'1px solid var(--dsw-alias-border-l2)',background:'transparent',padding:'5px 10px',borderRadius:6}},'返回工作台')),
-            h(BiliWhaleSection)),document.body):null);
+          opened?createPortal(h('aside',{role:'region','aria-label':'连接与生活设置',style:{position:'fixed',top:16,right:12,bottom:36,width:'min(760px,calc(100vw - 280px))',zIndex:40,overflow:'auto',padding:24,background:'var(--dsw-alias-bg-layer-2)',color:'var(--dsw-alias-label-primary)',borderRadius:16,boxShadow:'0 8px 40px #0003'}},
+            h('header',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12,marginBottom:16}},h('strong',null,'连接与生活设置'),h('button',{type:'button',onClick:()=>setOpened(false),style:{cursor:'pointer',color:'inherit',border:'1px solid var(--dsw-alias-border-l2)',background:'transparent',padding:'5px 10px',borderRadius:6}},'返回工作台')),
+            h('div',{role:'tablist','aria-label':'连接与生活设置',style:{display:'flex',gap:8,marginBottom:16}},
+              h('button',{role:'tab',type:'button','aria-selected':settingsTab==='fish',onClick:()=>setSettingsTab('fish'),className:'blw-btn blw-btn2',style:{fontWeight:settingsTab==='fish'?600:400}},'养鱼'),
+              h('button',{role:'tab',type:'button','aria-selected':settingsTab==='qq',onClick:()=>setSettingsTab('qq'),className:'blw-btn blw-btn2',style:{fontWeight:settingsTab==='qq'?600:400}},'QQ 机器人')),
+            h('div',{hidden:settingsTab!=='fish'},h(BiliWhaleSection)),settingsTab==='qq'?h(QQBotSettings):null),document.body):null);
       }
       ctx.effect(()=>ctx.slots.inject('sidebar.footer.action',()=>ctx.slots.register({name:'sidebar.footer.action',id:'neko-fish-care',order:30},FishLauncher)),'fish settings entry');
       ctx.effect(
@@ -713,6 +768,7 @@ window.__ModuleLoader__.load({
     exports.apply = apply;
     exports.inject = inject;
     exports.BiliWhaleSection = BiliWhaleSection;
+    exports.QQBotSettings = QQBotSettings;
     exports.FIELDS = FIELDS;
     return module.exports;
   },

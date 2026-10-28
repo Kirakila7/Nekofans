@@ -29,7 +29,7 @@ function createFishControl({read,write,hasCredentials,verify,start,modelReady=as
     const generation=intent;
     publish({enabled:false,phase:'checking',reason:'正在检查养鱼环境…'});
     const ready=await modelReady();if(generation!==intent||closed)return {...state};
-    if(!ready){pendingModel=true;save(false);return publish({enabled:false,phase:'model-login-required',reason:'请登录工作台左下角的 DeepSeek 账号，登录后自动继续。'});}
+    if(!ready){pendingModel=true;save(false);return publish({enabled:false,phase:'model-login-required',reason:'请登录工作台左下角的账号，登录后自动继续。'});}
     pendingModel=false;
     if(!hasCredentials()){pendingLogin=true;save(false);return publish({enabled:false,phase:'login-required',reason:'请在工作台扫码登录 B 站，登录后自动继续。'});}
     try{

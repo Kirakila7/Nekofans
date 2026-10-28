@@ -80,9 +80,11 @@ function buildDshPatch(runtime, { baseDir = __dirname, skin = { rows: [], insert
     { id: 'credentials', config: { path: runtime.credentialsFile || path.join(runtime.dshHomeDir, '.credentials.yaml') } },
     { id: 'agent-default-model', config: { provider: 'deepseek-account', model: 'deepseek-flash', reasoningEffort: 'high' } },
     { id: 'web-runtime', config: { openBrowser: false, printUrl: false, surfaceContext: true } },
+    { id: 'ui-settings-models', config: { credentialOnboarding: false } },
     ...skin.rows,
     { insert: [{ id: 'pet-lab-bridge', name: path.join(baseDir, 'bridge.cjs') }, ...skin.insert,
-      {id:'dsh-bili-whale',name:path.join(baseDir,'vendor/dsh-bili-whale/lib/index.js')}] },
+      {id:'dsh-bili-whale',name:path.join(baseDir,'vendor/dsh-bili-whale/lib/index.js')},
+      {id:'neko-qqbot-workbench',name:path.join(baseDir,'vendor/dsh-qqbot-workbench/index.cjs')}] },
   ];
 }
 

@@ -4,21 +4,33 @@ const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
 const { DEFAULT_COMMUNITY_URL, COMMUNITY_PARTITION, resolveCommunityUrl,
   classifyCommunityNavigation, createCommunityController, validateCommunityRequest,
-  communityBounds } = require('../../apps/neko-workbench/community-config.cjs');
+  communityBounds, createSocialController, BILIBILI_URL, BILIBILI_PARTITION, BILIBILI_MOBILE_USER_AGENT,
+  classifyBilibiliNavigation, bilibiliVideoShareUrl, bilibiliOfficialPlayerUrl } = require('../../apps/neko-workbench/community-config.cjs');
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const bounds = { x: 300, y: 80, width: 800, height: 650 };
 function deferred() { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; }
-function fixture(env = {}) {
-  const views = [], external = [], states = [], errors = [];
+function fixture(env = {}, useSocial = false) {
+  const views = [], external = [], states = [], errors = [], copied = [];
+  let copyError = null;
   class Contents extends EventEmitter {
-    constructor() { super(); this.loads = []; this.destroyed = false; this.url = ''; this.closed = []; this.behavior = null; }
+    constructor() {
+      super(); this.loads = []; this.destroyed = false; this.url = ''; this.closed = []; this.behavior = null;
+      this.history = []; this.index = -1;
+      this.navigationHistory = {
+        canGoBack: () => this.index > 0,
+        goBack: () => { if (this.index > 0) { this.url = this.history[--this.index]; this.emit('did-navigate-in-page', {}, this.url, true); } },
+      };
+    }
     setWindowOpenHandler(handler) { this.popup = handler; }
+    setUserAgent(value) { this.userAgent = value; }
+    getUserAgent() { return this.userAgent || 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) TestApp/0.1 Chrome/150.0.7871.212 Electron/43.3.0 Safari/537.36'; }
     isDestroyed() { return this.destroyed; }
     getURL() { return this.url; }
     focus() { this.focused = (this.focused || 0) + 1; }
     async loadURL(url) {
       this.loads.push(url); this.url = url;
+      this.history.splice(++this.index); this.history.push(url);
       this.emit('did-start-navigation', {}, url, false, true);
       if (this.behavior) await this.behavior(url);
       this.emit('did-navigate', {}, url, this.responseCode || 200, 'status');
@@ -47,12 +59,13 @@ function fixture(env = {}) {
     isDestroyed() { return this.destroyed; }
     destroy() { this.destroyed = true; this.webContents.close(); this.emit('closed'); }
   }
-  const controller = createCommunityController({ WebContentsView: MockView, env,
-    openExternal: async url => external.push(url), onState: (host, value) => states.push({ host, ...value }), onExternalError: error => errors.push(error) });
+  const controller = (useSocial ? createSocialController : createCommunityController)({ WebContentsView: MockView, env,
+    openExternal: async url => external.push(url), copyText: text => { if (copyError) throw copyError; copied.push(text); },
+    onState: (host, value) => states.push({ host, ...value }), onExternalError: error => errors.push(error) });
   const host = new MockHost();
   const action = request => controller.action(host, request);
   const open = (value = bounds) => action({ action: 'open', bounds: value });
-  return { controller, views, external, states, errors, MockHost, Popup, host, action, open };
+  return { controller, views, external, states, errors, copied, failCopy: () => { copyError = new Error('private clipboard failure'); }, MockHost, Popup, host, action, open };
 }
 function navigate(contents, type, url) {
   let prevented = false;
@@ -72,6 +85,163 @@ function secure(options) {
   assert.equal('preload' in webPreferences, false);
 }
 
+test('only official Bilibili video URLs become clean public links', () => {
+  assert.equal(bilibiliVideoShareUrl('https://m.bilibili.com/video/BV1WYnd6DEAw?p=2&token=secret&share_source=copy#fragment'), 'https://www.bilibili.com/video/BV1WYnd6DEAw?p=2');
+  assert.equal(bilibiliVideoShareUrl('https://www.bilibili.com/video/av12345/?p=0&secret=x'), 'https://www.bilibili.com/video/av12345');
+  for (const invalid of ['https://m.bilibili.com/', 'https://m.bilibili.com/video/BV1', 'https://m.bilibili.com/video/BV1WYnd6DEAw/extra', 'https://m.bilibili.com.evil.invalid/video/BV1WYnd6DEAw', 'https://u:p@m.bilibili.com/video/BV1WYnd6DEAw', 'http://m.bilibili.com/video/BV1WYnd6DEAw', 'https://m.bilibili.com:8443/video/BV1WYnd6DEAw', 'file:///video/BV1WYnd6DEAw']) assert.equal(bilibiliVideoShareUrl(invalid), null);
+});
+
+test('official player URLs are reconstructed from supported Bilibili video identities only', () => {
+  const source = 'https://m.bilibili.com/video/BV1WYnd6DEAw?p=2&token=private#fragment';
+  const player = 'https://player.bilibili.com/player.html?bvid=BV1WYnd6DEAw&p=2&autoplay=0';
+  assert.equal(bilibiliOfficialPlayerUrl(source), player);
+  assert.equal(bilibiliVideoShareUrl(player), 'https://www.bilibili.com/video/BV1WYnd6DEAw?p=2');
+  assert.equal(classifyBilibiliNavigation(player).kind, 'internal');
+  for (const url of ['https://m.bilibili.com/', 'https://m.bilibili.com/video/av123',
+    'https://m.bilibili.com/video/BV1WYnd6DEAw?p=1&p=2', 'https://m.bilibili.com/video/BV1WYnd6DEAw?p=1001',
+    'https://m.bilibili.com.evil.invalid/video/BV1WYnd6DEAw', 'https://u:p@m.bilibili.com/video/BV1WYnd6DEAw']) {
+    assert.equal(bilibiliOfficialPlayerUrl(url), null);
+  }
+  for (const url of ['https://player.bilibili.com/player.html?bvid=BV1WYnd6DEAw&next=https://evil.invalid',
+    'https://player.bilibili.com/player.html?bvid=BV1WYnd6DEAw&bvid=BV1BBnb6aEww',
+    'https://player.bilibili.com/player.html?bvid=BV1WYnd6DEAw&p=1001',
+    'https://player.bilibili.com/player.html?bvid=BV1WYnd6DEAw&autoplay=1',
+    'https://player.bilibili.com/other?bvid=BV1WYnd6DEAw',
+    'https://player.bilibili.com.evil.invalid/player.html?bvid=BV1WYnd6DEAw']) {
+    assert.notEqual(classifyBilibiliNavigation(url).kind, 'internal');
+    assert.equal(bilibiliVideoShareUrl(url), null);
+  }
+});
+
+test('official playback is user initiated, stays in the same isolated view, copies identity, and returns to the video', async () => {
+  const f = fixture({}, true);
+  assert.throws(() => validateCommunityRequest({ action: 'play-official', url: 'https://evil.invalid' }));
+  await f.action({ action: 'open', site: 'bilibili', bounds });
+  const contents = f.views[0].webContents;
+  assert.equal(f.states.at(-1).canPlayOfficial, false);
+  await assert.rejects(f.action({ action: 'play-official' }), /请先打开/);
+  await contents.loadURL('https://m.bilibili.com/video/BV1WYnd6DEAw?p=2&token=private');
+  assert.equal(f.states.at(-1).canPlayOfficial, true);
+  assert.deepEqual(await f.action({ action: 'play-official' }), { ok: true });
+  assert.equal(contents.getURL(), 'https://player.bilibili.com/player.html?bvid=BV1WYnd6DEAw&p=2&autoplay=0');
+  assert.equal(contents.userAgent, 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7871.212 Safari/537.36');
+  assert.equal(f.views.length, 1); assert.equal(f.host.children.size, 1);
+  assert.equal(f.states.at(-1).isOfficialPlayer, true); assert.equal(f.states.at(-1).canPlayOfficial, false);
+  assert.equal(f.states.at(-1).canShare, true);
+  await f.action({ action: 'copy-video-link' });
+  assert.deepEqual(f.copied, ['https://www.bilibili.com/video/BV1WYnd6DEAw?p=2']);
+  await f.action({ action: 'back' });
+  assert.match(contents.getURL(), /^https:\/\/m\.bilibili\.com\/video\/BV1WYnd6DEAw/);
+  assert.equal(contents.userAgent, BILIBILI_MOBILE_USER_AGENT);
+  assert.equal(f.states.at(-1).canPlayOfficial, true);
+  await f.action({ action: 'back' }); assert.equal(contents.getURL(), BILIBILI_URL);
+  assert.equal(f.states.at(-1).canPlayOfficial, false);
+  f.controller.dispose();
+});
+
+test('pending official player navigation is canceled when leaving, with no stale attachment', async () => {
+  const f = fixture({}, true); await f.action({ action: 'open', site: 'bilibili', bounds });
+  const contents = f.views[0].webContents;
+  await contents.loadURL('https://m.bilibili.com/video/BV1WYnd6DEAw');
+  const gate = deferred(); contents.behavior = () => gate.promise;
+  const playing = f.action({ action: 'play-official' });
+  const canceled = assert.rejects(playing, /已隐藏|离开|未能打开/);
+  await tick(); await f.action({ action: 'open', site: 'community', bounds }); await canceled;
+  assert.equal(contents.isDestroyed(), true);
+  assert.equal(f.host.children.has(f.views[0]), false);
+  const states = f.states.length; gate.resolve(); await tick(); assert.equal(f.states.length, states);
+  f.controller.dispose();
+});
+
+test('asynchronous history back publishes loading instead of stale player state and prevents overlapping back clicks', async () => {
+  const f = fixture({}, true); await f.action({ action: 'open', site: 'bilibili', bounds });
+  const contents = f.views[0].webContents;
+  await contents.loadURL('https://m.bilibili.com/video/BV1WYnd6DEAw');
+  await f.action({ action: 'play-official' });
+  const playerUrl = contents.url;
+  let traversals = 0;
+  contents.navigationHistory.goBack = () => { traversals++; }; // real Electron begins asynchronously
+  await f.action({ action: 'back' });
+  assert.equal(contents.url, playerUrl);
+  assert.equal(f.states.at(-1).status, 'loading');
+  assert.equal(f.states.at(-1).canGoBack, false);
+  assert.equal(f.states.at(-1).canPlayOfficial, false);
+  assert.equal(f.states.at(-1).canShare, false);
+  await f.action({ action: 'back' }); assert.equal(traversals, 1);
+  contents.url = 'https://m.bilibili.com/video/BV1WYnd6DEAw';
+  contents.emit('did-start-navigation', {}, contents.url, false, true);
+  contents.emit('did-navigate', {}, contents.url, 200, 'OK');
+  contents.emit('did-finish-load');
+  assert.equal(f.states.at(-1).status, 'ready');
+  assert.equal(f.states.at(-1).canPlayOfficial, true);
+  assert.equal(f.states.at(-1).canShare, true);
+  assert.equal(f.host.children.has(f.views[0]), true);
+  f.controller.dispose();
+});
+
+test('same-document history completion clears pending state and recomputes the page identity', async () => {
+  const f = fixture({}, true); await f.action({ action: 'open', site: 'bilibili', bounds });
+  const contents = f.views[0].webContents;
+  await contents.loadURL('https://m.bilibili.com/video/BV1WYnd6DEAw');
+  contents.navigationHistory.goBack = () => {};
+  await f.action({ action: 'back' }); assert.equal(f.states.at(-1).status, 'loading');
+  contents.url = BILIBILI_URL;
+  contents.emit('did-navigate-in-page', {}, contents.url, true);
+  assert.equal(f.states.at(-1).status, 'ready'); assert.equal(f.states.at(-1).canShare, false);
+  assert.equal(f.states.at(-1).canPlayOfficial, false);
+  f.controller.dispose();
+});
+
+test('copy uses the visible loaded Bilibili video, strips private parameters, and never accepts a supplied URL', async () => {
+  const f = fixture({}, true);
+  assert.throws(() => validateCommunityRequest({ action: 'copy-video-link', url: 'https://evil.invalid/' }));
+  await f.action({ action: 'open', site: 'bilibili', bounds });
+  assert.equal(f.states.at(-1).canShare, false);
+  await assert.rejects(f.action({ action: 'copy-video-link' }), /请先打开/);
+  const contents = f.views[0].webContents;
+  await contents.loadURL('https://m.bilibili.com/video/BV1WYnd6DEAw?p=2&token=secret');
+  assert.equal(f.states.at(-1).canShare, true);
+  assert.deepEqual(await f.action({ action: 'copy-video-link' }), { ok: true });
+  assert.deepEqual(f.copied, ['https://www.bilibili.com/video/BV1WYnd6DEAw?p=2']);
+  await f.action({ action: 'hide' });
+  await assert.rejects(f.action({ action: 'copy-video-link' }), /请先打开/);
+  await f.action({ action: 'open', site: 'community', bounds });
+  await assert.rejects(f.action({ action: 'copy-video-link' }), /请先打开/);
+  assert.equal(f.copied.length, 1);
+  f.controller.dispose();
+});
+
+test('copy is disabled during navigation, and clipboard errors have a fixed safe message', async () => {
+  const f = fixture({}, true); await f.action({ action: 'open', site: 'bilibili', bounds });
+  const contents = f.views[0].webContents;
+  await contents.loadURL('https://m.bilibili.com/video/BV1WYnd6DEAw');
+  const gate = deferred(); contents.behavior = () => gate.promise;
+  const pending = contents.loadURL('https://m.bilibili.com/video/BV1BBnb6aEww');
+  assert.equal(f.states.at(-1).canShare, false);
+  await assert.rejects(f.action({ action: 'copy-video-link' }), /请先打开/);
+  gate.resolve(); await pending;
+  assert.equal(f.states.at(-1).canShare, true);
+  f.failCopy(); await assert.rejects(f.action({ action: 'copy-video-link' }), /^Error: 复制链接失败，请重试$/);
+  assert.deepEqual(f.copied, []);
+  f.controller.dispose();
+});
+
+test('in-page navigation recalculates the available share action using the current page', async () => {
+  const f = fixture({}, true); await f.action({ action: 'open', site: 'bilibili', bounds });
+  const contents = f.views[0].webContents;
+  contents.url = 'https://m.bilibili.com/video/BV1WYnd6DEAw?p=3&token=private';
+  contents.emit('did-navigate-in-page', {}, contents.url, true);
+  assert.equal(f.states.at(-1).canShare, true);
+  await f.action({ action: 'copy-video-link' });
+  assert.deepEqual(f.copied, ['https://www.bilibili.com/video/BV1WYnd6DEAw?p=3']);
+  contents.url = 'https://m.bilibili.com/search?token=private';
+  contents.emit('did-navigate-in-page', {}, contents.url, true);
+  assert.equal(f.states.at(-1).canShare, false);
+  await assert.rejects(f.action({ action: 'copy-video-link' }), /请先打开/);
+  assert.equal(f.copied.length, 1);
+  f.controller.dispose();
+});
+
 test('native feed is an isolated child WebContentsView with no BrowserWindow or focus', async () => {
   const f = fixture();
   assert.equal(DEFAULT_COMMUNITY_URL, 'https://community.project-neko.cn/feed');
@@ -82,6 +252,99 @@ test('native feed is an isolated child WebContentsView with no BrowserWindow or 
   assert.deepEqual(f.views[0].bounds, bounds);
   assert.equal(f.host.children.has(f.views[0]), true);
   assert.deepEqual(f.states.map(value => value.status), ['loading', 'ready']);
+  f.controller.dispose();
+});
+
+test('Bilibili is an isolated single-pane mobile view with page history and preserved community', async () => {
+  const f = fixture({}, true); await f.open(); const community = f.views[0];
+  community.webContents.scrollFixture = 240;
+  await f.action({ action: 'open', site: 'bilibili', bounds });
+  assert.equal(f.views.length, 2); const bili = f.views[1];
+  assert.equal(f.host.children.size, 1); assert.equal(f.host.children.has(bili), true);
+  assert.equal(community.webContents.isDestroyed(), false);
+  assert.equal(bili.options.webPreferences.partition, BILIBILI_PARTITION);
+  assert.notEqual(BILIBILI_PARTITION, COMMUNITY_PARTITION);
+  assert.equal(bili.options.webPreferences.sandbox, true);
+  assert.equal(bili.options.webPreferences.contextIsolation, true);
+  assert.equal(bili.options.webPreferences.nodeIntegration, false);
+  assert.equal('preload' in bili.options.webPreferences, false);
+  assert.equal(bili.webContents.userAgent, BILIBILI_MOBILE_USER_AGENT);
+  assert.equal(community.webContents.userAgent, undefined, 'mobile UA is restricted to the isolated Bilibili view');
+  assert.deepEqual(bili.webContents.loads, [BILIBILI_URL]);
+  assert.equal(f.states.at(-1).site, 'bilibili'); assert.equal(f.states.at(-1).canGoBack, false);
+  assert.equal(bili.webContents.popup({ url: 'https://m.bilibili.com/video/BV1fixture' }).action, 'deny');
+  await tick();
+  assert.equal(bili.webContents.loads.at(-1), 'https://m.bilibili.com/video/BV1fixture');
+  assert.equal(f.states.at(-1).canGoBack, true);
+  await f.action({ action: 'back' }); assert.equal(bili.webContents.getURL(), BILIBILI_URL);
+  assert.equal(f.states.at(-1).canGoBack, false);
+  await f.action({ action: 'open', site: 'community', bounds });
+  assert.equal(f.host.children.size, 1); assert.equal(f.host.children.has(community), true);
+  assert.equal(community.webContents.scrollFixture, 240); assert.equal(community.webContents.loads.length, 1);
+  await f.action({ action: 'open', site: 'bilibili', bounds });
+  assert.equal(f.views.length, 2); assert.equal(f.host.children.has(bili), true);
+  await f.action({ action: 'hide' }); assert.equal(f.host.children.size, 0); f.controller.dispose();
+});
+
+test('Bilibili navigation allows only explicit official HTTPS origins and never creates another window', async () => {
+  const f = fixture({}, true); await f.action({ action: 'open', site: 'bilibili', bounds }); const contents = f.views[0].webContents;
+  for (const url of ['https://m.bilibili.com/video/BV1test', 'https://www.bilibili.com/', 'https://passport.bilibili.com/login']) {
+    assert.equal(classifyBilibiliNavigation(url).kind, 'internal');
+    assert.equal(navigate(contents, 'will-navigate', url), false);
+    assert.equal(contents.popup({ url }).action, 'deny');
+  }
+  for (const url of ['https://bilibili.com.evil.invalid/', 'https://m.bilibili.com:8443/', 'file:///tmp/test', 'javascript:alert(1)', 'https://user@bilibili.com/']) {
+    assert.notEqual(classifyBilibiliNavigation(url).kind, 'internal');
+    assert.equal(navigate(contents, 'will-navigate', url), true);
+  }
+  assert.throws(() => validateCommunityRequest({ action: 'open', site: 'https://evil.invalid', bounds }));
+  assert.throws(() => validateCommunityRequest({ action: 'back', site: 'bilibili' }));
+  f.controller.dispose();
+});
+
+test('switching sites while the previous site loads cancels the old view without stale attachments', async () => {
+  const f = fixture({}, true); const gate = deferred();
+  const opening = f.action({ action: 'open', site: 'community', bounds });
+  const canceled = assert.rejects(opening, /已隐藏|离开/);
+  const old = f.views[0]; old.webContents.behavior = () => gate.promise; await tick();
+  await f.action({ action: 'open', site: 'bilibili', bounds }); await canceled;
+  assert.equal(old.webContents.isDestroyed(), true);
+  assert.equal(f.host.children.size, 1); assert.equal(f.host.children.has(f.views[1]), true);
+  const count = f.states.length; gate.resolve(); await tick();
+  assert.equal(f.states.length, count); assert.equal(f.states.at(-1).site, 'bilibili');
+  f.controller.dispose();
+});
+
+test('same-site reopen labels events and rejects stale hides while host hide remains authoritative', async () => {
+  const f = fixture({}, true);
+  await f.action({ action: 'open', site: 'bilibili', requestId: 1, bounds });
+  assert.equal(f.states.at(-1).requestId, 1);
+  await f.action({ action: 'hide', requestId: 1 });
+  const oldHidden = f.states.at(-1);
+  assert.equal(oldHidden.status, 'hidden'); assert.equal(oldHidden.requestId, 1);
+  await f.action({ action: 'open', site: 'bilibili', requestId: 2, bounds });
+  assert.equal(f.states.at(-1).requestId, 2);
+  const count = f.states.length;
+  assert.deepEqual(await f.action({ action: 'hide', requestId: 1 }), { ok: true, stale: true });
+  assert.equal(f.states.length, count);
+  assert.equal(f.host.children.has(f.views[0]), true);
+  await f.action({ action: 'hide' }); // fish/settings and other native callers
+  assert.equal(f.host.children.size, 0);
+  assert.equal(f.states.at(-1).status, 'hidden'); assert.equal(f.states.at(-1).requestId, 2);
+  f.controller.dispose();
+});
+
+test('stale hide cannot cancel a newer site open and request IDs are narrowly validated', async () => {
+  const f = fixture({}, true);
+  await f.action({ action: 'open', site: 'community', requestId: 1, bounds });
+  const newer = f.action({ action: 'open', site: 'bilibili', requestId: 2, bounds });
+  assert.deepEqual(await f.action({ action: 'hide', requestId: 1 }), { ok: true, stale: true });
+  assert.deepEqual(await newer, { ok: true });
+  assert.equal(f.host.children.size, 1); assert.equal(f.states.at(-1).requestId, 2);
+  for (const requestId of [0, -1, 1.2, Number.MAX_SAFE_INTEGER + 1, '2', null]) {
+    assert.throws(() => validateCommunityRequest({ action: 'open', requestId, bounds }));
+  }
+  assert.throws(() => validateCommunityRequest({ action: 'copy-video-link', requestId: 2 }));
   f.controller.dispose();
 });
 
@@ -178,7 +441,8 @@ test('hide cancels a pending native call immediately; new open never waits on th
   contents.behavior = () => gate.promise; await tick(); const stateCount = f.states.length;
   await f.action({ action: 'hide' }); await canceled;
   assert.equal(contents.isDestroyed(), true); assert.equal(f.host.children.size, 0);
-  assert.equal(f.states.length, stateCount, 'explicit hide emits no delayed hidden event');
+  assert.equal(f.states.length, stateCount + 1);
+  assert.equal(f.states.at(-1).status, 'hidden');
   await f.open(); assert.equal(f.views.length, 2); assert.equal(f.host.children.has(f.views[1]), true);
   const readyCount = f.states.length;
   gate.reject(Error('ERR_ABORTED from retired navigation')); await tick();
@@ -196,10 +460,12 @@ test('open and reload focus only the child view of an already focused host; layo
   f.controller.dispose();
 });
 
-test('host close-to-tray notifies hidden before disposing; loaded explicit hide keeps the view and emits nothing', async () => {
+test('host and explicit hide notify hidden; loaded explicit hide keeps the view', async () => {
   const f = fixture(); await f.open(); const contents = f.views[0].webContents;
   const stateCount = f.states.length;
-  await f.action({ action: 'hide' }); assert.equal(f.states.length, stateCount);
+  await f.action({ action: 'hide' }); assert.equal(f.states.length, stateCount + 1);
+  assert.equal(f.states.at(-1).status, 'hidden');
+  await f.action({ action: 'hide' }); assert.equal(f.states.length, stateCount + 1);
   assert.equal(contents.isDestroyed(), false); await f.open(); assert.equal(f.views.length, 1);
   f.host.emit('close'); assert.equal(f.states.at(-1).status, 'hidden');
   assert.equal(contents.isDestroyed(), true); assert.equal(f.controller.view, null);
@@ -228,7 +494,8 @@ test('concurrent refreshes coalesce and neither may attach or publish stale stat
   const rejected = [assert.rejects(first, /已隐藏/), assert.rejects(second, /已隐藏/)];
   const stateCount = f.states.length;
   await f.action({ action: 'hide' }); await Promise.all(rejected); gate.resolve(); await tick();
-  assert.equal(f.host.children.size, 0); assert.equal(f.states.length, stateCount); f.controller.dispose();
+  assert.equal(f.host.children.size, 0); assert.equal(f.states.length, stateCount + 1);
+  assert.equal(f.states.at(-1).status, 'hidden'); f.controller.dispose();
 });
 
 test('repeated refresh clicks share one navigation and all return the real successful outcome', async () => {
@@ -246,5 +513,6 @@ test('failure from a canceled hidden view cannot publish an error or reattach co
   contents.behavior = () => gate.promise; await tick(); const stateCount = f.states.length;
   await f.action({ action: 'hide' }); await canceled;
   gate.reject(Error('fixture failure')); await tick();
-  assert.equal(f.states.length, stateCount); assert.equal(f.host.children.size, 0); f.controller.dispose();
+  assert.equal(f.states.length, stateCount + 1); assert.equal(f.states.at(-1).status, 'hidden');
+  assert.equal(f.host.children.size, 0); f.controller.dispose();
 });

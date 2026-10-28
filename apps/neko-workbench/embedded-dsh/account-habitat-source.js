@@ -43,7 +43,7 @@ function nekoAccountBalanceLabel(snapshot) {
 
 function createNekoAccountBalanceReader(ctx, options) {
   options = options || {};
-  const source = 'DeepSeek 官方充值钱包';
+  const source = '官方充值钱包';
   const listeners = new Set();
   let generation = 0, disposed = false, pending = null;
   let snapshot = Object.freeze({ signedIn: null, status: 'unavailable', amount: null, currency: null, source, fetchedAt: null });
@@ -149,6 +149,9 @@ function installNekoAccountHabitat(ctx, options) {
   doc.head.appendChild(style);
   let stopped = false, scheduled = false, launcher = null, menuRecord = null, nativeSignedIn = null;
   let reduced = false, lastAnnouncement = '';
+  // This is a projection of the host's own Codex authentication status.
+  // Unknown, unsupported and API-key modes are not ChatGPT sign-in.
+  let codexSignedIn = false, codexRevision = 0;
   const releases = [];
   const motion = typeof win.matchMedia === 'function' ? win.matchMedia('(prefers-reduced-motion: reduce)') : null;
   reduced = !!(motion && motion.matches);
@@ -193,7 +196,8 @@ function installNekoAccountHabitat(ctx, options) {
     root.replaceChildren();
   }
   function addPet(world) {
-    const pet = element('span', 'neh-pet');
+    const pet = element('span', 'neh-pet neh-pet--dsh');
+    pet.setAttribute('data-neko-account-pet', 'dsh');
     pet.setAttribute('aria-hidden', 'true');
     if (reduced || !videoSrc || doc.visibilityState === 'hidden') {
       if (posterSrc) {
@@ -214,6 +218,15 @@ function installNekoAccountHabitat(ctx, options) {
     }
     world.appendChild(pet);
   }
+  function addCodexPet(world) {
+    if (!developerSrc) return;
+    const pet = element('span', 'neh-pet neh-pet--codex');
+    pet.setAttribute('data-neko-account-pet', 'chatgpt');
+    pet.setAttribute('aria-hidden', 'true');
+    const image = element('img', 'neh-pet-poster');
+    image.src = developerSrc; image.alt = ''; image.draggable = false;
+    pet.appendChild(image); world.appendChild(pet);
+  }
   function balanceLabel(snap) {
     return nekoAccountBalanceLabel(snap);
   }
@@ -225,8 +238,10 @@ function installNekoAccountHabitat(ctx, options) {
     const world = element('span', 'neh-world');
     world.setAttribute('aria-hidden', 'true');
     world.appendChild(element('span', 'neh-ground'));
-    if (effectiveSignedIn(snap)) addPet(world);
-    else world.appendChild(element('span', 'neh-empty-world', '未登录'));
+    const pets = element('span', 'neh-pets');
+    if (effectiveSignedIn(snap)) addPet(pets);
+    if (codexSignedIn) addCodexPet(pets);
+    world.appendChild(pets);
     column.append(overhead, world);
     if (inMenu) column.classList.add('neh-habitat-column--menu');
     return column;
@@ -257,11 +272,12 @@ function installNekoAccountHabitat(ctx, options) {
   }
   function renderLauncher(snap) {
     if (!launcher) return;
-    const key = JSON.stringify([snap, nativeSignedIn, reduced, doc.visibilityState, launcher.element.getAttribute('data-collapsed')]);
+    const key = JSON.stringify([snap, nativeSignedIn, codexSignedIn, reduced, doc.visibilityState, launcher.element.getAttribute('data-collapsed')]);
     if (launcher.renderKey === key) return;
     launcher.renderKey = key;
     clearOwned(launcher.owned);
-    if (!nativeSignedIn) {
+    rememberSet(launcher, "data-neko-account-compact", !nativeSignedIn && !codexSignedIn ? "true" : "false");
+    if (!nativeSignedIn && !codexSignedIn) {
       const icon = element('img', 'neh-signed-out-icon');
       icon.alt = ''; icon.draggable = false;
       if (signedOutSrc) icon.src = signedOutSrc;
@@ -277,26 +293,27 @@ function installNekoAccountHabitat(ctx, options) {
     if (developerSrc) avatar.src = developerSrc;
     identity.appendChild(avatar);
     launcher.owned.append(identity, habitat(snap, false));
-    rememberSet(launcher, 'aria-label', '开发喵账号菜单，DeepSeek，' + (effectiveSignedIn(snap) ? '已登录，' : '未登录，') + balanceLabel(snap) + '，来源：' + snap.source);
-    rememberSet(launcher, 'title', '开发喵 · DeepSeek 账号菜单');
+    rememberSet(launcher, 'aria-label', '开发喵账号菜单，工作台账号' + (effectiveSignedIn(snap) ? '已登录' : '未登录') + '，ChatGPT ' + (codexSignedIn ? '已登录' : '未确认登录') + '，' + balanceLabel(snap) + '，来源：' + snap.source);
+    rememberSet(launcher, 'title', '开发喵 · 账号菜单');
   }
   function renderMenu(snap) {
     if (!menuRecord) return;
-    const key = JSON.stringify([snap, nativeSignedIn, reduced, doc.visibilityState]);
+    const key = JSON.stringify([snap, nativeSignedIn, codexSignedIn, reduced, doc.visibilityState]);
     if (menuRecord.renderKey === key) return;
     menuRecord.renderKey = key;
     clearOwned(menuRecord.owned);
     const heading = element('div', 'neh-menu-heading');
-    heading.append(element('h3', '', '账号'), element('span', 'neh-login-status', effectiveSignedIn(snap) ? '已登录' : '未登录'));
+    heading.append(element('h3', '', '账号与生活'), element('span', 'neh-login-status', effectiveSignedIn(snap) ? '已登录' : '未登录'));
     const summary = element('div', 'neh-service-summary');
-    summary.append(element('strong', '', 'DeepSeek · 大肥鱼'), element('span', '', '当前工作台账号'));
-    menuRecord.owned.append(heading, summary, habitat(snap, true), element('p', 'neh-menu-help', '账号设置、充值和退出继续使用下方原生功能。'));
+    summary.append(element('strong', '', '账号'), element('span', '', '工作台账号'));
+    const help = effectiveSignedIn(snap) ? '账号和充值可在下方设置中管理。' : '使用下方登录按钮连接账号。';
+    menuRecord.owned.append(heading, summary, habitat(snap, true), element('p', 'neh-menu-help', help));
   }
   function render() {
     if (stopped) return;
     const snap = reader.getSnapshot();
     renderLauncher(snap); renderMenu(snap);
-    const message = effectiveSignedIn(snap) ? 'DeepSeek，' + balanceLabel(snap) + '，来源：' + snap.source : 'DeepSeek 未登录，余额暂不可读取';
+    const message = effectiveSignedIn(snap) ? '账号，' + balanceLabel(snap) + '，来源：' + snap.source : '账号未登录，余额暂不可读取';
     if (message !== lastAnnouncement) { announcement.textContent = message; lastAnnouncement = message; }
   }
   function matchAccountMenu(menu) {
@@ -305,13 +322,40 @@ function installNekoAccountHabitat(ctx, options) {
       const label = button.querySelector('._itemLabel_4ub78_190');
       return (label || button).textContent.replace(/\s+/g, '').toLowerCase();
     });
+    const accountAction = nativeSignedIn === true
+      ? /^(退出|退出登录|登出|signout|logout)$/
+      : /^(登录|登入|登陆|signin|login)$/;
     return labels.length === 3 && /^(设置|settings)$/.test(labels[0]) &&
       /^(联系我们|意见反馈|反馈意见|contactus|contact|feedback|sendfeedback)$/.test(labels[1]) &&
-      /^(退出|退出登录|登出|signout|logout)$/.test(labels[2]);
+      accountAction.test(labels[2]);
+  }
+  // Only the native login dialog's exact introductory sentence is adapted.
+  // Do not rewrite general page content, conversation messages, or links.
+  const loginCopy = new Map([
+    ['登录 DeepSeek 账号，或添加 API Key，即可开始使用。你的项目和文件保存在本地。', '登录账号，或添加 API Key，即可开始使用。你的项目和文件保存在本地。'],
+    ['Sign in to your DeepSeek account or add an API Key to get started. Your projects and files are stored locally.', 'Sign in to your account or add an API Key to get started. Your projects and files are stored locally.'],
+  ]);
+  const loginCopyChanges = new Map();
+  function adaptLoginDialog() {
+    for (const dialog of doc.querySelectorAll('[role="dialog"]')) {
+      const title = dialog.querySelector('h2');
+      if (!title || !/^(开始使用|Get started)$/.test(title.textContent.trim())) continue;
+      const labels = Array.from(dialog.querySelectorAll('button')).map(button => button.textContent.trim());
+      if (!labels.some(label => /^(登录|Sign in)$/.test(label)) || !labels.some(label => /^(添加 API Key|Add API Key)$/.test(label))) continue;
+      for (const paragraph of dialog.querySelectorAll('p')) {
+        const node = paragraph.firstChild;
+        if (!node || node.nodeType !== 3 || paragraph.childNodes.length !== 1) continue;
+        const replacement = loginCopy.get(node.nodeValue);
+        if (!replacement) continue;
+        loginCopyChanges.set(node, { original: node.nodeValue, owned: replacement });
+        node.nodeValue = replacement;
+      }
+    }
   }
   function sync() {
     scheduled = false;
     if (stopped) return;
+    adaptLoginDialog();
     const trigger = doc.querySelector(triggerSelector);
     if (!trigger) { releaseMenu(); releaseLauncher(); nativeSignedIn = null; reader.invalidate(null); return; }
     if (!launcher || launcher.element !== trigger || !launcher.owned.isConnected) {
@@ -358,6 +402,20 @@ function installNekoAccountHabitat(ctx, options) {
     schedule();
     if (nativeSignedIn === true) reader.refresh();
   }
+  function acceptCodexStatus(value) {
+    if (stopped) return;
+    codexRevision++;
+    const next = !!value && value.status === 'signed-in' && value.source === 'chatgpt';
+    if (next !== codexSignedIn) { codexSignedIn = next; render(); }
+  }
+  const codex = win.nekoWorkbench && win.nekoWorkbench.codex;
+  if (codex && typeof codex.onAccountStatus === 'function') {
+    try { const off = codex.onAccountStatus(acceptCodexStatus); if (typeof off === 'function') releases.push(off); } catch (_) {}
+  }
+  if (codex && typeof codex.accountStatus === 'function') {
+    const revision = codexRevision;
+    try { Promise.resolve(codex.accountStatus()).then(value => { if (!stopped && codexRevision === revision) acceptCodexStatus(value); }, () => {}); } catch (_) {}
+  }
   const unsubscribe = reader.subscribe(render);
   const observer = new win.MutationObserver(schedule);
   observer.observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-expanded', 'data-signed-out', 'data-collapsed'] });
@@ -403,6 +461,8 @@ function installNekoAccountHabitat(ctx, options) {
     win.clearInterval(interval);
     for (const release of releases.reverse()) { try { release(); } catch (_) {} }
     unsubscribe(); reader.dispose();
+    for (const [node, values] of loginCopyChanges) if (node.nodeValue === values.owned) node.nodeValue = values.original;
+    loginCopyChanges.clear();
     releaseMenu(); releaseLauncher();
     announcement.remove(); style.remove();
   };
