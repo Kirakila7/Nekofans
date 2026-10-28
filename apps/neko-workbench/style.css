@@ -22,6 +22,8 @@
 .chat-settings-links{display:flex;flex-wrap:wrap;gap:8px;padding-top:12px;margin-top:8px;border-top:1px solid #c8deed}
 .pet-tier{position:absolute;top:calc(var(--head-top) + 2px);left:calc(50% + var(--character-width)*.32);z-index:4;max-width:48px;padding:1px 4px;border:1px solid #bdd8e8;border-radius:6px;background:#f3fbfff0;color:#456d87;font:10px/14px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;white-space:nowrap;overflow:hidden;user-select:none}.pet[data-tier=task] .pet-tier{border-color:#c1d8c7;background:#f3faf4f0;color:#4b7356}
 
+.pet[data-tier=task] .pet-tier,.pet[data-tier=subagent] .pet-tier{display:none}
+
 /* Native kitten media shares the same stage, tier sizes and hit target. */
 .pet-cat-motion{position:absolute;inset:0;pointer-events:none;transform-origin:center}.pet-cat{display:block;width:100%;height:100%;object-fit:contain;pointer-events:none;user-select:none}.pet-cat-motion[data-phase=running][data-reduced=false]{animation:neko-cat-patrol 5.6s linear infinite}.pet-cat-motion[data-phase=drag]{transform:translateY(-3%)}
 @keyframes neko-cat-patrol{0%{transform:translateX(11%) scaleX(1)}49.9%{transform:translateX(-11%) scaleX(1)}50%{transform:translateX(-11%) scaleX(-1)}99.9%{transform:translateX(11%) scaleX(-1)}100%{transform:translateX(11%) scaleX(1)}}
