@@ -100,9 +100,11 @@ class WorkbenchMainChat {
     this.offState = this.offMemory = this.offSummaries = null;
     opened?.service.cancel(); opened?.close();
   }
-  read() {
+  read({ checkSecureStorage = false } = {}) {
+    // Querying the macOS keychain can prompt/block. DSH startup does not need it.
+    if (checkSecureStorage) this.secureStorageAvailable = this.secretStore.available();
     return clone({ backend: this.backend, settings: this.settings || null, hasKey: this.secretStore.has(),
-      secureStorageAvailable: this.secretStore.available(), ready: !!this.opened, error: this.configError,
+      secureStorageAvailable: this.secureStorageAvailable ?? null, ready: !!this.opened, error: this.configError,
       memoryAvailable: this.backend === 'chat-api' && !!this.opened?.memory,
       voiceStatus: '未接入', chat: this.opened?.service.state() || { personaId: PERSONA, phase: 'idle' } });
   }

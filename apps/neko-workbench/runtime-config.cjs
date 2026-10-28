@@ -36,13 +36,16 @@ function resolveRuntimePaths({ baseDir = __dirname, env = process.env, platform 
   const workspaceDir = absoluteSetting(env.NEKO_WORKBENCH_WORKSPACE || env.NEKO_WORKBENCH_WORKSPACE_DIR,
     path.join(baseDir, 'workspaces'), 'NEKO_WORKBENCH_WORKSPACE');
   const userDataDir = absoluteSetting(env.NEKO_WORKBENCH_ELECTRON_USER_DATA, path.join(dataDir, 'electron'), 'NEKO_WORKBENCH_ELECTRON_USER_DATA');
-  const dshHomeDir = path.join(dataDir, 'dsh');
+  const sharedDsh = Boolean(env.NEKO_WORKBENCH_DSH_HOME);
+  const dshHomeDir = absoluteSetting(env.NEKO_WORKBENCH_DSH_HOME, path.join(dataDir, 'dsh'), 'NEKO_WORKBENCH_DSH_HOME');
+  const dshProfile = env.NEKO_WORKBENCH_DSH_PROFILE || (sharedDsh ? 'desktop' : 'web');
+  if(typeof dshProfile !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(dshProfile) || dshProfile.includes('..'))throw new Error('DSH 配置名称无效');
   const globalDsh = path.join(homeDir, '.dsh');
   if (within(dataDir, workspaceDir) || within(workspaceDir, dataDir)
     || within(userDataDir, workspaceDir) || within(workspaceDir, userDataDir)) {
     throw new Error('工作区必须与工作台数据、Electron 数据目录分开');
   }
-  if (within(globalDsh, dataDir) || within(globalDsh, dshHomeDir) || within(globalDsh, userDataDir) || within(globalDsh, workspaceDir)) {
+  if (within(globalDsh, dataDir) || (!sharedDsh && within(globalDsh, dshHomeDir)) || within(globalDsh, userDataDir) || within(globalDsh, workspaceDir)) {
     throw new Error('工作台不能使用全局 ~/.dsh 目录；请选择独立数据和工作区');
   }
   const macResources = '/Applications/DeepSeek Harness.app/Contents/Resources';
@@ -51,7 +54,8 @@ function resolveRuntimePaths({ baseDir = __dirname, env = process.env, platform 
   const modulesDir = absoluteSetting(env.NEKO_WORKBENCH_DSH_MODULES || env.NEKO_WORKBENCH_DSH_MODULES_DIR,
     platform === 'darwin' ? path.join(macResources, 'app.asar/dsh/node_modules/@deepseek-ai') : '', 'NEKO_WORKBENCH_DSH_MODULES');
   const credentialsFile = absoluteSetting(env.NEKO_WORKBENCH_DSH_CREDENTIALS, null, 'NEKO_WORKBENCH_DSH_CREDENTIALS');
-  return Object.freeze({ cli, modulesDir, dataDir, workspaceDir, userDataDir, dshHomeDir,
+  return Object.freeze({ cli, modulesDir, dataDir, workspaceDir, userDataDir, dshHomeDir, dshProfile, sharedDsh,
+    desktopResources:macResources,desktopExecutable:path.join(macResources,'../MacOS/DeepSeek Harness'),
     diagnosticsDir: path.join(dataDir, 'diagnostics'), credentialsFile });
 }
 
@@ -78,7 +82,7 @@ function assertDshRuntime(runtime) {
 function buildDshPatch(runtime, { baseDir = __dirname, skin = { rows: [], insert: [] } } = {}) {
   return [
     { id: 'credentials', config: { path: runtime.credentialsFile || path.join(runtime.dshHomeDir, '.credentials.yaml') } },
-    { id: 'agent-default-model', config: { provider: 'deepseek-account', model: 'deepseek-flash', reasoningEffort: 'high' } },
+    ...(runtime.sharedDsh ? [{id:'pet',disabled:true},{id:'dsh-pet',disabled:true}] : [{ id: 'agent-default-model', config: { provider: 'deepseek-account', model: 'deepseek-flash', reasoningEffort: 'high' } }]),
     { id: 'web-runtime', config: { openBrowser: false, printUrl: false, surfaceContext: true } },
     { id: 'ui-settings-models', config: { credentialOnboarding: false } },
     ...skin.rows,
@@ -89,13 +93,16 @@ function buildDshPatch(runtime, { baseDir = __dirname, skin = { rows: [], insert
 }
 
 function buildDshLaunch(runtime, { env = process.env, patchFile = path.join(runtime.dataDir, 'bridge.patch.json') } = {}) {
+  const desktop=runtime.sharedDsh&&runtime.dshProfile==='desktop';
   return {
-    command: runtime.cli,
-    args: ['--profile', 'web', '--patch', patchFile, '--no-open', '--host', '127.0.0.1', '--port', '0'],
+    command: desktop?runtime.desktopExecutable:runtime.cli,
+    args: desktop?['--expose-internals',path.join(__dirname,'dsh-shared-desktop-host.cjs'),patchFile]:['--profile', runtime.dshProfile || 'web', '--patch', patchFile, '--no-open', '--host', '127.0.0.1', '--port', '0'],
     options: {
       cwd: runtime.workspaceDir,
       env: { ...env, ...fishEnvironment(runtime,env), DSH_HOME: runtime.dshHomeDir, DSH_PERMISSION_MODE: 'workspace-write', DSH_TELEMETRY_MODE: 'DISABLED',
+        ...(desktop?{ELECTRON_RUN_AS_NODE:'1',DSH_DESKTOP_NODE_EXECUTABLE:runtime.desktopExecutable}:{}),
         NEKO_WORKBENCH_DATA_DIR: runtime.dataDir, NEKO_WORKBENCH_WORKSPACE: runtime.workspaceDir,
+        NEKO_WORKBENCH_DSH_HOME: runtime.sharedDsh ? runtime.dshHomeDir : '', NEKO_WORKBENCH_DSH_PROFILE: runtime.dshProfile || 'web',
         NEKO_WORKBENCH_WORKSPACE_DIR: runtime.workspaceDir, NEKO_WORKBENCH_ELECTRON_USER_DATA: runtime.userDataDir,
         NEKO_WORKBENCH_DSH_CLI: runtime.cli, NEKO_WORKBENCH_DSH_MODULES: runtime.modulesDir,
         NEKO_WORKBENCH_DSH_MODULES_DIR: runtime.modulesDir, NEKO_WORKBENCH_DSH_CREDENTIALS: runtime.credentialsFile || '' },

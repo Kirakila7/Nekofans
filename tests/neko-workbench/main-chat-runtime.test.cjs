@@ -25,6 +25,13 @@ test('new workbench uses independent unconfigured chat, encrypted key projection
   const history=await runtime.history();assert.equal(history.length,1);assert.equal(history[0].role,'user');assert.equal(history[0].personaId,'bigfish');
 });
 
+test('starting DSH with unconfigured companion chat never queries the keychain; settings checks remain fail-closed',async t=>{
+  const f=fixture(t);let checks=0;f.safeStorage.isEncryptionAvailable=()=>{checks++;throw Error('locked keychain fixture');};
+  const runtime=f.create();await runtime.start();runtime.read();assert.equal(checks,0);assert.equal(runtime.read().secureStorageAvailable,null);
+  assert.equal(runtime.read({checkSecureStorage:true}).secureStorageAvailable,false);assert.equal(checks,1);
+  await assert.rejects(runtime.saveApi(config('https://example.invalid/v1')),/保存失败/);assert.equal(runtime.secretStore.has(),false);
+});
+
 test('actual loopback API streams; confirmed memory, edits, deletion, source summaries and restart use the same stores',async t=>{
   const f=fixture(t),api=await upstream(t);let runtime=f.create();await runtime.start();await runtime.saveApi({...config(api.baseUrl),personaId:'forged',apiKey:'must-not-persist'});
   const projections=[];runtime.subscribe(state=>projections.push(state));const result=await runtime.send('我喜欢乌龙茶');assert.equal(result.status,'completed');assert.equal(result.text,'你好');

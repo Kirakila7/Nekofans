@@ -48,6 +48,14 @@ test('reduced motion and failed native media use a local still without error loo
  f.image.onerror();assert.equal(f.image.src,A.assets.still);const count=f.image.srcWrites;f.image.onerror();f.presenter.render({},actor);assert.equal(f.image.srcWrites,count);
  f.presenter.dispose();for(const listener of f.listeners)listener();assert.equal(f.image.src,'');
 });
+
+test('desktop cat direction and return animation follow motion without rewriting task success',()=>{
+ const f=fixture(),actor={id:'subagent-real',kind:'subagent',appearanceId:A.CAT,active:false,status:'success',work:{state:'success'}};
+ f.presenter.render({},actor);f.presenter.setMotion({phase:'returning',moving:true,direction:1});
+ assert.equal(f.image.src,A.assets.running);assert.equal(f.motion.dataset.desktop,'true');assert.equal(f.motion.dataset.direction,'right');assert.equal(actor.work.state,'success');
+ f.presenter.setMotion({phase:'gathered',moving:false,direction:-1});assert.equal(f.image.src,A.assets.success);
+ f.presenter.setMotion(null);assert.equal(f.motion.dataset.desktop,'false');f.presenter.dispose();
+});
 test('bundled native cat assets retain their pinned bytes, transparency-capable formats and original license',()=>{
  const root=path.resolve(__dirname,'../../apps/neko-workbench/assets/neko-cat'),source=JSON.parse(fs.readFileSync(path.join(root,'SOURCE.json'),'utf8'));
  assert.equal(source.source,'Project-N-E-K-O/N.E.K.O');

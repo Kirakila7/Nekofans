@@ -110,3 +110,25 @@ test('runtime preflight and opt-in credentials validate only the selected fixtur
   assert.equal(patch.at(-1).insert[1].id, 'fixture-skin');
   assert(!fs.existsSync(path.join(f.homeDir, '.dsh')));
 });
+
+test('explicit shared DSH home reuses desktop plugins and credentials without rewriting the profile', t => {
+  const f=fixture(t),dsh=path.join(f.homeDir,'.dsh'),profile=path.join(dsh,'profiles','desktop');
+  fs.mkdirSync(profile,{recursive:true});
+  const file=path.join(profile,'cordis.patch.yml'),original='- id: custom-plugin\n  disabled: false\n';fs.writeFileSync(file,original);
+  const env={NEKO_WORKBENCH_DSH_HOME:dsh};
+  const runtime=resolveRuntimePaths({...f.options,env});prepareRuntimeDirectories(runtime);
+  assert.equal(runtime.dshHomeDir,dsh);assert.equal(runtime.dshProfile,'desktop');assert.equal(runtime.sharedDsh,true);
+  const launch=buildDshLaunch(runtime,{env}),patch=buildDshPatch(runtime);
+  assert.equal(launch.command,runtime.desktopExecutable);assert(launch.args[1].endsWith('dsh-shared-desktop-host.cjs'));assert.equal(launch.options.env.DSH_HOME,dsh);
+  const {desktopOptions}=require('../../apps/neko-workbench/dsh-shared-desktop-host.cjs');
+  const boot=desktopOptions(runtime,'/fixture/overlay.json',{});
+  assert.equal(boot.profileDir,profile);assert.deepEqual(boot.options.patchFiles,['/fixture/overlay.json']);
+  assert.equal(boot.options.profile,'desktop');assert.deepEqual(boot.options.args.slice(-4),['--host','127.0.0.1','--port','0']);
+  assert.equal(launch.options.env.NEKO_WORKBENCH_DSH_HOME,dsh);
+  assert.equal(patch[0].config.path,path.join(dsh,'.credentials.yaml'));
+  assert(!patch.some(row=>row.id==='agent-default-model'),'shared model selection is preserved');
+  assert(patch.some(row=>row.id==='pet'&&row.disabled===true),'only the launch overlay hides the old pet');
+  assert(patch.some(row=>row.id==='dsh-pet'&&row.disabled===true),'the installed bundle entry is hidden too');
+  assert.equal(fs.readFileSync(file,'utf8'),original);assert(!fs.existsSync(path.join(runtime.dataDir,'dsh')));
+  assert.throws(()=>resolveRuntimePaths({...f.options,env:{...env,NEKO_WORKBENCH_DSH_PROFILE:'../desktop'}}),/配置名称/);
+});

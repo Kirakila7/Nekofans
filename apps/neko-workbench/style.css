@@ -25,6 +25,9 @@
 /* Native kitten media shares the same stage, tier sizes and hit target. */
 .pet-cat-motion{position:absolute;inset:0;pointer-events:none;transform-origin:center}.pet-cat{display:block;width:100%;height:100%;object-fit:contain;pointer-events:none;user-select:none}.pet-cat-motion[data-phase=running][data-reduced=false]{animation:neko-cat-patrol 5.6s linear infinite}.pet-cat-motion[data-phase=drag]{transform:translateY(-3%)}
 @keyframes neko-cat-patrol{0%{transform:translateX(11%) scaleX(1)}49.9%{transform:translateX(-11%) scaleX(1)}50%{transform:translateX(-11%) scaleX(-1)}99.9%{transform:translateX(11%) scaleX(-1)}100%{transform:translateX(11%) scaleX(1)}}
+.pet-cat-motion[data-desktop=true]{animation:none!important;transform:scaleX(1)}.pet-cat-motion[data-desktop=true][data-direction=right]{transform:scaleX(-1)}
+.pet-cat-motion[data-desktop=true][data-home=true]{animation:neko-cat-home 1.3s ease-in forwards!important}@keyframes neko-cat-home{0%,70%{opacity:1}100%{opacity:0}}
+@media(prefers-reduced-motion:reduce){.pet-cat-motion[data-desktop=true][data-home=true]{animation:none!important}}
 @media(prefers-reduced-motion:reduce){.pet-cat-motion{animation:none!important;transform:none!important}}
 /* Compact frames keep native aspect ratios and reserve no bottom name row. */
 .pet{--appearance-scale:1;--frame-aspect:1.777777778;--character-height:calc(var(--stage-width)*9/16*var(--appearance-scale));--character-width:calc(var(--character-height)*var(--frame-aspect));--head-top:calc(76px + var(--character-height)*.2)}
@@ -36,3 +39,8 @@
 .character[data-appearance=claude-pixel] .pet-cat-motion,.character[data-appearance=gemini-pixel] .pet-cat-motion{overflow:hidden}
 .character[data-appearance=claude-pixel] .pet-cat{position:absolute;left:calc(-100%*43/170);top:calc(-100%*35/187);width:calc(100%*256/170);height:calc(100%*256/187)}
 .character[data-appearance=gemini-pixel] .pet-cat{position:absolute;left:calc(-100%*48/164);top:calc(-100%*57/165);width:calc(100%*256/164);height:calc(100%*256/165)}
+
+/* Native window motion is shared by every appearance; keep idle proportions intact. */
+.pet[data-agent-motion=spawning] .character{transform:translateX(-50%) rotate(var(--agent-lean,0deg));transform-origin:center bottom}
+.pet:not([data-appearance=neko-cat])[data-agent-motion=gathered][data-motion-retire=true] .character{animation:neko-cat-home 1.3s ease-in forwards}
+@media(prefers-reduced-motion:reduce){.pet[data-agent-motion] .character{transform:translateX(-50%)!important;animation:none!important}}

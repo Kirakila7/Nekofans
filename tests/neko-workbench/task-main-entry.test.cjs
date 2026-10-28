@@ -24,7 +24,8 @@ if(!process.argv.includes('--harness')){
   }
   class Tray extends EventEmitter{setTitle(){}setToolTip(){}popUpContextMenu(){}}
   const electron={app,BrowserWindow:Window,ipcMain:{handle:(name,fn)=>handlers.set(name,fn)},screen:{getPrimaryDisplay:()=>({workArea:{x:0,y:0,width:1600,height:1000}})},shell:{openExternal:async()=>{},openPath:async()=>{}},Menu:{buildFromTemplate:template=>({template,popup(){menus.push(template);}}),setApplicationMenu(){}},Tray,nativeImage:{createEmpty:()=>({}),createFromBuffer:()=>({isEmpty:()=>false,getSize:()=>({width:512,height:512}),toPNG:()=>fs.readFileSync(path.resolve(__dirname,'../../apps/neko-workbench/assets/neko-cat/still.png'))})},dialog:{showErrorBox(){},showMessageBox:async()=>{},showOpenDialog:async()=>selectedImage?{canceled:false,filePaths:[selectedImage]}:{canceled:true,filePaths:[]}},nativeTheme:{shouldUseDarkColors:false},safeStorage:{isEncryptionAvailable:()=>true,encryptString:value=>Buffer.from(value),decryptString:value=>value.toString()}};
-  const originalLoad=Module._load;Module._load=function(name,...args){if(name==='electron')return electron;if(name==='node:child_process')return{spawn(){setImmediate(()=>emit('ready',{}));return child;}};return originalLoad.call(this,name,...args);};
+  const realMotion=require('../../apps/neko-workbench/subagent-motion.cjs');let motion;
+  const originalLoad=Module._load;Module._load=function(name,...args){if(name==='electron')return electron;if(name==='./subagent-motion.cjs')return{createSubagentMotion:options=>motion=realMotion.createSubagentMotion({...options,random:()=>.25,schedule:()=>1,unschedule(){}})};if(name==='node:child_process')return{spawn(){setImmediate(()=>emit('ready',{}));return child;}};return originalLoad.call(this,name,...args);};
   const wait=async check=>{for(let n=0;n<500;n++){if(await check())return;await new Promise(resolve=>setTimeout(resolve,5));}throw Error('fixture timed out');};
   const invoke=(w,method,params={})=>handlers.get('pet:call')({sender:w.webContents,senderFrame:w.webContents.mainFrame},method,params);
   const read=()=>invoke(windows[0],'state');
@@ -39,6 +40,20 @@ if(!process.argv.includes('--harness')){
    s=await read();assert.equal(s.preferences.taskAppearance,'neko-cat');assert.equal(s.preferences.subagentAppearance,'dsh-original');assert.equal(s.actors[0].appearanceId,undefined);
    const childWindow=windows.find(w=>new URL(w.webContents.url).searchParams.get('actor')==='subagent-child');
    await invoke(childWindow,'menu');menus.at(-1).find(item=>item.label==='形象').submenu.find(item=>item.label==='N.E.K.O. 跑动小猫').click();
+   motion.tick();assert.equal(motion.snapshot().find(x=>x.id==='subagent-child').phase,'spawning');
+   const explorationStart=childWindow.getPosition();now+=100;motion.tick();assert.notDeepEqual(childWindow.getPosition(),explorationStart,'real native-catalog helper launches while its task is active');
+   const automaticPosition=childWindow.getPosition();await invoke(windows[0],'menu');assert.deepEqual(childWindow.getPosition(),automaticPosition,'work-state reconciliation does not snap a roaming helper back');
+   emit('subagent-activity',{sessionId:'child',local:false,phase:'end',stopReason:'completed'});await wait(async()=>(await read()).actors.find(x=>x.sessionId==='child').returningHome===true);
+   assert.equal((await read()).actors.find(x=>x.sessionId==='child').present,true,'completion feedback stays visible until the return animation reaches home');
+   windows[0].setPosition(700,300);for(let step=0;step<200;step++){now+=40;motion.tick();}
+   s=await read();assert.equal(s.actors.find(x=>x.sessionId==='child').present,false,'helper hides after gathering at the main character');assert.equal(s.actors.find(x=>x.sessionId==='child').returningHome,false);
+   assert.equal(JSON.parse(fs.readFileSync(path.join(data,'state.json'),'utf8')).actors.find(x=>x.sessionId==='child').returningHome,undefined,'return state is not restored as a fake task next launch');
+   emit('subagent-activity',{sessionId:'child',local:false,phase:'start'});await wait(async()=>(await read()).actors.find(x=>x.sessionId==='child').active===true);
+   await invoke(childWindow,'menu');menus.at(-1).find(item=>item.label==='常驻桌面').click({checked:true});
+   emit('subagent-activity',{sessionId:'child',local:false,phase:'end',stopReason:'completed'});await wait(async()=>(await read()).actors.find(x=>x.sessionId==='child').returningHome===true);
+   for(let step=0;step<200;step++){now+=40;motion.tick();}s=await read();assert.equal(s.actors.find(x=>x.sessionId==='child').present,true,'explicitly pinned helper gathers and stays');assert.equal(s.actors.find(x=>x.sessionId==='child').returningHome,false);
+   await invoke(childWindow,'menu');menus.at(-1).find(item=>item.label==='常驻桌面').click({checked:false});
+   emit('subagent-activity',{sessionId:'child',local:false,phase:'start'});await wait(async()=>(await read()).actors.find(x=>x.sessionId==='child').active===true);
    await invoke(taskWindow,'menu');menus.at(-1).find(item=>item.label==='形象').submenu.find(item=>item.label==='大肥鱼 · 原有角色').click();
    const persisted=JSON.parse(fs.readFileSync(path.join(data,'state.json'),'utf8'));assert.equal(persisted.preferences.taskAppearance,'neko-cat');assert.equal(persisted.actors.find(x=>x.sessionId==='child').appearanceId,'neko-cat');assert.equal(persisted.actors.find(x=>x.kind==='task').appearanceId,'dsh-original');
    await invoke(windows[0],'menu');menus.at(-1).find(item=>item.label==='形象').submenu.find(item=>item.label==='Claude 娘').click();
@@ -60,7 +75,9 @@ if(!process.argv.includes('--harness')){
    await invoke(taskWindow,'open-task');const workbench=windows.find(w=>w.options.title==='N.E.K.O. 工作台');assert(workbench);const nav=await handlers.get('workbench:call')({sender:workbench.webContents,senderFrame:workbench.webContents.mainFrame},'state');assert.equal(nav.navigation.sessionId,'task-session');await assert.rejects(invoke(windows[0],'open-task'));
    emit('task-meta',task('task-session',{backgroundJobs:1}));emit('event',{sessionId:'task-session',event:{type:'turn/end',data:{reason:{kind:'completed'}}}});await wait(async()=>(await read()).actors.find(x=>x.kind==='task').backgroundJobs===1);assert.equal((await read()).actors.find(x=>x.kind==='task').active,true);
    emit('task-meta',task('task-session',{running:false,backgroundJobs:0,outcome:'completed'}));await wait(async()=>(await read()).actors.find(x=>x.kind==='task').active===false);
-   now+=11000;emit('task-roster',{source:'dsh-task-session',sessionIds:['task-session']});await wait(async()=>(await read()).actors.find(x=>x.kind==='task').present===false);
+   assert.equal((await read()).actors.find(x=>x.kind==='task').returningHome,true,'medium tasks also gather before leaving');
+   for(let step=0;step<275;step++){now+=40;motion.tick();}
+   emit('task-roster',{source:'dsh-task-session',sessionIds:['task-session']});await wait(async()=>(await read()).actors.find(x=>x.kind==='task').present===false);
    for(const [outcome,status] of [['killed','stopped'],['failed','error'],['unknown','idle']]){
     emit('task-meta',task('task-session',{backgroundJobs:1}));emit('event',{sessionId:'task-session',event:{type:'turn/end',data:{reason:{kind:'completed'}}}});emit('task-meta',task('task-session',{running:false,backgroundJobs:0,outcome}));
     await wait(async()=>(await read()).actors.find(x=>x.kind==='task').status===status);assert.equal((await read()).actors.find(x=>x.kind==='task').present,true);

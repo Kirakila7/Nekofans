@@ -51,6 +51,8 @@ export function launchPlan({ root = defaultRoot, env = process.env,
     NEKO_WORKBENCH_WORKSPACE: runtime.workspaceDir,
     NEKO_WORKBENCH_ELECTRON_USER_DATA: runtime.userDataDir,
     NEKO_WORKBENCH_DSH_CLI: runtime.cli, NEKO_WORKBENCH_DSH_MODULES: runtime.modulesDir };
+  childEnv.NEKO_WORKBENCH_DSH_HOME = runtime.sharedDsh ? runtime.dshHomeDir : '';
+  childEnv.NEKO_WORKBENCH_DSH_PROFILE = runtime.dshProfile || 'web';
   delete childEnv.ELECTRON_RUN_AS_NODE;
   return { appDir, electron, runtime, errors, childEnv };
 }
@@ -63,7 +65,8 @@ export function startWorkbench({ plan, checkOnly = false, spawnProcess = spawn,
     return null;
   }
   logger.log(`N.E.K.O. 工作台数据：${plan.runtime.dataDir}`);
-  logger.log(`独立工作区：${plan.runtime.workspaceDir}`);
+  logger.log(`工作区：${plan.runtime.workspaceDir}`);
+  logger.log(`DSH 配置：${plan.runtime.dshHomeDir} / ${plan.runtime.dshProfile || 'web'}`);
   if (checkOnly) {
     logger.log("启动路径检查通过；未启动 Electron、DSH 或模型请求。");
     return null;
