@@ -160,7 +160,7 @@ if(view==='chat-settings'){
     input.readOnly=a.id!=='main'&&a.mode!=='continuable';
     const shortName=Array.from(a.name).slice(0,12).join('')+(Array.from(a.name).length>12?'…':'');
     input.placeholder=a.id==='main'?(busy(a)?'正在回复，可点右侧停止':a.chatBackend==='chat-api'?(state.mainChat?.hasKey&&state.mainChat?.settings?.model?'和大肥鱼聊聊，回车发送':'右键 → 聊天 API 设置'):state.neko.connection==='ready'?'和'+state.neko.character+'说点什么，回车发送':'N.E.K.O. 未连接，右键设置'):input.readOnly?'只读子任务，在 DSH 查看':busy(a)?((a.work?.task||a.task)?.slice(0,25)||'正在做，稍等一下…'):shortName+'：发消息，回车发送';
-    if(a.id==='main'&&a.chatBackend==='chat-api'){
+    if(a.id==='main'&&(a.chatBackend==='chat-api'||a.screenReply)){
       hideInspector();bubble.tabIndex=0;bubble.title='最近回复，可滚动查看全文';apiReplyPresenter.render(a);
     }else if(a.kind==='task'){
       apiReplyPresenter.reset();bubble.tabIndex=0;bubble.title='子会话聊天消息';feedback.showLocal(inputVisible?window.PetChatPresentation.taskChatText(a):'',{persistent:inputVisible});

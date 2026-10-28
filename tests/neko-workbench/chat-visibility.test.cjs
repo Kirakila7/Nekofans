@@ -43,6 +43,13 @@ test('actual feedback adapter expires transient notices but never times out a pe
   feedback.showLocal('');assert.equal(feedback.localText,'');assert.equal(timers.size,0);
 });
 
+test('screen feedback streams through main pet presenter and pause restores ordinary chat',()=>{
+  const calls=[],presenter=createReplyPresenter({showLocal:text=>calls.push(text)}),actor={chatReply:{id:'chat',text:'普通聊天',streaming:false}};
+  presenter.render(actor);actor.screenReply={id:'screen',text:'画面反馈',streaming:true};presenter.render(actor);assert.equal(calls.at(-1),'画面反馈');
+  actor.screenReply={...actor.screenReply,text:'画面反馈完成',streaming:false};presenter.render(actor);assert.equal(calls.at(-1),'画面反馈完成');
+  actor.screenReply=null;presenter.render(actor);assert.equal(calls.at(-1),'普通聊天');
+});
+
 test('only tiny subagents run continuously; a subsection runs in the air and returns to real work on landing',()=>{
   const C=require('../../apps/neko-workbench/pet-chat-presentation.js'),A=require('../../apps/neko-workbench/pet-appearance.js');
   const a={id:'helper-native',kind:'subagent',sessionId:'native',active:false,status:'error',work:{state:'error',tick:4}};const before=JSON.stringify(a),visual=C.animationActor(a);
