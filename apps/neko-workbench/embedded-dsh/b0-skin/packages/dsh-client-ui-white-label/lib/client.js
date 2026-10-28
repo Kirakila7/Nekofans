@@ -2735,10 +2735,6 @@ button[data-neko-new-session="plus"]:focus-visible { outline: 2px solid var(--ds
 }
 .neko-avatar-portal > .neko-pop { pointer-events:auto; }
 
-/* Hide only the account identity and wallet cards in native settings. */
-section._6qcDqa_section > ._6qcDqa_card,
-section._6qcDqa_section > ._6qcDqa_balanceCard { display: none !important; }
-
 /* Native global nav (插件 / 自动化任务 / More): folded in place, shown as an overlay. */
 nav[data-neko-tools="folded"] { display: none !important; }
 nav[data-neko-tools="open"] {
