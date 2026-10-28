@@ -179,6 +179,7 @@ function installNekoAccountHabitat(ctx, options) {
     return '';
   }
   const developerSrc = mediaSource(options.developerAvatarSrc, false);
+  const signedOutSrc = mediaSource(options.signedOutIconSrc, false);
   const videoSrc = mediaSource(options.idleVideoSrc, true);
   const posterSrc = mediaSource(options.idlePosterSrc, false);
   function pauseMedia(root) {
@@ -260,6 +261,15 @@ function installNekoAccountHabitat(ctx, options) {
     if (launcher.renderKey === key) return;
     launcher.renderKey = key;
     clearOwned(launcher.owned);
+    if (!nativeSignedIn) {
+      const icon = element('img', 'neh-signed-out-icon');
+      icon.alt = ''; icon.draggable = false;
+      if (signedOutSrc) icon.src = signedOutSrc;
+      launcher.owned.appendChild(icon);
+      rememberSet(launcher, 'aria-label', '登录 DeepSeek 账号');
+      rememberSet(launcher, 'title', '登录 DeepSeek 账号');
+      return;
+    }
     const identity = element('span', 'neh-identity');
     identity.appendChild(element('span', 'neh-developer-name', '开发喵'));
     const avatar = element('img', 'neh-developer-avatar');
