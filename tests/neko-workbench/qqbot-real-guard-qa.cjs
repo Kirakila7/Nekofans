@@ -9,7 +9,8 @@ const modules='/Applications/DeepSeek Harness.app/Contents/Resources/app.asar/ds
 if(process.platform!=='darwin'||!fs.existsSync(electron)){console.error('需要 macOS 已安装 DeepSeek Harness 才能运行此实机检查。');process.exit(2);}
 const base=fs.mkdtempSync(path.join(os.tmpdir(),'neko-qq-agent-guard-'));
 const env={...process.env,NEKO_WORKBENCH_DATA_DIR:path.join(base,'data'),NEKO_WORKBENCH_WORKSPACE:path.join(base,'workspace'),NEKO_WORKBENCH_ELECTRON_USER_DATA:path.join(base,'electron'),NEKO_WORKBENCH_DSH_MODULES:modules};
-const pkgroot=path.join(base,'qqbot');const installer=path.join(project,'apps/neko-workbench/vendor/dsh-qqbot-workbench/install.cjs');
+const pkgroot=path.join(env.NEKO_WORKBENCH_DATA_DIR,'qqbot-runtime');env.NEKO_WORKBENCH_QQBOT_PROFILE=pkgroot;
+const installer=path.join(project,'apps/neko-workbench/vendor/dsh-qqbot-workbench/install.cjs');
 const setup=cp.spawnSync(electron,['-e','const {install}=require(process.argv[1]);install(process.argv[2],process.argv[3]).then(()=>{},()=>process.exitCode=1)',installer,pkgroot,modules],{cwd:project,env:{...env,ELECTRON_RUN_AS_NODE:'1'},stdio:'ignore',timeout:90000});
 if(setup.status!==0){fs.rmSync(base,{recursive:true,force:true});console.error('无法安装测试所需的固定依赖。');process.exit(1);}
 env.NEKO_QQ_TEST_PKG=path.join(pkgroot,'node_modules/@tencent-connect/dsh-qqbot');

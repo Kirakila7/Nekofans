@@ -16,6 +16,53 @@ test('official archive is pinned for offline audit with its original bytes', () 
   assert.equal(actual, installer.SHA);
 });
 
+test('QQ model settings and session preferences stay in the selected private profile',async t=>{
+  const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'neko-qq-profile-test-'));t.after(()=>fs.rmSync(tmp,{recursive:true,force:true}));
+  cp.execFileSync('tar',['-xzf',installer.ARCHIVE,'-C',tmp]);const pkg=path.join(tmp,'package');
+  fs.mkdirSync(path.join(pkg,'node_modules/js-yaml'),{recursive:true});
+  fs.writeFileSync(path.join(pkg,'node_modules/js-yaml/package.json'),'{"name":"js-yaml","main":"index.js"}');
+  fs.writeFileSync(path.join(pkg,'node_modules/js-yaml/index.js'),'module.exports={load:s=>JSON.parse(s),dump:v=>JSON.stringify(v)}');
+  installer.adaptPlugin(tmp,pkg);
+  const readerSource=fs.readFileSync(path.join(pkg,'dist/model/settings-reader.js'),'utf8');
+  const prefsSource=fs.readFileSync(path.join(pkg,'dist/model/prefs-store.js'),'utf8');
+  assert(!readerSource.includes('homedir()'));assert(!prefsSource.includes('homedir()'));
+  const {SettingsReader}=await import(pathToFileURL(path.join(pkg,'dist/model/settings-reader.js')).href);
+  const {PrefsStore}=await import(pathToFileURL(path.join(pkg,'dist/model/prefs-store.js')).href);
+  const previous={data:process.env.NEKO_WORKBENCH_DATA_DIR,profile:process.env.NEKO_WORKBENCH_QQBOT_PROFILE};
+  t.after(()=>{for(const [key,value] of [['NEKO_WORKBENCH_DATA_DIR',previous.data],['NEKO_WORKBENCH_QQBOT_PROFILE',previous.profile]]){if(value===undefined)delete process.env[key];else process.env[key]=value;}});
+  const fakeHome=path.join(tmp,'fake-home');fs.mkdirSync(path.join(fakeHome,'.dsh'),{recursive:true});fs.mkdirSync(path.join(fakeHome,'.dsh-qqbot'));
+  const outsideSettings=path.join(fakeHome,'.dsh/settings.yaml'),outsidePrefs=path.join(fakeHome,'.dsh-qqbot/model-prefs.json');
+  fs.writeFileSync(outsideSettings,JSON.stringify({'agent-default-model':{provider:'wrong-global',model:'wrong-global'}}));
+  fs.writeFileSync(outsidePrefs,JSON.stringify({presets:{peer:'wrong-global'}}));
+  const oldHomedir=os.homedir;os.homedir=()=>fakeHome;t.after(()=>{os.homedir=oldHomedir});
+  const dataA=path.join(tmp,'a'),dataB=path.join(tmp,'b');
+  const a=path.join(dataA,'qqbot-runtime'),b=path.join(dataB,'qqbot-runtime');
+  fs.mkdirSync(a,{recursive:true,mode:0o700});fs.mkdirSync(b,{recursive:true,mode:0o700});
+  const use=(data,profile)=>{process.env.NEKO_WORKBENCH_DATA_DIR=data;process.env.NEKO_WORKBENCH_QQBOT_PROFILE=profile;};
+  use(dataA,a);assert.equal(new SettingsReader().readDefaultRoute(),undefined);
+  const privateSettings=path.join(a,'settings.yaml');fs.writeFileSync(privateSettings,JSON.stringify({'agent-default-model':{provider:'private',model:'a'}}),{mode:0o600});
+  assert.deepEqual(new SettingsReader().readDefaultRoute(),{provider:'private',model:'a'});
+  const prefA=new PrefsStore();assert.equal(prefA.getPreset('peer'),undefined);prefA.setPreset('peer','from-a');
+  const prefFile=path.join(a,'model-prefs.json');assert.equal(fs.statSync(prefFile).mode&0o777,0o600);
+  assert.equal(new PrefsStore().getPreset('peer'),'from-a');
+  use(dataB,b);assert.equal(new SettingsReader().readDefaultRoute(),undefined);assert.equal(new PrefsStore().getPreset('peer'),undefined);
+  new PrefsStore().setPreset('peer','from-b');assert.equal(JSON.parse(fs.readFileSync(path.join(b,'model-prefs.json'),'utf8')).presets.peer,'from-b');
+  assert.equal(JSON.parse(fs.readFileSync(prefFile,'utf8')).presets.peer,'from-a');
+  assert.equal(JSON.parse(fs.readFileSync(outsidePrefs,'utf8')).presets.peer,'wrong-global');
+  assert.equal(JSON.parse(fs.readFileSync(outsideSettings,'utf8'))['agent-default-model'].provider,'wrong-global');
+  fs.unlinkSync(path.join(b,'model-prefs.json'));fs.symlinkSync(outsidePrefs,path.join(b,'model-prefs.json'));
+  new PrefsStore().setPreset('peer','must-not-write-through');
+  assert.equal(JSON.parse(fs.readFileSync(outsidePrefs,'utf8')).presets.peer,'wrong-global');
+  fs.symlinkSync(outsideSettings,path.join(b,'settings.yaml'));assert.equal(new SettingsReader().readDefaultRoute(),undefined);
+  fs.unlinkSync(path.join(b,'model-prefs.json'));fs.linkSync(outsidePrefs,path.join(b,'model-prefs.json'));
+  new PrefsStore().setPreset('peer','must-not-write-hardlink');
+  assert.equal(JSON.parse(fs.readFileSync(outsidePrefs,'utf8')).presets.peer,'wrong-global');
+  process.env.NEKO_WORKBENCH_QQBOT_PROFILE=fakeHome;
+  assert.throws(()=>new PrefsStore(),/QQ profile unavailable/);
+  const alias=path.join(tmp,'data-alias');fs.symlinkSync(dataA,alias);
+  use(alias,path.join(alias,'qqbot-runtime'));assert.throws(()=>new PrefsStore(),/QQ profile unavailable/);
+});
+
 test('official persistence adapter keeps credentials private and does not print them on failure',async t=>{
   const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'neko-qq-adapter-test-'));t.after(()=>fs.rmSync(tmp,{recursive:true,force:true}));
   cp.execFileSync('tar',['-xzf',installer.ARCHIVE,'-C',tmp]);const pkg=path.join(tmp,'package');

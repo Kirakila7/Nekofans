@@ -14,6 +14,8 @@ and is not redistributed here; its npm license field says UNLICENSED.
 
 The installed copy is adapted locally before execution: the QQ profile is
 isolated and owner-only; credentials never appear in fallback instructions;
+model settings and per-peer preferences use the isolated QQ profile rather
+than the upstream global home-directory files;
 requests go through the DSH connection authentication gate; installed DSH
 runtime modules are resolved without relying on ASAR-incompatible symlinks;
 incoming message bodies are omitted from the main log; and the QQ settings
