@@ -83,3 +83,27 @@ test('only a real approval for the active thread can be answered', async () => {
   assert.throws(() => controller.approval({ requestId: 'x', decision: 'accept' }), /不存在/);
   controller.dispose();
 });
+
+test('account refresh and update notifications preserve task state and never publish private fields', async () => {
+  let notify; const accounts = [];
+  const controller = createCodexController({
+    resolveWorkspace: async id => ({ workspaceId: id, path: '/private/tmp' }),
+    publishAccount: value => accounts.push(value),
+    adapterFactory: ({ onEvent }) => {
+      notify = onEvent;
+      return { createSession: async () => ({ threadId: 't' }),
+        sendMessage: async () => ({ turnId: 'turn' }),
+        readAccount: async () => ({ status: 'signed-in', source: 'chatgpt', email: 'private@example.test', token: 'secret' }), dispose() {} };
+    }
+  });
+  await controller.start({ workspaceId: 'project' });
+  await controller.send({ text: 'hello' });
+  assert.equal(controller.isBusy(), true);
+  assert.deepEqual(await controller.accountStatus(), { status: 'signed-in', source: 'chatgpt' });
+  notify({ type: 'account-changed', email: 'private@example.test' });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(accounts, [{ status: 'signed-in', source: 'chatgpt' }, { status: 'signed-in', source: 'chatgpt' }]);
+  assert.equal(controller.isBusy(), true);
+  assert(!JSON.stringify(accounts).includes('private'));
+  controller.dispose();
+});

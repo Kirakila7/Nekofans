@@ -78,6 +78,9 @@ function createCodexAdapter({ onEvent = () => {}, command = findCodexCommand(), 
       if (message.error) p.reject(new Error(safeMessage(message.error))); else p.resolve(message.result);
       return;
     }
+    // Never forward the account notification payload: it may grow new fields.
+    // The controller responds by performing a fresh, projected account/read.
+    if (message.method === 'account/updated') { emit({ type: 'account-changed' }); return; }
     const p = message.params || {}, threadId = p.threadId;
     if (!threads.has(threadId)) return;
     if (message.method === 'item/agentMessage/delta' && typeof p.delta === 'string') {
@@ -95,9 +98,12 @@ function createCodexAdapter({ onEvent = () => {}, command = findCodexCommand(), 
     if (ready) return ready;
     ready = (async () => {
       child = spawnProcess(command, ['app-server'], { stdio: ['pipe', 'pipe', 'pipe'], shell: false });
-      child.stdin.on('error', () => failPending('Codex 服务连接已断开'));
+      const launched = child;
+      buffer = '';
+      child.stdin.on('error', () => { if (child === launched) failPending('Codex 服务连接已断开'); });
       child.stdout.setEncoding('utf8');
       child.stdout.on('data', chunk => {
+        if (child !== launched) return;
         buffer += chunk;
         if (buffer.length > 8 * 1024 * 1024) { child.kill(); return; }
         let index;
@@ -107,16 +113,20 @@ function createCodexAdapter({ onEvent = () => {}, command = findCodexCommand(), 
         }
       });
       child.stderr.resume(); // Do not expose logs: they may contain local or account data.
-      child.on('error', () => { failPending('无法启动 Codex，请检查 Codex 是否已安装'); emit({ type: 'error', message: '无法启动 Codex，请检查 Codex 是否已安装' }); });
-      child.on('close', () => { failPending('Codex 服务已退出'); if (!disposed) emit({ type: 'error', message: 'Codex 服务已退出' }); });
+      child.on('error', () => { if (child !== launched) return; failPending('无法启动 Codex，请检查 Codex 是否已安装'); emit({ type: 'error', message: '无法启动 Codex，请检查 Codex 是否已安装' }); });
+      child.on('close', () => { if (child !== launched) return; failPending('Codex 服务已退出'); ready = undefined; threads.clear(); if (!disposed) emit({ type: 'error', message: 'Codex 服务已退出' }); });
       try {
         await request('initialize', { clientInfo: { name: 'neko_workbench', title: 'N.E.K.O. Workbench', version: '0.1.0' }, capabilities: null });
         write({ method: 'initialized' });
       } catch (error) {
-        child.kill();
+        launched.kill();
         throw error;
       }
     })();
+    // Installation or startup may fail transiently. A later explicit refresh
+    // must be able to retry instead of retaining a rejected startup promise.
+    const started = ready;
+    started.catch(() => { if (ready === started) ready = undefined; });
     return ready;
   }
   async function projectPath(cwd) {
@@ -130,6 +140,26 @@ function createCodexAdapter({ onEvent = () => {}, command = findCodexCommand(), 
     if (!threads.has(threadId)) throw new Error('此 Codex 会话不属于当前工作台');
   }
   return {
+    async readAccount() {
+      try {
+        await start();
+        const value = await request('account/read', { refreshToken: false });
+        if (!value || typeof value !== 'object' || !Object.hasOwn(value, 'account')) return { status: 'unknown', source: null, message: 'Codex 账号状态返回异常' };
+        if (value.account === null) return value.requiresOpenaiAuth === true
+          ? { status: 'signed-out', source: null }
+          : { status: 'unknown', source: null, message: '无法确定 Codex 登录状态' };
+        if (value.account?.type === 'chatgpt') return { status: 'signed-in', source: 'chatgpt' };
+        if (value.account?.type === 'apiKey' || value.account?.type === 'amazonBedrock') return { status: 'unsupported', source: null, message: '当前 Codex 使用其他认证方式' };
+        return { status: 'unknown', source: null, message: '无法识别 Codex 认证方式' };
+      } catch (error) {
+        const msg = String(error?.message || '');
+        const message = msg.includes('超时') ? 'Codex 账号状态读取超时'
+          : msg.includes('无法启动') ? '无法启动 Codex，请检查 Codex 是否已安装'
+          : msg.includes('已退出') || msg.includes('已断开') ? 'Codex 服务已退出或连接断开'
+          : 'Codex 账号状态读取失败';
+        return { status: 'unknown', source: null, message };
+      }
+    },
     async createSession({ cwd }) {
       const dir = await projectPath(cwd); await start();
       const result = await request('thread/start', { cwd: dir, sandbox: 'workspace-write', approvalPolicy: 'on-request' });

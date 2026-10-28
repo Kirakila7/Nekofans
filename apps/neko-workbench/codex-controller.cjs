@@ -4,10 +4,12 @@ const path = require('node:path');
 const { createCodexAdapter } = require('./codex-adapter.cjs');
 
 // The resolver runs in the DSH host and returns its authoritative registry path.
-function createCodexController({ resolveWorkspace, publish = () => {}, adapterFactory = createCodexAdapter }) {
+function createCodexController({ resolveWorkspace, publish = () => {}, publishAccount = () => {}, adapterFactory = createCodexAdapter }) {
   let current = null, activeTurn = null, sending = false, starting = false, disposed = false;
+  let accountReadSequence = 0;
   const sessions = new Map(), approvals = new Map(), settled = new Set();
   const adapter = adapterFactory({ onEvent(event) {
+    if (event.type === 'account-changed') { void refreshAccount(); return; }
     if (event.type === 'error' && !event.threadId) {
       current = null; activeTurn = null; sending = false; sessions.clear(); approvals.clear();
       publish(event); return;
@@ -21,12 +23,30 @@ function createCodexController({ resolveWorkspace, publish = () => {}, adapterFa
     if (event.type === 'approval-request') approvals.set(event.requestId, { threadId: event.threadId, turnId: event.turnId });
     publish({ ...event, workspaceId: current.workspaceId });
   } });
+  async function refreshAccount() {
+    const sequence = ++accountReadSequence;
+    let result;
+    try {
+      const raw = await adapter.readAccount();
+      if (raw?.status === 'signed-in' && raw.source === 'chatgpt') result = { status: 'signed-in', source: 'chatgpt' };
+      else if (raw?.status === 'signed-out') result = { status: 'signed-out', source: null };
+      else if (raw?.status === 'unsupported') result = { status: 'unsupported', source: null, message: '当前 Codex 使用其他认证方式' };
+      else {
+        const safeMessages = new Set(['Codex 账号状态返回异常', '无法确定 Codex 登录状态', '无法识别 Codex 认证方式', 'Codex 账号状态读取超时', '无法启动 Codex，请检查 Codex 是否已安装', 'Codex 服务已退出或连接断开', 'Codex 账号状态读取失败']);
+        result = { status: 'unknown', source: null, message: safeMessages.has(raw?.message) ? raw.message : 'Codex 账号状态读取失败' };
+      }
+    }
+    catch { result = { status: 'unknown', source: null, message: 'Codex 账号状态读取失败' }; }
+    if (!disposed && sequence === accountReadSequence) publishAccount(result);
+    return result;
+  }
   async function realDir(value) {
     if (typeof value !== 'string' || !path.isAbsolute(value) || value.includes('\0')) throw new Error('请选择有效的工作区');
     try { const dir = await fs.realpath(value); if (!(await fs.stat(dir)).isDirectory()) throw new Error(); return dir; }
     catch { throw new Error('工作区目录不存在或无法访问'); }
   }
   return {
+    accountStatus: refreshAccount,
     // Authoritative in the main process, including start/send race windows.
     isBusy() { return Boolean(starting || sending || activeTurn || approvals.size); },
     async start({ workspaceId, path: proposedPath } = {}) {

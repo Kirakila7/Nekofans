@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld('nekoWorkbench',Object.freeze({
     send:options=>ipcRenderer.invoke('workbench:codex','send',options),
     cancel:()=>ipcRenderer.invoke('workbench:codex','cancel'),
     approval:options=>ipcRenderer.invoke('workbench:codex','approval',options),
+    accountStatus:()=>ipcRenderer.invoke('workbench:codex','account-status'),
+    onAccountStatus:callback=>{if(typeof callback!=='function')throw new TypeError('callback must be a function');const listener=(_event,value)=>callback(value);ipcRenderer.on('workbench:codex-account',listener);return()=>ipcRenderer.removeListener('workbench:codex-account',listener);},
     onEvent:callback=>{if(typeof callback!=='function')throw new TypeError('callback must be a function');const listener=(_event,value)=>callback(value);ipcRenderer.on('workbench:codex-event',listener);return()=>ipcRenderer.removeListener('workbench:codex-event',listener);}
   }),
   community:request=>ipcRenderer.invoke('workbench:community',request),

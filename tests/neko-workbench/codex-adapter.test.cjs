@@ -21,7 +21,7 @@ test('finds Codex in the user installation for GUI launches and falls back to PA
   assert(!accessed.some(candidate => candidate.includes('auth') || candidate.includes('credential')));
 });
 
-function fakeServer({ resumeCwd = '/private/tmp', failTurn = false } = {}) {
+function fakeServer({ resumeCwd = '/private/tmp', failTurn = false, accountResult = { account: null, requiresOpenaiAuth: true } } = {}) {
   const child = new EventEmitter(); child.stdout = new PassThrough(); child.stderr = new PassThrough();
   child.stdin = new PassThrough(); child.kill = () => { child.emit('close', 0); return true; };
   const requests = [], responses = [];
@@ -40,12 +40,44 @@ function fakeServer({ resumeCwd = '/private/tmp', failTurn = false } = {}) {
       if (msg.method === 'thread/read') result = { thread: { cwd: resumeCwd } };
       if (msg.method === 'thread/resume') result = { thread: { id: msg.params.threadId } };
       if (msg.method === 'turn/start') result = { turn: { id: 'test-turn' } };
+      if (msg.method === 'account/read') result = accountResult;
       if (msg.method === 'turn/start' && failTurn) child.notify({ id: msg.id, error: { message: 'login required' } });
       else child.notify({ id: msg.id, result });
     }
   });
   return { child, requests, responses };
 }
+
+test('projects real account responses without leaking account data', async () => {
+  for (const [input, expected] of [
+    [{ account: { type: 'chatgpt', email: 'private@example.test', token: 'secret', planType: 'plus' }, requiresOpenaiAuth: true }, { status: 'signed-in', source: 'chatgpt' }],
+    [{ account: null, requiresOpenaiAuth: true }, { status: 'signed-out', source: null }],
+    [{ account: { type: 'apiKey', token: 'secret' }, requiresOpenaiAuth: true }, { status: 'unsupported', source: null, message: '当前 Codex 使用其他认证方式' }],
+    [{ account: { type: 'amazonBedrock' }, requiresOpenaiAuth: false }, { status: 'unsupported', source: null, message: '当前 Codex 使用其他认证方式' }],
+    [{ account: null, requiresOpenaiAuth: false }, { status: 'unknown', source: null, message: '无法确定 Codex 登录状态' }],
+    [{ account: { type: 'other' }, requiresOpenaiAuth: false }, { status: 'unknown', source: null, message: '无法识别 Codex 认证方式' }],
+  ]) {
+    const server = fakeServer({ accountResult: input }); const events = [];
+    const adapter = createCodexAdapter({ spawnProcess: () => server.child, onEvent: event => events.push(event) });
+    assert.deepEqual(await adapter.readAccount(), expected);
+    assert.deepEqual(server.requests.find(req => req.method === 'account/read').params, { refreshToken: false });
+    server.child.notify({ method: 'account/updated', params: { authMode: 'chatgpt', email: 'private@example.test', token: 'secret' } });
+    assert.deepEqual(events.at(-1), { type: 'account-changed' });
+    assert(!JSON.stringify(events).includes('secret'));
+    adapter.dispose();
+  }
+});
+
+test('account refresh retries after an app-server exits', async () => {
+  const first = fakeServer(), second = fakeServer({ accountResult: { account: { type: 'chatgpt' }, requiresOpenaiAuth: true } });
+  let calls = 0;
+  const adapter = createCodexAdapter({ spawnProcess: () => (++calls === 1 ? first.child : second.child) });
+  assert.equal((await adapter.readAccount()).status, 'signed-out');
+  first.child.emit('close', 0);
+  assert.deepEqual(await adapter.readAccount(), { status: 'signed-in', source: 'chatgpt' });
+  assert.equal(calls, 2);
+  adapter.dispose();
+});
 
 test('real protocol routing, streaming, cancellation and explicit approval', async () => {
   const server = fakeServer(); const events = [];

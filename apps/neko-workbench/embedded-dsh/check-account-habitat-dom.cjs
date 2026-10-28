@@ -39,6 +39,11 @@ async function run() {
   const nativeAccount = document.querySelector('#native-account');
   const originalButtons = [nativeSettings, nativeFeedback, nativeAccount];
   let signedIn = false, reads = 0, nativeClicks = 0;
+  let codexListener, codexUnsubscribed = false;
+  window.nekoWorkbench = { codex: {
+    onAccountStatus(listener) { codexListener = listener; return () => { codexUnsubscribed = true; }; },
+    accountStatus: async () => ({ status: 'unknown', source: null }),
+  } };
   nativeAccount.addEventListener('click', () => nativeClicks++);
   const ctx = {
     locale: { getSnapshot: () => ({ active: 'zh-CN' }) },
@@ -62,12 +67,16 @@ async function run() {
   assert.equal(card.querySelector('.neh-service-summary strong').textContent, '账号');
   assert.equal(card.querySelector('.neh-service-summary span').textContent, '工作台账号');
   assert.equal(card.querySelector('.neh-wallet').textContent, '暂不可读取');
-  assert.equal(card.querySelector('.neh-empty-world').textContent, '未登录');
+  assert.equal(card.querySelectorAll('[data-neko-account-pet]').length, 0, 'unknown account state is not represented as a signed-in character');
   assert.match(card.querySelector('.neh-menu-help').textContent, /下方登录按钮/);
   assert.equal(reads, 0, 'signed-out account never requests a balance');
   assert.deepEqual([...menu.querySelectorAll('button[role="menuitem"]')], originalButtons);
   nativeAccount.click(); assert.equal(nativeClicks, 1, 'native login handler is preserved');
   assert.equal(trigger.querySelector('.neh-launcher').outerHTML, beforeOpening, 'expanding the menu keeps the launcher unchanged');
+  codexListener({ status: 'signed-in', source: 'chatgpt' });
+  assert.equal(menu.querySelectorAll('[data-neko-account-pet="chatgpt"]').length, 1, 'ChatGPT sign-in shows the developer character');
+  assert.equal(menu.querySelectorAll('[data-neko-account-pet="dsh"]').length, 0, 'ChatGPT sign-in does not imply DSH login');
+  assert.equal(menu.querySelector('.neh-wallet').textContent, '暂不可读取', 'ChatGPT login does not fake the DSH wallet balance');
 
   const login = document.createElement('div');
   login.setAttribute('role', 'dialog');
@@ -88,16 +97,23 @@ async function run() {
   assert.equal(signedInCard.querySelector('.neh-wallet').textContent, 'CNY 余额 ¥8.80');
   assert.equal(signedInCard.querySelector('.neh-source').textContent, '官方充值钱包');
   assert.ok(signedInCard.querySelector('.neh-pet-poster'), 'real habitat slot remains available in reduced-motion mode');
+  assert.equal(signedInCard.querySelectorAll('[data-neko-account-pet="dsh"]').length, 1);
+  assert.equal(signedInCard.querySelectorAll('[data-neko-account-pet="chatgpt"]').length, 1, 'both real accounts can appear together');
+  assert.equal(signedInCard.querySelector('.neh-pets').children.length, 2, 'characters use separate slots');
   assert.match(signedInCard.querySelector('.neh-menu-help').textContent, /设置中管理/);
   assert.deepEqual([...menu.querySelectorAll('button[role="menuitem"]')], originalButtons);
   nativeAccount.click(); assert.equal(nativeClicks, 2, 'native sign-out handler is preserved');
   assert.equal(reads, 1, 'one read from the fixture projection supplies its displayed balance');
+  codexListener({ status: 'unsupported', source: null });
+  assert.equal(menu.querySelectorAll('[data-neko-account-pet="chatgpt"]').length, 0, 'API-key or unsupported auth is not presented as ChatGPT login');
+  assert.equal(menu.querySelectorAll('[data-neko-account-pet="dsh"]').length, 1, 'Codex account changes do not alter DSH state');
 
   nativeAccount.querySelector('span').textContent = '其他操作';
   await flush();
   assert.equal(menu.querySelector('.neh-menu-card'), null, 'an unrelated menu is left untouched');
   assert.deepEqual([...menu.querySelectorAll('button[role="menuitem"]')], originalButtons);
   stop();
+  assert.equal(codexUnsubscribed, true, 'Codex account subscription is released on unload');
   assert.match(login.querySelector('p').textContent, /DeepSeek/, 'disposing restores the native dialog text');
   assert.equal(trigger.getAttribute('aria-label'), '原生账号');
   assert.equal(trigger.querySelector('.neh-launcher'), null);

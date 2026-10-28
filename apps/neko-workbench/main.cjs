@@ -71,7 +71,8 @@ function assertWorkbenchCaller(event){if(!dshWindow||dshWindow.isDestroyed()||ev
 function rolesState(){return {...workbenchRoles.get(),workspaceSessionId:state.dshRoot?.sessionId??null};}
 const codexController=createCodexController({
   resolveWorkspace:workspaceId=>rpc('codex-workspace',{workspaceId}),
-  publish:event=>{if(dshWindow&&!dshWindow.isDestroyed()&&isWorkbenchOrigin(dshWindow.webContents.getURL()))dshWindow.webContents.send('workbench:codex-event',event);}
+  publish:event=>{if(dshWindow&&!dshWindow.isDestroyed()&&isWorkbenchOrigin(dshWindow.webContents.getURL()))dshWindow.webContents.send('workbench:codex-event',event);},
+  publishAccount:status=>{if(dshWindow&&!dshWindow.isDestroyed()&&isWorkbenchOrigin(dshWindow.webContents.getURL()))dshWindow.webContents.send('workbench:codex-account',status);}
 });
 function publishRoles(){if(dshWindow&&!dshWindow.isDestroyed()&&isWorkbenchOrigin(dshWindow.webContents.getURL()))dshWindow.webContents.send('workbench:roles-state',rolesState());}
 async function chooseAvatar(title='上传工作台头像'){
@@ -565,6 +566,7 @@ ipcMain.handle('workbench:codex',async(event,method,p={})=>{
   if(method==='send')return codexController.send(p);
   if(method==='cancel')return codexController.cancel();
   if(method==='approval')return codexController.approval(p);
+  if(method==='account-status')return codexController.accountStatus();
   throw new Error('未知 Codex 操作');
 });
 ipcMain.handle('workbench:roles',async(event,method,p={})=>{

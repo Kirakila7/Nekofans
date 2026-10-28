@@ -149,6 +149,9 @@ function installNekoAccountHabitat(ctx, options) {
   doc.head.appendChild(style);
   let stopped = false, scheduled = false, launcher = null, menuRecord = null, nativeSignedIn = null;
   let reduced = false, lastAnnouncement = '';
+  // This is a projection of the host's own Codex authentication status.
+  // Unknown, unsupported and API-key modes are not ChatGPT sign-in.
+  let codexSignedIn = false, codexRevision = 0;
   const releases = [];
   const motion = typeof win.matchMedia === 'function' ? win.matchMedia('(prefers-reduced-motion: reduce)') : null;
   reduced = !!(motion && motion.matches);
@@ -192,7 +195,8 @@ function installNekoAccountHabitat(ctx, options) {
     root.replaceChildren();
   }
   function addPet(world) {
-    const pet = element('span', 'neh-pet');
+    const pet = element('span', 'neh-pet neh-pet--dsh');
+    pet.setAttribute('data-neko-account-pet', 'dsh');
     pet.setAttribute('aria-hidden', 'true');
     if (reduced || !videoSrc || doc.visibilityState === 'hidden') {
       if (posterSrc) {
@@ -213,6 +217,15 @@ function installNekoAccountHabitat(ctx, options) {
     }
     world.appendChild(pet);
   }
+  function addCodexPet(world) {
+    if (!developerSrc) return;
+    const pet = element('span', 'neh-pet neh-pet--codex');
+    pet.setAttribute('data-neko-account-pet', 'chatgpt');
+    pet.setAttribute('aria-hidden', 'true');
+    const image = element('img', 'neh-pet-poster');
+    image.src = developerSrc; image.alt = ''; image.draggable = false;
+    pet.appendChild(image); world.appendChild(pet);
+  }
   function balanceLabel(snap) {
     return nekoAccountBalanceLabel(snap);
   }
@@ -224,8 +237,10 @@ function installNekoAccountHabitat(ctx, options) {
     const world = element('span', 'neh-world');
     world.setAttribute('aria-hidden', 'true');
     world.appendChild(element('span', 'neh-ground'));
-    if (effectiveSignedIn(snap)) addPet(world);
-    else world.appendChild(element('span', 'neh-empty-world', '未登录'));
+    const pets = element('span', 'neh-pets');
+    if (effectiveSignedIn(snap)) addPet(pets);
+    if (codexSignedIn) addCodexPet(pets);
+    world.appendChild(pets);
     column.append(overhead, world);
     if (inMenu) column.classList.add('neh-habitat-column--menu');
     return column;
@@ -256,7 +271,7 @@ function installNekoAccountHabitat(ctx, options) {
   }
   function renderLauncher(snap) {
     if (!launcher) return;
-    const key = JSON.stringify([snap, nativeSignedIn, reduced, doc.visibilityState, launcher.element.getAttribute('data-collapsed')]);
+    const key = JSON.stringify([snap, nativeSignedIn, codexSignedIn, reduced, doc.visibilityState, launcher.element.getAttribute('data-collapsed')]);
     if (launcher.renderKey === key) return;
     launcher.renderKey = key;
     clearOwned(launcher.owned);
@@ -267,12 +282,12 @@ function installNekoAccountHabitat(ctx, options) {
     if (developerSrc) avatar.src = developerSrc;
     identity.appendChild(avatar);
     launcher.owned.append(identity, habitat(snap, false));
-    rememberSet(launcher, 'aria-label', '开发喵账号菜单，' + (effectiveSignedIn(snap) ? '已登录，' : '未登录，') + balanceLabel(snap) + '，来源：' + snap.source);
+    rememberSet(launcher, 'aria-label', '开发喵账号菜单，工作台账号' + (effectiveSignedIn(snap) ? '已登录' : '未登录') + '，ChatGPT ' + (codexSignedIn ? '已登录' : '未确认登录') + '，' + balanceLabel(snap) + '，来源：' + snap.source);
     rememberSet(launcher, 'title', '开发喵 · 账号菜单');
   }
   function renderMenu(snap) {
     if (!menuRecord) return;
-    const key = JSON.stringify([snap, nativeSignedIn, reduced, doc.visibilityState]);
+    const key = JSON.stringify([snap, nativeSignedIn, codexSignedIn, reduced, doc.visibilityState]);
     if (menuRecord.renderKey === key) return;
     menuRecord.renderKey = key;
     clearOwned(menuRecord.owned);
@@ -375,6 +390,20 @@ function installNekoAccountHabitat(ctx, options) {
     reader.invalidate(null); // Synchronous clearing; old in-flight requests cannot commit.
     schedule();
     if (nativeSignedIn === true) reader.refresh();
+  }
+  function acceptCodexStatus(value) {
+    if (stopped) return;
+    codexRevision++;
+    const next = !!value && value.status === 'signed-in' && value.source === 'chatgpt';
+    if (next !== codexSignedIn) { codexSignedIn = next; render(); }
+  }
+  const codex = win.nekoWorkbench && win.nekoWorkbench.codex;
+  if (codex && typeof codex.onAccountStatus === 'function') {
+    try { const off = codex.onAccountStatus(acceptCodexStatus); if (typeof off === 'function') releases.push(off); } catch (_) {}
+  }
+  if (codex && typeof codex.accountStatus === 'function') {
+    const revision = codexRevision;
+    try { Promise.resolve(codex.accountStatus()).then(value => { if (!stopped && codexRevision === revision) acceptCodexStatus(value); }, () => {}); } catch (_) {}
   }
   const unsubscribe = reader.subscribe(render);
   const observer = new win.MutationObserver(schedule);
