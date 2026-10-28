@@ -181,13 +181,23 @@ function installUnifiedLayout(options = {}) {
     } else if (lastRects[slot] !== key) void Promise.resolve(bridge.community({ action: 'layout', slot, bounds: targetBounds })).catch(() => {});
     lastRects[slot] = key;
   }
+  const overlaySelector = '[role="dialog"], [role="menu"], [data-neko-account-habitat-menu]';
+  const accountSelector = '[data-slot="settings.launcher"] [aria-expanded]';
+  function effectivelyVisible(node) {
+    if (!node?.isConnected) return false;
+    for (let current = node; current && current.nodeType === 1; current = current.parentElement) {
+      const style = win.getComputedStyle(current);
+      if (current.hidden || style.display === 'none' || ['hidden', 'collapse'].includes(style.visibility)) return false;
+    }
+    return true;
+  }
   function hasOverlay() {
-    const account = doc.querySelector('[data-slot="settings.launcher"] [aria-expanded="true"]');
-    if (account) return true;
-    for (const node of doc.querySelectorAll('[role="dialog"], [role="menu"], [data-neko-account-habitat-menu]')) {
-      if (node === config || config.contains(node) || node.hidden || !node.isConnected) continue;
-      const style = win.getComputedStyle(node);
-      if (style.display !== 'none' && style.visibility !== 'hidden') return true;
+    for (const account of doc.querySelectorAll(accountSelector)) {
+      if (account.getAttribute('aria-expanded') === 'true' && effectivelyVisible(account)) return true;
+    }
+    for (const node of doc.querySelectorAll(overlaySelector)) {
+      if (node === config || config.contains(node)) continue;
+      if (effectivelyVisible(node)) return true;
     }
     return false;
   }
@@ -248,14 +258,29 @@ function installUnifiedLayout(options = {}) {
   contents.addEventListener('dragstart', startContentDrag); contents.addEventListener('dragend', endContentDrag);
   const resize = win.ResizeObserver ? new win.ResizeObserver(schedule) : null;
   function observe() { const geo = findGeometry(); if (geo && geo.frameNode !== observe.frame) { resize?.disconnect(); resize?.observe(geo.frameNode); resize?.observe(doc.querySelector('[data-slot="sidebar"]')); observe.frame = geo.frameNode; } }
+  // Watch attributes only on actual overlay/account ancestors, avoiding global
+  // class/style observation for DSH's frequent streaming updates. A separate
+  // child-list observer refreshes this set if React mounts or replaces menus.
+  let watchedOverlayNodes = new Set();
+  const overlayObserver = new win.MutationObserver(schedule);
+  function watchOverlayAncestors() {
+    const next = new Set();
+    for (const item of doc.querySelectorAll(overlaySelector + ', ' + accountSelector)) {
+      if (item === config || config.contains(item)) continue;
+      for (let node = item; node && node.nodeType === 1; node = node.parentElement) next.add(node);
+    }
+    if (next.size === watchedOverlayNodes.size && [...next].every(node => watchedOverlayNodes.has(node))) return;
+    overlayObserver.disconnect(); watchedOverlayNodes = next;
+    for (const node of next) overlayObserver.observe(node, { attributes:true, attributeFilter:['hidden','aria-expanded','data-state','style','class'] });
+  }
   const observer = new win.MutationObserver(records => {
-    const relevant = records.some(record => record.type === 'childList' ||
-      (record.target instanceof win.Element && !record.target.closest('[data-neko-unified-config]') &&
-       record.target.closest('[data-slot="settings.launcher"], [role="dialog"], [role="menu"], [data-neko-account-habitat-menu]')));
+    const relevant = records.some(record => record.type === 'childList' || record.attributeName === 'role' || record.attributeName === 'data-neko-account-habitat-menu' ||
+      (record.target instanceof win.Element && record.target.closest('[data-slot="settings.launcher"]')));
     if (!relevant || scheduled) return;
-    scheduled = true; Promise.resolve().then(() => { scheduled = false; if (!disposed) { observe(); schedule(); } });
+    scheduled = true; Promise.resolve().then(() => { scheduled = false; if (!disposed) { watchOverlayAncestors(); observe(); schedule(); } });
   });
-  observer.observe(doc.body, { childList:true, subtree:true, attributes:true, attributeFilter:['hidden','aria-expanded','data-state'] });
+  observer.observe(doc.body, { childList:true, subtree:true, attributes:true, attributeFilter:['aria-expanded','role','data-neko-account-habitat-menu'] });
+  watchOverlayAncestors();
   win.addEventListener('resize', schedule); doc.addEventListener('scroll', schedule, true);
   function visibilityChanged() { if (doc.visibilityState === 'hidden') hideAll(); else schedule(); }
   doc.addEventListener('visibilitychange', visibilityChanged); win.addEventListener('focus', visibilityChanged);
@@ -300,7 +325,7 @@ function installUnifiedLayout(options = {}) {
   renderConfig();
   return () => {
     disposed = true; revision++; hideAll(); clearCoding(); doc.body.removeAttribute('data-neko-unified-enabled');
-    observer.disconnect(); resize?.disconnect(); win.removeEventListener('resize', schedule); doc.removeEventListener('scroll', schedule, true); doc.removeEventListener('click', shortcut, true);
+    observer.disconnect(); overlayObserver.disconnect(); resize?.disconnect(); win.removeEventListener('resize', schedule); doc.removeEventListener('scroll', schedule, true); doc.removeEventListener('click', shortcut, true);
     doc.removeEventListener('visibilitychange', visibilityChanged); win.removeEventListener('focus', visibilityChanged); if (recoveryTimer) win.clearTimeout(recoveryTimer);
     if (frame) (win.cancelAnimationFrame || win.clearTimeout)(frame); if (typeof unsubscribe === 'function') unsubscribe();
     trigger.remove(); config.remove(); mobile.remove(); divider.remove(); for (const p of Object.values(panels)) p.node.remove(); for (const zone of Object.values(drops)) zone.remove(); style.remove();
