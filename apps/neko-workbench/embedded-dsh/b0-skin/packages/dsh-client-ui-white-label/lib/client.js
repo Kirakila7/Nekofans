@@ -3368,8 +3368,146 @@ function installAvatarTheme(options) { return NekoAvatarTheme.install(options) }
       return null
     }
 
+    // Codex uses the DSH workspace registry and current DSH selection; its
+    // conversations remain separate from DSH sessions and model accounts.
+    function readSharedWorkspace(ctx) {
+      const workspaces = ctx?.get?.('workspaces') || ctx?.uiWorkspace?.workspaces
+      const list = workspaces?.list?.getSnapshot?.()
+      const current = ctx?.uiWorkspace?.selection?.getSnapshot?.()
+      if (!list || list.phase !== 'ready' || !Array.isArray(list.items)) return { phase: 'loading', project: null }
+      const project = list.items.find((item) => Array.isArray(item.sessionIds) && item.sessionIds.includes(current?.sessionId))
+      if (!project || typeof project.workspaceId !== 'string' || typeof project.path !== 'string' || !(/^(?:\/|[A-Za-z]:[\\/]|\\\\)/.test(project.path))) return { phase: 'missing', project: null }
+      return { phase: 'ready', project: { workspaceId: project.workspaceId, path: project.path, title: project.title || project.path.split('/').filter(Boolean).pop() || '工作区' } }
+    }
+
+    function CodexWorkbench({ ctx }) {
+      const [mode, setMode] = useState('dsh')
+      const [workspace, setWorkspace] = useState(() => readSharedWorkspace(ctx))
+      const [connected, setConnected] = useState(null)
+      const [messages, setMessages] = useState([])
+      const [draft, setDraft] = useState('')
+      const [busy, setBusy] = useState(false)
+      const [starting, setStarting] = useState(false)
+      const [approval, setApproval] = useState(null)
+      const [error, setError] = useState('')
+      const [bounds, setBounds] = useState(null)
+      const activeThread = useRef(null)
+      const histories = useRef(new Map())
+      const lock = useRef(false)
+      const api = window.nekoWorkbench?.codex
+      const ready = api && ['start', 'send', 'cancel', 'approval', 'onEvent'].every((name) => typeof api[name] === 'function')
+      const project = workspace.project
+      const matching = connected && project && connected.workspaceId === project.workspaceId && connected.path === project.path
+
+      useEffect(() => {
+        const list = (ctx?.get?.('workspaces') || ctx?.uiWorkspace?.workspaces)?.list
+        const selection = ctx?.uiWorkspace?.selection
+        const update = () => setWorkspace(readSharedWorkspace(ctx))
+        const a = list?.subscribe?.(update), b = selection?.subscribe?.(update)
+        update()
+        return () => { if (typeof a === 'function') a(); if (typeof b === 'function') b() }
+      }, [ctx])
+      useEffect(() => {
+        const position = () => {
+          const root = locateSidebar(null)?.root
+          const rect = root?.getBoundingClientRect()
+          if (!rect) { setBounds(null); return }
+          const next = communityPaneBounds(rect, { width: window.innerWidth, height: window.innerHeight }, document.querySelector('.neko-strip')?.getBoundingClientRect())
+          setBounds((old) => JSON.stringify(old) === JSON.stringify(next) ? old : next)
+        }
+        position()
+        const observer = new MutationObserver(position)
+        observer.observe(document.body, { childList: true, subtree: true })
+        window.addEventListener('resize', position)
+        return () => { observer.disconnect(); window.removeEventListener('resize', position) }
+      }, [])
+      useEffect(() => { if (activeThread.current) histories.current.set(activeThread.current, messages) }, [messages])
+      useEffect(() => {
+        if (!ready) return undefined
+        const off = api.onEvent((event) => {
+          if (!event || typeof event !== 'object') return
+          if (event.type === 'error' && !event.threadId) { activeThread.current = null; lock.current = false; setConnected(null); setBusy(false); setApproval(null); setError(event.message || 'Codex 服务已断开'); return }
+          if (!activeThread.current || event.threadId !== activeThread.current) return
+          if (event.type === 'delta' && typeof event.delta === 'string') {
+            const id = String(event.itemId || event.turnId || 'reply')
+            setMessages((old) => {
+              const index = old.findIndex((item) => item.id === id && item.role === 'assistant')
+              if (index < 0) return [...old, { id, role: 'assistant', text: event.delta }]
+              const copy = [...old]; copy[index] = { ...copy[index], text: copy[index].text + event.delta }; return copy
+            })
+          } else if (event.type === 'turn-started') setBusy(true)
+          else if (event.type === 'turn-completed') {
+            setBusy(false); lock.current = false; setApproval(null)
+            if (event.error) setError(typeof event.error === 'string' ? event.error : event.error.message || 'Codex 任务失败')
+            else if (event.status === 'interrupted') setError('Codex 任务已中断')
+            else if (event.status !== 'completed') setError(`Codex 任务未完成${event.status ? `（${event.status}）` : ''}`)
+          }
+          else if (event.type === 'approval-request') setApproval(event)
+          else if (event.type === 'error') { setError(event.message || 'Codex 发生错误'); setBusy(false); lock.current = false }
+        })
+        return () => { if (typeof off === 'function') off() }
+      }, [api, ready])
+      const connect = async () => {
+        if (!ready || !project || starting || busy) return
+        setStarting(true); setError('')
+        try {
+          const result = await api.start({ workspaceId: project.workspaceId, path: project.path })
+          if (!result || typeof result.threadId !== 'string' || !result.threadId) throw new Error('Codex 未返回有效会话')
+          activeThread.current = result.threadId; setConnected({ ...project, threadId: result.threadId }); setMessages(histories.current.get(result.threadId) || []); setApproval(null)
+        } catch (e) { activeThread.current = null; setConnected(null); setError(e?.message || '无法启动 Codex') }
+        finally { setStarting(false) }
+      }
+      const send = async () => {
+        const text = draft.trim()
+        if (!ready || !matching || !text || busy || lock.current || approval) return
+        lock.current = true; setBusy(true); setError(''); setDraft('')
+        setMessages((old) => [...old, { id: `user-${Date.now()}-${old.length}`, role: 'user', text }])
+        try { await api.send({ text }) } catch (e) { setBusy(false); lock.current = false; setError(e?.message || '发送失败') }
+      }
+      const decide = async (decision) => {
+        if (!approval) return
+        try { await api.approval({ requestId: approval.requestId, decision }); setApproval(null) }
+        catch (e) { setError(e?.message || '审批未提交') }
+      }
+      const switchMode = (next) => { if (next === 'codex') currentCommunityPane?.hide(); setMode(next) }
+      if (!bounds || !ReactDOM?.createPortal) return null
+      const style = { left: `${bounds.x}px`, top: `${bounds.y}px`, width: `${bounds.width}px`, height: `${bounds.height}px` }
+      const chooser = h('div', { className: 'neko-codex-switch', role: 'group', 'aria-label': '选择工作助手' },
+        h('button', { type: 'button', title: 'DSH', 'aria-label': '切换到 DSH', 'aria-pressed': mode === 'dsh', onClick: () => switchMode('dsh') }, h(AvatarImg, { src: builtinSrc(LIVE_ROLE), size: 28 })),
+        h('button', { type: 'button', title: 'Codex', 'aria-label': '切换到 Codex', 'aria-pressed': mode === 'codex', onClick: () => switchMode('codex') }, h('span', { className: 'neko-codex-avatar', 'aria-hidden': true }, 'C')))
+      const view = mode !== 'codex' ? null : h('section', { className: 'neko-codex-view', style, 'aria-label': 'Codex 工作区' },
+        h('header', { className: 'neko-codex-header' }, h('strong', null, 'Codex'),
+          h('span', { className: 'neko-codex-project', title: project?.path || '' }, project ? `工作区：${project.title}` : workspace.phase === 'loading' ? '正在读取工作区…' : '请从左侧选择工作区'),
+          h('button', { type: 'button', onClick: () => switchMode('dsh') }, '返回 DSH')),
+        h('div', { className: 'neko-codex-thread', 'aria-live': 'polite' },
+          !ready ? h('p', { role: 'status' }, 'Codex 连接尚未就绪，请重新打开工作台。') : null,
+          connected && !matching ? h('p', { role: 'status' }, `工作区已切换；当前 Codex 会话属于 ${connected.title}。${busy ? '请等待任务结束或停止后再连接新工作区。' : '请连接当前工作区。'}`) : null,
+          ...messages.map((item) => h('div', { key: `${item.role}-${item.id}`, className: `neko-codex-message neko-codex-message--${item.role}` }, h('strong', null, item.role === 'user' ? '你' : 'Codex'), h('p', null, item.text))),
+          busy ? h('p', { role: 'status' }, approval ? '等待你的确认' : 'Codex 正在处理…') : null,
+          error ? h('p', { role: 'alert', className: 'neko-codex-error' }, error) : null,
+          approval ? h('div', { className: 'neko-codex-approval', role: 'group', 'aria-label': 'Codex 操作确认' },
+            h('strong', null, 'Codex 请求操作'), h('p', null, [approval.kind, approval.command, approval.cwd, approval.reason, approval.grantRoot].filter(Boolean).join('\n')),
+            h('button', { type: 'button', onClick: () => decide('accept') }, '允许'), h('button', { type: 'button', onClick: () => decide('decline') }, '拒绝')) : null),
+        h('div', { className: 'neko-codex-compose' },
+          !matching ? h('button', { type: 'button', disabled: !ready || !project || starting || busy, onClick: connect }, starting ? '正在连接…' : '连接当前工作区') : null,
+          h('textarea', { value: draft, disabled: !matching || starting || !!approval, placeholder: matching ? '告诉 Codex 你想完成什么…' : '连接当前工作区后开始', onChange: (e) => setDraft(e.target.value), onKeyDown: (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent?.isComposing) { e.preventDefault(); send() } } }),
+          busy ? h('button', { type: 'button', onClick: () => api.cancel().catch((e) => setError(e?.message || '无法停止任务')) }, '停止') : h('button', { type: 'button', disabled: !matching || !draft.trim() || starting, onClick: send }, '发送')))
+      return ReactDOM.createPortal(h(React.Fragment, null, view,
+        h('div', { className: 'neko-codex-switch-position', style: { left: `${bounds.x + 20}px`, top: `${bounds.y + bounds.height - 52}px` } }, chooser)), document.body)
+    }
+    function installCodexStyles() {
+      const element = document.createElement('style')
+      element.textContent = `
+.neko-codex-switch-position{position:fixed;z-index:55;pointer-events:none}.neko-codex-switch{display:flex;gap:5px;pointer-events:auto}.neko-codex-switch button{display:grid;place-items:center;width:34px;height:34px;padding:2px;border:1px solid #ccd9e6;border-radius:50%;background:#fff;cursor:pointer}.neko-codex-switch button[aria-pressed="true"]{outline:2px solid #7b9bd4;outline-offset:1px}.neko-codex-avatar{display:grid;place-items:center;width:27px;height:27px;border-radius:50%;background:#283a3b;color:white;font-size:15px;font-weight:700}
+.neko-codex-view{position:fixed;z-index:50;display:flex;flex-direction:column;background:var(--dsw-alias-bg-base,#edf3f8);color:var(--dsw-alias-label-primary,#17283a);font:14px system-ui,sans-serif}.neko-codex-header{display:flex;align-items:center;gap:12px;padding:18px 24px;border-bottom:1px solid #dbe4ec}.neko-codex-header button{margin-left:auto}.neko-codex-project{color:#607489;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.neko-codex-thread{flex:1;overflow:auto;padding:22px max(24px,calc((100% - 720px)/2));white-space:pre-wrap}.neko-codex-message{margin-bottom:18px}.neko-codex-message p{margin:5px 0;overflow-wrap:anywhere}.neko-codex-message--user{background:#fff;border-radius:14px;padding:12px}.neko-codex-error{color:#a63333}.neko-codex-approval{border:1px solid #e0be73;border-radius:12px;padding:12px;background:#fff9e9}.neko-codex-approval p{white-space:pre-wrap;overflow-wrap:anywhere}.neko-codex-compose{display:flex;align-items:end;gap:8px;margin:0 auto 22px;width:min(720px,calc(100% - 48px));padding-left:80px;box-sizing:border-box}.neko-codex-compose textarea{flex:1;min-width:0;min-height:56px;max-height:140px;resize:vertical;border:1px solid #b8ccdc;border-radius:14px;padding:12px;font:inherit}.neko-codex-view button{border:1px solid #b8ccdc;border-radius:9px;background:white;color:inherit;padding:8px 11px;cursor:pointer}.neko-codex-view button:disabled{opacity:.5;cursor:default}
+`
+      document.head.appendChild(element)
+      return () => element.remove()
+    }
+
     function apply(ctx) {
       ctx.effect(() => installStyles(), 'neko-brand: styles')
+      ctx.effect(() => installCodexStyles(), 'neko-brand: Codex styles')
       ctx.effect(() => installNekoAccountHabitat(ctx, {cssText: ACCOUNT_HABITAT_CSS, developerAvatarSrc: builtinSrc('devcat'), idleVideoSrc: ACCOUNT_PET_ART.video, idlePosterSrc: ACCOUNT_PET_ART.still, version: '0.2.1-rc.3'}), 'neko-brand: native account habitat')
       ctx.effect(() => installAvatarTheme(), 'neko-brand: avatar theme')
       ctx.effect(() => applyFavicon(), 'neko-brand: favicon')
@@ -3378,6 +3516,8 @@ function installAvatarTheme(options) { return NekoAvatarTheme.install(options) }
       ctx.effect(() => installRolesStore(ctx), 'neko-brand: roles bridge')
       ctx.effect(() => installCommunityPane(), 'neko-brand: community coding pane')
       ctx.effect(() => installCompactRunningStatus(), 'neko-brand: compact running status')
+
+      ctx.slots.inject('shell.overlay', () => ctx.slots.register({ name: 'shell.overlay', id: 'neko.codex-workbench' }, () => h(CodexWorkbench, { ctx })))
 
       // SlotCore chooses the lowest priority for the same list id. The
       // original welcome registration remains installed and is restored on
@@ -3408,10 +3548,11 @@ function installAvatarTheme(options) { return NekoAvatarTheme.install(options) }
       }
     }
 
+    exports.readSharedWorkspace = readSharedWorkspace
     exports.apply = apply
     exports.compactRunningStatus = compactRunningStatus
     exports.installCompactRunningStatus = installCompactRunningStatus
-    exports.inject = ['slots', 'uiWorkspace', 'remote', 'remote.account', 'locale']
+    exports.inject = ['slots', 'uiWorkspace', 'workspaces', 'remote', 'remote.account', 'locale']
     // Exposed for tests/tools only; not used by the loader.
     exports.PRODUCT_BRAND = PRODUCT_BRAND
     exports.AVATARS = AVATARS

@@ -22,6 +22,7 @@ const {NekoChat,localBase}=require('./neko-chat.cjs');
 const {skinPatch,applySkinCookie}=require('./embedded-dsh/dsh-skin-patch.cjs');
 const {createAppearanceStore}=require('./workbench-appearance.cjs');
 const {createRolesStore}=require('./workbench-roles.cjs');
+const {createCodexController}=require('./codex-controller.cjs');
 let dshSkin=null;
 const workbenchOnly=process.env.PET_WORKBENCH_ONLY==='1'; // Local visual QA only; normal launches show every pet.
 const {cleanPrompt,humanMessage,activity,acceptHuman}=require('./pet-context.js');
@@ -68,6 +69,10 @@ function assertLocalCaller(event,window){if(!trustedLocalCaller(event,window,loc
 function isWorkbenchOrigin(candidate){try{const target=new URL(candidate),launch=new URL(dshLaunchUrl);return launch.protocol==='http:'&&launch.hostname==='127.0.0.1'&&target.origin===launch.origin;}catch{return false;}}
 function assertWorkbenchCaller(event){if(!dshWindow||dshWindow.isDestroyed()||event.sender!==dshWindow.webContents||event.senderFrame!==event.sender.mainFrame||!isWorkbenchOrigin(event.senderFrame?.url))throw new Error('请从工作台操作');}
 function rolesState(){return {...workbenchRoles.get(),workspaceSessionId:state.dshRoot?.sessionId??null};}
+const codexController=createCodexController({
+  resolveWorkspace:workspaceId=>rpc('codex-workspace',{workspaceId}),
+  publish:event=>{if(dshWindow&&!dshWindow.isDestroyed()&&isWorkbenchOrigin(dshWindow.webContents.getURL()))dshWindow.webContents.send('workbench:codex-event',event);}
+});
 function publishRoles(){if(dshWindow&&!dshWindow.isDestroyed()&&isWorkbenchOrigin(dshWindow.webContents.getURL()))dshWindow.webContents.send('workbench:roles-state',rolesState());}
 async function chooseAvatar(title='上传工作台头像'){
   const result=await dialog.showOpenDialog(dshWindow,{title,buttonLabel:'使用这张图片',properties:['openFile'],filters:[{name:'头像图片',extensions:['png','jpg','jpeg','webp']}]});
@@ -554,6 +559,14 @@ ipcMain.handle('workbench:community',async(event,request)=>{
   assertWorkbenchCaller(event);
   return communityController.action(dshWindow,request);
 });
+ipcMain.handle('workbench:codex',async(event,method,p={})=>{
+  assertWorkbenchCaller(event);
+  if(method==='start')return codexController.start(p);
+  if(method==='send')return codexController.send(p);
+  if(method==='cancel')return codexController.cancel();
+  if(method==='approval')return codexController.approval(p);
+  throw new Error('未知 Codex 操作');
+});
 ipcMain.handle('workbench:roles',async(event,method,p={})=>{
   assertWorkbenchCaller(event);
   if(method==='state')return rolesState();
@@ -650,7 +663,7 @@ app.on('before-quit',event=>{
   if(shutdownComplete)return;
   event.preventDefault();
   if(shutdownStarted)return;
-  shutdownStarted=true;quitting=true;communityController.dispose();clearTimeout(nekoRetry);clearTimeout(rosterTimer);for(const timer of terminalTimers.values())clearTimeout(timer);terminalTimers.clear();nekoChat.close();save();
+  shutdownStarted=true;quitting=true;communityController.dispose();codexController.dispose();clearTimeout(nekoRetry);clearTimeout(rosterTimer);for(const timer of terminalTimers.values())clearTimeout(timer);terminalTimers.clear();nekoChat.close();save();
   const current=childLifecycle;
   Promise.allSettled([mainChatRuntime?.close(),current?.stop()]).finally(()=>{shutdownComplete=true;app.quit();});
 });

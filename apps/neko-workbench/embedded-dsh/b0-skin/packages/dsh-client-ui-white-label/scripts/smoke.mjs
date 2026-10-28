@@ -76,9 +76,16 @@ const exports = entry.factory((id) => {
 })
 assert.deepEqual(requested, ['react', 'react-dom'], 'only react and react-dom are required')
 assert.equal(typeof exports.apply, 'function')
-assert.deepEqual([...exports.inject], ['slots', 'uiWorkspace', 'remote', 'remote.account', 'locale'])
+assert.deepEqual([...exports.inject], ['slots', 'uiWorkspace', 'workspaces', 'remote', 'remote.account', 'locale'])
 assert.equal(exports.PRODUCT_BRAND.name, 'N.E.K.O. 工作台')
 assert.equal(exports.PRODUCT_BRAND.shortName, 'N.E.K.O.')
+
+const fakeCtx = { uiWorkspace: { selection: { getSnapshot: () => ({ sessionId: 's1' }) } }, get: () => ({ list: { getSnapshot: () => ({ phase: 'ready', items: [{ workspaceId: 'w1', title: 'Project', path: '/tmp/project', sessionIds: ['s1'] }] }) } }) }
+assert.equal(exports.readSharedWorkspace(fakeCtx).project.path, '/tmp/project')
+assert.equal(exports.readSharedWorkspace({}).phase, 'loading')
+fakeCtx.uiWorkspace.selection.getSnapshot = () => ({ sessionId: 'missing' })
+assert.equal(exports.readSharedWorkspace(fakeCtx).phase, 'missing')
+
 assert.ok(Object.isFrozen(exports.PRODUCT_BRAND))
 
 // --- avatars ----------------------------------------------------------------
@@ -141,21 +148,21 @@ const opened = []
 document.title = 'Fix the parser — DeepSeek Harness'
 const run = runApply()
 assert.deepEqual(run.registrations.map((r) => r.spec.name),
-  ['settings.onboarding', 'shell.overlay', 'sidebar.brand.mark', 'sidebar.brand.name', 'conversation.hero.brand.mark', 'shell.bottom'])
-assert.deepEqual(run.injected.slice(0, 3), ['settings.onboarding', 'sidebar.panellist', 'shell.overlay'], 'role adapter nested in the sidebar declaration')
-assert.deepEqual({ ...run.registrations[0].spec }, { name: 'settings.onboarding', id: 'welcome-notice', order: -100, priority: -1 })
-assert.equal(run.registrations[1].spec.id, 'neko.role-sidebar-adapter')
-assert.equal(run.registrations[5].spec.order, 100)
+  ['shell.overlay', 'settings.onboarding', 'shell.overlay', 'sidebar.brand.mark', 'sidebar.brand.name', 'conversation.hero.brand.mark', 'shell.bottom'])
+assert.deepEqual(run.injected.slice(0, 4), ['shell.overlay', 'settings.onboarding', 'sidebar.panellist', 'shell.overlay'], 'role adapter nested in the sidebar declaration')
+assert.deepEqual({ ...run.registrations[1].spec }, { name: 'settings.onboarding', id: 'welcome-notice', order: -100, priority: -1 })
+assert.equal(run.registrations[2].spec.id, 'neko.role-sidebar-adapter')
+assert.equal(run.registrations[6].spec.order, 100)
 assert.ok(!run.registrations.some((r) => /^sidebar\.(panellist|workspaces)/.test(r.spec.name)), 'no native sidebar slot replaced')
 assert.ok(!run.registrations.some((r) => /hero\.brand\.name|hero\.(workspace|agentPreset|options)/.test(r.spec.name)), 'feature slots untouched')
-assert.deepEqual(run.effects, ['neko-brand: styles', 'neko-brand: native account habitat', 'neko-brand: avatar theme', 'neko-brand: favicon', 'neko-brand: title observer', 'neko-brand: workbench bridge', 'neko-brand: roles bridge', 'neko-brand: community coding pane', 'neko-brand: compact running status'])
+assert.deepEqual(run.effects, ['neko-brand: styles', 'neko-brand: Codex styles', 'neko-brand: native account habitat', 'neko-brand: avatar theme', 'neko-brand: favicon', 'neko-brand: title observer', 'neko-brand: workbench bridge', 'neko-brand: roles bridge', 'neko-brand: community coding pane', 'neko-brand: compact running status'])
 const byName = Object.fromEntries(run.registrations.map((r) => [r.spec.name, r.component.name]))
 assert.deepEqual(byName, {
   'sidebar.brand.mark': 'SidebarMark', 'sidebar.brand.name': 'SidebarName',
   'conversation.hero.brand.mark': 'HeroGallery', 'shell.bottom': 'ProductStrip', 'shell.overlay': 'RolesSidebarAdapter',
   'settings.onboarding': 'SkipWelcomeNotice',
 })
-assert.equal(run.registrations[3].component().children[0], 'N.E.K.O. 工作台')
+assert.equal(run.registrations[4].component().children[0], 'N.E.K.O. 工作台')
 
 assert.equal(document.title, 'Fix the parser — N.E.K.O. 工作台')
 document.title = 'New chat — DeepSeek Harness'

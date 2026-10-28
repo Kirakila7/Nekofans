@@ -151,6 +151,7 @@ const exportsObj = entry.factory((id) => {
   throw new Error(`unexpected ${id}`)
 })
 const seats = {}
+const seatsById = {}
 const seatSpecs = {}
 const disposers = []
 const opened = []
@@ -159,7 +160,7 @@ const ctx = {
   effect(fn) { const d = fn(); if (typeof d === 'function') disposers.push(d) },
   slots: {
     inject(_key, cb) { const d = cb(); disposers.push(d); return () => {} },
-    register(spec, component) { seats[spec.name] = component; seatSpecs[spec.name] = spec; return () => { delete seats[spec.name]; delete seatSpecs[spec.name] } },
+    register(spec, component) { if (spec.id) seatsById[spec.id] = component; seats[spec.name] = component; seatSpecs[spec.name] = spec; return () => { delete seats[spec.name]; delete seatSpecs[spec.name] } },
   },
 }
 exportsObj.apply(ctx)
@@ -252,6 +253,40 @@ const $$ = (s) => [...document.querySelectorAll(s)]
 const click = async (el) => act(async () => { el.dispatchEvent(new window.MouseEvent('click', { bubbles: true })) })
 const key = async (el, k) => act(async () => { el.dispatchEvent(new window.KeyboardEvent('keydown', { key: k, bubbles: true })) })
 const flush = () => act(async () => { await new Promise((r) => setTimeout(r, 5)) })
+
+
+// Codex consumes the live DSH registry and selection. All backend calls here
+// are mocks; real protocol and account behavior have separate integration tests.
+const codexEvents = new Set(), codexCalls = [], workspaceSubscribers = new Set(), selectionSubscribers = new Set()
+let selectedSession = 's-a'
+let workspaceItems = [{ workspaceId: 'w-a', title: '项目 A', path: '/tmp/a', sessionIds: ['s-a'] }, { workspaceId: 'w-b', title: '项目 B', path: '/tmp/b', sessionIds: ['s-b'] }]
+ctx.get = (key) => key === 'workspaces' ? { list: { getSnapshot: () => ({ phase: 'ready', items: workspaceItems }), subscribe: (cb) => { workspaceSubscribers.add(cb); return () => workspaceSubscribers.delete(cb) } } } : undefined
+ctx.uiWorkspace.selection = { getSnapshot: () => ({ sessionId: selectedSession }), subscribe: (cb) => { selectionSubscribers.add(cb); return () => selectionSubscribers.delete(cb) } }
+window.nekoWorkbench.codex = {
+  start: async (request) => { codexCalls.push(['start', request]); return { threadId: 't-a' } },
+  send: async (request) => { codexCalls.push(['send', request]); return { turnId: 'turn-a' } },
+  cancel: async () => ({ accepted: true }), approval: async () => ({ accepted: true }),
+  onEvent: (cb) => { codexEvents.add(cb); return () => codexEvents.delete(cb) },
+}
+const codexHost = document.createElement('div'); document.body.appendChild(codexHost)
+const codexRoot = ReactDOMClient.createRoot(codexHost)
+await act(async () => { codexRoot.render(React.createElement(seatsById['neko.codex-workbench'])) })
+await flush()
+await click($('[aria-label="切换到 Codex"]'))
+assert.match($('.neko-codex-project').textContent, /项目 A/)
+await click([...$$('.neko-codex-compose button')].find((el) => el.textContent === '连接当前工作区'))
+assert.deepEqual(codexCalls[0], ['start', { workspaceId: 'w-a', path: '/tmp/a' }])
+const codexText = $('.neko-codex-compose textarea')
+await act(async () => { Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set.call(codexText, '测试项目'); codexText.dispatchEvent(new window.Event('input', { bubbles: true })) })
+await click([...$$('.neko-codex-compose button')].find((el) => el.textContent === '发送'))
+assert.deepEqual(codexCalls[1], ['send', { text: '测试项目' }])
+await act(async () => { for (const callback of codexEvents) callback({ type: 'turn-completed', threadId: 't-a', turnId: 'turn-a', status: 'interrupted' }) })
+assert.match($('.neko-codex-error').textContent, /中断/)
+await act(async () => { selectedSession = 's-b'; for (const callback of selectionSubscribers) callback() })
+assert.match($('.neko-codex-project').textContent, /项目 B/)
+assert.equal($('.neko-codex-compose textarea').disabled, true, 'old Codex thread must not send into newly selected project')
+await act(async () => codexRoot.unmount()); codexHost.remove()
+assert.equal(workspaceSubscribers.size, 0); assert.equal(selectionSubscribers.size, 0); assert.equal(codexEvents.size, 0)
 
 // --- hero gallery + scoped CSS -----------------------------------------------
 

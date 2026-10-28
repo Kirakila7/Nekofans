@@ -152,6 +152,14 @@ exports.apply=function(ctx){
       return {sessionId:root.agent.id,provider:options.provider,model:options.model,uiUrl:ctx.connection.authenticatedUrl(ctx.webApp.getAdvertisedUrl())};
     }
     if(!root)throw new Error('DSH 尚未就绪');
+    if(method==='codex-workspace'){
+      if(typeof p.workspaceId!=='string'||!p.workspaceId||p.workspaceId.length>256)throw new Error('请选择工作区');
+      const registry=ctx.get('workspaceRegistry');
+      if(!registry||typeof registry.get!=='function')throw new Error('DSH 工作区列表尚不可用');
+      const item=registry.get(p.workspaceId);
+      if(!item||typeof item.path!=='string'||!path.isAbsolute(item.path))throw new Error('所选工作区不存在或不可用');
+      return {workspaceId:p.workspaceId,path:item.path};
+    }
     if(method==='fish-care'){
       if(!['status','start','pause'].includes(p.action))throw new Error('未知养鱼操作');
       const fish=await import(require('node:url').pathToFileURL(require('node:path').join(__dirname,'vendor/dsh-bili-whale/lib/index.js')).href);
