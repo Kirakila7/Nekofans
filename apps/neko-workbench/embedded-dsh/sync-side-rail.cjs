@@ -1,0 +1,11 @@
+'use strict';
+const fs = require('node:fs'), path = require('node:path');
+const base = __dirname;
+const file = path.join(base, 'b0-skin/packages/dsh-client-ui-white-label/lib/client.js');
+const source = fs.readFileSync(path.join(base, 'side-rail-source.js'), 'utf8');
+const css = fs.readFileSync(path.join(base, 'side-rail-source.css'), 'utf8');
+const block = '// @neko-side-rail:start\nconst SIDE_RAIL_CSS = ' + JSON.stringify(css) + ';\n' + source + '\n// @neko-side-rail:end';
+const code = fs.readFileSync(file, 'utf8');
+const marker = /\/\/ @neko-side-rail:start[\s\S]*?\/\/ @neko-side-rail:end/;
+if (!marker.test(code)) throw new Error('Side rail markers missing');
+fs.writeFileSync(file, code.replace(marker, () => block));
