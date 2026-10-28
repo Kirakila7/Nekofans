@@ -1,9 +1,10 @@
-# Local test workbench 0.28.4
+# Local test workbench 0.28.5
 
 The daily artifact is built from this repository. `config/daily-release.json` is the version authority; every app includes `Contents/Resources/WORKBENCH_BUILD.json` with the source commit and SHA-256 of every shipped source file. Historical QA checkouts and profiles are not release inputs.
 
 ## Included local workbench changes
 
+- The main companion moves to the top of the persistent rail when its original workspace position is hidden, and returns when that position becomes visible. The existing character and chat draft are retained.
 - Optional unified layout allows the sidebar and two main slots to place the native DSH workspace, existing community view and Bilibili view; one real view per external site is reused when moved. The companion community action respects this layout, and the original single-pane behavior remains when it is disabled. Synthetic isolated Electron tests cover geometry and view isolation; production DSH layout, real community login and Bilibili playback still need runtime verification.
 - Clicking the main companion opens its interaction menu: community visiting reuses the existing embedded native community, while chat returns focus to the existing input. Dragging does not trigger the menu. The same menu is available from the companion in the collapsed rail; it does not start an autonomous visit, send a message, or invent a social memory.
 - Workbench PR #13 (`c673090888176de81d10e72693fbd90c934720b1`) session shortcuts are included in the 0.28.4 local build. Each assistant row has a new-session button; the duplicate top-level plus and work/leisure switch are hidden. Unbound entries open their existing configuration. The Codex shortcut stays disabled while Codex testing is paused.
