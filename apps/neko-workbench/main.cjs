@@ -17,6 +17,7 @@ const petAppearance=require('./pet-appearance.js');
 const {importAppearanceImage}=require('./pet-appearance-import.cjs');
 const {decodeAnimationPoster}=require('./pet-image-decoder.cjs');
 const {prepareFishCare}=require('./fish-care.cjs');
+const {createCoordinator}=require('./fish-qq-coordinator.cjs');
 const {restoreDesktopActor,syncTaskRecord,acceptTaskRoster,promoteTaskRecord}=require('./task-pets.cjs');
 const {NekoChat,localBase}=require('./neko-chat.cjs');
 const {skinPatch,applySkinCookie}=require('./embedded-dsh/dsh-skin-patch.cjs');
@@ -51,6 +52,7 @@ state.actors=state.actors.filter(a=>a.id==='main'||a.sessionId).map(a=>{
 migrateChatRouting(state);
 state.connection='starting';state.error='';
 state.fish={enabled:false,phase:'paused',reason:'已暂停'};
+state.qqbot={enabled:false,phase:'paused',reason:'QQ 机器人已暂停。',bound:false,connected:false,scopeConfigured:false};
 let memoryWindow,settingsWindow,nekoSettingsWindow,chatSettingsWindow,chatMemoryWindow,nekoWindow,dshWindow,dshLaunchUrl,tray,child,childLifecycle,quitting=false,rpcId=0,startPromise,stderr='',rosterTimer,nekoRetry,mainChatRuntime,activeApiRequest,workbenchNavigation=null;
 const localWindows=new WeakMap();
 const nekoChat=new NekoChat();
@@ -62,6 +64,15 @@ const draggingPets=new Set(),petGeometry=new Map();
 const earlyFrames=new Map();
 const terminalTimers=new Map();
 const busy=a=>['working','stopping'].includes(a.status);
+const channelRevisions={fish:0,qqbot:0};
+const channelIntents={fish:0,qqbot:0};
+const fishQqCoordinator=createCoordinator({
+  fishAction:action=>channelAction('fish',action),
+  qqbotAction:action=>channelAction('qqbot',action),
+  getSelection:()=>state.preferences.fishQqSelection,
+  saveSelection:selection=>{const previous=state.preferences.fishQqSelection;state.preferences.fishQqSelection=selection;try{save();}catch(error){state.preferences.fishQqSelection=previous;throw error;}},
+  notify:()=>broadcast()
+});
 function save(){const f=path.join(data,'state.json');const actors=state.actors.map(a=>a.id==='main'&&a.chatBackend==='chat-api'?{...a,messages:[],chatReply:undefined,lastUserMessage:undefined}:a);fs.writeFileSync(f+'.tmp',JSON.stringify({...state,actors,mainChat:undefined,connection:undefined},null,2));fs.renameSync(f+'.tmp',f);}
 function broadcast(){for(const w of [...petWindows.values(),...renameWindows.values(),memoryWindow,settingsWindow,nekoSettingsWindow,chatSettingsWindow,chatMemoryWindow])if(w&&!w.isDestroyed()&&localWindows.has(w))w.webContents.send('pet:state',state);if(dshWindow&&!dshWindow.isDestroyed()&&isWorkbenchOrigin(dshWindow.webContents.getURL()))dshWindow.webContents.send('workbench:state',workbenchState());}
 function loadLocalFile(window,query){const url=pathToFileURL(path.join(base,'index.html'));for(const [key,value] of Object.entries(query))url.searchParams.set(key,value);localWindows.set(window,url.href);window.webContents.on('will-navigate',(event,target)=>{if(target!==url.href)event.preventDefault();});window.webContents.setWindowOpenHandler(()=>({action:'deny'}));return window.loadURL(url.href);}
@@ -84,20 +95,50 @@ async function chooseAvatar(title='上传工作台头像'){
   const side=Math.min(size.width,size.height),png=image.crop({x:Math.floor((size.width-side)/2),y:Math.floor((size.height-side)/2),width:side,height:side}).resize({width:256,height:256,quality:'best'}).toPNG();
   return 'data:image/png;base64,'+png.toString('base64');
 }
-function workbenchState(){return {avatar:workbenchAppearance.get(),navigation:workbenchNavigation,fish:state.fish,neko:{enabled:state.neko.enabled===true,connection:state.neko.connection,character:state.neko.character,error:String(state.neko.error||'').slice(0,300)},workbench:{connection:state.connection,error:String(state.error||'').slice(0,300)}};}
+function workbenchState(){return {avatar:workbenchAppearance.get(),navigation:workbenchNavigation,fish:state.fish,qqbot:state.qqbot,fishQq:fishQqCoordinator.snapshot(),neko:{enabled:state.neko.enabled===true,connection:state.neko.connection,character:state.neko.character,error:String(state.neko.error||'').slice(0,300)},workbench:{connection:state.connection,error:String(state.error||'').slice(0,300)}};}
 async function openFishSettings(){workbenchNavigation={...workbenchNavigation,fishSettingsRevision:(workbenchNavigation?.fishSettingsRevision||0)+1};await openDsh();await communityController.action(dshWindow,{action:'hide'});broadcast();}
+function projectChannelState(name,value){
+  const phases=['paused','checking','starting','login-required','model-login-required','scope-required','bound','connecting','running','error'];
+  const next={enabled:value?.enabled===true,phase:phases.includes(value?.phase)?value.phase:'error',reason:String(value?.reason||'服务状态无法确认，请重试。').slice(0,300)};
+  if(name==='qqbot')Object.assign(next,{bound:value?.bound===true,connected:value?.connected===true,scopeConfigured:value?.scopeConfigured===true});
+  return next;
+}
+function acceptChannelState(name,value){
+  const next=projectChannelState(name,value);
+  channelRevisions[name]++;state[name]=next;fishQqCoordinator.updateChannel(name,next);return next;
+}
+async function channelAction(name,action){
+  if(!['status','start','pause'].includes(action))throw Error('未知渠道操作');
+  if(action==='pause')channelIntents[name]++;
+  if(state.connection!=='ready')throw Error('工作台尚未连接，请稍后重试。');
+  const revision=channelRevisions[name];
+  const value=await rpc(name==='fish'?'fish-care':'qqbot-care',{action});
+  if(action==='status')return revision===channelRevisions[name]?projectChannelState(name,value):{...state[name]};
+  if(revision===channelRevisions[name])acceptChannelState(name,value);
+  return {...state[name]};
+}
 async function fishAction(action){
   if(!['status','start','pause'].includes(action))throw Error('未知养鱼操作');
-  if(state.connection!=='ready')throw Error('工作台尚未连接，请稍后重试。');
-  const value=await rpc('fish-care',{action});state.fish=value;broadcast();
-  if(['login-required','model-login-required','error'].includes(value.phase))await openFishSettings();
+  if(action==='start'){const intent=channelIntents.fish;await fishQqCoordinator.setSelection({fish:true});if(intent!==channelIntents.fish)return {...state.fish};}
+  const value=await channelAction('fish',action);
+  if(action==='start'&&['login-required','model-login-required','error'].includes(value.phase))await openFishSettings();
   return value;
 }
 async function qqbotAction(action){
   if(!['status','start','pause'].includes(action))throw Error('未知 QQ 机器人操作');
-  if(state.connection!=='ready')throw Error('工作台尚未连接，请稍后重试。');
-  return rpc('qqbot-care',{action});
+  if(action==='start'){const intent=channelIntents.qqbot;await fishQqCoordinator.setSelection({qqbot:true});if(intent!==channelIntents.qqbot)return {...state.qqbot};}
+  return channelAction('qqbot',action);
 }
+async function fishQqAction(request){
+  if(!request||!['status','start','pause','select'].includes(request.action))throw Error('未知养鱼与 QQ 操作');
+  if(request.action==='select')return fishQqCoordinator.setSelection(request.selection);
+  if(request.action==='status')return fishQqCoordinator.status();
+  if(request.action==='pause')return fishQqCoordinator.pause();
+  const pendingStart=fishQqCoordinator.start();
+  const [result]=await Promise.all([pendingStart,openFishSettings()]);
+  return result;
+}
+function fishQqActive(){const value=fishQqCoordinator.snapshot();return value.unified||['fish','qqbot'].some(name=>value.selection[name]&&(value[name].enabled||['checking','starting','login-required','model-login-required','scope-required','bound','connecting'].includes(value[name].phase)));}
 function showConnectionStatus(){return dialog.showMessageBox(dshWindow&&!dshWindow.isDestroyed()?dshWindow:petWindows.get('main'),{type:'info',message:'N.E.K.O.：'+(state.neko.connection==='ready'?'已连接':'未连接')+' · 工作台：'+(state.connection==='ready'?'已连接':'未连接'),detail:[state.neko.error,state.error].filter(Boolean).join('\n')||'主角色聊天与工作台任务分别连接。',buttons:['好']});}
 async function workbenchAction(name){
   switch(name){
@@ -277,7 +318,8 @@ function shortReply(text){return text.replace(/```[\s\S]*?```/g,'').replace(/[*#
 function receive(message,replay=false){
   if(message.id){const p=pending.get(message.id);if(p){clearTimeout(p.timer);pending.delete(message.id);message.error?p.reject(new Error(message.error)):p.resolve(message.result);}return;}
   const p=message.params||{};
-  if(message.method==='fish-care-state'){state.fish={enabled:p.enabled===true,phase:String(p.phase||'paused'),reason:String(p.reason||'').slice(0,300)};broadcast();return;}
+  if(message.method==='fish-care-state'){acceptChannelState('fish',p);return;}
+  if(message.method==='qqbot-care-state'){acceptChannelState('qqbot',p);return;}
   if(message.method==='ready'){connect().catch(engineError);return;}
   if(!replay)fs.appendFileSync(path.join(data,'events.jsonl'),JSON.stringify({at:new Date().toISOString(),...message})+'\n');
   if(message.method==='agent-meta'){syncAgent(p);return;}
@@ -336,12 +378,12 @@ function receive(message,replay=false){
   }
   update();
 }
-function engineError(error){state.connection='error';state.error=String(error.message||error);state.fish={enabled:false,phase:'error',reason:'工作台连接已中断，养鱼未运行。'};for(const a of state.actors.filter(a=>a.id!=='main')){a.active=false;a.displayUntil=0;}update();}
+function engineError(error){state.connection='error';state.error=String(error.message||error);void fishQqCoordinator.pause();acceptChannelState('fish',{enabled:false,phase:'error',reason:'工作台连接已中断，养鱼状态无法确认。'});acceptChannelState('qqbot',{enabled:false,phase:'error',reason:'工作台连接已中断，QQ 状态无法确认。'});for(const a of state.actors.filter(a=>a.id!=='main')){a.active=false;a.displayUntil=0;}update();}
 async function connect(){
   const r=await rpc('init',{rootId:state.rootId,resume:!!state.rootId,parentIds:[...new Set(state.actors.map(a=>a.parentSessionId).filter(Boolean))],taskIds:state.actors.filter(a=>a.kind==='task').map(a=>a.sessionId)});
   const url=new URL(r.uiUrl);if(url.protocol!=='http:'||url.hostname!=='127.0.0.1')throw new Error('DSH 窗口地址不在本机。');
   dshLaunchUrl=url.href;state.rootId=r.sessionId;state.dshRoot.sessionId=r.sessionId;state.connection='ready';state.error='';
-  try{state.fish=await rpc('fish-care',{action:'status'});}catch{state.fish={enabled:false,phase:'error',reason:'养鱼服务尚未就绪，请稍后重试。'};}
+  await Promise.all(['fish','qqbot'].map(async name=>{const revision=channelRevisions[name];try{const value=await channelAction(name,fishQqCoordinator.snapshot().selection[name]?'status':'pause');if(revision===channelRevisions[name])acceptChannelState(name,value);}catch{acceptChannelState(name,{enabled:false,phase:'error',reason:'渠道服务尚未就绪，请稍后重试。'});}}));
   const frames=earlyFrames.get(r.sessionId);earlyFrames.delete(r.sessionId);for(const frame of frames||[])receive(frame,true);
   update();
   if(dshWindow&&!dshWindow.isDestroyed()){await applySkinCookie(dshWindow.webContents.session,dshLaunchUrl,dshSkin);await dshWindow.loadURL(dshLaunchUrl);}
@@ -364,7 +406,7 @@ function startEngine(){
       if(!quitting&&!error)engineError(new Error('DSH 已退出 ('+code+')。'+stderr.slice(-600)));
     }});
     child.stderr.on('data',d=>{stderr=(stderr+d.toString()).slice(-20000);fs.appendFileSync(path.join(data,'engine.log'),d);});
-    readline.createInterface({input:child.stdout}).on('line',line=>{try{receive(JSON.parse(line));}catch{fs.appendFileSync(path.join(data,'engine.log'),line+'\n');}});
+    readline.createInterface({input:child.stdout}).on('line',line=>{if(child!==ownedChild)return;try{receive(JSON.parse(line));}catch{fs.appendFileSync(path.join(data,'engine.log'),line+'\n');}});
   })();
   startPromise.catch(()=>{if(!child)startPromise=null;});
   return startPromise;
@@ -511,7 +553,7 @@ async function capture(){
   fs.writeFileSync(path.join(runtimePaths.diagnosticsDir,'minimal-ui.json'),JSON.stringify(metrics,null,2));
 }
 function mainMenu(){return Menu.buildFromTemplate([
-  {label:state.fish.enabled||['checking','login-required','model-login-required'].includes(state.fish.phase)?'暂停养鱼':'开始养鱼',enabled:state.connection==='ready',click:()=>fishAction(state.fish.enabled||['checking','login-required','model-login-required'].includes(state.fish.phase)?'pause':'start').catch(error=>{notice(state.actors[0],error.message);update();})},
+  {label:fishQqActive()?'暂停养鱼':'开始养鱼',enabled:state.connection==='ready',click:()=>fishQqAction({action:fishQqActive()?'pause':'start'}).catch(()=>{notice(state.actors[0],'养鱼与 QQ 操作未完成，请在连接与生活设置中重试。');update();})},
   {label:'形象',submenu:appearanceMenu(state.actors.find(a=>a.id==='main'))},
   {label:'聊天 API 设置…',click:editChatSettings},
   {label:'聊天记忆…',click:editChatMemory},
@@ -586,6 +628,7 @@ ipcMain.handle('workbench:call',async(event,method,value)=>{
   if(method==='state')return workbenchState();
   if(method==='fish'){return fishAction(value);}
   if(method==='qqbot'){return qqbotAction(value);}
+  if(method==='fish-qq'){return fishQqAction(value);}
   if(method==='avatar'){workbenchAppearance.select(value);broadcast();return workbenchState();}
   if(method==='upload-avatar'){
     const image=await chooseAvatar();if(!image)return null;

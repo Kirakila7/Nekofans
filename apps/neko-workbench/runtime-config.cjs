@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const {fishEnvironment}=require('./fish-care.cjs');
+const {accountRoute}=require('./account-route.cjs');
 
 function absoluteSetting(value, fallback, name) {
   if (value == null || value === '') return fallback;
@@ -78,7 +79,7 @@ function assertDshRuntime(runtime) {
 function buildDshPatch(runtime, { baseDir = __dirname, skin = { rows: [], insert: [] } } = {}) {
   return [
     { id: 'credentials', config: { path: runtime.credentialsFile || path.join(runtime.dshHomeDir, '.credentials.yaml') } },
-    { id: 'agent-default-model', config: { provider: 'deepseek-account', model: 'deepseek-flash', reasoningEffort: 'high' } },
+    { id: 'agent-default-model', config: accountRoute() },
     { id: 'web-runtime', config: { openBrowser: false, printUrl: false, surfaceContext: true } },
     { id: 'ui-settings-models', config: { credentialOnboarding: false } },
     ...skin.rows,
@@ -88,18 +89,24 @@ function buildDshPatch(runtime, { baseDir = __dirname, skin = { rows: [], insert
   ];
 }
 
-function buildDshLaunch(runtime, { env = process.env, patchFile = path.join(runtime.dataDir, 'bridge.patch.json') } = {}) {
+function buildDshLaunch(runtime, { env = process.env, patchFile = path.join(runtime.dataDir, 'bridge.patch.json'),
+  execPath = process.execPath, electronVersion = process.versions.electron } = {}) {
+  const scriptEntry = /\.(?:js|mjs|cjs)$/i.test(runtime.cli);
+  const command = scriptEntry ? env.DSH_DESKTOP_NODE_EXECUTABLE || execPath : runtime.cli;
+  const electronNode = scriptEntry && electronVersion && command === execPath;
   return {
-    command: runtime.cli,
-    args: ['--profile', 'web', '--patch', patchFile, '--no-open', '--host', '127.0.0.1', '--port', '0'],
+    command,
+    args: [...(scriptEntry ? [runtime.cli] : []), '--profile', 'web', '--patch', patchFile, '--no-open', '--host', '127.0.0.1', '--port', '0'],
     options: {
       cwd: runtime.workspaceDir,
       env: { ...env, ...fishEnvironment(runtime,env), DSH_HOME: runtime.dshHomeDir, DSH_PERMISSION_MODE: 'workspace-write', DSH_TELEMETRY_MODE: 'DISABLED',
         NEKO_WORKBENCH_DATA_DIR: runtime.dataDir, NEKO_WORKBENCH_WORKSPACE: runtime.workspaceDir,
         NEKO_WORKBENCH_WORKSPACE_DIR: runtime.workspaceDir, NEKO_WORKBENCH_ELECTRON_USER_DATA: runtime.userDataDir,
         NEKO_WORKBENCH_DSH_CLI: runtime.cli, NEKO_WORKBENCH_DSH_MODULES: runtime.modulesDir,
-        NEKO_WORKBENCH_DSH_MODULES_DIR: runtime.modulesDir, NEKO_WORKBENCH_DSH_CREDENTIALS: runtime.credentialsFile || '' },
+        NEKO_WORKBENCH_DSH_MODULES_DIR: runtime.modulesDir, NEKO_WORKBENCH_DSH_CREDENTIALS: runtime.credentialsFile || '',
+        ...(electronNode ? { ELECTRON_RUN_AS_NODE: '1' } : {}) },
       stdio: ['pipe', 'pipe', 'pipe'],
+      windowsHide: true,
     },
   };
 }

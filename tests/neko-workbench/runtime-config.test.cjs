@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 const { resolveRuntimePaths, prepareRuntimeDirectories, assertDshRuntime, buildDshPatch, buildDshLaunch } = require('../../apps/neko-workbench/runtime-config.cjs');
 
 function fixture(t) {
@@ -55,6 +56,53 @@ test('explicit runtime paths propagate to the child, overriding inherited global
   assert.equal(launch.options.env.DSH_TELEMETRY_MODE, 'DISABLED');
   assert.deepEqual(launch.args.slice(-4), ['--host', '127.0.0.1', '--port', '0']);
   assert.equal(env.DSH_HOME, path.join(f.homeDir, '.dsh'), 'caller environment is not mutated');
+  assert.equal(launch.options.windowsHide, true);
+  assert.equal(launch.options.env.ELECTRON_RUN_AS_NODE, undefined);
+});
+
+test('JavaScript CLI runs with Chinese and spaced paths as separate arguments in its private runtime', t => {
+  const f = fixture(t);
+  const cli = path.join(f.directory, '运行 时', 'dsh entry.cjs');
+  const runtime = resolveRuntimePaths({ ...f.options, env: { NEKO_WORKBENCH_DSH_CLI: cli } });
+  prepareRuntimeDirectories(runtime);
+  fs.mkdirSync(path.dirname(cli), { recursive: true });
+  fs.writeFileSync(cli, "process.stdout.write(JSON.stringify({ args: process.argv.slice(2), cwd: process.cwd(), dshHome: process.env.DSH_HOME }));");
+  const patchFile = path.join(runtime.dataDir, '中文 patch.json');
+  const launch = buildDshLaunch(runtime, { env: {}, patchFile });
+  const result = spawnSync(launch.command, launch.args, { ...launch.options, encoding: 'utf8' });
+  assert.equal(result.error, undefined);
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(JSON.parse(result.stdout), {
+    args: ['--profile', 'web', '--patch', patchFile, '--no-open', '--host', '127.0.0.1', '--port', '0'],
+    cwd: runtime.workspaceDir,
+    dshHome: runtime.dshHomeDir,
+  });
+});
+
+test('JavaScript CLI uses Electron node mode only for its own executable and supports an explicit Node', t => {
+  const f = fixture(t);
+  const runtime = resolveRuntimePaths(f.options);
+  const execPath = path.join(f.directory, 'Electron runtime', 'electron.exe');
+  const nodePath = path.join(f.directory, 'Node runtime', 'node.exe');
+  for (const extension of ['js', 'mjs', 'cjs']) {
+    const script = { ...runtime, cli: path.join(f.directory, `中文 runtime/bin.${extension}`) };
+    const env = { ELECTRON_RUN_AS_NODE: '0' };
+    const launch = buildDshLaunch(script, { env, execPath, electronVersion: '44.7.0' });
+    assert.equal(launch.command, execPath);
+    assert.equal(launch.args[0], script.cli);
+    assert.equal(launch.options.env.ELECTRON_RUN_AS_NODE, '1');
+    assert.equal(env.ELECTRON_RUN_AS_NODE, '0', 'caller environment is not mutated');
+    const explicit = buildDshLaunch(script, { env: { DSH_DESKTOP_NODE_EXECUTABLE: nodePath }, execPath, electronVersion: '44.7.0' });
+    assert.equal(explicit.command, nodePath);
+    assert.equal(explicit.args[0], script.cli);
+    assert.equal(explicit.options.env.ELECTRON_RUN_AS_NODE, undefined);
+  }
+  for (const cli of [path.join(f.directory, 'dsh.exe'), path.join(f.directory, 'dsh')]) {
+    const launch = buildDshLaunch({ ...runtime, cli }, { env: { DSH_DESKTOP_NODE_EXECUTABLE: nodePath }, execPath, electronVersion: '44.7.0' });
+    assert.equal(launch.command, cli);
+    assert.equal(launch.args[0], '--profile');
+    assert.equal(launch.options.env.ELECTRON_RUN_AS_NODE, undefined);
+  }
 });
 
 test('workspace and private state cannot overlap or resolve through a symlink into the global DSH home', t => {

@@ -14,6 +14,29 @@ function fixture({ observeSession = async () => { throw Error('not available'); 
 }
 
 if (!process.argv.includes('--bridge-harness')) {
+  test('QQ privacy matches only its isolated workspace and remains known after agent disposal', () => {
+    const path = require('node:path');
+    const { createChannelSessionPrivacy } = require('../../apps/neko-workbench/channel-session-privacy.cjs');
+    const data = path.resolve('fixture-data'), cwd = path.join(data, 'qqbot-runtime', 'workspace');
+    const privacy = createChannelSessionPrivacy(data);
+    assert.equal(privacy.isPrivate('ordinary', session('ordinary', { cwd: cwd + '-ordinary' })), false);
+    assert.equal(privacy.isPrivate('missing', session('missing')), false);
+    assert.equal(privacy.isPrivate('qq', session('qq', { cwd: path.join(cwd, 'nested', '..') })), true);
+    assert.equal(privacy.isPrivate('qq'), true);
+    assert.equal(privacy.isPrivate('child', session('child', { parentSession: 'qq' })), true);
+  });
+
+  test('background fish sessions and their children stay out of desktop task pets', () => {
+    const path = require('node:path');
+    const { createChannelSessionPrivacy } = require('../../apps/neko-workbench/channel-session-privacy.cjs');
+    const fishWorkspace = path.resolve('fixture-work','fish-care');
+    const privacy = createChannelSessionPrivacy(path.resolve('fixture-data'),{fishWorkspace});
+    assert.equal(privacy.isPrivate('ordinary',session('ordinary',{cwd:fishWorkspace+'-other'})),false);
+    assert.equal(privacy.isPrivate('fish',session('fish',{cwd:fishWorkspace})),true);
+    assert.equal(privacy.isPrivate('fish-child',session('fish-child',{parentSession:'fish'})),true);
+    assert.equal(privacy.isPrivate('fish'),true);
+  });
+
   test('only real own human work creates medium task metadata; title/todo and ordinary forks retain separate identity', () => {
     const f = fixture(), current = session('workbench-session');
     f.tracker.onEvent(current, event('turn/start', { turn: 1 }));
@@ -214,20 +237,28 @@ if (!process.argv.includes('--bridge-harness')) {
     const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), Module = require('node:module'), { EventEmitter } = require('node:events');
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'neko-task-bridge-'));
     const originalLoad = Module._load, originalWrite = process.stdout.write;
-    const lines = new EventEmitter(), frames = [], handlers = new Map(), agents = new Map(), canceled = [], interrupted = [], prompts = [], observations = [], mounted = [], killed = [];
+    const lines = new EventEmitter(), frames = [], handlers = new Map(), agents = new Map(), canceled = [], interrupted = [], prompts = [], observations = [], mounted = [], killed = [], released = [], parentQueries = [];
+    const dataDir = path.join(directory, 'data'), qqCwd = path.join(dataDir, 'qqbot-runtime', 'workspace');
+    const privateText = 'fixture-private-qq-conversation';
     let jobRows = [], registry;
     const nativeKill = (id, caller, reason) => { killed.push([id, caller, reason]); return 'requested'; };
     registry = { list: () => jobRows, kill: nativeKill };
     const sessions = new Map([['root', session('root')], ['catalog-child', session('catalog-child', { origin: 'subagent', parentSession: 'root' })], ['restored', session('restored')], ['fork', session('fork', { parentSession: 'ancestor' })], ['empty', session('empty')]]);
     const histories = new Map([['root', []], ['catalog-child', [message('delegated')]], ['restored', [message('restored own task')]], ['fork', [message('fork own task')]], ['empty', []]]);
+    for (const id of ['qq-restored', 'qq-parent', 'qq-catalog']) {
+      sessions.set(id, session(id, { cwd: qqCwd })); histories.set(id, [message(privateText)]);
+    }
+    sessions.set('fish-background',session('fish-background',{cwd:path.join(directory,'work','fish-care')}));
+    histories.set('fish-background',[message('background fish reading')]);
     const root = { id: 'root', status: 'idle', session: sessions.get('root'), cancel: reason => canceled.push(['root', reason]), followup: value => prompts.push(value) }; agents.set('root', root);
-    const rows = [{ id: 'catalog-child', mode: 'continuable', label: 'real child', createdAt: 120 }];
+    const rows = [{ id: 'catalog-child', mode: 'continuable', label: 'real child', createdAt: 120 },
+      { id: 'qq-catalog', mode: 'continuable', label: privateText, createdAt: 121 }];
     let resumes = 0;
     const ctx = { on: (name, fn) => { if (!handlers.has(name)) handlers.set(name, []); handlers.get(name).push(fn); },
       get: name => name === 'loader' ? { await: async () => {} } : name === 'jobs' ? registry : undefined,
       agents: { get: id => agents.get(id), resume: async () => { resumes++; return { agent: root }; }, create: async () => { throw Error('must not create an agent for task restoration'); } },
-      sessionQuery: { observeSession: async id => { observations.push(id); if (!sessions.has(id)) throw Error('missing fixture'); return { header: sessions.get(id).header, events: histories.get(id), inheritedEventCount: 0, projections: { values: { title: id === 'catalog-child' ? 'Catalog title' : '' } }, [Symbol.dispose]() {} }; } },
-      subagents: { listChildren: async id => id === 'root' ? rows : [], interrupt: (id, reason) => interrupted.push([id, reason]), prompt: (...args) => prompts.push(args) },
+      sessionQuery: { observeSession: async id => { observations.push(id); if (!sessions.has(id)) throw Error('missing fixture'); return { header: sessions.get(id).header, events: histories.get(id), inheritedEventCount: 0, projections: { values: { title: id === 'catalog-child' ? 'Catalog title' : '' } }, [Symbol.dispose]() { released.push(id); } }; } },
+      subagents: { listChildren: async id => { parentQueries.push(id); return id === 'root' ? rows : []; }, interrupt: (id, reason) => interrupted.push([id, reason]), prompt: (...args) => prompts.push(args) },
       agentPresets: { mount: (...args) => mounted.push(args) }, connection: { authenticatedUrl: url => url }, webApp: { getAdvertisedUrl: () => 'http://127.0.0.1:59099/fixture' }, root: { dispose: async () => {} } };
     lines.close = () => lines.emit('close');
     const emitCtx = (name, ...args) => { for (const fn of handlers.get(name) || []) fn(...args); };
@@ -238,19 +269,53 @@ if (!process.argv.includes('--bridge-harness')) {
         const moduleDir = path.join(directory, name); fs.mkdirSync(path.join(moduleDir, 'lib'), { recursive: true }); fs.writeFileSync(path.join(moduleDir, 'package.json'), '{"type":"module"}'); fs.writeFileSync(path.join(moduleDir, 'lib/index.js'), source);
       }
       Module._load = function (name, parent, ...args) {
-        if (parent?.filename.endsWith('/apps/neko-workbench/bridge.cjs')) {
-          if (name === './runtime-config.cjs') return { resolveRuntimePaths: () => ({ modulesDir: directory, workspaceDir: path.join(directory, 'work') }) };
+        if (parent?.filename.replaceAll('\\', '/').endsWith('/apps/neko-workbench/bridge.cjs')) {
+          if (name === './runtime-config.cjs') return { resolveRuntimePaths: () => ({ modulesDir: directory, dataDir, workspaceDir: path.join(directory, 'work') }) };
           if (name === 'node:readline') return { createInterface: () => lines };
         }
         return originalLoad.call(this, name, parent, ...args);
       };
       process.stdout.write = value => { for (const line of String(value).trim().split('\n')) if (line) frames.push(JSON.parse(line)); return true; };
       require('../../apps/neko-workbench/bridge.cjs').apply(ctx);
-      const initialized = await invoke('init', { rootId: 'root', resume: true, taskIds: ['restored', 'fork', 'catalog-child', 'empty', 'missing'] });
+      const initialized = await invoke('init', { rootId: 'root', resume: true, parentIds: ['qq-parent'], taskIds: ['restored', 'fork', 'catalog-child', 'empty', 'missing', 'qq-restored', 'fish-background'] });
       assert.equal(initialized.result.sessionId, 'root'); assert.equal(resumes, 1); assert.equal(prompts.length, 0);
       assert.deepEqual(last('agent-roster').sessionIds, ['catalog-child']);
       assert.equal(last('agent-meta', 'catalog-child').source, 'dsh-subagent-catalog');
       assert.deepEqual(last('task-roster').sessionIds, ['restored', 'fork']); assert(observations.includes('empty')); assert(observations.includes('missing'));
+      assert.equal(JSON.stringify(frames).includes(privateText), false, 'restored QQ content and catalog labels never cross the bridge');
+      for (const id of ['qq-restored', 'qq-parent', 'qq-catalog']) {
+        assert(released.includes(id), `private observation must be released: ${id}`);
+        assert.equal(frames.some(frame => frame.params?.sessionId === id), false);
+      }
+      assert.equal(parentQueries.includes('qq-parent'), false, 'a persisted private parent cannot enumerate or publish children');
+      emitCtx('session/event',sessions.get('fish-background'),message('background fish reading'));
+      assert.equal(frames.some(frame=>frame.params?.sessionId==='fish-background'),false,'background fish must not create or update a second desktop pet');
+      const qqLive = session('qq-live', { cwd: path.join(qqCwd, 'nested', '..') });
+      const qqAgent = { id: qqLive.id, session: qqLive };
+      emitCtx('session/event', qqLive, message(privateText));
+      emitCtx('agent/status', { agent: qqAgent, status: 'running' });
+      emitCtx('agent/error', { agent: qqAgent, error: Error(privateText) });
+      emitCtx('subagent/start', { id: qqLive.id, local: true });
+      emitCtx('subagent/end', { id: qqLive.id, local: true, stopReason: privateText });
+      emitCtx('session/event', sessions.get('root'), event('subagent/catalog', { childId: 'qq-catalog', mode: 'continuable', label: privateText }, 8));
+      await tick();
+      assert.equal(JSON.stringify(frames).includes(privateText), false);
+      assert.equal(frames.some(frame => frame.params?.sessionId === qqLive.id), false, 'QQ user messages, status, error and late lifecycle events are private');
+      assert.equal((await invoke('stop', { sessionId: 'qq-restored' })).result, undefined, 'private old task ids never enter task controls');
+      const latePrivate = session('late-private', { cwd: path.join(directory, 'work') });
+      emitCtx('session/event', latePrivate, message('public task before ownership classification'));
+      assert(last('task-roster').sessionIds.includes(latePrivate.id));
+      latePrivate.header.cwd = qqCwd;
+      emitCtx('agent/error', { agent: { id: latePrivate.id, session: latePrivate }, error: Error(privateText) });
+      assert.equal(last('task-roster').sessionIds.includes(latePrivate.id), false, 'private ownership removes stale task metadata');
+      const lateChild = session('late-private-child', { cwd: path.join(directory, 'work'), origin: 'subagent', parentSession: 'root' });
+      sessions.set(lateChild.id, lateChild); histories.set(lateChild.id, []);
+      emitCtx('session/event', sessions.get('root'), event('subagent/catalog', { childId: lateChild.id, mode: 'continuable', label: 'public child' }, 9));
+      await tick(); assert(last('agent-roster').sessionIds.includes(lateChild.id));
+      lateChild.header.cwd = qqCwd;
+      emitCtx('agent/status', { agent: { id: lateChild.id, session: lateChild }, status: 'running' });
+      assert.equal(last('agent-roster').sessionIds.includes(lateChild.id), false, 'private ownership removes stale catalog entries');
+      assert.equal(JSON.stringify(frames).includes(privateText), false);
       const active = session('ui-task', { parentSession: 'ordinary-fork-parent' });
       emitCtx('session/event', active, event('turn/start', { turn: 1 })); assert.equal(last('task-meta', active.id), undefined);
       emitCtx('session/event', active, message('UI human task', 2)); assert.equal(last('event', active.id).delegatedPrompt, false, 'ordinary forks are not delegated subagents');

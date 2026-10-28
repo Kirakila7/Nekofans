@@ -25,7 +25,7 @@ try{
   }});
   assert.deepEqual([...bridges.keys()].sort(),['nekoRoles','nekoWorkbench']);
   const bridge=bridges.get('nekoWorkbench'),roles=bridges.get('nekoRoles');
-  assert.deepEqual(Object.keys(bridge).sort(),['action','codex','community','fish','getState','qqbot','setAvatar','subscribe','subscribeCommunity','uploadAvatar']);assert(Object.isFrozen(bridge));
+  assert.deepEqual(Object.keys(bridge).sort(),['action','codex','community','fish','fishQq','getState','qqbot','setAvatar','subscribe','subscribeCommunity','uploadAvatar']);assert(Object.isFrozen(bridge));
   assert.deepEqual(Object.keys(bridge.codex).sort(),['accountStatus','approval','cancel','onAccountStatus','onEvent','send','start']);assert(Object.isFrozen(bridge.codex));
   assert.deepEqual(Object.keys(roles).sort(),['getState','selectRole','subscribe','updateRole','uploadAvatar']);assert(Object.isFrozen(roles));
 
@@ -92,5 +92,7 @@ try{
   stopCodex();stopCodex();assert(!listeners.has('workbench:codex-event'));
   emit('workbench:codex-event',codexEvent);assert.equal(codexEvents.length,1);
   assert.throws(()=>bridge.codex.onEvent(null));
+  const fishQqRequest={action:'select',selection:{fish:false,qqbot:true}};
+  bridge.fishQq(fishQqRequest);assert.deepEqual(calls.at(-1),['workbench:call','fish-qq',fishQqRequest]);
   console.log('ok: avatar persistence and malformed-state recovery; frozen workbench/role bridge methods, exact IPC channels and payloads; isolated subscriptions cancel independently');
 }finally{fs.rmSync(folder,{recursive:true,force:true});}

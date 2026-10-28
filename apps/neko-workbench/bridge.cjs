@@ -8,6 +8,8 @@ const {catalogOrder,mergeCatalogOrder}=require('./pet-roster.cjs');
 const {cleanPrompt,historyContext}=require('./pet-context.js');
 const {resolveRuntimePaths}=require('./runtime-config.cjs');
 const {createTaskSessionTracker}=require('./task-session-tracker.cjs');
+const {accountRoute}=require('./account-route.cjs');
+const {createChannelSessionPrivacy}=require('./channel-session-privacy.cjs');
 const runtimePaths=resolveRuntimePaths();
 const runtime=runtimePaths.modulesDir;
 let createUserMessage,carrierKeyOf;
@@ -19,9 +21,12 @@ exports.apply=function(ctx){
   const initialPrompts=new Map();
   const children=new Map();
   const syncingParents=new Map();let lastRoster='';
-  const options={provider:'deepseek-account',model:'deepseek-flash',reasoningEffort:'high'};
+  const options=accountRoute();
+  const channelPrivacy=createChannelSessionPrivacy(runtimePaths.dataDir,{fishWorkspace:path.join(runtimePaths.workspaceDir,'fish-care')});
   const emit=(method,params)=>process.stdout.write(JSON.stringify({method,params})+'\n');
-  const taskSessions=createTaskSessionTracker({emit,getAgent:id=>ctx.agents.get(id),observeSession:id=>ctx.sessionQuery.observeSession(id),
+  const qqbotState=value=>emit('qqbot-care-state',value);
+  process.on('neko-qqbot-state',qqbotState);
+  const taskSessions=createTaskSessionTracker({emit,getAgent:id=>ctx.agents.get(id),observeSession:observePublicSession,
     getLiveJobs:id=>ctx.get('jobs')?.list(id)});
   const signal=()=>new AbortController().signal;
   const publishRoster=()=>{const sessionIds=catalogOrder(root?.agent.id,children),key=JSON.stringify(sessionIds);if(key!==lastRoster){lastRoster=key;emit('agent-roster',{source:'dsh-subagent-catalog',sessionIds});}};
@@ -30,11 +35,37 @@ exports.apply=function(ctx){
     const valueText=cleanPrompt(value);
     return Array.from(valueText.trim()).slice(0,240).join('');
   };
+  function excludePrivate(id,session){
+    if(!channelPrivacy.isPrivate(id,session)&&!channelPrivacy.isPrivate(id,ctx.agents.get(id)?.session))return false;
+    taskSessions.exclude(id);catalog.delete(id);initialPrompts.delete(id);children.delete(id);
+    let changed=false;
+    for(const [parent,ids] of children){if(ids.includes(id)){children.set(parent,ids.filter(value=>value!==id));changed=true;}}
+    if(changed)publishRoster();
+    return true;
+  }
+  async function observePublicSession(id){
+    if(excludePrivate(id))throw Error('Private channel session');
+    const observation=await ctx.sessionQuery.observeSession(id);
+    if(excludePrivate(id,observation)){
+      observation?.[Symbol.dispose]?.();
+      throw Error('Private channel session');
+    }
+    return observation;
+  }
+  async function discoverPrivate(id){
+    if(excludePrivate(id))return true;
+    let observation;
+    try{observation=await observePublicSession(id);}catch{}
+    finally{observation?.[Symbol.dispose]?.();}
+    return excludePrivate(id);
+  }
   function publish(record,createdNow=false){
+    if(excludePrivate(record.sessionId))return;
     emit('agent-meta',{sessionId:record.sessionId,parentSessionId:record.parentSessionId,name:record.label??record.sessionId,label:record.label,title:record.title||'',task:record.currentTask||record.promptTask||record.title||'',mode:record.mode,createdAt:record.createdAt,running:ctx.agents.get(record.sessionId)?.status==='running'||record.externalRunning===true,createdNow,source:'dsh-subagent-catalog'});
   }
   function register(parentSessionId,row,createdNow=false){
     const id=String(row.id??row.childId??'');if(!id||!parentSessionId)return;
+    if(excludePrivate(id)||excludePrivate(String(parentSessionId)))return;
     taskSessions.exclude(id);
     const previous=catalog.get(id)||{sessionId:id,title:'',promptTask:'',currentTask:null};
     const record={...previous,parentSessionId:String(parentSessionId),label:typeof row.label==='string'?row.label:previous.label,mode:row.mode||previous.mode||'unknown',createdAt:row.createdAt??row.childCreatedAt??previous.createdAt};
@@ -44,10 +75,10 @@ exports.apply=function(ctx){
     publish(record,createdNow);return record;
   }
   async function hydrate(record){
-    if(record.mode==='external')return;
+    if(!record||record.mode==='external'||excludePrivate(record.sessionId))return;
     let observation;
     try{
-      observation=await ctx.sessionQuery.observeSession(record.sessionId);
+      observation=await observePublicSession(record.sessionId);
       record.title=String(observation.projections?.values.title||record.title||'');
       for(let i=observation.events.length-1;i>=observation.inheritedEventCount;i--){
         const event=observation.events[i];
@@ -59,24 +90,28 @@ exports.apply=function(ctx){
       const context=historyContext(observation,!!record.parentSessionId);
       if(context.delegatedPromptSeq!==null)initialPrompts.set(record.sessionId,context.delegatedPromptSeq);
       emit('session-context',{sessionId:record.sessionId,title:record.title,...context});
-    }catch(error){emit('catalog-diagnostic',{sessionId:record.sessionId,message:String(error?.message||error)});}
+    }catch(error){if(!excludePrivate(record.sessionId))emit('catalog-diagnostic',{sessionId:record.sessionId,message:String(error?.message||error)});}
     finally{observation?.[Symbol.dispose]?.();}
   }
   async function syncParent(parentId,visited=new Set()){
     parentId=String(parentId);if(visited.has(parentId))return;visited.add(parentId);
     if(syncingParents.has(parentId))return syncingParents.get(parentId);
     const task=(async()=>{
+      if(await discoverPrivate(parentId))return;
       let rows;
       try{rows=await ctx.subagents.listChildren(parentId,signal());}
       catch(error){emit('catalog-diagnostic',{parentSessionId:parentId,message:String(error?.message||error)});return;}
-      children.set(parentId,mergeCatalogOrder(rows.map(row=>String(row.id??row.childId)),children.get(parentId)||[]));publishRoster();
-      for(const row of rows){const record=register(parentId,row);await hydrate(record);if(row.mode!=='external')await syncParent(record.sessionId,visited);}
+      const visible=[];for(const row of rows){if(!await discoverPrivate(String(row.id??row.childId)))visible.push(row);}
+      children.set(parentId,mergeCatalogOrder(visible.map(row=>String(row.id??row.childId)),children.get(parentId)||[]));publishRoster();
+      for(const row of visible){const record=register(parentId,row);if(!record)continue;await hydrate(record);if(row.mode!=='external')await syncParent(record.sessionId,visited);}
     })();
     syncingParents.set(parentId,task);
     try{await task;}finally{syncingParents.delete(parentId);}
   }
-  ctx.on('session/event',(session,event)=>{
+  ctx.on('session/event',async(session,event)=>{
     const id=String(session.id);
+    if(excludePrivate(id,session))return;
+    if(event.type==='subagent/catalog'&&await discoverPrivate(String(event.data?.id??event.data?.childId??'')))return;
     taskSessions.onEvent(session,event);
     if(event.type==='subagent/catalog'){
       const record=register(id,event.data,true);if(record)hydrate(record);
@@ -96,19 +131,22 @@ exports.apply=function(ctx){
   });
   ctx.on('agent/status',({agent,status})=>{
     const id=String(agent.id),record=catalog.get(id);
+    if(excludePrivate(id,agent.session))return;
     taskSessions.onStatus(agent,status);
     if(record)publish(record);
     else if(agent.session.header.parentSession)syncParent(agent.session.header.parentSession);
     emit('status',{sessionId:id,status});
   });
-  ctx.on('agent/error',({agent,error})=>emit('failure',{sessionId:String(agent.id),message:String(error?.message||error)}));
+  ctx.on('agent/error',({agent,error})=>{if(!excludePrivate(String(agent.id),agent.session))emit('failure',{sessionId:String(agent.id),message:String(error?.message||error)});});
   ctx.on('subagent/start',function(info){
+    if(excludePrivate(String(info.id)))return;
     const record=catalog.get(String(info.id));
     if(record){if(!info.local)record.externalRunning=true;publish(record);}
     else {const parent=carrierKeyOf?.(this);if(parent?.id)syncParent(parent.id);}
     emit('subagent-activity',{sessionId:String(info.id),phase:'start',local:info.local});
   });
   ctx.on('subagent/end',info=>{
+    if(excludePrivate(String(info.id)))return;
     const record=catalog.get(String(info.id));if(record){record.externalRunning=false;publish(record);}
     emit('subagent-activity',{sessionId:String(info.id),phase:'end',local:info.local,stopReason:info.stopReason});
   });
@@ -200,6 +238,6 @@ exports.apply=function(ctx){
   const lines=readline.createInterface({input:process.stdin});
   lines.on('line',async line=>{let request;try{request=JSON.parse(line);const result=await dispatch(request.method,request.params||{});process.stdout.write(JSON.stringify({id:request.id,result})+'\n');}catch(error){process.stdout.write(JSON.stringify({id:request?.id,error:String(error?.message||error)})+'\n');}});
   lines.on('close',()=>{if(closing)return;closing=true;Promise.resolve().then(()=>typeof ctx.root?.dispose==='function'?ctx.root.dispose():ctx.dispose?.()).finally(()=>process.exit(0));});
-  ctx.on('dispose',()=>{closing=true;taskSessions.dispose();lines.close();});
+  ctx.on('dispose',()=>{closing=true;process.removeListener('neko-qqbot-state',qqbotState);taskSessions.dispose();lines.close();});
   emit('ready',{version:2});
 };
