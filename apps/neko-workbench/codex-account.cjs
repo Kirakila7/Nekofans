@@ -41,6 +41,28 @@ function accountSummary(result) {
     planType: typeof account.planType === 'string' ? account.planType.slice(0, 40) : null };
 }
 
+function readCodexLoginStatus(executable, { spawnProcess = spawn, env = process.env, jobs = new Set() } = {}) {
+  return new Promise(resolve => {
+    const child = spawnProcess(executable, ['login', 'status'], { cwd: os.tmpdir(), env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, shell: false });
+    jobs.add(child);
+    let text = '', finished = false;
+    const timer = setTimeout(() => { child.kill('SIGTERM'); finish({ status: 'unavailable', authType: null, planType: null }); }, 3000);
+    const kill = setTimeout(() => child.kill('SIGKILL'), 4000);
+    function finish(value) { if (finished) return; finished = true; clearTimeout(timer); resolve(value); }
+    const collect = chunk => { if (text.length < 8192) text += String(chunk).slice(0, 8192 - text.length); };
+    child.stdout.on('data', collect); child.stderr.on('data', collect);
+    child.once('error', () => finish({ status: 'unavailable', authType: null, planType: null }));
+    child.once('close', code => {
+      jobs.delete(child); clearTimeout(kill);
+      const lower = text.toLowerCase();
+      const signedIn = code === 0 && lower.includes('logged in');
+      finish({ status: signedIn ? 'signed-in' : lower.includes('not logged in') ? 'signed-out' : 'unavailable',
+        authType: signedIn ? lower.includes('chatgpt') ? 'chatgpt' : lower.includes('api key') ? 'apiKey' : 'other' : null, planType: null });
+      text = '';
+    });
+  });
+}
+
 function openProtocol(executable, { spawnProcess = spawn, env = process.env, timeoutMs = 12000, jobs = new Set() } = {}) {
   const child = spawnProcess(executable, ['app-server', '--listen', 'stdio://'], {
     cwd: os.tmpdir(), env, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, shell: false,
@@ -100,22 +122,26 @@ function openProtocol(executable, { spawnProcess = spawn, env = process.env, tim
   return { request, notifyInitialized: () => child.stdin.write('{"method":"initialized"}\n'), close };
 }
 
-async function queryCodex(executable, { includeQuota = false, ...options } = {}) {
-  const client = openProtocol(executable, options);
+async function queryCodex(executable, { includeQuota = false, knownAccount = null, ...options } = {}) {
+  const client = openProtocol(executable, { timeoutMs: 20000, ...options });
   try {
     await client.request('initialize', { clientInfo: { name: 'neko_workbench_accounts', version: '0.25.2' }, capabilities: null });
     client.notifyInitialized();
-    const before = await client.request('account/read', { refreshToken: false });
-    const summary = accountSummary(before);
+    // Native login status is sufficient for a read-only quota query. Avoid
+    // depending on model-workspace routing discovery just to show usage.
+    const before = knownAccount ? null : await client.request('account/read', { refreshToken: false });
+    const summary = knownAccount ? { ...knownAccount } : accountSummary(before);
     let quota = { status: 'idle', buckets: [], ordinaryUsageAllowed: null };
     if (includeQuota && summary.status === 'signed-in') {
       if (summary.authType !== 'chatgpt') quota.status = 'not-applicable';
       else {
         try {
           const raw = await client.request('account/rateLimits/read');
-          const after = await client.request('account/read', { refreshToken: false });
-          // Discard old-account limits when native authentication changes mid-read.
-          if (JSON.stringify(before.account) !== JSON.stringify(after.account)) return { ...accountSummary(after), quota: { ...quota, status: 'unavailable' } };
+          if (!knownAccount) {
+            const after = await client.request('account/read', { refreshToken: false });
+            if (JSON.stringify(before.account) !== JSON.stringify(after.account)) return { ...accountSummary(after), quota: { ...quota, status: 'unavailable' } };
+          }
+          if (typeof raw?.rateLimits?.planType === 'string') summary.planType = raw.rateLimits.planType.slice(0, 40);
           const normalized = normalizeRateLimits(raw);
           quota = { status: normalized.buckets.some(b => b.windows.length) ? 'ready' : 'unavailable', ...normalized };
         } catch { quota.status = 'unavailable'; }
@@ -125,7 +151,7 @@ async function queryCodex(executable, { includeQuota = false, ...options } = {})
   } finally { await client.close(); }
 }
 
-function createCodexAccountService({ env = process.env, resolveExecutable = () => resolveCodex({ env }), query = queryCodex, now = Date.now, cacheMs = 30000 } = {}) {
+function createCodexAccountService({ env = process.env, resolveExecutable = () => resolveCodex({ env }), query = queryCodex, readStatus = readCodexLoginStatus, now = Date.now, cacheMs = 30000 } = {}) {
   const jobs = new Set();
   let disposed = false, pending = null, snapshot = null, fetched = 0, quotaFetched = 0;
   async function read({ includeQuota = false, force = false } = {}) {
@@ -137,8 +163,21 @@ function createCodexAccountService({ env = process.env, resolveExecutable = () =
       let next;
       if (!executable) next = { status: 'not-installed', authType: null, planType: null, quota: { status: 'unavailable', buckets: [] } };
       else {
-        try { next = await query(executable, { includeQuota, env, jobs }); }
-        catch { next = { status: 'unavailable', authType: null, planType: null, quota: { status: 'unavailable', buckets: [] } }; }
+        let local;
+        try { local = await readStatus(executable, { env, jobs }); }
+        catch { local = { status: 'unavailable', authType: null, planType: null }; }
+        next = { ...local, quota: { status: 'idle', buckets: [] } };
+        if (includeQuota && local.status !== 'signed-out') {
+          if (local.status === 'signed-in' && local.authType !== 'chatgpt') next.quota.status = 'not-applicable';
+          else {
+            try {
+              next = await query(executable, { includeQuota, knownAccount: local.status === 'signed-in' ? local : null, env, jobs });
+              const after = await readStatus(executable, { env, jobs });
+              if (after.status !== local.status || after.authType !== local.authType) next = { ...after, quota: { status: 'unavailable', buckets: [] } };
+            }
+            catch { next = { ...local, quota: { status: 'unavailable', buckets: [] } }; }
+          }
+        }
       }
       if (!disposed) { fetched = now(); quotaFetched = includeQuota ? fetched : 0; snapshot = Object.freeze({ ...next, fetchedAt: new Date(fetched).toISOString() }); }
     })();
@@ -155,4 +194,4 @@ function createCodexAccountService({ env = process.env, resolveExecutable = () =
   }
   return { read, dispose };
 }
-module.exports = { resolveCodex, normalizeRateLimits, accountSummary, openProtocol, queryCodex, createCodexAccountService };
+module.exports = { resolveCodex, normalizeRateLimits, accountSummary, readCodexLoginStatus, openProtocol, queryCodex, createCodexAccountService };
