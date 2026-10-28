@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const cp = require('node:child_process');
-const { Readable } = require('node:stream');
+const { Readable, PassThrough } = require('node:stream');
 const { pathToFileURL } = require('node:url');
 const base = path.join(__dirname, '../../apps/neko-workbench/vendor/dsh-qqbot-workbench');
 const installer = require(path.join(base, 'install.cjs'));
@@ -31,6 +31,13 @@ async function fixture(t, savedConfig = {}, { sessions = false } = {}) {
   };
   const key = `neko-qq-test:${tmp}`;
   globalThis[key] = fake;
+  fake.persist = next => {
+    const entries=JSON.parse(fs.readFileSync(path.join(root,'cordis.patch.yml'),'utf8'));
+    entries[0].config={...entries[0].config,...next};
+    fs.writeFileSync(path.join(root,'cordis.patch.yml'),JSON.stringify(entries));
+    return true;
+  };
+  fs.writeFileSync(path.join(pkg,'dist/setup/persist.js'),`export const updateProfileConfig = value => globalThis[${JSON.stringify(key)}].persist(value);\n`);
   fs.writeFileSync(path.join(tmp, 'dependencies.mjs'), `
 const fixture = globalThis[${JSON.stringify(key)}];
 export const ConfigSchema = {};
@@ -227,7 +234,7 @@ test('QQ diagnostics require active authenticated GET and never expose or change
   assert.equal(JSON.parse(read('GET').body).counters.received, 0, 'old runtime cannot alter a new run');
 });
 
-test('private pairing HTTP controls require a live authenticated gateway and expose no captured identity', async t => {
+test('private pairing HTTP controls require an authenticated bound bot and expose no captured identity', async t => {
   const f = await fixture(t, bound);
   const handler = f.webRoutes.get('/qqbot-workbench/private-pairing');
   const request = async (method, action) => {
@@ -237,13 +244,13 @@ test('private pairing HTTP controls require a live authenticated gateway and exp
   };
   assert.equal((await request('POST','begin')).statusCode,403);
   await f.wrapper.qqbotAction('start');
-  assert.equal((await request('POST','begin')).statusCode,409);
   f.fake.bots[0].handlers.ready();
   f.fake.rejectRequests = true;
   assert.equal((await request('POST','begin')).statusCode,403);
   f.fake.rejectRequests = false;
   const begun = JSON.parse((await request('POST','begin')).body);
   assert.match(begun.challenge,/^[a-f0-9]{32}$/);
+  await tick(); await tick();
   const oldRuntime = globalThis[RUNTIME]();
   assert.equal(oldRuntime.capture({kind:'c2c',senderId:'chosen-private-user',content:begun.challenge}),true);
   const status = await request('GET');
@@ -255,6 +262,72 @@ test('private pairing HTTP controls require a live authenticated gateway and exp
   assert.equal((await request('PUT')).statusCode,405);
   await f.wrapper.qqbotAction('pause');
   assert.equal(oldRuntime.capture({kind:'c2c',senderId:'chosen-private-user',content:begun.challenge}),false);
+});
+
+test('first pairing starts a receive-only gateway from empty scopes and requires explicit confirmation', async t => {
+  const access={c2cMode:'disabled',c2cAllow:[],groupMode:'disabled',groupAllow:[]};
+  const f=await fixture(t,{...bound,access});
+  const handler=f.webRoutes.get('/qqbot-workbench/private-pairing');
+  const request=async(method,action)=>{const req=Readable.from(action?[JSON.stringify({action})]:[]);req.method=method;
+    const res={statusCode:200,writeHead(status){this.statusCode=status},end(body=''){this.body=body}};await handler(req,res);return res;};
+  const initial=await f.wrapper.qqbotAction('start');
+  assert.equal(initial.phase,'scope-required');assert.equal(f.fake.starts,0);
+  const started=await request('POST','begin');assert.equal(started.statusCode,200);
+  const {challenge}=JSON.parse(started.body);await tick();await tick();
+  assert.equal(f.fake.starts,1,'pairing explicitly opens gateway despite empty allowlist');
+  const runtime=globalThis[RUNTIME]();assert.equal(runtime.allowPairing(),true);assert.equal(runtime.pairingOnly(),true);
+  await f.fake.bots.at(-1).sendMarkdown('target','must not be sent');
+  assert.deepEqual(f.fake.sends,[],'receive-only gateway cannot send');
+  assert.equal(runtime.capture({kind:'c2c',senderId:'person-123',content:'wrong'}),false);
+  assert.equal(runtime.capture({kind:'c2c',senderId:'person-123',content:challenge}),true);
+  assert.equal((await request('POST','confirm')).statusCode,409,'cannot confirm while gateway unready');
+  f.fake.bots.at(-1).handlers.ready();
+  const status=JSON.parse((await request('GET')).body);assert.equal(status.matched,true);assert.equal(status.connected,true);
+  assert(!JSON.stringify(status).includes('person-123'));assert(!JSON.stringify(status).includes(challenge));
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(process.env.NEKO_WORKBENCH_DATA_DIR,'qqbot-runtime/cordis.patch.yml'),'utf8'))[0].config.access,access,'scope stays disabled before confirmation');
+  const confirmed=await request('POST','confirm');assert.equal(confirmed.statusCode,200);
+  assert(!confirmed.body.includes('person-123'));assert(!confirmed.body.includes(challenge));
+  await tick();await tick();
+  assert.equal(runtime.allowPairing(),false);assert.equal(f.fake.stops>=1,true,'pairing-only gateway is closed');
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(process.env.NEKO_WORKBENCH_DATA_DIR,'qqbot-runtime/cordis.patch.yml'),'utf8'))[0].config.access,{c2cMode:'allowlist',c2cAllow:['person-123'],groupMode:'disabled',groupAllow:[]});
+});
+
+test('cancelling pairing restores an existing private scope without sending during the pairing window', async t => {
+  const f=await fixture(t,bound);await f.wrapper.qqbotAction('start');f.fake.bots[0].handlers.ready();
+  const handler=f.webRoutes.get('/qqbot-workbench/private-pairing');
+  const request=async(action)=>{const req=Readable.from([JSON.stringify({action})]);req.method='POST';
+    const res={statusCode:200,writeHead(status){this.statusCode=status},end(body=''){this.body=body}};await handler(req,res);return res;};
+  assert.equal((await request('begin')).statusCode,200);await tick();await tick();
+  const pairingBot=f.fake.bots.at(-1);await pairingBot.sendMarkdown('target','must not send');assert.deepEqual(f.fake.sends,[]);
+  let release;f.fake.disposeGate=new Promise(resolve=>{release=resolve;});
+  assert.equal((await request('cancel')).statusCode,200);await tick();
+  await pairingBot.sendMarkdown('target','must not send while old gateway is closing');
+  assert.deepEqual(f.fake.sends,[],'old gateway remains blocked until updated scope is installed');
+  release();f.fake.disposeGate=null;await tick();await tick();
+  const restored=f.fake.bots.at(-1);assert.notEqual(restored,pairingBot);restored.handlers.ready();
+  await restored.sendMarkdown('target','allowed after cancellation');assert.deepEqual(f.fake.sends,['allowed after cancellation']);
+  const saved=JSON.parse(fs.readFileSync(path.join(process.env.NEKO_WORKBENCH_DATA_DIR,'qqbot-runtime/cordis.patch.yml'),'utf8'))[0].config.access;
+  assert.deepEqual(saved,bound.access,'cancel does not alter an existing scope');
+});
+
+for(const staleAction of ['begin','cancel'])
+test(`a delayed ${staleAction} request cannot cross pause and restart into a new generation`, async t => {
+    const f=await fixture(t,bound);await f.wrapper.qqbotAction('start');f.fake.bots.at(-1).handlers.ready();
+    const handler=f.webRoutes.get('/qqbot-workbench/private-pairing');
+    const late=new PassThrough();late.method='POST';
+    const lateRes={statusCode:200,writeHead(status){this.statusCode=status},end(body=''){this.body=body}};
+    const inflight=handler(late,lateRes);await tick();
+    await f.wrapper.qqbotAction('pause');await f.wrapper.qqbotAction('start');f.fake.bots.at(-1).handlers.ready();
+    if(staleAction==='cancel') {
+      const fresh=Readable.from([JSON.stringify({action:'begin'})]);fresh.method='POST';
+      const freshRes={statusCode:200,writeHead(status){this.statusCode=status},end(body=''){this.body=body}};
+      await handler(fresh,freshRes);assert.equal(freshRes.statusCode,200);
+    }
+    late.end(JSON.stringify({action:staleAction}));await inflight;
+    assert.equal(lateRes.statusCode,409);assert.equal(JSON.parse(lateRes.body).code,'PAIRING_CANCELLED');
+    const check=Readable.from([]);check.method='GET';const checkRes={writeHead(){},end(body){this.body=body}};
+    await handler(check,checkRes);assert.equal(JSON.parse(checkRes.body).active,staleAction==='cancel');
+    await f.wrapper.qqbotAction('pause');
 });
 
 test('QQ binding, access scope and gateway readiness are independent real lifecycle states', async t => {

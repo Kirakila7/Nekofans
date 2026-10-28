@@ -12,15 +12,15 @@ function guardQQBot(bot, runtime) {
   for (const name of ['send', 'sendMarkdown', 'sendImage', 'sendVideo', 'sendVoice', 'sendFile', 'acknowledgeInteraction']) {
     if (typeof bot[name] !== 'function') continue;
     const send = bot[name].bind(bot);
-    bot[name] = (...args) => runtime.active() ? send(...args) : Promise.resolve();
+    bot[name] = (...args) => runtime.active() && !runtime.pairingOnly?.() ? send(...args) : Promise.resolve();
   }
   if (typeof bot.openStream === 'function') {
     const open = bot.openStream.bind(bot);
     bot.openStream = (...args) => {
-      const stream = runtime.active() ? open(...args) : null;
+      const stream = runtime.active() && !runtime.pairingOnly?.() ? open(...args) : null;
       return {
-        update: (...values) => runtime.active() && stream ? stream.update(...values) : Promise.resolve(),
-        complete: (...values) => runtime.active() && stream ? stream.complete(...values) : Promise.resolve(),
+        update: (...values) => runtime.active() && !runtime.pairingOnly?.() && stream ? stream.update(...values) : Promise.resolve(),
+        complete: (...values) => runtime.active() && !runtime.pairingOnly?.() && stream ? stream.complete(...values) : Promise.resolve(),
       };
     };
   }
@@ -34,6 +34,8 @@ function createQQRuntime(ctx) {
   const runtime = {
     active: () => !disposed && host?.active?.() === true,
     capture(message) { return runtime.active() && host?.capture?.(message) === true; },
+    allowPairing() { return runtime.active() && host?.allowPairing?.() === true; },
+    pairingOnly() { return !runtime.active() || host?.pairingOnly?.() === true; },
     mark(key) { host?.mark?.(key); },
     report(phase) { if (runtime.active()) host.report(phase); },
   };

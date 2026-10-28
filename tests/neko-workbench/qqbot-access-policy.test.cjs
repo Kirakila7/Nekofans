@@ -49,10 +49,10 @@ export const historyGroupKey = () => 'fixture';
 export const historyBuffer = () => async (_ctx,next) => { state.history++; await next(); };
 `);
   const { setupMiddlewares } = await import(pathToFileURL(path.join(tmp,'middleware.mjs')).href);
-  return async (access,message,capture = () => false) => {
+  return async (access,message,capture = () => false,pairingOnly = () => false) => {
     const middleware = [];
     const log = { debug() {} };
-    setupMiddlewares({use(fn){middleware.push(fn);}}, {access,debug:false}, {__nekoRuntime:{mark(){},capture}},log);
+    setupMiddlewares({use(fn){middleware.push(fn);}}, {access,debug:false}, {__nekoRuntime:{mark(){},capture,pairingOnly}},log);
     let delivered = 0, stopped = false;
     state.history = 0;
     const ctx = {message,log,stop(){stopped=true;}};
@@ -90,9 +90,22 @@ test('an armed private pairing challenge is consumed before the real access gate
   const run = await middlewareFixture(t);
   const access = {c2cMode:'allowlist',c2cAllow:['old-user'],groupMode:'disabled',groupAllow:[]};
   const { createPrivatePairing } = require(path.join(base,'private-pairing.cjs'));
-  const pairing = createPrivatePairing({readConfig:()=>({appId:'test-bot',access})});
+  const pairing = createPrivatePairing({readConfig:()=>({appId:'test-bot',appSecret:'test-secret',access})});
   const { challenge } = pairing.begin();
   assert.deepEqual(await run(access,{kind:'c2c',senderId:'new-private-user',content:challenge},m=>pairing.capture(m)),{delivered:0,stopped:true,history:0});
   assert.equal(pairing.status().matched,true);
   assert.deepEqual(await run(access,{kind:'c2c',senderId:'new-private-user',content:'ordinary message'},m=>pairing.capture(m)),{delivered:0,stopped:true,history:0});
+});
+
+test('first pairing consumes only the challenge and rejects every other message before model or history',async t => {
+  const run=await middlewareFixture(t);
+  const access={c2cMode:'disabled',c2cAllow:[],groupMode:'disabled',groupAllow:[]};
+  const {createPrivatePairing}=require(path.join(base,'private-pairing.cjs'));
+  const pairing=createPrivatePairing({readConfig:()=>({appId:'test-bot',appSecret:'test-secret',access})});
+  const {challenge}=pairing.begin();
+  for(const message of [{kind:'c2c',senderId:'user-0001',content:'hello'}, {kind:'group',senderId:'user-0001',content:challenge}, {kind:'guild',senderId:'user-0001',content:challenge}])
+    assert.deepEqual(await run(access,message,m=>pairing.capture(m),()=>true),{delivered:0,stopped:true,history:0});
+  assert.equal(pairing.status().matched,false);
+  assert.deepEqual(await run(access,{kind:'c2c',senderId:'user-0001',content:'QQ配对 '+challenge},m=>pairing.capture(m),()=>true),{delivered:0,stopped:true,history:0});
+  assert.equal(pairing.status().matched,true);
 });

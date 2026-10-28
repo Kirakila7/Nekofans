@@ -9,6 +9,8 @@ const privatePairing = createPrivatePairing({ readConfig: config });
 const GUARD = Symbol.for('neko.qqbot.connection.guard');
 let context = null, entryId = null, entryContext = null, enabled = false, generation = 0;
 let pending = null, stopping = null, updateTail = Promise.resolve(), aborter = null;
+let pairingExpiry = null;
+let pairingTransition = false;
 let profileRoot = '', pluginDir = '';
 let pendingModel = false, accountWatch = null, accountService = null, accountEpoch = 0, accountStatus = null;
 let state = { phase: 'paused', reason: 'QQ 机器人未启动。', bound: false, connected: false, scopeConfigured: false };
@@ -59,13 +61,19 @@ function runtimeFor(revision) {
   return {
     active: () => enabled && revision === generation,
     capture(message) { return enabled && revision === generation && privatePairing.capture(message); },
+    allowPairing() { return enabled && revision === generation && privatePairing.status().active; },
+    pairingOnly() {
+      if (!enabled || revision !== generation) return true;
+      try { return pairingTransition || privatePairing.status().active || !hasScope(config().access); } catch { return true; }
+    },
     mark(key) {
       if (enabled && revision === generation && counterKeys.includes(key)) counters[key] = Math.min(counters[key] + 1, 1000000);
     },
     report(phase) {
       if (!enabled || revision !== generation || !Object.hasOwn(reasons, phase)) return;
-      if (phase === 'running' && !state.scopeConfigured) phase = 'scope-required';
-      publish({ phase, reason: reasons[phase], connected: phase === 'running',
+      const connected = phase === 'running';
+      if (connected && !state.scopeConfigured) phase = 'scope-required';
+      publish({ phase, reason: reasons[phase], connected,
         ...(phase === 'login-required' ? { bound: false } : {}),
         ...(['connecting', 'running', 'scope-required'].includes(phase) ? { bound: true } : {}) });
     },
@@ -87,6 +95,7 @@ function refresh() {
     projectConfig(value);
     await owner.loader.update(entryId, { config: value });
     await owner.loader.await();
+    if (revision === generation && enabled && !privatePairing.status().active) pairingTransition = false;
   }).catch(() => {
     if (revision === generation && enabled) publish({ phase: 'error', reason: 'QQ 配置保存后重新加载失败，请暂停并重试。', connected: false });
   });
@@ -118,7 +127,7 @@ async function start() {
   if (enabled && state.phase === 'error') await pause();
   if (enabled) return snapshot();
   const revision = ++generation, owner = context;
-  privatePairing.cancel();
+  clearTimeout(pairingExpiry); pairingExpiry = null; privatePairing.cancel(); pairingTransition = false;
   counters = Object.fromEntries(counterKeys.map(key => [key, 0]));
   enabled = true;
   publish({ phase: 'starting', reason: reasons.starting, connected: false });
@@ -169,7 +178,7 @@ async function start() {
   return pending;
 }
 function pause() {
-  privatePairing.cancel();
+  clearTimeout(pairingExpiry); pairingExpiry = null; privatePairing.cancel(); pairingTransition = false;
   ++generation; aborter?.abort(); enabled = false; pendingModel = false;
   publish({ phase: 'paused', reason: reasons.paused, connected: false });
   if (stopping) return stopping;
@@ -232,22 +241,41 @@ exports.apply = function apply(ctx) {
     const disposePairing = scoped.webServer.register({ kind: 'exact', path: '/qqbot-workbench/private-pairing', async handler(req, res) {
       if (!trusted(req)) { res.statusCode = 403; res.end(); return; }
       const send = (status, value) => { res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' }); res.end(JSON.stringify(value)); };
-      if (req.method === 'GET') { send(200, privatePairing.status()); return; }
+      if (req.method === 'GET') { send(200, { ...privatePairing.status(), connected: state.connected === true }); return; }
       if (req.method !== 'POST') { send(405, { ok: false }); return; }
       try {
+        const requestGeneration = generation, requestEntry = entryId;
         let body = '';
         for await (const chunk of req) { body += chunk; if (body.length > 1024) throw Error(); }
+        if (requestGeneration !== generation || requestEntry !== entryId || !trusted(req)) {
+          send(409, { ok: false, code: 'PAIRING_CANCELLED' }); return;
+        }
         const { action } = JSON.parse(body);
-        if (action === 'cancel') { privatePairing.cancel(); send(200, { ok: true }); return; }
-        if (!enabled || state.phase !== 'running') { send(409, { ok: false, code: 'PAIRING_NOT_CONNECTED' }); return; }
-        if (action === 'begin') { send(200, privatePairing.begin()); return; }
+        if (action === 'cancel') {
+          pairingTransition = true; clearTimeout(pairingExpiry); pairingExpiry = null; privatePairing.cancel(); refresh();
+          send(200, { ok: true }); return;
+        }
+        if (!enabled || !entryId || !state.bound) { send(409, { ok: false, code: 'PAIRING_NOT_CONNECTED' }); return; }
+        if (action === 'begin') {
+          const started = privatePairing.begin();
+          clearTimeout(pairingExpiry);
+          pairingExpiry = setTimeout(() => { pairingTransition = true; pairingExpiry = null; privatePairing.cancel(); refresh(); }, Math.max(0, started.expiresAt - Date.now()));
+          pairingExpiry.unref?.();
+          refresh(); send(200, started); return;
+        }
         if (action !== 'confirm') { send(400, { ok: false }); return; }
+        if (!state.connected) { send(409, { ok: false, code: 'PAIRING_NOT_CONNECTED' }); return; }
         const revision = generation;
         const { updateProfileConfig } = await import(pathToFileURL(path.join(pluginDir, 'dist/setup/persist.js')).href);
         if (revision !== generation || !trusted(req)) { send(409, { ok: false, code: 'PAIRING_CANCELLED' }); return; }
-        send(200, privatePairing.confirm(access => updateProfileConfig({ access }, profileRoot, { info() {}, warn() {} })));
+        pairingTransition = true;
+        const result = privatePairing.confirm(access => updateProfileConfig({ access }, profileRoot, { info() {}, warn() {} }));
+        clearTimeout(pairingExpiry); pairingExpiry = null; refresh(); send(200, result);
       } catch (error) {
-        const code = ['PAIRING_SCOPE_CHANGED', 'PAIRING_NOT_MATCHED', 'PAIRING_SAVE_FAILED'].includes(error?.code) ? error.code : 'PAIRING_REQUEST_FAILED';
+        if (pairingExpiry && !privatePairing.status().active) {
+          clearTimeout(pairingExpiry); pairingExpiry = null; refresh();
+        }
+        const code = ['PAIRING_SCOPE_CHANGED', 'PAIRING_ALREADY_ACTIVE', 'PAIRING_NOT_MATCHED', 'PAIRING_SAVE_FAILED'].includes(error?.code) ? error.code : 'PAIRING_REQUEST_FAILED';
         send(400, { ok: false, code });
       }
     } });

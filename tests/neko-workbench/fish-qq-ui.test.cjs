@@ -100,8 +100,20 @@ function tab(owner, label) { return find(owner, node => node.props.role === 'tab
 function open(owner) { button(owner, '养鱼').props.onClick(); owner.flush(); }
 const deferred = () => { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; };
 
+test('the existing fish avatar is the single entry for the unified panel', () => {
+  const f=fixture(),names=[];
+  f.api.apply({effect(fn){fn();},slots:{inject(name,fn){names.push(name);fn();},register(){return()=>{};}}});
+  assert.deepEqual(names,['sidebar.footer.action'],'do not register a duplicate old settings section');
+});
+
 test('beginner panel keeps scan and start controls visible while channel configuration is folded', async () => {
   const f=fixture(), owner=f.mount(f.api.FishLauncher); await owner.settle(); open(owner);
+  const entry=find(owner,node=>node.type==='button'&&node.props['aria-label']==='养鱼设置');
+  const avatar=nodes(entry).find(node=>node.type==='img');
+  assert.ok(avatar?.props.src.startsWith('data:image/webp;base64,'),'the existing fish avatar remains the entry');
+  assert.deepEqual(Buffer.from(avatar.props.src.split(',')[1],'base64'),fs.readFileSync(path.join(__dirname,'../../apps/neko-workbench/embedded-dsh/assets/avatars/bigfish.webp')));
+  const panel=find(owner,node=>node.props['aria-label']==='连接与生活设置'&&node.type==='aside');
+  assert.ok(panel.props.style.zIndex>50,'the unified panel appears above the Codex view');
   const visible=visibleNodes(owner.tree);
   assert.ok(visible.some(node=>node.type==='button'&&text(node)==='一键养鱼'));
   for(const label of ['B 站扫码','QQ 扫码'])assert.ok(visible.some(node=>node.type==='button'&&text(node)===label));

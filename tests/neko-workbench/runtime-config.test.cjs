@@ -74,7 +74,7 @@ test('JavaScript CLI runs with Chinese and spaced paths as separate arguments in
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(JSON.parse(result.stdout), {
     args: ['--profile', 'web', '--patch', patchFile, '--no-open', '--host', '127.0.0.1', '--port', '0'],
-    cwd: runtime.workspaceDir,
+    cwd: fs.realpathSync(runtime.workspaceDir),
     dshHome: runtime.dshHomeDir,
   });
 });
