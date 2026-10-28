@@ -58,3 +58,5 @@ npm run check:neko              # 语法与主题检查
 社区目标、接入范围和后续分工见 [COMMUNITY_INTEGRATION.md](COMMUNITY_INTEGRATION.md)。
 
 N.E.K.O. 原生语音的现有模块、ASR/TTS 并行接入、聊天/记忆统一写入和实机验收分工见 [NEKO_NATIVE_VOICE_PLAN.md](NEKO_NATIVE_VOICE_PLAN.md)。其中语音 agent 是待认领职责，不能与上方已完成工作台接入的实际子 agent 混称。
+
+工作台账号统一、B 站养鱼和 QQ 机器人一键配置的后续任务、并行分工及真实账号验收见 [ONE_CLICK_FISH_QQ_PLAN.md](ONE_CLICK_FISH_QQ_PLAN.md)。该计划中各职责待认领，不代表已完成或已指派。
