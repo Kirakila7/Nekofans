@@ -81,7 +81,9 @@ function fixture(t, mode) {
     });input.on('close',()=>process.exit(0));`);
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const methods = [];
-  return { methods, options: { timeoutMs: 1000, spawnProcess: (cli, args, options) => {
+  // The fixture launches a real Node child; give it time to start under a
+  // busy full-suite run while preserving the production timeout unchanged.
+  return { methods, options: { timeoutMs: 10000, spawnProcess: (cli, args, options) => {
     assert.equal(cli, '/native/codex'); assert.deepEqual(args, ['app-server', '--listen', 'stdio://']); assert.equal(options.shell, false);
     const child = spawn(process.execPath, [entry], options), write = child.stdin.write.bind(child.stdin);
     child.stdin.write = (chunk, ...rest) => { methods.push(JSON.parse(chunk).method); return write(chunk, ...rest); };
