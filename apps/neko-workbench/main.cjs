@@ -510,11 +510,19 @@ async function capture(){
   const appearance=workbenchAppearance.get();metrics.workbenchAvatar={builtinId:appearance.builtinId,hasCustomAvatar:!!appearance.customDataUrl};metrics.workbenchRoles={activeId:rolesState().activeId,workspaceSessionId:rolesState().workspaceSessionId,roles:rolesState().roles.map(({customDataUrl,...role})=>({...role,hasCustomAvatar:!!customDataUrl}))};
   fs.writeFileSync(path.join(runtimePaths.diagnosticsDir,'minimal-ui.json'),JSON.stringify(metrics,null,2));
 }
+function memoryMenu(){
+  const snapshot=state.mainChat?.memorySystem||{},enabled=mainChatRuntime?.backend==='chat-api';
+  const act=async input=>{try{const result=await mainChatRuntime.memoryAction(input);if(result?.ok===false)notice(state.actors[0],result.message);}catch{notice(state.actors[0],'记忆操作未完成，请打开 N.E.K.O. 记忆设置检查。');}update();};
+  return [
+    {label:'N.E.K.O.：'+(snapshot.providerStates?.neko||'待连接'),enabled:false},
+    {label:'立即处理待存记忆',enabled,click:()=>act({action:'sync'})},
+    {label:'记忆与模型设置…',click:editChatMemory}
+  ];
+}
 function mainMenu(){return Menu.buildFromTemplate([
   {label:state.fish.enabled||['checking','login-required','model-login-required'].includes(state.fish.phase)?'暂停养鱼':'开始养鱼',enabled:state.connection==='ready',click:()=>fishAction(state.fish.enabled||['checking','login-required','model-login-required'].includes(state.fish.phase)?'pause':'start').catch(error=>{notice(state.actors[0],error.message);update();})},
   {label:'形象',submenu:appearanceMenu(state.actors.find(a=>a.id==='main'))},
-  {label:'聊天 API 设置…',click:editChatSettings},
-  {label:'聊天记忆…',click:editChatMemory},
+  {label:'养鱼',submenu:[{label:'聊天 API 设置…',click:editChatSettings},{label:'N.E.K.O. 记忆',submenu:memoryMenu()},{label:'生活与 QQ 设置…',click:()=>openFishSettings().catch(engineError)}]},
   {label:'停止聊天回复',enabled:state.actors[0].chatBackend==='chat-api'&&busy(state.actors[0]),click:()=>mainChatRuntime?.cancel()},
   {type:'separator'},
   {label:'打开工作台',click:()=>openDsh().catch(engineError)},

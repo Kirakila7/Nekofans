@@ -8,7 +8,7 @@ const root=path.resolve(__dirname,'../..');
 function vault(){return {isEncryptionAvailable:()=>true,getSelectedStorageBackend:()=> 'keychain',
   encryptString:value=>Buffer.from('fixture-cipher:'+Buffer.from(value).toString('base64')),
   decryptString:bytes=>{const raw=bytes.toString();if(!raw.startsWith('fixture-cipher:'))throw Error('bad fixture');return Buffer.from(raw.slice(15),'base64').toString();}};}
-function fixture(t){const directory=fs.mkdtempSync(path.join(os.tmpdir(),'neko-main-chat-'));const safeStorage=vault();const options={dataDir:directory,repositoryRoot:root,safeStorage};const runtimes=[];
+function fixture(t){const directory=fs.mkdtempSync(path.join(os.tmpdir(),'neko-main-chat-'));const safeStorage=vault();const options={dataDir:directory,repositoryRoot:root,safeStorage,memoryWorker:{request:async()=>{throw Error('fixture native offline');},stop:async()=>{},close:async()=>{}}};const runtimes=[];
   t.after(async()=>{for(const runtime of runtimes)await runtime.close();fs.rmSync(directory,{recursive:true,force:true});});
   const create=()=>{const runtime=new WorkbenchMainChat(options);runtimes.push(runtime);return runtime;};return {directory,options,safeStorage,create};}
 function sse(res,text='你好'){res.writeHead(200,{'content-type':'text/event-stream'});res.write(`data: ${JSON.stringify({choices:[{delta:{content:text.slice(0,1)}}]})}\n\n`);res.end(`data: ${JSON.stringify({choices:[{delta:{content:text.slice(1)}}]})}\n\ndata: [DONE]\n\n`);}
@@ -25,23 +25,18 @@ test('new workbench uses independent unconfigured chat, encrypted key projection
   const history=await runtime.history();assert.equal(history.length,1);assert.equal(history[0].role,'user');assert.equal(history[0].personaId,'bigfish');
 });
 
-test('actual loopback API streams; confirmed memory, edits, deletion, source summaries and restart use the same stores',async t=>{
+test('loopback chat uses only native memory, preserves raw history, and does not generate local proposals or summaries',async t=>{
   const f=fixture(t),api=await upstream(t);let runtime=f.create();await runtime.start();await runtime.saveApi({...config(api.baseUrl),personaId:'forged',apiKey:'must-not-persist'});
   const projections=[];runtime.subscribe(state=>projections.push(state));const result=await runtime.send('我喜欢乌龙茶');assert.equal(result.status,'completed');assert.equal(result.text,'你好');
   assert(projections.some(p=>p.chat.phase==='connecting'));assert(projections.some(p=>p.chat.phase==='replying'&&p.chat.reply==='你'));
   assert.equal(api.requests[0].url,'/v1/chat/completions');assert.equal(api.requests[0].headers.authorization,'Bearer fixture-secret-only');
   const storedConfig=fs.readFileSync(runtime.configFile,'utf8');assert(!storedConfig.includes('fixture-secret'));assert(!storedConfig.includes('must-not-persist'));assert.equal(JSON.parse(storedConfig).mainChat.personaId,'bigfish');
-  const cipher=fs.readFileSync(runtime.secretStore.file);assert(!cipher.includes(Buffer.from('fixture-secret-only')));
-  let memory=await runtime.memories();const proposal=memory.items.find(item=>item.text.includes('乌龙茶'));assert(proposal);assert.equal(proposal.confirmation,'pending');
-  await runtime.send('我喝什么茶');assert(!api.requests.at(-1).body.messages[0].content.includes('乌龙茶'));
-  await runtime.memoryAction({action:'confirm',id:proposal.id});await runtime.memoryAction({action:'update',id:proposal.id,text:'用户喜欢茉莉花茶'});
-  await runtime.send('我的茶偏好是什么');assert(api.requests.at(-1).body.messages[0].content.includes('用户喜欢茉莉花茶'));
-  await assert.rejects(runtime.memoryAction({action:'remove',id:proposal.id,personaId:'other'}));
-  for(let n=0;n<10;n++)await runtime.send('继续聊天 '+n);
-  memory=await runtime.memories();assert(memory.summaries.length>0);const summary=memory.summaries[0];const sources=await runtime.memoryAction({action:'sources',id:summary.id});assert(sources.length>0);assert(sources.every(row=>row.personaId==='bigfish'));
+  assert(!fs.readFileSync(runtime.secretStore.file).includes(Buffer.from('fixture-secret-only')));
+  for(let n=0;n<11;n++)await runtime.send('继续聊天 '+n);
+  let memory=await runtime.memories();assert.equal(memory.items.length,0);assert.equal(memory.summaries.length,0);assert.equal(memory.replication.mode,'neko');assert.equal(memory.replication.records.filter(r=>r.value?.kind==='episode').length,12);
+  await assert.rejects(runtime.memoryAction({action:'set-mode',mode:'diary'}));await assert.rejects(runtime.memoryAction({action:'auto-sync',enabled:false}));
   const id=runtime.opened.service.conversationId,priorHistory=await runtime.history();await runtime.close();runtime=f.create();await runtime.start();assert.equal(runtime.opened.service.conversationId,id);assert.equal((await runtime.history()).length,priorHistory.length);
-  memory=await runtime.memories();assert.equal(memory.items.find(item=>item.id===proposal.id).text,'用户喜欢茉莉花茶');
-  await runtime.memoryAction({action:'remove',id:proposal.id});await runtime.memoryAction({action:'remove-summary',id:summary.id});assert(!(await runtime.memories()).items.some(item=>item.id===proposal.id));assert(!(await runtime.memories()).summaries.some(item=>item.id===summary.id));
+  memory=await runtime.memories();assert.equal(memory.replication.records.length,12);assert.equal(memory.replication.mode,'neko');
 });
 
 test('cancel discards partial assistant storage, API failure is fixed text, and the next request recovers',async t=>{

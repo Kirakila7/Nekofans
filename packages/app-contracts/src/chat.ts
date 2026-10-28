@@ -57,8 +57,19 @@ export interface ChatStreamInput {
   memories: MemoryItem[];
   /** Derived historical context, separate from confirmed memories. */
   summaries?: import("./summary.ts").ConversationSummary[];
+  /** Current memory backend only. Inferences remain distinct from user confirmation. */
+  memoryContext?: RecalledMemory[];
   maxOutputTokens: number;
   signal: AbortSignal;
+}
+
+export interface RecalledMemory {
+  kind: "fact" | "preference" | "episode" | "summary";
+  text: string;
+  visibility: "owner" | "private";
+  certainty: "candidate" | "inferred" | "user-confirmed";
+  evidenceRefs: string[];
+  nativeRef?: { provider: "diary" | "neko"; id: string; nativeStatus?: string };
 }
 
 export interface ChatProvider {

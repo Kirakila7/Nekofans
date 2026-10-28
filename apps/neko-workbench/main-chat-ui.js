@@ -28,19 +28,49 @@
     return ()=>{disposed=true;off?.();};
   }
   function mountMemory(host,pet){
-    host.innerHTML='<main class="chat-panel memory-panel"><header><h1>聊天记忆</h1><button type="button" class="refresh-memory">刷新</button></header><p>候选记忆经你确认后才作为事实召回。自动摘要保留来源，原始聊天不会因删除记忆而删除。</p><p role="status" aria-live="polite"></p><section class="memory-items"></section><section class="memory-summaries"></section><details><summary>最近聊天记录</summary><div class="chat-history"></div></details></main>';
+    host.innerHTML='<main class="chat-panel memory-panel"><header><h1>N.E.K.O. 记忆</h1><button type="button" class="refresh-memory">刷新</button></header><p>主角色统一使用 N.E.K.O. 记忆，自动整理已完成的聊天。原始记录保留；候选和模型推断不会冒充用户确认。</p><section class="memory-system"><h2>原生记忆服务</h2><button type="button" class="sync-memory">立即处理待存记忆</button><p class="memory-sync-status"></p><details class="memory-model-settings"><summary>N.E.K.O. 记忆组件与整理模型</summary><p>组件在本机自动运行，默认使用聊天 API 整理记忆，也可设置独立模型。整理会调用所选模型。DSH 工作任务不进入这套记忆。</p><label class="check-label"><input type="checkbox" class="memory-reuse-chat" checked>使用当前聊天 API 整理记忆</label><form class="memory-model-form"><fieldset class="memory-custom-model"><legend>独立记忆整理模型</legend><label>协议<select name="protocol"><option value="openai-compatible">OpenAI 兼容</option><option value="anthropic">Anthropic</option></select></label><label>API 基础地址<input name="baseUrl" type="url" maxlength="2048"></label><label>模型<input name="model" maxlength="200"></label><label>超时（毫秒）<input name="requestTimeoutMs" type="number" min="1000" max="300000" value="60000"></label><label>新密钥<input name="apiKey" type="password" maxlength="16384" autocomplete="new-password" placeholder="留空保留已存密钥"></label></fieldset><button type="submit">保存并连接记忆组件</button><p class="memory-key-status"></p></form></details></section><p role="status" aria-live="polite"></p><section class="memory-items"></section><section class="memory-summaries"></section><details><summary>最近聊天记录</summary><div class="chat-history"></div></details></main>';
     const document=host.ownerDocument,status=host.querySelector('[role=status]'),items=host.querySelector('.memory-items'),summaries=host.querySelector('.memory-summaries'),history=host.querySelector('.chat-history');
-    let generation=0,disposed=false,lastBackend,lastPhase;
+    let generation=0,disposed=false,lastBackend,lastPhase,lastMemory,modelLoaded=false;const drafts=new Map();
+    const syncStatus=host.querySelector('.memory-sync-status'),reuse=host.querySelector('.memory-reuse-chat'),modelForm=host.querySelector('.memory-model-form'),custom=host.querySelector('.memory-custom-model');
     const node=(tag,text,className)=>{const el=document.createElement(tag);if(text!==undefined)el.textContent=text;if(className)el.className=className;return el;};
     const actionButton=(text,action)=>{const button=node('button',text);button.type='button';button.addEventListener('click',async()=>{if(button.disabled)return;button.disabled=true;try{await action();}catch{if(!disposed)status.textContent='操作未完成，请刷新后重试';}finally{if(!disposed)button.disabled=false;}});return button;};
-    async function mutate(input){await pet.call('chat-memory-action',input);await refresh();}
+    async function mutate(input){const result=await pet.call('chat-memory-action',input);if(result?.ok!==false&&input.id)drafts.delete(input.id);await refresh();if(result?.ok===false)status.textContent=result.message||'操作未完成，仍使用原有设置';}
+    host.querySelector('.sync-memory').addEventListener('click',async event=>{const button=event.currentTarget;button.disabled=true;status.textContent='正在处理记忆…';try{await mutate({action:'sync'});}catch{status.textContent='记忆处理未完成，记录已保留';}finally{if(!disposed)button.disabled=false;}});
+    reuse.addEventListener('change',()=>{custom.disabled=reuse.checked;});custom.disabled=true;
+    modelForm.addEventListener('submit',async event=>{
+      event.preventDefault();const button=modelForm.querySelector('button');if(button.disabled)return;button.disabled=true;status.textContent='正在连接记忆组件…';const get=name=>modelForm.elements.namedItem(name);
+      try{const secret=get('apiKey').value;await mutate({action:'configure-neko',enabled:true,useChatApi:reuse.checked,...(reuse.checked?{}:{protocol:get('protocol').value,baseUrl:get('baseUrl').value,model:get('model').value,requestTimeoutMs:Number(get('requestTimeoutMs').value),key:secret.trim()?{action:'replace',value:secret}:{action:'keep'}})});get('apiKey').value='';}
+      catch{if(!disposed)status.textContent='记忆组件尚未就绪，请检查组件安装和模型设置';}finally{if(!disposed)button.disabled=false;}
+    });
+    function renderReplication(replication,model){
+      host.querySelector('.memory-system').hidden=!replication;if(!replication)return;
+
+      syncStatus.textContent='N.E.K.O.：'+(replication.providerStates.neko||'待连接')+'；待处理 '+replication.pending+' 条，冲突 '+replication.conflicts+' 条。'+(replication.error||'');
+      if(model&&!modelLoaded){reuse.checked=model.useChatApi;custom.disabled=reuse.checked;for(const key of ['protocol','baseUrl','model','requestTimeoutMs'])if(model[key]!==undefined)modelForm.elements.namedItem(key).value=String(model[key]);modelLoaded=true;}
+      host.querySelector('.memory-key-status').textContent=model?.hasKey?'独立记忆密钥已加密保存':'独立记忆密钥尚未保存';
+      if(replication.records.length>200)items.append(node('p','显示最近 200 条结构化记录，原始聊天与日记继续完整保留。'));
+      for(const record of replication.records.slice(-200).reverse()){
+        const card=node('article',undefined,'memory-card'),controls=node('div',undefined,'memory-controls'),revisionIds=record.heads.map(e=>e.eventId),input={id:record.itemId,revisionIds};
+        if(record.deleted){card.append(node('p','已删除 · 旧记录不会自动恢复'),actionButton('显式恢复',()=>mutate({...input,action:'event-restore'})));items.append(card);continue;}
+        if(record.conflict){card.append(node('p','这条记忆有不同修订，请选择或合并内容'));for(const head of record.heads)card.append(node('pre',head.value?.text||'删除修订'));const edit=node('textarea');edit.maxLength=30000;edit.setAttribute('aria-label','合并冲突内容');card.append(edit,actionButton('保存合并',()=>mutate({...input,action:'event-resolve',text:edit.value})));}
+        else{
+          const value=record.value;if(!value)continue;const edit=node('textarea'),draft=drafts.get(record.itemId);edit.value=draft?.text??value.text;edit.maxLength=30000;edit.setAttribute('aria-label','编辑记忆内容');
+          edit.addEventListener('input',()=>drafts.set(record.itemId,{text:edit.value,revisionIds:[...revisionIds]}));
+          if(draft){input.revisionIds=draft.revisionIds;if(JSON.stringify(draft.revisionIds)!==JSON.stringify(revisionIds))card.append(node('p','这条记忆已有新修订，你的编辑草稿已保留；请核对后重新编辑。'));}
+          card.append(node('p',(value.certainty==='user-confirmed'?'用户已确认':value.certainty==='inferred'?'模型推断 / 历史摘要':'待确认 / 历史经历')+' · '+(value.visibility==='private'?'私人':'给用户的日记')),edit,node('small','来源：'+(value.evidenceRefs.join('、')||'来源缺失')));
+          if(value.certainty!=='user-confirmed')controls.append(actionButton('确认',()=>mutate({...input,action:'event-confirm'})));
+          controls.append(actionButton('保存更正',()=>mutate({...input,action:'event-update',text:edit.value})));
+        }
+        controls.append(actionButton('删除记忆',()=>mutate({...input,action:'event-delete'})));card.append(controls);items.append(card);
+      }
+    }
     async function refresh(){
       const token=++generation;status.textContent='正在读取…';
       try{
         const [memory,messages]=await Promise.all([pet.call('chat-memory-read'),pet.call('chat-history')]);
-        if(disposed||token!==generation)return;items.replaceChildren(node('h2','偏好与事实'));summaries.replaceChildren(node('h2','自动摘要'));
-        if(!memory.items.length)items.append(node('p','还没有记忆；聊天产生的候选会显示在这里。','empty-state'));
-        for(const item of memory.items){
+        if(disposed||token!==generation)return;items.replaceChildren(node('h2','偏好与事实'));summaries.replaceChildren(node('h2','旧版历史摘要'));summaries.hidden=!!memory.replication&&!memory.summaries.length;
+        if(!(memory.replication?memory.replication.records:memory.items).length)items.append(node('p','还没有记忆；聊天产生的候选会显示在这里。','empty-state'));
+        for(const item of memory.replication?[]:memory.items){
           const card=node('article',undefined,'memory-card'),heading=node('p',item.confirmation==='confirmed'?'已确认':'待确认','memory-badge');
           const text=node('textarea');text.value=item.text;text.maxLength=500;text.setAttribute('aria-label',item.confirmation==='confirmed'?'编辑已确认记忆':'编辑候选记忆');
           const controls=node('div',undefined,'memory-controls');
@@ -48,6 +78,7 @@
           controls.append(actionButton('保存修改',()=>mutate({action:'update',id:item.id,text:text.value})),actionButton('删除',()=>mutate({action:'remove',id:item.id})));
           card.append(heading,text,node('small','来源消息：'+item.sourceMessageIds.join('、')),controls);items.append(card);
         }
+        renderReplication(memory.replication,memory.memoryModel);
         if(!memory.summaries.length)summaries.append(node('p','长会话超出近期上下文后才会生成带来源的摘要。','empty-state'));
         for(const summary of memory.summaries){
           const card=node('article',undefined,'memory-card'),sources=node('div',undefined,'summary-sources');
@@ -56,10 +87,10 @@
           card.append(node('p',summary.text),node('small','自动摘录，不是已确认事实'),controls,sources);summaries.append(card);
         }
         history.replaceChildren(...messages.slice(-60).map(message=>node('p',(message.role==='user'?'你：':'角色：')+message.text,'history-message')));
-        if(!messages.length)history.append(node('p','还没有聊天记录。'));status.textContent='已读取本角色的轻量记忆';
+        if(!messages.length)history.append(node('p','还没有聊天记录。'));status.textContent='当前使用 N.E.K.O. 记忆，已读取本角色存档';
       }catch{if(!disposed&&token===generation){items.replaceChildren();summaries.replaceChildren();history.replaceChildren();status.textContent='请先使用聊天 API 模式；本机 N.E.K.O. 的记忆在原界面管理。';}}
     }
-    const off=pet.onState(state=>{const snapshot=state.mainChat;if(!snapshot)return;const backend=snapshot.backend,phase=snapshot.chat?.phase;const refreshNow=backend!==lastBackend||(['connecting','replying'].includes(lastPhase)&&!['connecting','replying'].includes(phase));lastBackend=backend;lastPhase=phase;if(refreshNow)void refresh();});
+    const off=pet.onState(state=>{const snapshot=state.mainChat;if(!snapshot)return;const backend=snapshot.backend,phase=snapshot.chat?.phase,memory=JSON.stringify(snapshot.memorySystem);const refreshNow=backend!==lastBackend||memory!==lastMemory||(['connecting','replying'].includes(lastPhase)&&!['connecting','replying'].includes(phase));lastBackend=backend;lastPhase=phase;lastMemory=memory;if(refreshNow)void refresh();});
     host.querySelector('.refresh-memory').addEventListener('click',()=>void refresh());void refresh();
     return ()=>{disposed=true;generation++;off?.();};
   }

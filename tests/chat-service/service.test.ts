@@ -110,6 +110,20 @@ test("streams connecting -> replying -> idle and saves both messages", async () 
   assert.deepEqual(p.inputs[0].messages.map((m) => m.text), ["你好"]);
 });
 
+test("stalled native memory handoff does not delay completion of a saved reply", { timeout: 2000 }, async () => {
+  const entered = gate(), stalled = gate();
+  const svc = service(fakeProvider([[{ delta: "saved" }, { complete: "native-handoff" }]]), {
+    onTurnSaved: async () => { entered.open(); await stalled.promise; },
+  });
+  try {
+    const pending = svc.send("remember this");
+    await entered.promise;
+    assert.equal((await pending).status, "completed");
+    assert.equal(svc.state().phase, "idle");
+    assert.deepEqual((await store.recent("bigfish", svc.conversationId, 10)).map(m => m.role), ["user", "assistant"]);
+  } finally { stalled.open(); svc.dispose(); }
+});
+
 test("state() returns a copy", () => {
   const svc = service(fakeProvider([]));
   const s = svc.state();

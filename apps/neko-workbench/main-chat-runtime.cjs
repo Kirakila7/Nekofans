@@ -47,12 +47,15 @@ function parseApiInput(input, shared) {
 }
 
 class WorkbenchMainChat {
-  constructor({ dataDir, repositoryRoot, safeStorage, fetch: fetchImpl, initialBackend = 'chat-api', sharedModules } = {}) {
+  constructor({ dataDir, repositoryRoot, safeStorage, fetch: fetchImpl, initialBackend = 'chat-api', sharedModules, memoryWorker } = {}) {
     this.dataDir = path.join(dataDir, 'main-chat');
     this.repositoryRoot = repositoryRoot;
     this.personasDir = path.join(this.dataDir, 'personas');
     this.configFile = path.join(this.dataDir, 'app-config.json');
     this.secretStore = new WorkbenchSecretStore(path.join(this.dataDir, 'secrets', 'chat-api-key.encrypted'), safeStorage);
+    this.memorySecretStore = new WorkbenchSecretStore(path.join(this.dataDir, 'secrets', 'memory-api-key.encrypted'), safeStorage);
+    this.memoryConfigFile = path.join(this.dataDir, 'memory-model.json');
+    this.memoryWorker = memoryWorker;
     this.fetch = fetchImpl; this.initialBackend = BACKENDS.has(initialBackend) ? initialBackend : 'chat-api';
     this.shared = sharedModules; this.opened = null; this.listeners = new Set(); this.tail = Promise.resolve();
     this.closed = false; this.backend = this.initialBackend; this.configError = '';
@@ -68,7 +71,15 @@ class WorkbenchMainChat {
       const personaFile = path.join(this.personasDir, PERSONA + '.json');
       if (!fs.existsSync(personaFile)) fs.copyFileSync(path.join(this.repositoryRoot, 'config/personas/bigfish.json'), personaFile, fs.constants.COPYFILE_EXCL);
       this.readConfig();
+      const { WorkbenchMemory } = await import(pathToFileURL(path.join(this.repositoryRoot, 'apps/neko-workbench/memory/controller.mjs')).href);
+      this.memorySystem = new WorkbenchMemory({directory:path.join(this.dataDir,'memory'),dataDir:this.dataDir,repositoryRoot:this.repositoryRoot,
+        worker:this.memoryWorker,getModel:()=>this.memoryModel(),getPersona:async()=>{
+          const persona=JSON.parse(fs.readFileSync(path.join(this.personasDir,PERSONA+'.json'),'utf8'));
+          return {id:PERSONA,name:'大肥鱼',prompt:[persona.persona,...persona.boundaries].join('\n')};
+        },getLegacy:async()=>this.opened?({items:await this.opened.memory?.list()||[],summaries:await this.opened.summaries?.list()||[],conversationId:this.opened.service.conversationId}):null,notify:()=>this.publish()});
       this.openNow();
+      await this.memorySystem.localSync();
+      if(this.backend==='chat-api')void this.memorySystem.connect().catch(()=>{});
       return this.read();
     });
   }
@@ -88,7 +99,10 @@ class WorkbenchMainChat {
   openNow() {
     if (this.closed) throw new Error('聊天服务已关闭');
     this.opened = this.shared.openMainChat({ settings: this.settings, personasDir: this.personasDir,
-      dataDir: this.dataDir, secretStore: this.secretStore, ...(this.fetch ? { fetch: this.fetch } : {}) });
+      dataDir: this.dataDir, secretStore: this.secretStore, ...(this.fetch ? { fetch: this.fetch } : {}),
+      memoryContext:(personaId,query,budget,signal)=>this.memorySystem.recall(personaId,query,budget,signal),
+      localMemoryProcessing:false,
+      onTurnSaved:()=>this.memorySystem.recordTurn() });
     this.offState = this.opened.service.subscribe(() => this.publish());
     this.offMemory = this.opened.memory?.subscribe(() => this.publish());
     this.offSummaries = this.opened.summaries?.subscribe(() => this.publish());
@@ -104,6 +118,7 @@ class WorkbenchMainChat {
     return clone({ backend: this.backend, settings: this.settings || null, hasKey: this.secretStore.has(),
       secureStorageAvailable: this.secretStore.available(), ready: !!this.opened, error: this.configError,
       memoryAvailable: this.backend === 'chat-api' && !!this.opened?.memory,
+      memorySystem: this.memorySystem?.status(),
       voiceStatus: '未接入', chat: this.opened?.service.state() || { personaId: PERSONA, phase: 'idle' } });
   }
   subscribe(listener) { this.listeners.add(listener); listener(this.read()); return () => this.listeners.delete(listener); }
@@ -120,6 +135,7 @@ class WorkbenchMainChat {
       try { atomicJson(this.configFile, { backend, mainChat: this.settings }); }
       catch { throw new Error('聊天方式未能保存，请检查本机存储'); }
       this.backend = backend; this.configError = ''; this.cancel();
+      if(backend==='chat-api')void this.memorySystem?.connect().catch(()=>{});
       this.publish(); return this.read();
     });
   }
@@ -133,6 +149,7 @@ class WorkbenchMainChat {
       const restoreSecret = await this.secretStore.prepareRollback();
       try {
         this.closeOpened();
+        if(this.readMemoryModel().useChatApi)await this.memorySystem?.worker.stop();
         if (change.key.action === 'replace') await this.secretStore.set(change.key.value);
         else if (change.key.action === 'clear') await this.secretStore.clear();
         if (this.closed) throw failure();
@@ -149,6 +166,7 @@ class WorkbenchMainChat {
         } catch { this.configError = '聊天配置恢复失败，请重新保存设置'; }
         this.publish(); throw failure();
       }
+      void this.memorySystem?.connect().catch(()=>{});
       this.publish(); return this.read();
     });
   }
@@ -159,13 +177,52 @@ class WorkbenchMainChat {
     finally { store.close(); }
   }
   async memories() {
-    if (this.closed || this.backend !== 'chat-api' || !this.opened?.memory) throw new Error('请在聊天 API 模式管理轻量记忆');
+    if (this.closed || this.backend !== 'chat-api' || !this.opened?.memory) throw new Error('请在聊天 API 模式管理 N.E.K.O. 记忆');
     const [items, summaries] = await Promise.all([this.opened.memory.list(), this.opened.summaries?.list() || []]);
-    return { items: items.map(({ audioRef, ...item }) => item), summaries };
+    return { items: items.map(({ audioRef, ...item }) => item), summaries, replication:await this.memorySystem.view(),
+      memoryModel:this.readMemoryModel() };
+  }
+  readMemoryModel() {
+    let settings={useChatApi:true};
+    if(fs.existsSync(this.memoryConfigFile))settings=JSON.parse(fs.readFileSync(this.memoryConfigFile,'utf8'));
+    return {...settings,hasKey:this.memorySecretStore.has()};
+  }
+  async memoryModel() {
+    const config=this.readMemoryModel(),settings=config.useChatApi?this.settings:config;
+    this.shared.validateConfig(settings);
+    return {...settings,apiKey:await (config.useChatApi?this.secretStore:this.memorySecretStore).get()};
+  }
+  async configureMemory(input) {
+    if(input.enabled===false)throw new Error('当前统一使用 N.E.K.O. 记忆');
+    if(typeof input.useChatApi!=='boolean')throw new Error('请选择记忆整理模型');
+    let config={useChatApi:true};
+    const rollback=await this.memorySecretStore.prepareRollback(),previous=fs.existsSync(this.memoryConfigFile)?fs.readFileSync(this.memoryConfigFile):null;
+    try{
+      if(!input.useChatApi){
+        const change=parseApiInput({...input,maxOutputTokens:1024},this.shared);
+        if(change.key.action==='replace')await this.memorySecretStore.set(change.key.value);
+        else if(change.key.action==='clear')await this.memorySecretStore.clear();
+        config={...change.settings,useChatApi:false};
+      }
+      atomicJson(this.memoryConfigFile,config);
+    }catch{
+      await rollback();if(previous===null)fs.rmSync(this.memoryConfigFile,{force:true});else atomicBytes(this.memoryConfigFile,previous);throw new Error('记忆模型设置未能保存');
+    }
+    await this.memorySystem.activeSync?.catch(()=>{});
+    await this.memorySystem.worker.stop();
+    return this.memorySystem.connect();
   }
   async memoryAction(input) {
-    if (!input || typeof input !== 'object' || Object.keys(input).some(key => !['action', 'id', 'text'].includes(key))) throw new Error('记忆操作无效');
+    if (!input || typeof input !== 'object' || Object.keys(input).some(key => !['action', 'id', 'text','mode','enabled','revisionIds','useChatApi','protocol','baseUrl','model','requestTimeoutMs','key'].includes(key))) throw new Error('记忆操作无效');
     if (this.closed || this.backend !== 'chat-api' || !this.opened?.memory) throw new Error('记忆服务未就绪');
+    if(['configure-neko','sync'].includes(input.action)||String(input.action).startsWith('event-')){
+      try{
+        if(input.action==='configure-neko')await this.configureMemory(input);
+        else if(input.action==='sync')await this.memorySystem.sync();
+        else await this.memorySystem.change(input);
+        return {ok:true,...await this.memories()};
+      }catch{return {ok:false,message:this.memorySystem.status().error||'记忆操作未完成，请刷新后重试',...await this.memories()};}
+    }
     const { action } = input, id = field(input.id, 200);
     if (!id) throw new Error('记忆操作无效');
     if (action === 'confirm') await this.opened.memory.confirm(id);
@@ -174,9 +231,11 @@ class WorkbenchMainChat {
     else if (action === 'remove-summary') await this.opened.summaries.remove(id);
     else if (action === 'sources') return (await this.opened.summaries.sources(id)).map(item => ({ ...item, text: item.text.slice(0, 4000) }));
     else throw new Error('记忆操作无效');
+    await this.memorySystem.localSync();
+    if(this.memorySystem.settings.autoSync)void this.memorySystem.sync().catch(()=>{});
     return this.memories();
   }
-  close() { this.closed = true; this.cancel(); return this.serial(async () => { this.closeOpened(); this.listeners.clear(); }); }
+  close() { this.closed = true; this.cancel(); return this.serial(async () => { await this.memorySystem?.close(); this.closeOpened(); this.listeners.clear(); }); }
 }
 
 function trustedLocalCaller(event, window, expectedUrl) {
