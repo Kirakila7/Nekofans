@@ -136,6 +136,10 @@ async function channelAction(name,action){
   if(!['status','start','pause'].includes(action))throw Error('未知渠道操作');
   if(action==='pause')channelIntents[name]++;
   if(state.connection!=='ready')throw Error('工作台尚未连接，请稍后重试。');
+  // An older initial status response must not invalidate a newer user action.
+  // Advance when the action is issued, then allow genuinely newer channel
+  // notifications or actions to supersede its eventual RPC response.
+  if(action!=='status')channelRevisions[name]++;
   const revision=channelRevisions[name];
   const value=await rpc(name==='fish'?'fish-care':'qqbot-care',{action});
   if(action==='status')return revision===channelRevisions[name]?projectChannelState(name,value):{...state[name]};
