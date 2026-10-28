@@ -47,7 +47,7 @@ function installWorkspaceShell(options = {}) {
   const dock = own(el('section', 'neko-companion-dock')); dock.setAttribute('aria-label', '主 agent 聊天');
   const character = el('div', 'neko-companion-character');
   character.setAttribute('role', 'slider'); character.tabIndex = 0; character.setAttribute('aria-label', '左右移动大肥鱼'); character.setAttribute('aria-orientation', 'horizontal'); character.title = '左右拖动 · Home 回到中间';
-  let companionOffset = 0, companionDrag = null;
+  let companionOffset = 0, companionDrag = null, companionInRail = false, dockIntersecting = null, observedDockParent = null;
   function setCompanionOffset(value) {
     const width = dock.clientWidth || dock.getBoundingClientRect().width;
     const spriteWidth = character.offsetWidth || 76;
@@ -58,7 +58,7 @@ function installWorkspaceShell(options = {}) {
     character.setAttribute('aria-valuetext', companionOffset === 0 ? '居中' : (companionOffset < 0 ? '向左 ' : '向右 ') + Math.abs(companionOffset) + ' 像素');
   }
   character.addEventListener('pointerdown', event => {
-    if (event.button !== 0 || companionDrag) return;
+    if (event.button !== 0 || companionDrag || companionInRail) return;
     setCompanionOffset(companionOffset); companionDrag = { pointerId: event.pointerId, x: event.clientX, offset: companionOffset };
     character.dataset.dragging = 'true'; event.preventDefault();
     try { character.setPointerCapture(event.pointerId); } catch {}
@@ -102,6 +102,42 @@ function installWorkspaceShell(options = {}) {
   const historyPath = doc.createElementNS('http://www.w3.org/2000/svg', 'path'); historyPath.setAttribute('d', 'M4 5h16v11H9l-5 4V5Zm4 4h8M8 12h5'); historyIcon.appendChild(historyPath); historyToggle.appendChild(historyIcon);
   const chatStop = button('■', 'neko-companion-stop', () => bridge.companion({ action: 'stop' }).catch(error => { chatError = error.message || '未能停止回复'; renderCompanion(); })); chatStop.setAttribute('aria-label', '停止回复'); chatStop.title = '停止回复'; chatStop.hidden = true;
   form.append(historyToggle, chatInput, chatSend, chatStop); dock.append(character, history, form, chatStatus);
+  // Move the existing animated character, rather than creating another pet.
+  // The chat and its draft stay mounted in the original dock throughout.
+  const railCompanion = own(button('', 'neko-side-rail__button neko-rail-companion', () => {
+    const expand = doc.querySelector('.neko-side-rail__expand');
+    if (expand && !expand.hidden) expand.click();
+    else { dock.scrollIntoView?.({ block: 'nearest' }); chatInput.focus(); }
+  }));
+  railCompanion.hidden = true; railCompanion.title = '主 agent · 大肥鱼';
+  railCompanion.setAttribute('aria-label', '主 agent 大肥鱼');
+  function syncCompanionPlacement(rail) {
+    if (!rail) return;
+    const connected = dock.isConnected;
+    let visible = connected && dockIntersecting !== false;
+    for (let node = dock; visible && node && node !== doc.body; node = node.parentElement) {
+      const style = win.getComputedStyle(node);
+      if (node.hidden || style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0' || node.getAttribute('data-sidebar-collapsed') === 'true') visible = false;
+    }
+    if (visible) {
+      const r = dock.getBoundingClientRect();
+      visible = r.width > 0 && r.height > 0 && r.right > 0 && r.left < win.innerWidth && r.bottom > 0 && r.top < win.innerHeight;
+    }
+    const needsRail = !visible;
+    if (needsRail !== companionInRail || (needsRail && character.parentNode !== railCompanion)) {
+      companionInRail = needsRail;
+      if (needsRail) {
+        companionDrag = null; character.removeAttribute('data-dragging');
+        character.setAttribute('aria-hidden', 'true'); character.tabIndex = -1;
+        railCompanion.appendChild(character);
+      } else {
+        character.removeAttribute('aria-hidden'); character.tabIndex = 0;
+        dock.prepend(character); setCompanionOffset(companionOffset);
+      }
+      syncCharacter();
+    }
+    if (railCompanion.hidden !== !needsRail) railCompanion.hidden = !needsRail;
+  }
   let historyKey = '', chatError = '';
   form.addEventListener('submit', async event => {
     event.preventDefault(); const text = chatInput.value.trim(); if (!text || sending || state?.companion?.working) return;
@@ -376,6 +412,7 @@ function installWorkspaceShell(options = {}) {
     if (disposed) return;
     const found = options.locateSidebar?.(); const root = found?.root || found?.slot || doc.querySelector('[data-slot="sidebar"]');
     const rail = doc.querySelector('[data-neko-side-rail]'), theme = rail?.querySelector('.neko-side-rail__theme');
+    if (rail && railCompanion.parentNode !== rail) rail.prepend(railCompanion);
     if (theme && officeButton.parentNode !== theme) { if (!nativeMarks.has(theme)) nativeMarks.set(theme, new Map()); nativeMarks.get(theme).set('aria-hidden', theme.getAttribute('aria-hidden')); theme.setAttribute('aria-hidden', ''); theme.appendChild(officeButton); }
     if (rail && railTop.parentNode !== rail) theme?.after(railTop);
     const mount = doc.querySelector('[data-neko-seat-mount]'); if (mount && seats.parentNode !== mount) mount.appendChild(seats);
@@ -384,7 +421,9 @@ function installWorkspaceShell(options = {}) {
     const account = doc.querySelector('[data-slot="settings.launcher"]');
     if (account?.parentElement) markNative(account.parentElement, 'data-neko-companion-footer');
     if (account && (dock.parentNode !== account.parentNode || dock.nextSibling !== account)) account.before(dock);
-    setCompanionOffset(companionOffset);
+    watchDockAncestors();
+    syncCompanionPlacement(rail);
+    if (!companionInRail) setCompanionOffset(companionOffset);
     if (root) {
       const r = root.getBoundingClientRect(), strip = doc.querySelector('.neko-strip')?.getBoundingClientRect();
       const x = Math.ceil(r.right), bottom = strip?.top > 0 ? strip.top : win.innerHeight;
@@ -395,9 +434,24 @@ function installWorkspaceShell(options = {}) {
   function nativeNew(event) { if (layout?.officeMode !== 'codex' || !event.target.closest?.('[data-neko-new-session="plus"]')) return; event.preventDefault(); event.stopImmediatePropagation(); newOffice(); }
   function escape(event) { if (event.key !== 'Escape') return; if (!modal.hidden) { event.stopPropagation(); closeSettings(); } else if (layout?.companionHistoryOpen && dock.contains(doc.activeElement)) { event.preventDefault(); saveLayout({ companionHistoryOpen: false }); historyToggle.focus(); } }
   const observer = new win.MutationObserver(schedule); observer.observe(doc.body, { childList: true, subtree: true });
-  win.addEventListener('resize', place); doc.addEventListener('click', nativeNew, true); doc.addEventListener('keydown', escape, true);
+  // Observe only the dock's ancestors for inline style changes: watching every
+  // style mutation would also watch our own drag/position updates.
+  const ancestorObserver = new win.MutationObserver(schedule);
+  function watchDockAncestors() {
+    if (observedDockParent === dock.parentElement) return;
+    ancestorObserver.disconnect(); observedDockParent = dock.parentElement;
+    for (let node = observedDockParent; node && node !== doc.body; node = node.parentElement)
+      ancestorObserver.observe(node, { attributes: true, attributeFilter: ['style', 'class', 'hidden', 'data-sidebar-collapsed'] });
+  }
+  const intersection = win.IntersectionObserver ? new win.IntersectionObserver(entries => {
+    const entry = entries.find(item => item.target === dock);
+    if (entry && dockIntersecting !== entry.isIntersecting) { dockIntersecting = entry.isIntersecting; schedule(); }
+  }) : null;
+  intersection?.observe(dock);
+  win.addEventListener('resize', place); doc.addEventListener('scroll', schedule, true); doc.addEventListener('click', nativeNew, true); doc.addEventListener('keydown', escape, true);
   const resize = win.ResizeObserver ? new win.ResizeObserver(place) : null;
   if (options.locateSidebar?.()?.root) resize?.observe(options.locateSidebar().root);
+  resize?.observe(dock);
   doc.body.setAttribute('data-neko-workspace-shell', '');
   if (typeof bridge.subscribe === 'function') releases.push(bridge.subscribe(next => {
     if (disposed) return; state = next; const connections = modalBody.querySelector('.neko-workspace-connections'); if (connections) connections.textContent = connectionSummary(); if (!selectedProject) selectedProject = next.workspaceRoot || '';
@@ -410,8 +464,8 @@ function installWorkspaceShell(options = {}) {
   const interval = win.setInterval(() => { if (doc.visibilityState !== 'hidden') refreshCatalog(true); }, 60000);
   place();
   return () => {
-    if (disposed) return; disposed = true; motion?.removeEventListener?.('change', syncCharacter); doc.removeEventListener('visibilitychange', syncCharacter); if (characterVideo) { characterVideo.pause(); characterVideo.removeAttribute('src'); characterVideo.load(); } observer.disconnect(); resize?.disconnect(); win.clearInterval(interval);
-    win.removeEventListener('resize', place); doc.removeEventListener('click', nativeNew, true); doc.removeEventListener('keydown', escape, true);
+    if (disposed) return; disposed = true; motion?.removeEventListener?.('change', syncCharacter); doc.removeEventListener('visibilitychange', syncCharacter); if (characterVideo) { characterVideo.pause(); characterVideo.removeAttribute('src'); characterVideo.load(); } observer.disconnect(); ancestorObserver.disconnect(); intersection?.disconnect(); resize?.disconnect(); win.clearInterval(interval);
+    win.removeEventListener('resize', place); doc.removeEventListener('scroll', schedule, true); doc.removeEventListener('click', nativeNew, true); doc.removeEventListener('keydown', escape, true);
     for (const release of releases) if (typeof release === 'function') release();
     for (const [node, attrs] of nativeMarks) for (const [name, before] of attrs) { if (node.getAttribute(name) === '') { if (before === null) node.removeAttribute(name); else node.setAttribute(name, before); } }
     doc.body.removeAttribute('data-neko-workspace-shell'); doc.body.removeAttribute('data-neko-office-mode');
