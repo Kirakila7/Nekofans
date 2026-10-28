@@ -4,6 +4,7 @@ The daily artifact is built from this repository. `config/daily-release.json` is
 
 ## Included local workbench changes
 
+- Workbench PR #13 (`c673090888176de81d10e72693fbd90c934720b1`) session shortcuts ported onto the current local source. Each assistant row has a new-session button; the duplicate top-level plus and work/leisure switch are hidden. Unbound entries open their existing configuration. The Codex shortcut stays disabled while Codex testing is paused. This source update has not replaced the installed 0.28.3 app.
 - Codex is temporarily unavailable and marked as testing. New Codex sessions, sends, model selection and account reads are disabled; saved sessions, seat bindings, credentials and choices remain intact. An already running turn retains stop and approval controls until it settles. DSH remains available. Re-enablement requires changing the explicit availability flag and verifying the native integration.
 - Workbench PR #10 (`d5ff80619f23fa279c670e0355f954503ad23e27`) sidebar hide/expand ported onto the 0.28.1 Codex model-picker source (`4567f2e`). Collapse removes the sidebar grid track completely; a native-expand action appears above Bilibili in the persistent rail. Dragging the sidebar divider past the left threshold invokes native collapse. Only the side-rail source and its generated block were taken from the older trial branch. This is a local test build, separate from the published 0.28.1 release.
 - Shared native DSH accounts, plugins and sessions; Codex app-server workspace and read-only account/quota entry.
