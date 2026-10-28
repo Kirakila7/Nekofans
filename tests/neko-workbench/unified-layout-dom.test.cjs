@@ -5,6 +5,25 @@ const fs = require('node:fs');
 const path = require('node:path');
 let JSDOM; try { ({ JSDOM } = require(path.join(process.env.NEKO_DOM_DEPS || '/private/tmp/neko-sidebar-dom-20261026', 'node_modules/jsdom'))); } catch {}
 const sleep = () => new Promise(resolve => setTimeout(resolve, 40));
+async function waitFor(check, label) {
+  const deadline = Date.now() + 5000;
+  while (!check()) {
+    if (Date.now() >= deadline) assert.fail(`Timed out waiting for ${label}`);
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+}
+async function nextFrame(w) {
+  // Observer callbacks themselves enqueue microtasks. Wait two frames so an
+  // update scheduled behind the first sentinel has also had a chance to run.
+  await Promise.resolve();
+  for (let i=0;i<2;i++) {
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('Timed out waiting for an animation frame')), 5000);
+      w.requestAnimationFrame(() => { clearTimeout(timer); resolve(); });
+    });
+    await Promise.resolve();
+  }
+}
 const source = fs.readFileSync(path.join(__dirname, '../../apps/neko-workbench/embedded-dsh/unified-layout-source.js'), 'utf8');
 function fixture(t) {
   const dom = new JSDOM('<body><aside data-neko-side-rail><div class="neko-workspace-rail-controls"></div></aside><div id="frame" style="display:grid;grid-template-columns:220px 800px 0px"><div id="track"><aside data-slot="sidebar"><section class="neko-companion-dock"><textarea>personal draft</textarea></section><div data-slot="settings.launcher"></div></aside></div><div class="some_centerCol_HASH_42"><textarea id="draft">coding draft</textarea></div><div></div></div></body>', { runScripts:'outside-only', pretendToBeVisual:true });
@@ -75,32 +94,37 @@ test('account and settings overlays temporarily detach native views, then restor
 });
 test('hidden overlay and account ancestors neither block panels nor miss later visibility changes', {skip:!JSDOM}, async t=>{
   const f=fixture(t); await sleep(); await openConfig(f); select(f,'target','right'); select(f,'content','community'); await sleep();
-  f.d.querySelector('.neko-unified-config .close').click(); await sleep();
+  f.d.querySelector('.neko-unified-config .close').click();
   const count=action=>f.calls.filter(x=>x.action===action && x.slot==='right').length;
+  const expectCount=async (action, expected, label)=>{ await waitFor(()=>count(action)>=expected,label); assert.equal(count(action),expected,label); };
+  await expectCount('open',1,'initial native view');
   assert.equal(count('open'),1);
   const style=f.d.createElement('style'); style.textContent='.qa-hidden-overlay { display:none }'; f.d.head.appendChild(style);
   const parent=f.d.createElement('div'); parent.className='qa-hidden-overlay';
-  const dialog=f.d.createElement('div'); dialog.setAttribute('role','dialog'); parent.appendChild(dialog); f.d.body.appendChild(parent); await sleep();
+  const dialog=f.d.createElement('div'); dialog.setAttribute('role','dialog'); parent.appendChild(dialog); f.d.body.appendChild(parent); await nextFrame(f.w);
   assert.equal(count('hide'),0,'dialog under display:none ancestor is not visible');
-  parent.classList.remove('qa-hidden-overlay'); await sleep(); assert.equal(count('hide'),1,'showing ancestor suspends native view');
-  parent.style.display='none'; await sleep(); assert.equal(count('open'),2,'hiding ancestor restores native view');
-  parent.style.display=''; parent.style.visibility='collapse'; await sleep(); assert.equal(count('hide'),1,'visibility:collapse ancestor is hidden');
-  parent.style.visibility='visible'; await sleep(); assert.equal(count('hide'),2,'visibility change on ancestor suspends again');
-  parent.hidden=true; await sleep(); assert.equal(count('open'),3,'hidden ancestor restores view');
+  parent.classList.remove('qa-hidden-overlay'); await expectCount('hide',1,'showing ancestor suspends native view');
+  parent.style.display='none'; await expectCount('open',2,'hiding ancestor restores native view');
+  parent.style.display=''; parent.style.visibility='collapse'; await nextFrame(f.w); assert.equal(count('hide'),1,'visibility:collapse ancestor is hidden');
+  parent.style.visibility='visible'; await expectCount('hide',2,'visibility change on ancestor suspends again');
+  parent.hidden=true; await expectCount('open',3,'hidden ancestor restores view');
   parent.remove();
   const accountWrap=f.d.createElement('div'); accountWrap.style.display='none';
   const account=f.d.createElement('button'); account.setAttribute('aria-expanded','true'); accountWrap.appendChild(account);
-  f.d.querySelector('[data-slot="settings.launcher"]').appendChild(accountWrap); await sleep();
+  f.d.querySelector('[data-slot="settings.launcher"]').appendChild(accountWrap); await nextFrame(f.w);
   assert.equal(count('hide'),2,'hidden expanded account is not an overlay');
-  accountWrap.style.display=''; await sleep(); assert.equal(count('hide'),3,'showing expanded account ancestor suspends view');
-  accountWrap.setAttribute('hidden',''); await sleep(); assert.equal(count('open'),4,'hiding account ancestor restores view');
-  account.removeAttribute('aria-expanded'); accountWrap.removeAttribute('hidden'); await sleep();
+  // Simulate a delayed renderer frame: a fixed sleep may fire before it even
+  // though the actual overlay observer and transition are functioning.
+  const nativeRaf=f.w.requestAnimationFrame.bind(f.w); f.w.requestAnimationFrame=cb=>f.w.setTimeout(()=>nativeRaf(cb),150);
+  accountWrap.style.display=''; await expectCount('hide',3,'showing expanded account ancestor suspends view');
+  accountWrap.setAttribute('hidden',''); await expectCount('open',4,'hiding account ancestor restores view');
+  account.removeAttribute('aria-expanded'); accountWrap.removeAttribute('hidden'); await nextFrame(f.w);
   assert.equal(count('hide'),3,'account without expanded state does not suspend view');
-  account.setAttribute('aria-expanded','true'); await sleep(); assert.equal(count('hide'),4,'newly added expanded state is observed');
-  account.setAttribute('aria-expanded','false'); await sleep(); assert.equal(count('open'),5,'newly observed account closes cleanly');
-  const lateRole=f.d.createElement('div'); f.d.body.appendChild(lateRole); await sleep();
-  lateRole.setAttribute('role','dialog'); await sleep(); assert.equal(count('hide'),5,'newly added dialog role is observed');
-  lateRole.removeAttribute('role'); await sleep(); assert.equal(count('open'),6,'removing dialog role restores the view');
+  account.setAttribute('aria-expanded','true'); await expectCount('hide',4,'newly added expanded state is observed');
+  account.setAttribute('aria-expanded','false'); await expectCount('open',5,'newly observed account closes cleanly');
+  const lateRole=f.d.createElement('div'); f.d.body.appendChild(lateRole); await nextFrame(f.w);
+  lateRole.setAttribute('role','dialog'); await expectCount('hide',5,'newly added dialog role is observed');
+  lateRole.removeAttribute('role'); await expectCount('open',6,'removing dialog role restores the view');
   f.cleanup();
 });
 test('display:contents sidebar uses the grid track and preserves the companion and settings footer', {skip:!JSDOM}, async t=>{
