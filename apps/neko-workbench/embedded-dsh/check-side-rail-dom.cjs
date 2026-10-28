@@ -7,7 +7,7 @@ const { JSDOM } = createRequire(path.join(process.env.NEKO_DOM_DEPS || __dirname
 let active;
 (async () => {
   const dom = new JSDOM(`<!doctype html><html><head></head><body><div id="app">
-    <aside data-slot="sidebar"><button id="new">新建会话</button><button id="fish">养鱼设置</button>
+    <aside data-slot="sidebar"><button id="new">新建会话</button><button id="fish" aria-label="养鱼设置">养鱼</button>
       <div data-slot="settings.launcher"><button class="hjANda_trigger" aria-haspopup="menu" aria-expanded="false" aria-label="账号与额度：DSH 已登录，Codex 已登录">Native account</button></div></aside>
     <main><textarea>unsent draft</textarea></main></div></body></html>`, { url: 'http://127.0.0.1/', runScripts: 'outside-only', pretendToBeVisual: true });
   active = dom; const win = dom.window, doc = win.document;
@@ -37,6 +37,8 @@ let active;
   assert.equal(clicks, 1); assert.equal(closes, 1); assert.equal(account.getAttribute('aria-expanded'), 'true');
   assert.equal(original.parentNode, parent, 'native React account control is neither moved nor replaced');
   assert.equal(original.tabIndex, -1, 'only the visible account button remains in the tab order');
+  assert.equal(original.getAttribute('aria-hidden'), 'true', 'screen readers only see the visible account launcher');
+  assert(doc.querySelector('#fish').hasAttribute('data-neko-rail-fish-original'), 'native icon/text labels hide the duplicate fish entry');
   fish.click(); await flush(); assert.deepEqual(actions, ['fish-settings'], 'opening fish UI never starts its scheduler');
   bili.click(); bili.click(); await flush(); assert.equal(home, 1, 'double clicks share one in-flight home navigation');
   finish(); await flush(); assert(!bili.hasAttribute('aria-busy'));
@@ -51,6 +53,7 @@ let active;
   assert.equal(doc.querySelector('[data-neko-side-rail]'), null);
   assert(!app.hasAttribute('data-neko-rail-app')); assert(!doc.body.hasAttribute('data-neko-side-rail-layout'));
   assert(!original.hasAttribute('tabindex')); assert(!doc.querySelector('[data-neko-rail-fish-original]'));
+  assert(!original.hasAttribute('aria-hidden'));
   assert.equal(original.parentNode, parent);
   dom.window.close(); console.log('PASS side rail order, blank region, native account ownership/focus, login updates, fish settings, homepage coalescing and cleanup');
 })().catch(error => { active?.window.close(); console.error(error); process.exitCode = 1; });

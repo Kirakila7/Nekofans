@@ -1516,20 +1516,22 @@ function installWorkbenchSideRail(options = {}) {
     if (appRoot) mark(appRoot, 'data-neko-rail-app');
     const nextAccount = doc.querySelector('[data-slot="settings.launcher"] button.hjANda_trigger[aria-haspopup="menu"]');
     if (nativeAccount !== nextAccount) {
-      if (nativeAccount) { release(nativeAccount, 'data-neko-rail-account-original'); release(nativeAccount, 'tabindex'); }
+      if (nativeAccount) { release(nativeAccount, 'data-neko-rail-account-original'); release(nativeAccount, 'tabindex'); release(nativeAccount, 'aria-hidden'); }
       nativeAccount = nextAccount;
     }
     account.disabled = !nativeAccount;
     if (nativeAccount) {
       mark(nativeAccount, 'data-neko-rail-account-original'); mark(nativeAccount, 'tabindex', '-1');
+      mark(nativeAccount, 'aria-hidden', 'true');
       const label = nativeAccount.getAttribute('aria-label') || '账号与额度';
       if (account.getAttribute('aria-label') !== label) account.setAttribute('aria-label', label);
       const expanded = nativeAccount.getAttribute('aria-expanded') === 'true' ? 'true' : 'false';
       if (account.getAttribute('aria-expanded') !== expanded) account.setAttribute('aria-expanded', expanded);
     }
     const selected = new Set();
-    for (const button of sidebar?.querySelectorAll('button') || []) {
-      if (button.textContent.trim() === '养鱼设置') { mark(button, 'data-neko-rail-fish-original'); selected.add(button); }
+    for (const button of (appRoot || sidebar)?.querySelectorAll('button') || []) {
+      const label = button.getAttribute('aria-label') || button.getAttribute('title') || button.textContent.trim();
+      if (label === '养鱼设置') { mark(button, 'data-neko-rail-fish-original'); selected.add(button); }
     }
     for (const [node, attrs] of [...claimed]) if (attrs.has('data-neko-rail-fish-original') && !selected.has(node)) release(node, 'data-neko-rail-fish-original');
   }
