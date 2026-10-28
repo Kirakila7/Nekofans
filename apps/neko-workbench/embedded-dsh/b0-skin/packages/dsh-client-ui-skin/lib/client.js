@@ -165,13 +165,89 @@ window.__ModuleLoader__.load({
 
     const STYLE_ID = `${PKG}:style`
 
+    function installFeedbackRemoval(doc = document) {
+      if (!doc.documentElement || typeof MutationObserver !== 'function') return () => {}
+      const marked = new Set()
+      const normalize = node => String(node.querySelector('._itemLabel_4ub78_190')?.textContent || node.textContent || node.getAttribute('aria-label') || '').replace(/\s+/g, '').toLowerCase()
+      const sync = () => {
+        const selected = new Set()
+        for (const menu of doc.querySelectorAll('[data-menu-material][role="menu"], [data-menu-material]._list_4ub78_7')) {
+          const items = Array.from(menu.querySelectorAll('[role="menuitem"]'))
+          const labels = items.map(normalize)
+          if (!labels.some(s => /^(设置|settings)$/.test(s)) ||
+              !labels.some(s => /^(登录|退出|退出登录|登出|signin|signout|logout)$/.test(s))) continue
+          items.forEach((item, i) => {
+            if (/^(联系我们|意见反馈|反馈意见|contactus|contact|feedback|sendfeedback)$/.test(labels[i])) selected.add(item)
+          })
+        }
+        for (const node of marked) if (!selected.has(node)) { node.removeAttribute('data-neko-hide-feedback'); marked.delete(node) }
+        for (const node of selected) if (!marked.has(node)) { node.setAttribute('data-neko-hide-feedback', ''); marked.add(node) }
+      }
+      const observer = new MutationObserver(sync)
+      observer.observe(doc.documentElement, { childList: true, subtree: true, characterData: true })
+      sync()
+      return () => { observer.disconnect(); for (const node of marked) node.removeAttribute('data-neko-hide-feedback'); marked.clear() }
+    }
+
+    function installGetStartedDismissal(doc = document) {
+      if (!doc.documentElement || typeof MutationObserver !== 'function') return () => {}
+      const dismiss = () => {
+        for (const dialog of doc.querySelectorAll('.J8V0KW_dialog')) {
+          const title = dialog.querySelector('.J8V0KW_title')?.textContent?.trim()
+          const description = dialog.querySelector('.J8V0KW_description')?.textContent || ''
+          if ((title === '开始使用' && description.includes('登录 DeepSeek 账号')) ||
+              (title === 'Get started' && description.includes('Sign in to your DeepSeek account'))) {
+            dialog.querySelector('.J8V0KW_close')?.click()
+          }
+        }
+      }
+      const observer = new MutationObserver(dismiss)
+      observer.observe(doc.documentElement, { childList: true, subtree: true, characterData: true })
+      dismiss()
+      return () => observer.disconnect()
+    }
+
+    // Hide the Session Log upload preference without changing the stored setting.
+    function installSessionLogRowRemoval(doc = document) {
+      if (!doc.documentElement || !doc.head || typeof MutationObserver !== 'function') return () => {};
+      const marked = new Set();
+      const style = doc.createElement('style');
+      style.textContent = '[data-neko-hide-session-log-row] { display: none !important; }';
+      doc.head.appendChild(style);
+      const titles = new Set([
+        '在使用官方模型 API 时上传 Session Log',
+        'Upload Session Log when using the official model API',
+      ]);
+      function sync() {
+        const selected = new Set();
+        for (const heading of doc.querySelectorAll('div')) {
+          if (heading.children.length || !titles.has(heading.textContent.trim())) continue;
+          const row = heading.parentElement?.parentElement;
+          if (row?.querySelector('[role="switch"], input[type="checkbox"]')) selected.add(row);
+        }
+        for (const node of marked) if (!selected.has(node)) { node.removeAttribute('data-neko-hide-session-log-row'); marked.delete(node); }
+        for (const node of selected) if (!marked.has(node)) { node.setAttribute('data-neko-hide-session-log-row', ''); marked.add(node); }
+      }
+      const observer = new MutationObserver(sync);
+      observer.observe(doc.documentElement, { childList: true, subtree: true, characterData: true });
+      sync();
+      return () => {
+        observer.disconnect();
+        for (const node of marked) node.removeAttribute('data-neko-hide-session-log-row');
+        style.remove();
+      };
+    }
+
     function installStyles(css) {
       document.getElementById(STYLE_ID)?.remove()
       const element = document.createElement('style')
       element.id = STYLE_ID
-      element.textContent = css
+      element.textContent = css + '\n[data-neko-hide-feedback]{display:none!important}'
       document.head.appendChild(element)
-      return () => element.remove()
+      const disposeFeedback = installFeedbackRemoval()
+      const disposeGetStarted = installGetStartedDismissal()
+      const disposeSessionLog = installSessionLogRowRemoval()
+      return () => { disposeSessionLog(); disposeGetStarted(); disposeFeedback(); element.remove() }
     }
 
     function apply(ctx) {
@@ -191,6 +267,8 @@ window.__ModuleLoader__.load({
     exports.ALLOWED_TOKENS = ALLOWED_TOKENS
     exports.validateSkin = validateSkin
     exports.resolveSkinId = resolveSkinId
+    exports.installFeedbackRemoval = installFeedbackRemoval
     return module.exports
   },
 })
+
