@@ -25,6 +25,7 @@ const {skinPatch,applySkinCookie}=require('./embedded-dsh/dsh-skin-patch.cjs');
 const {createAppearanceStore}=require('./workbench-appearance.cjs');
 const {createRolesStore}=require('./workbench-roles.cjs');
 const {createWorkspaceLayout}=require('./workspace-layout.cjs');
+const {createPaneLayout}=require('./pane-layout.cjs');
 const {createWorkspaceController,companionSnapshot}=require('./workspace-controller.cjs');
 const {createCodexWorkspace}=require('./codex-workspace.cjs');
 const {createCodexModelChoices}=require('./codex-model-choices.cjs');
@@ -40,6 +41,7 @@ const data=runtimePaths.dataDir,workspace=runtimePaths.workspaceDir;
 const workbenchAppearance=createAppearanceStore(path.join(data,'workbench-appearance.json'));
 const workbenchRoles=createRolesStore(path.join(data,'workbench-roles.json'));
 const workspaceLayout=createWorkspaceLayout(path.join(data,'workspace-layout.json'));
+const paneLayout=createPaneLayout(path.join(data,'pane-layout.json'));
 const codexModelChoices=createCodexModelChoices(path.join(data,'codex-model-choices.json'));
 let workspaceRevision=0, codexHadActiveWork=false;
 const codexWorkspace=createCodexWorkspace({defaultCwd:workspace,onState:value=>{
@@ -682,6 +684,8 @@ ipcMain.handle('workbench:call',async(event,method,value)=>{
     if(!p||typeof p!=='object'||Array.isArray(p))throw Error('工作台请求无效');
     assertCodexActionAllowed(p.action);
     if(p.action==='state')return workspaceController.state();
+    if(p.action==='pane-layout')return paneLayout.get();
+    if(p.action==='set-pane-layout')return paneLayout.set(p.layout);
     if(p.action==='update'){workspaceController.update(p.patch);workspaceRevision++;broadcast();return workspaceController.state();}
     if(p.action==='catalog')return workspaceController.catalog({force:p.force===true,dshOffset:p.dshOffset??0});
     if(p.action==='update-seat'){workspaceController.updateSeat(p.id,p.patch);workspaceRevision++;broadcast();return workspaceController.state();}
