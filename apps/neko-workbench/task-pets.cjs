@@ -7,7 +7,7 @@ function restoreDesktopActor(actor,positions){
   const id=`${kind}-${actor.sessionId}`;
   if(positions[actor.id]&&!positions[id])positions[id]=positions[actor.id];
   return {...actor,id,kind,dshName:actor.dshName||actor.name||actor.sessionId,pinned:actor.pinned===true,
-    present:false,metadataReady:false,active:false,backgroundJobs:0,taskOutcome:null,displayUntil:0};
+    present:false,metadataReady:false,active:false,backgroundJobs:0,taskOutcome:null,displayUntil:0,returningHome:false};
 }
 function syncTaskRecord(state,meta){
   if(meta?.source!==TASK_SOURCE||!validSession(meta.sessionId)||typeof meta.running!=='boolean')return null;

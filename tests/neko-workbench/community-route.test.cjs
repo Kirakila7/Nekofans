@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
 const { DEFAULT_COMMUNITY_URL, COMMUNITY_PARTITION, resolveCommunityUrl,
   classifyCommunityNavigation, createCommunityController, validateCommunityRequest,
-  communityBounds, createSocialController, BILIBILI_URL, BILIBILI_PARTITION, BILIBILI_MOBILE_USER_AGENT,
+  communityBounds, createSocialController, BILIBILI_URL, BILIBILI_HOME_URL, BILIBILI_PARTITION, BILIBILI_MOBILE_USER_AGENT,
   classifyBilibiliNavigation, bilibiliVideoShareUrl, bilibiliOfficialPlayerUrl } = require('../../apps/neko-workbench/community-config.cjs');
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
@@ -352,6 +352,22 @@ test('Bilibili navigation allows only explicit official HTTPS origins and never 
   }
   assert.throws(() => validateCommunityRequest({ action: 'open', site: 'https://evil.invalid', bounds }));
   assert.throws(() => validateCommunityRequest({ action: 'back', site: 'bilibili' }));
+  f.controller.dispose();
+});
+
+test('the rail home action returns an existing B站 video view to the official homepage', async () => {
+  const f = fixture({}, true);
+  await f.action({ action: 'open', site: 'bilibili', bounds });
+  const content = f.views[0].webContents;
+  await content.loadURL('https://m.bilibili.com/video/BV1234567890');
+  await f.action({ action: 'open', site: 'bilibili', bounds, home: true });
+  assert.equal(content.getURL(), BILIBILI_HOME_URL);
+  assert.equal(f.views.length, 1, 'the home action reuses the existing isolated view');
+  assert(!content.getUserAgent().includes('Mobile'));
+  assert(!content.getUserAgent().includes('Electron'));
+  assert.throws(() => validateCommunityRequest({ action: 'open', site: 'community', bounds, home: true }));
+  assert.throws(() => validateCommunityRequest({ action: 'reload', home: true }));
+  assert.throws(() => validateCommunityRequest({ action: 'open', site: 'bilibili', bounds, home: 'https://evil.invalid' }));
   f.controller.dispose();
 });
 

@@ -1,6 +1,6 @@
 'use strict';
 const test = require('node:test'), assert = require('node:assert/strict');
-const { createSubagentMotion, homeTarget, exploreTarget, HOME_REST_MS } = require('../../apps/neko-workbench/subagent-motion.cjs');
+const { createSubagentMotion, motionOptions, homeTarget, exploreTarget, HOME_REST_MS } = require('../../apps/neko-workbench/subagent-motion.cjs');
 const appearance = require('../../apps/neko-workbench/pet-appearance.js');
 const area = { x: 0, y: 24, width: 1440, height: 850 };
 test('native cat media follows desktop movement, while drag and reduced motion keep priority',()=>{
@@ -99,4 +99,23 @@ test('one helper finishing its fade does not change the remaining helpers gather
   const secondHome=homeTarget(f.home,second.bounds,area,1);
   assert.equal(second.bounds.x,secondHome.x);assert.equal(second.bounds.y,secondHome.y);
   assert.deepEqual(f.returned,['subagent-real','second']);
+});
+
+test('subsections land once and keep their workplace while tiny subagents gather and follow the main pet',()=>{
+  const f=fixture(),task=f.entry,helperWindow=new Window(200,300);
+  Object.assign(task,motionOptions({id:'task',kind:'task'},{},true));
+  assert.deepEqual({fountain:task.fountain,cluster:task.cluster,explore:task.explore},{fountain:true,cluster:false,explore:false});
+  const helper={id:'helper',window:helperWindow,active:true,...motionOptions({id:'helper',kind:'subagent'})};
+  const sync=()=>f.motion.sync([task,helper]);sync();
+  assert(f.motion.snapshot().every(r=>r.spawning));
+  for(let i=0;i<180;i++)f.step();
+  const landed=task.window.getBounds();
+  assert.equal(f.motion.snapshot().find(r=>r.id===task.id).phase,'resting');
+  assert.equal(f.motion.snapshot().find(r=>r.id===task.id).target,undefined,'task is excluded from cluster layout');
+  const helperBefore=helperWindow.getBounds();
+  f.setHome({x:100,y:300,width:400,height:330});sync();
+  for(let i=0;i<220;i++)f.step();
+  assert.deepEqual(task.window.getBounds(),landed,'landed subsection stays in place to work');
+  assert.notDeepEqual(helperWindow.getBounds(),helperBefore,'tiny subagent follows the colony');
+  assert.equal(f.motion.snapshot().find(r=>r.id==='helper').phase,'clustered');
 });

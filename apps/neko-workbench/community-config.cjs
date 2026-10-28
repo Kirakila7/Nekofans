@@ -6,6 +6,7 @@ const DEFAULT_COMMUNITY_URL = 'https://community.project-neko.cn/feed';
 const OFFICIAL_AUTH_ORIGIN = 'https://auth.project-neko.cn';
 const COMMUNITY_PARTITION = 'persist:neko-community';
 const BILIBILI_URL = 'https://m.bilibili.com/';
+const BILIBILI_HOME_URL = 'https://www.bilibili.com/';
 const BILIBILI_PLAYER_ORIGIN = 'https://player.bilibili.com';
 const BILIBILI_PARTITION = 'persist:neko-bilibili';
 // The mobile site otherwise redirects desktop user agents to the desktop site.
@@ -154,10 +155,11 @@ function installCommunityNavigation(target, { communityUrl, parent, openExternal
 
 function validateCommunityRequest(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)
-      || Object.keys(value).some(key => !['action', 'bounds', 'site', 'requestId'].includes(key))
+      || Object.keys(value).some(key => !['action', 'bounds', 'site', 'requestId', 'home'].includes(key))
       || !['open', 'layout', 'hide', 'reload', 'back', 'copy-video-link', 'play-official'].includes(value.action)
       || (value.requestId !== undefined && (!['open', 'hide'].includes(value.action) || !Number.isSafeInteger(value.requestId) || value.requestId < 1))
-      || (value.site !== undefined && (value.action !== 'open' || !['community', 'bilibili'].includes(value.site)))) throw new Error('未知社区操作');
+      || (value.site !== undefined && (value.action !== 'open' || !['community', 'bilibili'].includes(value.site)))
+      || (value.home !== undefined && (value.home !== true || value.action !== 'open' || value.site !== 'bilibili'))) throw new Error('未知社区操作');
   if (value.action === 'open' || value.action === 'layout' || value.bounds !== undefined) {
     const bounds = value.bounds;
     if (!bounds || typeof bounds !== 'object' || Array.isArray(bounds)
@@ -165,7 +167,7 @@ function validateCommunityRequest(value) {
           Object.hasOwn(bounds, key) && Number.isFinite(bounds[key]) && Math.abs(bounds[key]) <= 1000000)
         || bounds.width <= 0 || bounds.height <= 0) throw new Error('社区布局无效');
   }
-  return { action: value.action, ...(value.site ? { site: value.site } : {}), ...(value.requestId !== undefined ? { requestId: value.requestId } : {}), ...(value.bounds ? { bounds: { ...value.bounds } } : {}) };
+  return { action: value.action, ...(value.site ? { site: value.site } : {}), ...(value.home === true ? { home: true } : {}), ...(value.requestId !== undefined ? { requestId: value.requestId } : {}), ...(value.bounds ? { bounds: { ...value.bounds } } : {}) };
 }
 
 function communityBounds(host, bounds) {
@@ -278,7 +280,8 @@ function createCommunityController({ WebContentsView, openExternal, copyText, en
     function setBilibiliAgent(url) {
       if (!isBilibili) return;
       const player = bilibiliOfficialPlayerIdentity(parseWebUrl(url));
-      contents.setUserAgent(player && record.desktopUserAgent ? record.desktopUserAgent : BILIBILI_MOBILE_USER_AGENT);
+      const homepage = url === BILIBILI_HOME_URL;
+      contents.setUserAgent((player || homepage) && record.desktopUserAgent ? record.desktopUserAgent : BILIBILI_MOBILE_USER_AGENT);
     }
     record.setBilibiliAgent = setBilibiliAgent;
     if (isBilibili) contents.setUserAgent(BILIBILI_MOBILE_USER_AGENT);
@@ -426,7 +429,10 @@ function createCommunityController({ WebContentsView, openExternal, copyText, en
     if (request.bounds) record.bounds = request.bounds;
     record.wanted = true;
     const epoch = record.epoch;
-    if (request.action === 'reload') {
+    if (request.action === 'open' && request.home === true && isBilibili) {
+      detach(record);
+      await load(record, BILIBILI_HOME_URL);
+    } else if (request.action === 'reload') {
       detach(record);
       const url = record.webContents.getURL();
       await load(record, classify(url, record.communityUrl).kind === 'internal' ? url : record.communityUrl);
@@ -471,7 +477,7 @@ function createSocialController(options = {}) {
       activeRequestId = request.requestId;
       if (previous !== next) await controllers[previous].action(host, { action: 'hide' });
       if (version !== generation) throw new Error(CANCEL_ERROR);
-      return controllers[next].action(host, { action: 'open', bounds: request.bounds, ...(request.requestId !== undefined ? { requestId: request.requestId } : {}) });
+      return controllers[next].action(host, { action: 'open', site: next, bounds: request.bounds, ...(request.home === true ? { home: true } : {}), ...(request.requestId !== undefined ? { requestId: request.requestId } : {}) });
     }
     if (request.action === 'hide') {
       if (request.requestId !== undefined && request.requestId !== activeRequestId) return { ok: true, stale: true };
@@ -492,7 +498,7 @@ function createSocialController(options = {}) {
     get view() { return controllers[active].view; } });
 }
 
-module.exports = { DEFAULT_COMMUNITY_URL, OFFICIAL_AUTH_ORIGIN, COMMUNITY_PARTITION, BILIBILI_URL, BILIBILI_PARTITION, BILIBILI_MOBILE_USER_AGENT, BILIBILI_PLAYER_ORIGIN,
+module.exports = { DEFAULT_COMMUNITY_URL, OFFICIAL_AUTH_ORIGIN, COMMUNITY_PARTITION, BILIBILI_URL, BILIBILI_HOME_URL, BILIBILI_PARTITION, BILIBILI_MOBILE_USER_AGENT, BILIBILI_PLAYER_ORIGIN,
   resolveCommunityUrl, classifyCommunityNavigation, communityWebPreferences, communityWindowOptions,
   classifyBilibiliNavigation, bilibiliVideoShareUrl, bilibiliOfficialPlayerUrl, installCommunityNavigation, validateCommunityRequest, communityBounds,
   createCommunityController, createSocialController };

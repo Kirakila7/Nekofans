@@ -114,6 +114,73 @@ test("openai-compatible: streams deltas, then complete; request shape and auth h
   assert.deepEqual(req.body.messages.slice(1), [{ role: "user", content: "你好" }]);
 });
 
+test("official DeepSeek chat disables thinking and consumes its normal streamed text", async () => {
+  let requestUrl = "";
+  let body: any;
+  const p = createChatApiProvider({
+    config: cfg("openai-compatible", { baseUrl: "https://api.deepseek.com/", model: "deepseek-flash" }),
+    getApiKey: async () => KEY,
+    newId: () => "deepseek-reply",
+    fetch: async (url, init) => {
+      requestUrl = String(url);
+      body = JSON.parse(String(init?.body));
+      return new Response(
+        'data: {"choices":[{"index":0,"delta":{"role":"assistant","content":"你好"},"finish_reason":null}]}\n\n'
+        + 'data: {"choices":[{"index":0,"delta":{"content":"呀"},"finish_reason":null}]}\n\n'
+        + 'data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"total_tokens":3}}\n\n'
+        + 'data: [DONE]\n\n',
+        { headers: { "content-type": "text/event-stream" } },
+      );
+    },
+  });
+  assert.deepEqual(await collect(p.stream(input())), [
+    { type: "delta", text: "你好" }, { type: "delta", text: "呀" }, { type: "complete", messageId: "deepseek-reply" },
+  ]);
+  assert.equal(requestUrl, "https://api.deepseek.com/chat/completions");
+  assert.equal(body.model, "deepseek-flash");
+  assert.deepEqual(body.thinking, { type: "disabled" });
+  assert.equal(body.stream, true);
+  assert.equal(body.max_tokens, 256);
+});
+
+test("DeepSeek-only request option is not sent to proxies, lookalikes or Anthropic protocol", async () => {
+  const cases: Array<[ChatApiConfig["protocol"], string]> = [
+    ["openai-compatible", "https://api.deepseek.com.evil.invalid"],
+    ["openai-compatible", "https://api.deepseek.com:8443"],
+    ["openai-compatible", "https://other.example/v1"],
+    ["anthropic", "https://api.deepseek.com/anthropic"],
+  ];
+  for (const [protocol, baseUrl] of cases) {
+    let body: any;
+    const p = createChatApiProvider({
+      config: cfg(protocol, { baseUrl }), getApiKey: async () => KEY,
+      fetch: async (_url, init) => {
+        body = JSON.parse(String(init?.body));
+        return new Response(protocol === "anthropic"
+          ? 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"ok"}}\n\ndata: {"type":"message_stop"}\n\n'
+          : 'data: {"choices":[{"index":0,"delta":{"content":"ok"},"finish_reason":"stop"}]}\n\n',
+        { headers: { "content-type": "text/event-stream" } });
+      },
+    });
+    await collect(p.stream(input()));
+    assert.equal(Object.hasOwn(body, "thinking"), false, `${protocol}: ${baseUrl}`);
+  }
+});
+
+test("only official DeepSeek maps HTTP 402 to insufficient balance without leaking upstream error", async () => {
+  for (const [baseUrl, expected] of [
+    ["https://api.deepseek.com", "insufficient_balance"],
+    ["https://api.deepseek.com.evil.invalid", "http"],
+    ["https://other.example/v1", "http"],
+  ] as const) {
+    const p = createChatApiProvider({
+      config: cfg("openai-compatible", { baseUrl }), getApiKey: async () => KEY,
+      fetch: async () => new Response(JSON.stringify({ error: KEY }), { status: 402 }),
+    });
+    await rejectsCode(collect(p.stream(input())), expected);
+  }
+});
+
 test("anthropic: streams text_delta events; x-api-key and version headers", async () => {
   seen.length = 0;
   handler = (_q, _b, res) =>

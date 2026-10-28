@@ -26,6 +26,9 @@ test('context sharing is opt-in, names the destination and resets when it change
   window.eval(fs.readFileSync(path.join(directory, 'screen-share-ui.js'), 'utf8'));
   await tick();
   const $ = id => window.document.getElementById(id);
+  const disclosure=$('share-context').parentElement.textContent;
+  assert.match(disclosure,/已确认的旧版聊天记忆/);
+  assert.match(disclosure,/不包含 N\.E\.K\.O\. 原生记忆/);
   $('sources').value = 'window:1:0';
   assert.equal($('share-context').checked, false);
   assert.equal($('recipient').textContent, 'openai-compatible · https://vision.example/v1 · visual');

@@ -26,8 +26,7 @@ try{
   }});
   assert.deepEqual([...bridges.keys()].sort(),['nekoRoles','nekoWorkbench']);
   const bridge=bridges.get('nekoWorkbench'),roles=bridges.get('nekoRoles');
-  assert.deepEqual(Object.keys(bridge).sort(),['action','codex','community','communityAccount','fish','getState','qqbot','screenShare','setAvatar','subscribe','subscribeCommunity','subscribeCommunityAccount','uploadAvatar']);assert(Object.isFrozen(bridge));
-  assert.deepEqual(Object.keys(bridge.codex).sort(),['accountStatus','approval','cancel','onAccountStatus','onEvent','send','start']);assert(Object.isFrozen(bridge.codex));
+  assert.deepEqual(Object.keys(bridge).sort(),['action','community','communityAccount','companion','fish','fishQq','getAccounts','getState','qqbot','screenShare','setAvatar','subscribe','subscribeCommunity','subscribeCommunityAccount','subscribeOffice','uploadAvatar','workspace']);assert(Object.isFrozen(bridge));
   assert.deepEqual(Object.keys(roles).sort(),['getState','selectRole','subscribe','updateRole','uploadAvatar']);assert(Object.isFrozen(roles));
 
   bridge.getState();bridge.setAvatar('yui');bridge.uploadAvatar();bridge.action('neko-settings');
@@ -88,23 +87,20 @@ try{
   assert.equal(calls.length,countBeforeInvalidScreenShare,'unknown screen actions must not reach IPC');
   bridge.fish('pause');assert.deepEqual(calls.at(-1),['workbench:call','fish','pause']);
   bridge.qqbot('status');assert.deepEqual(calls.at(-1),['workbench:call','qqbot','status']);
-  const project={workspaceId:'project-1',path:'/tmp/project'},message={text:'hello'},approval={requestId:'request-1',decision:'decline'};
-  bridge.codex.start(project);assert.deepEqual(calls.at(-1),['workbench:codex','start',project]);
-  bridge.codex.send(message);assert.deepEqual(calls.at(-1),['workbench:codex','send',message]);
-  bridge.codex.cancel();assert.deepEqual(calls.at(-1),['workbench:codex','cancel']);
-  bridge.codex.approval(approval);assert.deepEqual(calls.at(-1),['workbench:codex','approval',approval]);
-  bridge.codex.accountStatus();assert.deepEqual(calls.at(-1),['workbench:codex','account-status']);
-  const accounts=[];const stopAccounts=bridge.codex.onAccountStatus(value=>accounts.push(value));
-  const accountStatus={status:'signed-in',source:'chatgpt'};
-  emit('workbench:codex-account',accountStatus);assert.deepEqual(accounts,[accountStatus]);
-  stopAccounts();stopAccounts();assert(!listeners.has('workbench:codex-account'));
-  assert.throws(()=>bridge.codex.onAccountStatus(null));
-  const codexEvents=[];const stopCodex=bridge.codex.onEvent(value=>codexEvents.push(value));
-  const codexEvent={type:'delta',delta:'hello'};
-  emit('workbench:codex-event',codexEvent);assert.deepEqual(codexEvents,[codexEvent]);
-  stopCodex();stopCodex();assert(!listeners.has('workbench:codex-event'));
-  emit('workbench:codex-event',codexEvent);assert.equal(codexEvents.length,1);
-  assert.throws(()=>bridge.codex.onEvent(null));
+  bridge.getAccounts({includeQuota:true,force:'yes',command:'arbitrary',path:'/private'});
+  assert.deepEqual(JSON.parse(JSON.stringify(calls.at(-1))),['workbench:call','accounts',{includeQuota:true,force:false}],'account bridge only forwards boolean read options');
+  bridge.getAccounts();assert.deepEqual(JSON.parse(JSON.stringify(calls.at(-1))),['workbench:call','accounts',{includeQuota:false,force:false}]);
+  const fishQqRequest={action:'select',selection:{fish:false,qqbot:true}};
+  bridge.fishQq(fishQqRequest);assert.deepEqual(calls.at(-1),['workbench:call','fish-qq',fishQqRequest]);
+  const workspaceRequest={action:'state'};
+  bridge.workspace(workspaceRequest);assert.deepEqual(calls.at(-1),['workbench:call','workspace',workspaceRequest]);
+  const companionRequest={action:'state'};
+  bridge.companion(companionRequest);assert.deepEqual(calls.at(-1),['workbench:call','companion',companionRequest]);
+  const officeUpdates=[];const stopOffice=bridge.subscribeOffice(value=>officeUpdates.push(value));
+  const officeState={active:true};emit('workbench:office-state',officeState);assert.deepEqual(officeUpdates,[officeState]);
+  stopOffice();emit('workbench:office-state',{active:false});assert.equal(officeUpdates.length,1);
+  for(const invalid of ['start','frame','settings','sources'])await assert.rejects(bridge.screenShare(invalid),/未知屏幕操作/);
+  assert.equal('invoke' in bridge,false);assert.equal('openURL' in bridge,false);
   console.log('ok: avatar persistence and malformed-state recovery; frozen workbench/role bridge methods, exact IPC channels and payloads; isolated subscriptions cancel independently');
 }finally{fs.rmSync(folder,{recursive:true,force:true});}
 }

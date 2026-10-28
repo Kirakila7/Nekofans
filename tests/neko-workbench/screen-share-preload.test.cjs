@@ -13,5 +13,8 @@ test('workbench screen bridge permits only hide and preserves other named bridge
   for (const operation of ['start', 'frame', 'settings', 'sources']) await assert.rejects(bridge.screenShare(operation), /未知屏幕操作/);
   assert.equal(calls.length, 1);
   assert.equal(typeof bridge.community, 'function');
-  assert.equal(typeof bridge.codex.start, 'function');
+  const request = { action: 'state' };
+  await bridge.workspace(request);
+  assert.deepEqual(calls.at(-1), ['workbench:call', 'workspace', request]);
+  assert.equal(typeof bridge.companion, 'function');
 });

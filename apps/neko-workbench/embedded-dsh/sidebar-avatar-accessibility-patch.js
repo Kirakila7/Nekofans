@@ -119,7 +119,7 @@ function SidebarMark({ size }) {
     type:'button', className:'neko-avatar-btn', ref:pop.triggerRef,
     'aria-haspopup':'dialog', 'aria-expanded':pop.open ? 'true' : 'false',
     'aria-controls':pop.open ? panelId : undefined,
-    'aria-label':`头像：${avatarName(current)}，点击更换`, title:'更换头像',
+    'aria-label':`头像：${avatarName(current)}，点击切换主题`, title:'更换头像与主题',
     // Portal events still bubble through their React owners. Keep every native
     // brand-button handler outside this independent avatar interaction.
     onPointerDown:stop, onKeyDown:stop, onKeyUp:stop, onDoubleClick:stop,
@@ -138,11 +138,11 @@ function SidebarMark({ size }) {
     } }
   }
   const panel = h(Panel, {
-    id:panelId, label:'选择头像', className:'neko-picker', popover:pickerPopover, width:PICKER_WIDTH,
+    id:panelId, label:'头像与主题', className:'neko-picker', popover:pickerPopover, width:PICKER_WIDTH,
   },
     h('div', {className:'neko-pop__head'},
-      h('span', {className:'neko-pop__title'}, '选择头像'),
-      h('span', {className:'neko-pop__hint'}, '只换形象，不影响模型和记忆')),
+      h('span', {className:'neko-pop__title'}, '头像与主题'),
+      h('span', {className:'neko-pop__hint'}, '角色头像与配色同步切换，模型和记忆保持不变')),
     h('div', {className:'neko-picker__grid', role:'group', 'aria-label':'内置头像'}, ...tiles),
     h('button', {
       type:'button', className:'neko-btn neko-picker__upload', disabled:locked,

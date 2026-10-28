@@ -46,3 +46,8 @@
 .pet[data-agent-motion=spawning] .character{transform:translateX(-50%) rotate(var(--agent-lean,0deg));transform-origin:center bottom}
 .pet:not([data-appearance=neko-cat])[data-agent-motion=gathered][data-motion-retire=true] .character{animation:neko-cat-home 1.3s ease-in forwards}
 @media(prefers-reduced-motion:reduce){.pet[data-agent-motion] .character{transform:translateX(-50%)!important;animation:none!important}}
+
+/* Child sessions expose messages only on explicit click; native helpers never compose. */
+.pet[data-tier=task]:not(.task-chat-open) .pet-bubble,.pet[data-tier=task] .chat,.pet[data-tier=subagent] .chat,.pet[data-tier=subagent] .pet-bubble,.pet[data-tier=task] .task-inspector{display:none!important}
+.pet.task-chat-open .pet-bubble{max-height:76px;overflow:auto;white-space:pre-wrap;user-select:text;pointer-events:auto!important}
+.memory-system{display:grid;gap:10px;padding:16px;margin:16px 0;border:1px solid #c8deed;border-radius:12px;background:#e8f3fb}.memory-system h2{margin:0}.memory-system label,.memory-model-form{display:grid;gap:5px}.memory-system .check-label{display:flex;align-items:center;gap:8px}.memory-system select,.memory-system input:not([type=checkbox]){box-sizing:border-box;width:100%;min-width:0;border:1px solid #aac9df;border-radius:7px;background:#fff;color:inherit;padding:8px;font:inherit}.memory-system details{margin-top:4px}.memory-model-form{gap:10px;margin-top:12px}.memory-custom-model{display:grid;gap:10px;border:1px solid #aac9df;border-radius:8px;min-width:0;padding:12px}.memory-custom-model:disabled{opacity:.55}.memory-sync-status,.memory-key-status{font-size:12px;overflow-wrap:anywhere}.memory-mode{display:block}

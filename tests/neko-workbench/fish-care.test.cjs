@@ -8,6 +8,8 @@ test('fish defaults stay in the isolated workspace and preserve existing setting
     const env=fishEnvironment(runtime,{DSH_NODE:'/bundled/node'});assert.equal(env.BILI_WHALE_CONFIG,p.config);assert.equal(env.DSH_NODE,'/bundled/node');assert(!('HOME'in env));assert.equal(process.env.HOME,before);
     cfg.persona.name='我的鱼';fs.writeFileSync(p.config,JSON.stringify(cfg));const persona=path.join(p.home,'.bili-ai/persona.md');fs.writeFileSync(persona,'custom persona');prepareFishCare(runtime);
     assert.equal(JSON.parse(fs.readFileSync(p.config)).persona.name,'我的鱼');assert.equal(fs.readFileSync(persona,'utf8'),'custom persona');assert(fs.readFileSync(path.join(p.root,'bili.mjs'),'utf8').includes('vendor/dsh-bili-whale'));
+    const launcher=path.join(p.root,'bili.mjs');fs.utimesSync(launcher,new Date(1000000),new Date(1000000));prepareFishCare(runtime);assert.equal(fs.statSync(launcher).mtimeMs,1000000,'startup leaves an unchanged launcher untouched');
+    prepareFishCare(runtime,{baseDir:'/new/install'});assert(fs.readFileSync(launcher,'utf8').includes('/new/install/vendor/dsh-bili-whale'),'a changed installation still updates the launcher');
     assert.deepEqual(fishPaths(runtime),p);
   }finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
@@ -40,6 +42,32 @@ test('missing model login blocks B站 work, and pausing an in-flight verificatio
 });
 test('execution failures stop the scheduler and retain only safe actionable status',async()=>{
  const f=fixture();f.credentials(true);await f.control.action('start');const state=await f.control.reportFailure();assert.equal(state.phase,'error');assert.equal(f.counters.stops,1);assert.equal(f.config.enabled,false);assert.match(state.reason,/余额/);f.control.dispose();
+});
+test('pause fences starts already queued before they execute, while later explicit starts remain usable',async()=>{
+ const f=fixture();f.credentials(true);
+ await Promise.all([f.control.action('start'),f.control.action('start'),f.control.action('pause')]);
+ assert.equal(f.counters.starts,0);assert.equal(f.control.snapshot().phase,'paused');assert.equal(f.config.enabled,false);
+ await f.control.action('start');assert.equal(f.counters.starts,1);f.control.dispose();
+});
+test('cancelled verification failures cannot restore login intent or publish stale errors',async()=>{
+ for(const action of ['pause','cancel-login']){
+  let config={enabled:true},rejectVerify,starts=0;
+  const verification=new Promise((_,reject)=>rejectVerify=reject);
+  const states=[];
+  const control=createFishControl({read:()=>config,write:value=>config=value,hasCredentials:()=>true,verify:()=>verification,start:()=>{starts++;return{stop(){}}},notify:state=>states.push(state)});
+  const started=control.restore();await new Promise(resolve=>setImmediate(resolve));
+  assert.equal((await control.action('status')).phase,'checking');
+  const cancelled=control.action(action);const error=Error('expired private credential');error.code='AUTH_INVALID';rejectVerify(error);
+  await started;await cancelled;await control.afterLogin();
+  assert.equal(starts,0);assert.equal(config.enabled,false);assert.equal(control.snapshot().phase,'paused');
+  assert(!states.some(state=>state.phase==='login-required'||state.phase==='error'));control.dispose();
+ }
+});
+test('late rejected model checks stay cancelled and expose no provider error text',async()=>{
+ let config={enabled:false},rejectModel;const gate=new Promise((_,reject)=>rejectModel=reject);
+ const states=[],control=createFishControl({read:()=>config,write:value=>config=value,modelReady:()=>gate,hasCredentials:()=>true,verify:async()=>{},start:()=>{throw Error('must not start')},notify:state=>states.push(state)});
+ const started=control.action('start');await new Promise(resolve=>setImmediate(resolve));const paused=control.action('pause');rejectModel(Error('provider secret-test-value'));
+ await started;await paused;assert.equal(control.snapshot().phase,'paused');assert(!JSON.stringify(states).includes('secret-test-value'));assert(!states.some(state=>state.phase==='error'));control.dispose();
 });
 test('bundled host stays paused, fences untrusted requests, starts after both logins and cancels only its own work',()=>{
  const {spawnSync}=require('node:child_process');const result=spawnSync(process.execPath,[path.join(__dirname,'fish-host-fixture.mjs')],{encoding:'utf8',timeout:15000});assert.equal(result.status,0,result.stderr+'\n'+result.stdout);

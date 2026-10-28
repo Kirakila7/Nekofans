@@ -34,9 +34,10 @@
   function layoutOptions(state,actor){return {compact:true,scale:scaleFor(state,actor),aspect:frameAspect(state,actor)};}
   const base='assets/neko-cat/';
   const assets=Object.freeze({idle:base+'cat-idle-cat4-3.gif',running:base+'cat-idle-cat4-1.gif',success:base+'cat-idle-cat4-2.gif',drag:base+'cat-idle-cat-move-3.gif',still:base+'still.png'});
-  function phase(actor,dragging=false){if(dragging)return 'drag';if(actor?.active||['working','stopping'].includes(actor?.status))return 'running';return actor?.work?.state==='success'?'success':'idle';}
-  function pose(actor,dragging){if(dragging)return 'waving';if(actor?.status==='error'||actor?.work?.state==='error')return 'failed';if(actor?.status==='stopping'||actor?.work?.state==='waiting')return 'waiting';if(actor?.work?.state==='thinking')return 'review';if(actor?.work?.state==='success'||actor?.status==='success')return 'jumping';return actor?.active||actor?.status==='working'?'running':'idle';}
+  function phase(actor,dragging=false){if(dragging)return 'drag';if(actor?.presentationRunning)return 'running';if(actor?.active||['working','stopping'].includes(actor?.status))return 'running';return actor?.work?.state==='success'?'success':'idle';}
+  function pose(actor,dragging){if(dragging)return 'waving';if(actor?.presentationRunning)return 'running';if(actor?.status==='error'||actor?.work?.state==='error')return 'failed';if(actor?.status==='stopping'||actor?.work?.state==='waiting')return 'waiting';if(actor?.work?.state==='thinking')return 'review';if(actor?.work?.state==='success'||actor?.status==='success')return 'jumping';return actor?.active||actor?.status==='working'?'running':'idle';}
   function pixelPose(actor,dragging){
+    if(actor?.presentationRunning&&!dragging)return 'walk-left';
     if(dragging)return 'walk-left';
     const state=actor?.work?.state;
     if(actor?.status==='error'||state==='error')return 'failed';
@@ -47,7 +48,7 @@
     return actor?.active||actor?.status==='working'?'type':'idle';
   }
   function sourceFor(id,actor,{dragging=false,reduced=false,failed=false,desktopMotion=null}={}){
-    if(id===CAT)return reduced||failed?assets.still:dragging?assets.drag:desktopMotion&&desktopMotion.phase!=='gathered'?(desktopMotion.moving?assets.running:assets.idle):assets[phase(actor,dragging)];
+    if(id===CAT)return reduced||failed?assets.still:dragging?assets.drag:actor?.presentationRunning?assets.running:actor?.kind==='task'?(phase(actor)==='success'?assets.success:assets.idle):desktopMotion&&desktopMotion.phase!=='gathered'?(desktopMotion.moving?assets.running:assets.idle):assets[phase(actor,dragging)];
     if(id===CUSTOM){const value=actor?.customAppearance;if((reduced||failed)&&value?.stillDataUrl?.startsWith('data:image/png;base64,')&&validImageDataUrl({dataUrl:value.stillDataUrl}))return value.stillDataUrl;if(failed||reduced&&/^data:image\/(gif|webp);/.test(value?.dataUrl||''))return assets.still;return validCustom(value)?value.dataUrl:assets.still;}
     if(id===CLAUDE_PIXEL||id===GEMINI_PIXEL){const folder=id===CLAUDE_PIXEL?'claude':'gemini';return `assets/pixel-ai-girls/${folder}/${reduced||failed?'still.png':pixelPose(actor,dragging)+'.webp'}`;}
     if(id===CLAUDE||id===GEMINI){const folder=id===CLAUDE?'claude':'gemini',action=pose(actor,dragging);
@@ -67,7 +68,7 @@
       if(disposed||current===ORIGINAL)return;
       const source=sourceFor(current,actor,{dragging:feedback.dragState.active,reduced:!!media?.matches,failed,desktopMotion});
       onHeadInset(insetFor(current,actor,{dragging:feedback.dragState.active,reduced:!!media?.matches,failed}));
-      motion.dataset.phase=current===CAT?phase(actor,feedback.dragState.active):'pose';motion.dataset.reduced=String(!!media?.matches);
+      motion.dataset.phase=current===CAT?(actor?.kind==='task'&&!actor?.presentationRunning&&!feedback.dragState.active?(phase(actor)==='success'?'success':'idle'):phase(actor,feedback.dragState.active)):'pose';motion.dataset.reduced=String(!!media?.matches);
       motion.dataset.desktop=String(current===CAT&&!!desktopMotion);motion.dataset.direction=desktopMotion?.direction===1?'right':'left';
       motion.dataset.home=String(desktopMotion?.phase==='gathered'&&desktopMotion.retire!==false);
       if(source!==lastSource){lastSource=source;image.src=source;}
