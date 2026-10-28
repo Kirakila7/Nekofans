@@ -148,7 +148,7 @@ assert.equal(run.registrations[1].spec.id, 'neko.role-sidebar-adapter')
 assert.equal(run.registrations[5].spec.order, 100)
 assert.ok(!run.registrations.some((r) => /^sidebar\.(panellist|workspaces)/.test(r.spec.name)), 'no native sidebar slot replaced')
 assert.ok(!run.registrations.some((r) => /hero\.brand\.name|hero\.(workspace|agentPreset|options)/.test(r.spec.name)), 'feature slots untouched')
-assert.deepEqual(run.effects, ['neko-brand: styles', 'neko-brand: native account habitat', 'neko-brand: avatar theme', 'neko-brand: favicon', 'neko-brand: title observer', 'neko-brand: workbench bridge', 'neko-brand: roles bridge', 'neko-brand: community coding pane', 'neko-brand: compact running status'])
+assert.deepEqual(run.effects, ['neko-brand: styles', 'neko-brand: native account habitat', 'neko-brand: avatar theme', 'neko-brand: favicon', 'neko-brand: title observer', 'neko-brand: workbench bridge', 'neko-brand: roles bridge', 'neko-brand: community coding pane', 'neko-brand: left navigation rail', 'neko-brand: compact running status'])
 const byName = Object.fromEntries(run.registrations.map((r) => [r.spec.name, r.component.name]))
 assert.deepEqual(byName, {
   'sidebar.brand.mark': 'SidebarMark', 'sidebar.brand.name': 'SidebarName',
