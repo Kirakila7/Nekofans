@@ -87,11 +87,11 @@ function installUnifiedLayout(options = {}) {
   }
   function toggleConfig() { void setConfig(config.hidden); }
   function clean(next) { return { enabled: !!next.enabled, side: next.side, left: next.left, right: next.right, ratio: next.ratio }; }
-  async function update(next) {
+  async function update(next, raise = false) {
     const ticket = ++revision;
     try {
       const saved = await bridge.workspace({ action: 'set-pane-layout', layout: clean(next) });
-      if (disposed || ticket !== revision) return;
+      if (disposed || ticket !== revision) { if (raise) throw Error('界面配置已变化，请重试'); return; }
       const enabling = !layout.enabled && saved.enabled;
       layout = clean(saved); renderConfig();
       if (enabling) options.hideLegacy?.();
@@ -99,10 +99,10 @@ function installUnifiedLayout(options = {}) {
       else { doc.body.removeAttribute('data-neko-unified-enabled'); hideAll(); clearCoding(); }
       if (layout.enabled && layout.side !== 'workspace') doc.querySelector('.neko-side-rail__expand:not([hidden])')?.click();
       suspended = !config.hidden && layout.enabled; schedule();
-    } catch (error) { if (!disposed && ticket === revision) info.textContent = error?.message || '界面配置未能保存，请重试'; }
+    } catch (error) { if (!disposed && ticket === revision) info.textContent = error?.message || '界面配置未能保存，请重试'; if (raise) throw error; }
   }
-  function chooseFor(slot, value) { target = slot; choose(value); }
-  function choose(value) {
+  function chooseFor(slot, value, raise = false) { target = slot; return choose(value, raise); }
+  function choose(value, raise = false) {
     const next = { ...layout, enabled: true }, requested = target === 'side' && value === 'coding' ? 'workspace' : value;
     if (requested !== 'workspace' && requested !== null) {
       for (const other of ['side', 'left', 'right']) if (other !== target && next[other] === requested) {
@@ -111,7 +111,7 @@ function installUnifiedLayout(options = {}) {
         next[other] = other === 'side' ? 'workspace' : (previous && previous !== 'workspace' ? previous : null);
       }
     }
-    next[target] = requested; void update(next);
+    next[target] = requested; return update(next, raise);
   }
   function findGeometry() {
     const sidebar = doc.querySelector('[data-slot="sidebar"]');
@@ -297,6 +297,25 @@ function installUnifiedLayout(options = {}) {
     target = activeMain; choose(item.classList.contains('neko-side-rail__bilibili') ? 'bilibili' : 'community');
   }
   doc.addEventListener('click', shortcut, true);
+  // A companion's community visit must not invoke the legacy single-pane
+  // route, which would hide all currently assigned native views. Save the
+  // destination first; the visible companion menu is allowed to close before
+  // remote loading resumes so no menu/native-view z-order deadlock occurs.
+  function visitCommunity(event) {
+    const detail = event.detail;
+    if (disposed || !layout.enabled || !detail || typeof detail !== 'object') return;
+    detail.handled = true;
+    const existing = ['side', 'left', 'right'].find(slot => layout[slot] === 'community');
+    if (existing) {
+      if (existing === 'side') doc.querySelector('.neko-side-rail__expand:not([hidden])')?.click();
+      else activeMain = existing;
+      schedule(); detail.promise = Promise.resolve(); return;
+    }
+    const destination = layout.left === 'coding' ? 'right' : layout.right === 'coding' ? 'left' : activeMain;
+    activeMain = destination;
+    detail.promise = chooseFor(destination, 'community', true);
+  }
+  doc.addEventListener('neko-unified-open-community', visitCommunity);
   if (typeof bridge.subscribeCommunity === 'function') unsubscribe = bridge.subscribeCommunity(state => {
     if (!state?.slot || !panels[state.slot] || placements.get(state.slot) !== state.site) return;
     if (state.status === 'hidden') {
@@ -325,7 +344,7 @@ function installUnifiedLayout(options = {}) {
   renderConfig();
   return () => {
     disposed = true; revision++; hideAll(); clearCoding(); doc.body.removeAttribute('data-neko-unified-enabled');
-    observer.disconnect(); overlayObserver.disconnect(); resize?.disconnect(); win.removeEventListener('resize', schedule); doc.removeEventListener('scroll', schedule, true); doc.removeEventListener('click', shortcut, true);
+    observer.disconnect(); overlayObserver.disconnect(); resize?.disconnect(); win.removeEventListener('resize', schedule); doc.removeEventListener('scroll', schedule, true); doc.removeEventListener('click', shortcut, true); doc.removeEventListener('neko-unified-open-community', visitCommunity);
     doc.removeEventListener('visibilitychange', visibilityChanged); win.removeEventListener('focus', visibilityChanged); if (recoveryTimer) win.clearTimeout(recoveryTimer);
     if (frame) (win.cancelAnimationFrame || win.clearTimeout)(frame); if (typeof unsubscribe === 'function') unsubscribe();
     trigger.remove(); config.remove(); mobile.remove(); divider.remove(); for (const p of Object.values(panels)) p.node.remove(); for (const zone of Object.values(drops)) zone.remove(); style.remove();
