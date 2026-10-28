@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('nekoWorkbench',Object.freeze({
   uploadAvatar:()=>call('upload-avatar'),
   action:name=>call('action',name),
   fish:action=>call('fish',action),
+  qqbot:action=>call('qqbot',action),
   community:request=>ipcRenderer.invoke('workbench:community',request),
   subscribeCommunity:callback=>{const listener=(_event,state)=>callback(state);ipcRenderer.on('workbench:community-state',listener);return()=>ipcRenderer.removeListener('workbench:community-state',listener);},
   subscribe:callback=>{const listener=(_event,state)=>callback(state);ipcRenderer.on('workbench:state',listener);return()=>ipcRenderer.removeListener('workbench:state',listener);}

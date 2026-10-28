@@ -87,6 +87,11 @@ async function fishAction(action){
   if(['login-required','model-login-required','error'].includes(value.phase))await openFishSettings();
   return value;
 }
+async function qqbotAction(action){
+  if(!['status','start','pause'].includes(action))throw Error('未知 QQ 机器人操作');
+  if(state.connection!=='ready')throw Error('工作台尚未连接，请稍后重试。');
+  return rpc('qqbot-care',{action});
+}
 function showConnectionStatus(){return dialog.showMessageBox(dshWindow&&!dshWindow.isDestroyed()?dshWindow:petWindows.get('main'),{type:'info',message:'N.E.K.O.：'+(state.neko.connection==='ready'?'已连接':'未连接')+' · 工作台：'+(state.connection==='ready'?'已连接':'未连接'),detail:[state.neko.error,state.error].filter(Boolean).join('\n')||'主角色聊天与工作台任务分别连接。',buttons:['好']});}
 async function workbenchAction(name){
   switch(name){
@@ -565,6 +570,7 @@ ipcMain.handle('workbench:call',async(event,method,value)=>{
   assertWorkbenchCaller(event);
   if(method==='state')return workbenchState();
   if(method==='fish'){return fishAction(value);}
+  if(method==='qqbot'){return qqbotAction(value);}
   if(method==='avatar'){workbenchAppearance.select(value);broadcast();return workbenchState();}
   if(method==='upload-avatar'){
     const image=await chooseAvatar();if(!image)return null;
