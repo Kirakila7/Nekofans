@@ -17,6 +17,8 @@ body[data-neko-workspace-shell] .neko-hero-pick__name { display:none !important;
 .neko-custom-seat img { width:27px; height:27px; object-fit:contain; flex:none; }
 .neko-custom-seat__name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; }
 .neko-custom-seat__provider { font-size:10px; color:var(--nws-muted); border:1px solid var(--nws-border); border-radius:4px; padding:1px 4px; }
+.neko-custom-seat__pick:disabled { cursor:not-allowed; opacity:1; color:#66788c; }
+.neko-custom-seat__pick:disabled .neko-custom-seat__provider { color:#526a82; border-color:#b7c8d9; background:#edf3f9; }
 .neko-custom-seat__settings { width:28px; height:30px; font-size:20px !important; }
 .neko-custom-seat button:hover,.neko-session-browser button:hover { background:var(--nws-hover); border-radius:7px; }
 .neko-session-browser { display:flex; flex-direction:column; flex:1; min-height:80px; overflow:hidden; padding:0 12px; color:var(--nws-text); font:12px/1.5 system-ui,sans-serif; }

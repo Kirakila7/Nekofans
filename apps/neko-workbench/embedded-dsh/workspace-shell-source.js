@@ -22,6 +22,8 @@ function installWorkspaceShell(options = {}) {
   const effortLabel = value => ({ none: '关闭', minimal: '极低', low: '低', medium: '中', high: '高', xhigh: '很高', max: '极高', ultra: '最高' })[value] || value;
   const own = node => { node.dataset.nekoWorkspaceOwned = ''; nodes.push(node); return node; };
   const call = request => bridge.workspace(request);
+  // The controller projects this flag without altering saved seat or session data.
+  const codexPaused = () => layout?.codexAvailable === false;
   const hideSocial = () => { options.hideSocial?.(); socialOpen = false; };
   function markNative(node, name) { if (!node) return; if (!nativeMarks.has(node)) nativeMarks.set(node, new Map()); const attrs = nativeMarks.get(node); if (!attrs.has(name)) attrs.set(name, node.getAttribute(name)); if (!node.hasAttribute(name)) node.setAttribute(name, ''); }
   const railTop = own(el('div', 'neko-workspace-rail-controls'));
@@ -157,7 +159,7 @@ function installWorkspaceShell(options = {}) {
   function showError(error) { listStatus.textContent = error?.message || '工作台操作未完成，请重试'; }
   function showOfficeError(error) { officeErrorText = error?.message || 'Codex 操作未完成，请重试'; officeError.textContent = officeErrorText; }
   async function refreshModels(force = false) {
-    if (disposed || modelsState === 'loading' || !force && modelsState !== 'idle') return;
+    if (disposed || codexPaused() || modelsState === 'loading' || !force && modelsState !== 'idle') return;
     modelsState = 'loading'; modelsError = ''; renderOffice();
     try {
       const next = await call({ action: 'codex-models', force });
@@ -167,6 +169,7 @@ function installWorkspaceShell(options = {}) {
     if (!disposed) renderOffice();
   }
   async function saveLayout(patch) {
+    if (codexPaused() && patch.officeMode === 'codex') { showError(Error('Codex 测试中，暂不可用')); return; }
     try { layout = await call({ action: 'update', patch }); renderLayout(); }
     catch (error) { showError(error); }
   }
@@ -174,17 +177,20 @@ function installWorkspaceShell(options = {}) {
     if (!layout || disposed) return;
     officeImage.src = avatar(layout.officeMode === 'codex' ? 'devcat' : 'bigfish');
     officeButton.setAttribute('aria-label', '工作界面：' + (layout.officeMode === 'codex' ? 'Codex' : 'DSH') + '，点击切换');
+    officeButton.title = codexPaused() ? '工作界面设置 · Codex 测试中' : '切换 DSH / Codex 工作界面';
     doc.body.setAttribute('data-neko-office-mode', layout.officeMode);
     const active = layout.activeSeatId;
     seats.replaceChildren(...layout.seats.map(seat => {
       const row = el('div', 'neko-custom-seat'); row.dataset.active = String(active === seat.id);
       const pick = button('', 'neko-custom-seat__pick', () => {
         if (!seat.provider) { openSettings('seat', seat.id); return; }
+        if (seat.provider === 'codex' && codexPaused()) return;
         hideSocial();
         saveLayout({ activeSeatId: seat.id, officeMode: seat.provider });
       });
+      if (seat.provider === 'codex' && codexPaused()) { pick.disabled = true; pick.title = 'Codex 测试中，暂不可用'; pick.setAttribute('aria-label', seat.name + '，Codex 测试中，暂不可用'); }
       pick.setAttribute('aria-pressed', String(active === seat.id));
-      pick.append(image(seat.avatarId === 'custom' ? seat.customDataUrl : avatar(seat.avatarId)), el('span', 'neko-custom-seat__name', seat.name), el('span', 'neko-custom-seat__provider', seat.provider?.toUpperCase() || '未绑定'));
+      pick.append(image(seat.avatarId === 'custom' ? seat.customDataUrl : avatar(seat.avatarId)), el('span', 'neko-custom-seat__name', seat.name), el('span', 'neko-custom-seat__provider', seat.provider === 'codex' && codexPaused() ? '测试中' : seat.provider?.toUpperCase() || '未绑定'));
       const settings = button('⋯', 'neko-custom-seat__settings', () => openSettings('seat', seat.id)); settings.setAttribute('aria-label', '配置工作 agent：' + seat.name);
       row.append(pick, settings); return row;
     }));
@@ -206,13 +212,14 @@ function installWorkspaceShell(options = {}) {
       if (!groupOpen.has(key)) for (const row of group.sessions) {
         const link = button(row.title, 'neko-workspace-session', () => openSession(row));
         link.title = row.title; link.dataset.selected = String(row.provider === 'codex' && row.id === selectedId);
+        if (row.provider === 'codex' && codexPaused()) { link.disabled = true; link.title = 'Codex 测试中，暂不可用'; link.textContent += ' · 测试中'; }
         section.appendChild(link);
       }
       return section;
     }));
     if (catalog?.nextDshOffset != null) projectList.appendChild(button('加载更多 DSH 会话', 'neko-workspace-more', () => refreshCatalog(true, catalog.nextDshOffset)));
-    const unavailable = Object.entries(catalog?.providers || {}).filter(([, status]) => status !== 'ready').map(([name]) => name.toUpperCase());
-    listStatus.textContent = listLoading ? '正在读取本地工作会话…' : unavailable.length ? unavailable.join('、') + ' 会话暂不可读取，可刷新重试' : rows.length ? '' : seat && !seat.provider ? '请配置这个工作 agent' : '暂无匹配的工作会话';
+    const unavailable = Object.entries(catalog?.providers || {}).filter(([, status]) => status !== 'ready' && status !== 'testing').map(([name]) => name.toUpperCase());
+    listStatus.textContent = listLoading ? '正在读取本地工作会话…' : unavailable.length ? unavailable.join('、') + ' 会话暂不可读取，可刷新重试' : codexPaused() ? 'Codex 测试中，暂不可用' : rows.length ? '' : seat && !seat.provider ? '请配置这个工作 agent' : '暂无匹配的工作会话';
   }
   async function refreshCatalog(force = false, dshOffset = 0) {
     if (disposed || listLoading) return;
@@ -222,6 +229,7 @@ function installWorkspaceShell(options = {}) {
     finally { listLoading = false; if (!disposed) renderCatalog(); }
   }
   async function openSession(row) {
+    if (row.provider === 'codex' && codexPaused()) { showError(Error('Codex 测试中，暂不可用')); return; }
     hideSocial(); closeSettings();
     if (row.provider === 'dsh') { await saveLayout({ officeMode: 'dsh' }); options.openDshSession?.(row.id); }
     else {
@@ -250,7 +258,7 @@ function installWorkspaceShell(options = {}) {
   function renderOffice() {
     if (!layout) return;
     panel.hidden = layout.officeMode !== 'codex' || socialOpen;
-    if (!panel.hidden && modelsState === 'idle') refreshModels();
+    if (!panel.hidden && !codexPaused() && modelsState === 'idle') refreshModels();
     for (const main of doc.querySelectorAll('main')) { if (socialOpen) continue; if (main.closest('[data-neko-workspace-owned]')) continue; if (!panel.hidden) markNative(main, 'inert'); else if (nativeMarks.get(main)?.has('inert')) { const before = nativeMarks.get(main).get('inert'); if (before === null) main.removeAttribute('inert'); else main.setAttribute('inert', before); nativeMarks.get(main).delete('inert'); } }
     officeTitle.textContent = office.thread?.title || 'Codex'; officeModel.textContent = office.thread?.model || '本机默认模型';
     const cwd = office.thread?.cwd || selectedProject || state?.workspaceRoot || '';
@@ -270,7 +278,7 @@ function installWorkspaceShell(options = {}) {
       if (choice.effort && !pickedModel?.supportedReasoningEfforts.some(e => e.reasoningEffort === choice.effort)) { const n = option(choice.effort, choice.effort + ' · 暂不可用'); n.disabled = true; effortSelect.appendChild(n); }
       effortSelect.value = choice.effort || '';
     }
-    modelSelect.disabled = busy; effortSelect.disabled = busy || !pickedModel?.supportedReasoningEfforts.length; modelsRefresh.disabled = busy || modelsState === 'loading';
+    modelSelect.disabled = codexPaused() || busy; effortSelect.disabled = codexPaused() || busy || !pickedModel?.supportedReasoningEfforts.length; modelsRefresh.disabled = codexPaused() || busy || modelsState === 'loading';
     modelsStatus.textContent = modelsState === 'loading' ? '正在读取 Codex 模型…' : modelsError || (invalidChoice ? '已选模型或思考强度暂不可用，请重新选择或刷新' : modelsState === 'ready' && !codexModels.length ? '暂无可选模型，可沿用本机默认' : '');
     modelsStatus.hidden = !modelsStatus.textContent;
     officeCaption.textContent = (busy ? '执行于 Codex' : '发送到 Codex') + ' · ' + (pickedModel?.displayName || choice.model || office.thread?.model || '本机默认') + (pickedModel ? ' · 思考：' + effortLabel(choice.effort || pickedModel.defaultReasoningEffort || '默认') : '') + ' · ⌘/Ctrl Enter 发送';
@@ -289,7 +297,9 @@ function installWorkspaceShell(options = {}) {
       if (bottom) officeHistory.scrollTop = officeHistory.scrollHeight;
     }
     officeError.textContent = officeErrorText || office.error || (officeReading ? '正在读取原生 Codex 会话…' : office.status === 'working' ? 'Codex 正在工作…' : '');
-    sendButton.disabled = busy || invalidChoice; sendButton.textContent = officeSending ? '发送中…' : '发送'; stopButton.hidden = office.status !== 'working';
+    sendButton.disabled = codexPaused() || busy || invalidChoice; sendButton.textContent = codexPaused() ? '测试中' : officeSending ? '发送中…' : '发送'; stopButton.hidden = office.status !== 'working';
+    newButton.disabled = codexPaused(); projectButton.disabled = codexPaused(); officeInput.disabled = codexPaused();
+    if (codexPaused()) officeCaption.textContent = 'Codex 测试中，暂不可新建或发送任务';
     officeApprovals.replaceChildren(...(office.approvals || []).map(a => {
       const box = el('section', 'neko-office-approval'); box.append(el('strong', '', a.title), el('p', '', [a.threadTitle, a.cwd].filter(Boolean).join(' · ')), el('pre', '', a.command || a.reason || 'Codex 请求确认此操作'));
       box.append(button('允许本次', '', () => call({ action: 'codex-approve', key: a.key, decision: 'accept' }).catch(showOfficeError)), button('拒绝', '', () => call({ action: 'codex-approve', key: a.key, decision: 'decline' }).catch(showOfficeError))); return box;
@@ -298,9 +308,9 @@ function installWorkspaceShell(options = {}) {
   function closeSettings() { if (modal.hidden) return; modal.hidden = true; settingsButton.focus(); }
   function officeChoices() {
     const choices = el('div', 'neko-office-choices');
-    for (const [id, name, pic] of [['dsh', 'DSH', 'bigfish'], ['codex', 'Codex', 'devcat'], ['claude', 'Claude · 待接入', 'claude']]) {
+    for (const [id, name, pic] of [['dsh', 'DSH', 'bigfish'], ['codex', codexPaused() ? 'Codex · 测试中' : 'Codex', 'devcat'], ['claude', 'Claude · 待接入', 'claude']]) {
       const b = button('', 'neko-office-choice', async () => { hideSocial(); await saveLayout({ officeMode: id }); closeSettings(); });
-      b.disabled = id === 'claude'; b.setAttribute('aria-pressed', String(layout?.officeMode === id)); b.append(image(avatar(pic)), el('span', '', name)); choices.appendChild(b);
+      b.disabled = id === 'claude' || id === 'codex' && codexPaused(); b.setAttribute('aria-pressed', String(layout?.officeMode === id)); b.append(image(avatar(pic)), el('span', '', name)); choices.appendChild(b);
     }
     return choices;
   }
@@ -334,7 +344,7 @@ function installWorkspaceShell(options = {}) {
       const edit = el('form', 'neko-seat-editor');
       const nameLabel = el('label', '', '名称'), name = el('input'); name.value = seat.name; name.maxLength = 24; nameLabel.appendChild(name);
       const providerLabel = el('label', '', '执行平台'), provider = el('select');
-      for (const [value, label] of [['', '暂不绑定'], ['dsh', 'DSH'], ['codex', 'Codex']]) { const option = el('option', '', label); option.value = value; provider.appendChild(option); } provider.value = seat.provider || ''; providerLabel.appendChild(provider);
+      for (const [value, label] of [['', '暂不绑定'], ['dsh', 'DSH'], ['codex', codexPaused() ? 'Codex · 测试中' : 'Codex']]) { const option = el('option', '', label); option.value = value; option.disabled = value === 'codex' && codexPaused() && seat.provider !== 'codex'; provider.appendChild(option); } provider.value = seat.provider || ''; providerLabel.appendChild(provider);
       const projectLabel = el('label', '', '工作项目范围'), project = el('select'); const all = el('option', '', '全部项目'); all.value = ''; project.appendChild(all);
       for (const cwd of [...new Set((catalog?.projects || []).map(p => p.cwd).filter(Boolean))]) { const option = el('option', '', cwd); option.value = cwd; project.appendChild(option); } project.value = seat.projectRoot || ''; projectLabel.appendChild(project);
       const avatarLabel = el('label', '', '头像'), pick = el('select');

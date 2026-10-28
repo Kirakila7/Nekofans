@@ -1,9 +1,10 @@
-# Local test workbench 0.28.2
+# Local test workbench 0.28.3
 
 The daily artifact is built from this repository. `config/daily-release.json` is the version authority; every app includes `Contents/Resources/WORKBENCH_BUILD.json` with the source commit and SHA-256 of every shipped source file. Historical QA checkouts and profiles are not release inputs.
 
 ## Included local workbench changes
 
+- Codex is temporarily unavailable and marked as testing. New Codex sessions, sends, model selection and account reads are disabled; saved sessions, seat bindings, credentials and choices remain intact. An already running turn retains stop and approval controls until it settles. DSH remains available. Re-enablement requires changing the explicit availability flag and verifying the native integration.
 - Workbench PR #10 (`d5ff80619f23fa279c670e0355f954503ad23e27`) sidebar hide/expand ported onto the 0.28.1 Codex model-picker source (`4567f2e`). Collapse removes the sidebar grid track completely; a native-expand action appears above Bilibili in the persistent rail. Dragging the sidebar divider past the left threshold invokes native collapse. Only the side-rail source and its generated block were taken from the older trial branch. This is a local test build, separate from the published 0.28.1 release.
 - Shared native DSH accounts, plugins and sessions; Codex app-server workspace and read-only account/quota entry.
 - Existing switch positions preserved. Picking a bound assistant updates its sidebar selection and right-hand engine together; DSH and Codex drafts stay separate.
@@ -36,7 +37,7 @@ The GitHub PR list was inspected on 2026-10-28. It contains 14 PRs: 12 merged, 1
 | #14 | Screen sharing and companion text feedback | **Pending. Draft; no patch applied in this consolidation.** |
 | #15 | Fountain spawning and DBSCAN | **Pending. No additional patch applied.** Some related local animation work already exists and is preserved; that does not mark the whole source PR integrated. |
 
-The user requested already-pulled baseline changes only. Pending source PRs remain a queue for explicit later intake. This work does not merge or close PRs in the bigfish repository.
+This local test build retains its 0.28.2 source baseline. Bigfish PRs #14 and #15 were separately integrated into the private Workbench GitHub main branch; this local build does not yet contain that integration. This work does not merge or close PRs in the Bigfish repository.
 
 ## Build and install
 

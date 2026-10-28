@@ -29,6 +29,7 @@ const {createWorkspaceController,companionSnapshot}=require('./workspace-control
 const {createCodexWorkspace}=require('./codex-workspace.cjs');
 const {createCodexModelChoices}=require('./codex-model-choices.cjs');
 const {createCodexAccountService}=require('./codex-account.cjs');
+const {CODEX_AVAILABLE,assertCodexActionAllowed}=require('./codex-availability.cjs');
 const codexAccount=createCodexAccountService();
 let dshSkin=null;
 const workbenchOnly=process.env.PET_WORKBENCH_ONLY==='1'; // Local visual QA only; normal launches show every pet.
@@ -40,9 +41,11 @@ const workbenchAppearance=createAppearanceStore(path.join(data,'workbench-appear
 const workbenchRoles=createRolesStore(path.join(data,'workbench-roles.json'));
 const workspaceLayout=createWorkspaceLayout(path.join(data,'workspace-layout.json'));
 const codexModelChoices=createCodexModelChoices(path.join(data,'codex-model-choices.json'));
-let workspaceRevision=0;
+let workspaceRevision=0, codexHadActiveWork=false;
 const codexWorkspace=createCodexWorkspace({defaultCwd:workspace,onState:value=>{
   if(dshWindow&&!dshWindow.isDestroyed()&&isWorkbenchOrigin(dshWindow.webContents.getURL()))dshWindow.webContents.send('workbench:office-state',value);
+  const active=value.status==='working'||!!value.approvals?.length;
+  if(!CODEX_AVAILABLE&&active!==codexHadActiveWork){codexHadActiveWork=active;workspaceRevision++;broadcast();}
 }});
 const workspaceController=createWorkspaceController({layout:workspaceLayout,codex:codexWorkspace,readDsh:params=>{
   if(state.connection!=='ready')throw Error('DSH 尚未就绪');return rpc('workspace-catalog',params);
@@ -677,6 +680,7 @@ ipcMain.handle('workbench:call',async(event,method,value)=>{
   if(method==='workspace'){
     const p=value;
     if(!p||typeof p!=='object'||Array.isArray(p))throw Error('工作台请求无效');
+    assertCodexActionAllowed(p.action);
     if(p.action==='state')return workspaceController.state();
     if(p.action==='update'){workspaceController.update(p.patch);workspaceRevision++;broadcast();return workspaceController.state();}
     if(p.action==='catalog')return workspaceController.catalog({force:p.force===true,dshOffset:p.dshOffset??0});
@@ -687,8 +691,8 @@ ipcMain.handle('workbench:call',async(event,method,value)=>{
     }
     if(p.action==='codex-read')return codexWorkspace.read(p.id);
     if(p.action==='codex-state')return codexWorkspace.snapshot();
-    if(p.action==='codex-models')return codexWorkspace.models({force:p.force===true});
-    if(p.action==='codex-model-choices')return codexModelChoices.get();
+    if(p.action==='codex-models')return CODEX_AVAILABLE?codexWorkspace.models({force:p.force===true}):{models:[]};
+    if(p.action==='codex-model-choices')return CODEX_AVAILABLE?codexModelChoices.get():{};
     if(p.action==='codex-model-choice')return codexModelChoices.set(p.id,{model:p.model,effort:p.effort});
     if(p.action==='codex-send')return codexWorkspace.send({id:p.id,cwd:p.cwd,message:p.message,model:p.model,effort:p.effort});
     if(p.action==='codex-stop')return codexWorkspace.stop();
@@ -717,7 +721,7 @@ ipcMain.handle('workbench:call',async(event,method,value)=>{
   }
   if(method==='accounts'){
     if(value==null||typeof value!=='object'||Array.isArray(value))throw new Error('账号读取参数无效');
-    return {codex:await codexAccount.read({includeQuota:value.includeQuota===true,force:value.force===true})};
+    return {codex:CODEX_AVAILABLE?await codexAccount.read({includeQuota:value.includeQuota===true,force:value.force===true}):{status:'testing',authType:null,planType:null,quota:{status:'unavailable',buckets:[]}}};
   }
   if(method==='fish'){return fishAction(value);}
   if(method==='qqbot'){return qqbotAction(value);}

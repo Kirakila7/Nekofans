@@ -21,7 +21,7 @@ test('DSH catalog lists native roots and disposes observations with bounded conc
 });
 test('merged catalog reports partial failures and scopes only to known projects',async t=>{
  const s=createWorkspaceLayout(path.join(temp(t),'layout.json'));let count=0;
- const c=createWorkspaceController({layout:s,codex:{list:async()=>{count++;return {status:'ready',sessions:[{id:'c',provider:'codex',cwd:'/p',updatedAt:1}]};}},readDsh:async()=>{throw Error('private diagnostic');}});
+ const c=createWorkspaceController({layout:s,codexAvailable:true,codex:{list:async()=>{count++;return {status:'ready',sessions:[{id:'c',provider:'codex',cwd:'/p',updatedAt:1}]};}},readDsh:async()=>{throw Error('private diagnostic');}});
  const r=await c.catalog();assert.equal(r.providers.dsh,'unavailable');assert.equal(r.providers.codex,'ready');assert.equal(r.sessions.length,1);assert.equal(r.projects[0].cwd,'/p');await c.catalog();assert.equal(count,1);assert(!JSON.stringify(r).includes('diagnostic'));
  c.updateSeat('seat-1',{projectRoot:'/p'});assert.throws(()=>c.updateSeat('seat-1',{projectRoot:'/unknown'}));
 });
