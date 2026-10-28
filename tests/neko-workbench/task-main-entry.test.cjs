@@ -60,7 +60,13 @@ if(!process.argv.includes('--harness')){
    await invoke(taskWindow,'open-task');const workbench=windows.find(w=>w.options.title==='N.E.K.O. 工作台');assert(workbench);const nav=await handlers.get('workbench:call')({sender:workbench.webContents,senderFrame:workbench.webContents.mainFrame},'state');assert.equal(nav.navigation.sessionId,'task-session');await assert.rejects(invoke(windows[0],'open-task'));
    emit('task-meta',task('task-session',{backgroundJobs:1}));emit('event',{sessionId:'task-session',event:{type:'turn/end',data:{reason:{kind:'completed'}}}});await wait(async()=>(await read()).actors.find(x=>x.kind==='task').backgroundJobs===1);assert.equal((await read()).actors.find(x=>x.kind==='task').active,true);
    emit('task-meta',task('task-session',{running:false,backgroundJobs:0,outcome:'completed'}));await wait(async()=>(await read()).actors.find(x=>x.kind==='task').active===false);
-   now+=11000;emit('task-roster',{source:'dsh-task-session',sessionIds:['task-session']});await wait(async()=>(await read()).actors.find(x=>x.kind==='task').present===false);
+   now+=11000;emit('task-roster',{source:'dsh-task-session',sessionIds:['task-session']});await wait(async()=>(await read()).actors.find(x=>x.kind==='task').returningHome===true);
+   await invoke(windows[0],'menu');menus.at(-1).find(item=>item.label==='设置').submenu.find(item=>item.label==='显示任务与小帮手').click({checked:false});
+   assert.equal((await read()).actors.find(x=>x.kind==='task').present,false);
+   now+=50000;emit('task-roster',{source:'dsh-task-session',sessionIds:['task-session']});await wait(async()=>(await read()).actors.find(x=>x.kind==='task').present===false);
+   assert.equal((await read()).actors.find(x=>x.kind==='task').returningHome,false);
+   await invoke(windows[0],'menu');menus.at(-1).find(item=>item.label==='设置').submenu.find(item=>item.label==='显示任务与小帮手').click({checked:true});
+   assert.equal((await read()).actors.find(x=>x.kind==='task').present,false);
    for(const [outcome,status] of [['killed','stopped'],['failed','error'],['unknown','idle']]){
     emit('task-meta',task('task-session',{backgroundJobs:1}));emit('event',{sessionId:'task-session',event:{type:'turn/end',data:{reason:{kind:'completed'}}}});emit('task-meta',task('task-session',{running:false,backgroundJobs:0,outcome}));
     await wait(async()=>(await read()).actors.find(x=>x.kind==='task').status===status);assert.equal((await read()).actors.find(x=>x.kind==='task').present,true);

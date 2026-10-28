@@ -79,6 +79,7 @@ window.__ModuleLoader__.load({
 
     /** Native actions (allowlist shared with the preload bridge). */
     const ACTION_NAMES = Object.freeze([
+      'screen-share',
       'neko-settings',
       'open-neko',
       'task-notes',
@@ -90,6 +91,7 @@ window.__ModuleLoader__.load({
     ])
     const ACTION_GROUPS = Object.freeze([
       Object.freeze([
+        ['screen-share', '屏幕陪伴'],
         ['neko-settings', 'N.E.K.O. 聊天设置'],
         ['open-neko', '打开 N.E.K.O.'],
         ['task-notes', '任务备注'],
@@ -440,6 +442,7 @@ window.__ModuleLoader__.load({
         }
         setPending({ action: name })
         try {
+          if (name === 'screen-share') currentCommunityPane?.hide()
           // The community stays in our coding pane. Older native bridges must
           // never silently fall back to opening a separate window.
           const result = isSocial
@@ -2314,7 +2317,17 @@ function installNekoAccountHabitat(ctx, options) {
       shareFeedback.setAttribute('aria-live', 'polite')
       const officialPlayer = doc.createElement('button')
       officialPlayer.type = 'button'; officialPlayer.textContent = '官方播放'; officialPlayer.hidden = true; officialPlayer.disabled = true
-      toolbar.append(back, pageBack, heading, reload, immersion, shareFeedback, share, officialPlayer)
+      const accountBar = doc.createElement('div')
+      accountBar.className = 'neko-community-pane__account'
+      const accountMessage = doc.createElement('span')
+      accountMessage.setAttribute('role', 'status')
+      accountMessage.textContent = '社区网页可独立登录；连接桌面身份可复用本体角色。'
+      const accountButton = doc.createElement('button')
+      accountButton.type = 'button'; accountButton.textContent = '连接桌面身份'
+      accountButton.title = '复用本机 N.E.K.O. 社区账号；未登录时在系统浏览器完成官方授权'
+      accountBar.append(accountMessage, accountButton)
+      accountBar.hidden = true
+      toolbar.append(back, pageBack, heading, reload, immersion, shareFeedback, share, officialPlayer, accountBar)
       const status = doc.createElement('p')
       status.className = 'neko-community-pane__status'
       status.setAttribute('role', 'status')
@@ -2329,6 +2342,31 @@ function installNekoAccountHabitat(ctx, options) {
       const sizes = typeof win.ResizeObserver === 'function' ? new win.ResizeObserver(schedule) : null
       const call = (request) => Promise.resolve().then(() => bridge.community(request))
       const hideNative = (requestId) => { void call({ action: 'hide', requestId }).catch(() => {}) }
+      let accountPending = false, accountRevision = 0
+      function paintAccount(state) {
+        if (!active || disposed || currentSite !== 'community' || !state || typeof state.message !== 'string') return
+        accountMessage.textContent = state.message
+        accountMessage.title = state.message
+        accountPending = ['checking', 'connecting', 'authorizing'].includes(state.status)
+        accountButton.textContent = accountPending ? '取消连接' : '连接桌面身份'
+        schedule()
+      }
+      function cancelAccount() {
+        accountRevision++; accountPending = false; accountButton.textContent = '连接桌面身份'
+        accountMessage.textContent = '社区网页可独立登录；连接桌面身份可复用本体角色。'
+        if (typeof bridge.communityAccount === 'function') void Promise.resolve(bridge.communityAccount('cancel')).catch(() => {})
+      }
+      const onAccount = () => {
+        if (!active || disposed || currentSite !== 'community' || accountButton.disabled) return
+        if (accountPending) { cancelAccount(); return }
+        const ticket = ++accountRevision
+        paintAccount({ status: 'checking', message: '正在检查桌面社区连接…' })
+        void Promise.resolve(bridge.communityAccount('connect')).then(state => {
+          if (active && !disposed && currentSite === 'community' && ticket === accountRevision) paintAccount(state)
+        }).catch(() => {
+          if (active && !disposed && currentSite === 'community' && ticket === accountRevision) paintAccount({ status: 'error', message: '桌面身份连接未完成，请重试；仍可直接浏览社区。' })
+        })
+      }
       function refreshShare() {
         share.hidden = currentSite !== 'bilibili'
         share.disabled = !active || currentSite !== 'bilibili' || !canShare || sharePending
@@ -2425,6 +2463,7 @@ function installNekoAccountHabitat(ctx, options) {
       }
       async function show(action = 'open', site = currentSite) {
         if (disposed) throw new Error('社区内容区已关闭')
+        if (active && currentSite === 'community' && (action === 'reload' || (action === 'open' && site === 'bilibili'))) cancelAccount()
         if (action === 'open' && site !== 'bilibili') setImmersive(false)
         const bounds = place()
         if (!bounds) throw new Error('工作台内容区尚未就绪，请稍后重试')
@@ -2438,6 +2477,8 @@ function installNekoAccountHabitat(ctx, options) {
           openRequestId = openRequestId >= Number.MAX_SAFE_INTEGER ? 1 : openRequestId + 1
         }
         immersion.hidden = currentSite !== 'bilibili'
+        accountBar.hidden = currentSite !== 'community' || typeof bridge.communityAccount !== 'function'
+        accountButton.disabled = !accountPending
         resetShare()
         resetOfficialPlayer()
         const name = currentSite === 'bilibili' ? 'B站' : 'N.E.K.O. 社区'
@@ -2465,11 +2506,12 @@ function installNekoAccountHabitat(ctx, options) {
           throw error
         } finally {
           if (cancelWaiting === releaseWait) cancelWaiting = null
-          if (ticket === revision) reload.disabled = false
+          if (ticket === revision) { reload.disabled = false; accountButton.disabled = false }
         }
       }
       function hide({ focus = false } = {}) {
         if (!active || disposed) return
+        if (currentSite === 'community') cancelAccount()
         setImmersive(false)
         active = false; revision++; panel.hidden = true; reload.disabled = false; mark(false)
         resetShare(); resetOfficialPlayer()
@@ -2534,7 +2576,7 @@ function installNekoAccountHabitat(ctx, options) {
         if (state?.requestId !== undefined && state.requestId !== openRequestId) return
         const name = currentSite === 'bilibili' ? 'B站' : 'N.E.K.O. 社区'
         if (typeof state?.canGoBack === 'boolean') pageBack.disabled = !state.canGoBack
-        if (state?.status === 'loading') { resetShare(); canPlayOfficial = false; refreshOfficialPlayer(); status.textContent = `正在加载 ${name}…`; reload.disabled = true }
+        if (state?.status === 'loading') { resetShare(); canPlayOfficial = false; refreshOfficialPlayer(); status.textContent = `正在加载 ${name}…`; reload.disabled = true; if (currentSite === 'community') accountButton.disabled = !accountPending }
         if (state?.status !== 'loading' && typeof state?.canShare === 'boolean') {
           canShare = state.canShare
           if (!canShare) shareFeedback.textContent = ''
@@ -2545,10 +2587,11 @@ function installNekoAccountHabitat(ctx, options) {
           if (typeof state?.isOfficialPlayer === 'boolean') isOfficialPlayer = state.isOfficialPlayer
           refreshOfficialPlayer()
         }
-        if (state?.status === 'ready') { status.textContent = ''; reload.disabled = false }
+        if (state?.status === 'ready') { status.textContent = ''; reload.disabled = false; accountButton.disabled = false }
         if (state?.status === 'error') { status.textContent = `${name}未能加载，请点击“刷新”重试，或返回工作台。`; reload.disabled = false }
         if (state?.status === 'hidden') hide()
       }) : null
+      const unsubscribeAccount = typeof bridge.subscribeCommunityAccount === 'function' ? bridge.subscribeCommunityAccount(paintAccount) : null
       // Opening fish settings hides the native child view from the host. Keep
       // this renderer's overlay, focus guard and mode in sync as well.
       let fishRevision = 0
@@ -2570,6 +2613,7 @@ function installNekoAccountHabitat(ctx, options) {
       const observer = new win.MutationObserver(schedule)
       observer.observe(doc.body, { subtree: true, childList: true })
       back.addEventListener('click', onBack); pageBack.addEventListener('click', onPageBack); reload.addEventListener('click', onReload); immersion.addEventListener('click', onImmersion); share.addEventListener('click', onShare); officialPlayer.addEventListener('click', onOfficialPlayer)
+      accountButton.addEventListener('click', onAccount)
       doc.addEventListener('click', onClick, true)
       // Native child views paint above DOM popovers. Return before opening
       // local menus so tools/account panels can use the full content area.
@@ -2585,8 +2629,10 @@ function installNekoAccountHabitat(ctx, options) {
           if (frame) win.cancelAnimationFrame(frame)
           observer.disconnect(); sizes?.disconnect()
           if (typeof unsubscribe === 'function') unsubscribe()
+          if (typeof unsubscribeAccount === 'function') unsubscribeAccount()
           if (typeof unsubscribeWorkbench === 'function') unsubscribeWorkbench()
           back.removeEventListener('click', onBack); pageBack.removeEventListener('click', onPageBack); reload.removeEventListener('click', onReload); immersion.removeEventListener('click', onImmersion); share.removeEventListener('click', onShare); officialPlayer.removeEventListener('click', onOfficialPlayer)
+          accountButton.removeEventListener('click', onAccount)
           doc.removeEventListener('click', onClick, true); win.removeEventListener('resize', schedule)
           doc.removeEventListener('pointerdown', onClick, true); doc.removeEventListener('contextmenu', onClick, true)
           doc.removeEventListener('focusin', onFocus, true)
@@ -2948,6 +2994,8 @@ button[data-neko-new-session="plus"]:focus-visible { outline: 2px solid var(--ds
 }
 .neko-community-pane__toolbar strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .neko-community-pane__feedback { flex: none; white-space: nowrap; font-size: 12px; }
+.neko-community-pane__account { display: flex; flex: none; align-items: center; gap: 8px; white-space: nowrap; font-size: 12px; }
+.neko-community-pane__account[hidden] { display: none; }
 .neko-community-pane__toolbar button { flex: none; padding: 7px 10px; border: 1px solid var(--dsw-alias-border-l1, #CDD6EA); border-radius: 8px; background: var(--dsw-alias-bg-layer-1, #FDFEFF); color: inherit; cursor: pointer; }
 .neko-community-pane__toolbar button:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary, #3F5F9E); outline-offset: 2px; }
 .neko-community-pane__toolbar button:disabled { opacity: .55; cursor: default; }

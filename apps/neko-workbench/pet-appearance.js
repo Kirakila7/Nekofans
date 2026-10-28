@@ -46,8 +46,8 @@
     if(state==='result')return 'check';
     return actor?.active||actor?.status==='working'?'type':'idle';
   }
-  function sourceFor(id,actor,{dragging=false,reduced=false,failed=false}={}){
-    if(id===CAT)return reduced||failed?assets.still:assets[phase(actor,dragging)];
+  function sourceFor(id,actor,{dragging=false,reduced=false,failed=false,desktopMotion=null}={}){
+    if(id===CAT)return reduced||failed?assets.still:dragging?assets.drag:desktopMotion&&desktopMotion.phase!=='gathered'?(desktopMotion.moving?assets.running:assets.idle):assets[phase(actor,dragging)];
     if(id===CUSTOM){const value=actor?.customAppearance;if((reduced||failed)&&value?.stillDataUrl?.startsWith('data:image/png;base64,')&&validImageDataUrl({dataUrl:value.stillDataUrl}))return value.stillDataUrl;if(failed||reduced&&/^data:image\/(gif|webp);/.test(value?.dataUrl||''))return assets.still;return validCustom(value)?value.dataUrl:assets.still;}
     if(id===CLAUDE_PIXEL||id===GEMINI_PIXEL){const folder=id===CLAUDE_PIXEL?'claude':'gemini';return `assets/pixel-ai-girls/${folder}/${reduced||failed?'still.png':pixelPose(actor,dragging)+'.webp'}`;}
     if(id===CLAUDE||id===GEMINI){const folder=id===CLAUDE?'claude':'gemini',action=pose(actor,dragging);
@@ -62,12 +62,14 @@
     const motion=document.createElement('span'),image=document.createElement('img');
     motion.className='pet-cat-motion';motion.hidden=true;motion.setAttribute('aria-hidden','true');image.className='pet-cat';image.alt='';image.draggable=false;motion.appendChild(image);character.appendChild(motion);
     const media=matchMedia('(prefers-reduced-motion: reduce)'),original=feedback.switchTo;
-    let current=ORIGINAL,currentCustom=null,actor=null,disposed=false,failed=false,lastSource='';
+    let current=ORIGINAL,currentCustom=null,actor=null,disposed=false,failed=false,lastSource='',desktopMotion=null;
     function renderMedia(){
       if(disposed||current===ORIGINAL)return;
-      const source=sourceFor(current,actor,{dragging:feedback.dragState.active,reduced:!!media?.matches,failed});
+      const source=sourceFor(current,actor,{dragging:feedback.dragState.active,reduced:!!media?.matches,failed,desktopMotion});
       onHeadInset(insetFor(current,actor,{dragging:feedback.dragState.active,reduced:!!media?.matches,failed}));
       motion.dataset.phase=current===CAT?phase(actor,feedback.dragState.active):'pose';motion.dataset.reduced=String(!!media?.matches);
+      motion.dataset.desktop=String(current===CAT&&!!desktopMotion);motion.dataset.direction=desktopMotion?.direction===1?'right':'left';
+      motion.dataset.home=String(desktopMotion?.phase==='gathered'&&desktopMotion.retire!==false);
       if(source!==lastSource){lastSource=source;image.src=source;}
     }
     function fenceVideos(){feedback.pending={gen:++feedback.gen,appearance:current};for(const video of videos){video.onended=null;video.pause();video.removeAttribute('src');video.load();video.classList.remove('is-front');}}
@@ -84,7 +86,7 @@
     }
     const onMotion=()=>renderMedia();media?.addEventListener?.('change',onMotion);
     image.onerror=()=>{if(current!==ORIGINAL&&!failed){failed=true;renderMedia();}};
-    return Object.freeze({render,isCat:()=>current===CAT,isMedia:()=>current!==ORIGINAL,dispose(){if(disposed)return;disposed=true;media?.removeEventListener?.('change',onMotion);image.onerror=null;image.removeAttribute('src');motion.remove();if(feedback.switchTo===wrapped)feedback.switchTo=original;}});
+    return Object.freeze({render,setMotion(value){desktopMotion=value&&['spawning','gathering','clustered','exploring','returning','gathered','resting'].includes(value.phase)?{phase:value.phase,moving:value.moving===true,direction:value.direction===1?1:-1,retire:value.retire!==false}:null;renderMedia();},isCat:()=>current===CAT,isMedia:()=>current!==ORIGINAL,dispose(){if(disposed)return;disposed=true;media?.removeEventListener?.('change',onMotion);image.onerror=null;image.removeAttribute('src');motion.remove();if(feedback.switchTo===wrapped)feedback.switchTo=original;}});
   }
   return Object.freeze({ORIGINAL,CAT,CLAUDE,GEMINI,CLAUDE_PIXEL,GEMINI_PIXEL,CUSTOM,MAX_CUSTOM_BYTES,choices,valid,normalizeId,validImageDataUrl,validCustom,explicit,kind,preferenceKey,normalizePreferences,selected,setDefault,setActor,setCustom,scaleFor,setScale,frameAspect,headInset,pixelFrames,layoutOptions,phase,pose,pixelPose,sourceFor,assets,install});
 });

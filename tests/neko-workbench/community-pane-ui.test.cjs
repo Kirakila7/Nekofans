@@ -44,12 +44,39 @@ function fixture(options = {}) {
     getState: options.getState || (() => Promise.resolve({})),
     subscribe(callback) { notifyWorkbench = callback; return () => { workbenchUnsubscribed = true; }; },
     subscribeCommunity(callback) { notify = callback; return () => { unsubscribed = true; }; } };
+  Object.assign(bridge, options.bridge || {});
   const pane = api.createCommunityPane({ window: win, document: doc, bridge, locate: () => ({ root }) });
   return { api, pane, bridge, calls, doc, win, main, button, root, body, panel: body.children[0], observer, resizeObserver,
     notify(state) { notify(state); }, navigate(state) { notifyWorkbench(state); }, get unsubscribed() { return unsubscribed; },
     get workbenchUnsubscribed() { return workbenchUnsubscribed; }, setRight(value) { right = value; } };
 }
 const tick = () => new Promise(resolve => setImmediate(resolve));
+
+test('desktop identity control is community-only, cancellable, and ignores late results after switching sites', async () => {
+  const actions = []; let finish, notifyAccount, unsubscribed = false;
+  const f = fixture({ bridge: {
+    communityAccount(action) { actions.push(action); return action === 'connect' ? new Promise(resolve => { finish = resolve; }) : Promise.resolve({ status: 'idle' }); },
+    subscribeCommunityAccount(callback) { notifyAccount = callback; return () => { unsubscribed = true; }; },
+  } });
+  const bar = f.panel.children[0].children[8], message = bar.children[0], button = bar.children[1];
+  await f.pane.open();
+  assert.equal(bar.hidden, false);
+  button.dispatchEvent(new Event('click'));
+  assert.deepEqual(actions, ['connect']);
+  assert.equal(button.textContent, '取消连接');
+  notifyAccount({ status: 'authorizing', message: '请完成官方授权' });
+  assert.equal(message.textContent, '请完成官方授权');
+  await f.pane.open('bilibili');
+  assert.deepEqual(actions, ['connect', 'cancel']);
+  assert.equal(bar.hidden, true);
+  finish({ status: 'handed-off', message: '迟到的结果' });
+  await tick();
+  assert.notEqual(message.textContent, '迟到的结果');
+  notifyAccount({ status: 'error', message: '迟到的状态' });
+  assert.notEqual(message.textContent, '迟到的状态');
+  f.pane.dispose();
+  assert.equal(unsubscribed, true);
+});
 
 test('community bounds cover only the coding region and exclude the product strip', () => {
   const api = bundle();

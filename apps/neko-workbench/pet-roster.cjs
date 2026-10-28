@@ -1,6 +1,18 @@
 // DSH renders each catalog in its stored order and expands children inline.
 const DEFAULT_LIMIT=5;
 const DESKTOP_ROTATION_MS=15000;
+// A return animation must not keep a hidden or overflowed helper alive forever.
+const RETURN_HOME_TIMEOUT_MS=60000;
+function beginReturnHome(actor,now=Date.now()){
+  actor.returningHome=true;actor.displayUntil=now+RETURN_HOME_TIMEOUT_MS;
+}
+function expireReturnHomes(actors,now=Date.now()){
+  for(const actor of actors){
+    if(!actor.returningHome)continue;
+    if(actor.active){actor.returningHome=false;continue;}
+    if(!Number.isFinite(actor.displayUntil)||actor.displayUntil<=now){actor.returningHome=false;actor.displayUntil=0;}
+  }
+}
 function normalizeLimit(value){return Number.isInteger(Number(value))&&Number(value)>=1&&Number(value)<=32?Number(value):DEFAULT_LIMIT;}
 // A snapshot requested before an append can arrive after its live catalog event.
 function mergeCatalogOrder(snapshot,known){return [...new Set([...snapshot,...known])];}
@@ -96,6 +108,6 @@ function selectHelpers(actors,order,limit,now=Date.now(),options){
 }
 function displayName(actor){return actor.nickname||actor.dshName||actor.label||actor.sessionId;}
 function nickname(value){const name=String(value??'').trim();if(Array.from(name).length>24||/[\r\n\x00-\x1f]/.test(name))throw new Error('名字请使用 24 字以内的单行文字。');return name;}
-module.exports={DEFAULT_LIMIT,DESKTOP_ROTATION_MS,normalizeLimit,mergeCatalogOrder,catalogOrder,
+module.exports={DEFAULT_LIMIT,DESKTOP_ROTATION_MS,RETURN_HOME_TIMEOUT_MS,beginReturnHome,expireReturnHomes,normalizeLimit,mergeCatalogOrder,catalogOrder,
   actorKind,taskActorId,orderedTaskPets,orderedDesktopPets,selectDesktopPets,nextDesktopRefreshAt,
   orderedHelpers,selectHelpers,displayName,nickname};

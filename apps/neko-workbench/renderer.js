@@ -69,6 +69,15 @@ if(view==='chat-settings'){
   const tierTag=document.createElement('div');tierTag.className='pet-tier';host.querySelector('.pet').append(tierTag);
   const feedback = new window.DshPetFeedback(actorId,videos,bubble);
   const appearance=window.PetAppearance.install({character,videos,feedback,document,matchMedia:query=>window.matchMedia(query),onHeadInset:value=>host.querySelector('.pet').style.setProperty('--media-head-inset',String(value))});
+  let desktopMotion=null;
+  const stopMotion=window.pet.onMotion?.(value=>{
+    desktopMotion=value;appearance.setMotion(value);
+    const pet=host.querySelector('.pet');pet.dataset.agentMotion=value?.phase||'';
+    pet.dataset.motionRetire=String(value?.retire!==false);
+    pet.style.setProperty('--agent-lean',Math.max(-6,Math.min(6,Number(value?.lean)||0))+'deg');
+    passThrough();
+  });
+  window.addEventListener('unload',()=>stopMotion?.(),{once:true});
   window.addEventListener('unload',()=>appearance.dispose(),{once:true});
   const apiReplyPresenter=window.PetChatPresentation.createReplyPresenter(feedback);
   const stageWidth=Number(query.get('stageWidth'))||239;
@@ -80,10 +89,25 @@ if(view==='chat-settings'){
   stopReply.addEventListener('click',()=>window.pet.call('chat-cancel').catch(()=>showBubble('停止回复未完成，请重试')));
   let shownNotice,shownReply;
   const actor = () => state?.actors.find(a=>a.id===actorId);
+  let ignoredMouse=null,lastHover=null;
+  function passThrough(event=lastHover){
+    if(event)lastHover={clientX:event.clientX,clientY:event.clientY};
+    const a=actor(),exploring=a?.id!=='main'&&(desktopMotion||state?.preferences.subagentFountain!==false||state?.preferences.subagentClustering!==false||a?.kind!=='task'&&appearance.isCat()&&state?.preferences.subagentExploration!==false);
+    let ignore=false;
+    if(exploring&&!inputVisible&&!dragStart){
+      const targets=[character,tierTag];
+      if(!bubble.hidden)targets.push(bubble);
+      ignore=!event||!targets.some(node=>{let r=node.getBoundingClientRect();if(node===character&&!appearance.isMedia()){const b=window.PetShared.HIT_BOX;r={left:r.left+r.width*b.x0/640,right:r.left+r.width*b.x1/640,top:r.top+r.height*b.y0/360,bottom:r.top+r.height*b.y1/360};}return event.clientX>=r.left&&event.clientX<=r.right&&event.clientY>=r.top&&event.clientY<=r.bottom;});
+    }
+    if(ignoredMouse!==ignore){ignoredMouse=ignore;window.pet.call('pass-through',{ignore}).catch(()=>{});}
+  }
+  window.addEventListener('mousemove',passThrough);
+  window.addEventListener('mouseleave',()=>{lastHover=null;passThrough();});
   function showBubble(text) {feedback.showLocal(text);}
   function setInput(visible) {
     if(visible&&actor()?.kind==='task'){window.pet.call('open-task').catch(error=>showBubble(error.message));return;}
     inputVisible=visible;form.hidden=!visible;host.querySelector('.pet').classList.toggle('chat-open',visible);
+    window.pet.call('motion-input',{active:visible}).catch(()=>{});passThrough();
     if(visible){hideInspector();input.focus();}else scheduleInspector();
   }
   function render(next) {
@@ -94,6 +118,7 @@ if(view==='chat-settings'){
     host.querySelector('.pet').style.setProperty('--appearance-scale',String(window.PetAppearance.scaleFor(state,a)));
     host.querySelector('.pet').style.setProperty('--frame-aspect',String(window.PetAppearance.frameAspect(state,a)));
     appearance.render(state,a);
+    passThrough();
     if(work)feedback.onWorkTick(work,work.tick);
     nameTag.querySelector('.logo-letter').textContent=Array.from(a.name)[0]||'鲸';nameTag.classList.toggle('is-pinned',!!a.pinned);nameTag.title=a.name+(a.pinned?' · 常驻桌面':'')+(a.dshName&&a.nickname?'\nDSH：'+a.dshName:'');nameTag.setAttribute('aria-label',a.name);
     character.setAttribute('aria-label',a.kind==='task'?'打开任务：'+a.name:'与'+a.name+'聊天');
@@ -105,7 +130,7 @@ if(view==='chat-settings'){
     input.readOnly=a.id!=='main'&&a.mode!=='continuable';
     const shortName=Array.from(a.name).slice(0,12).join('')+(Array.from(a.name).length>12?'…':'');
     input.placeholder=a.id==='main'?(busy(a)?'正在回复，可点右侧停止':a.chatBackend==='chat-api'?(state.mainChat?.hasKey&&state.mainChat?.settings?.model?'和大肥鱼聊聊，回车发送':'右键 → 聊天 API 设置'):state.neko.connection==='ready'?'和'+state.neko.character+'说点什么，回车发送':'N.E.K.O. 未连接，右键设置'):input.readOnly?'只读子任务，在 DSH 查看':busy(a)?((a.work?.task||a.task)?.slice(0,25)||'正在做，稍等一下…'):shortName+'：发消息，回车发送';
-    if(a.id==='main'&&a.chatBackend==='chat-api'){
+    if(a.id==='main'&&(a.chatBackend==='chat-api'||a.screenReply)){
       hideInspector();bubble.tabIndex=0;bubble.title='最近回复，可滚动查看全文';apiReplyPresenter.render(a);
     }else{
       if(apiReplyPresenter.reset())shownReply=shownNotice=undefined;
@@ -145,7 +170,7 @@ if(view==='chat-settings'){
     if(dragged){feedback.dragState.active=false;dragged=false;overCharacter=false;hideInspector();if(!feedback.resumeWorkStatusAnim())feedback.playIdle();await window.pet.call('move-end');}
     else setInput(!inputVisible);
   });
-  character.addEventListener('pointercancel',()=>{dragStart=null;dragged=false;overCharacter=false;hideInspector();feedback.dragState.active=false;if(!feedback.resumeWorkStatusAnim())feedback.playIdle();});
+  character.addEventListener('pointercancel',()=>{const wasDragged=dragged;dragStart=null;dragged=false;overCharacter=false;hideInspector();feedback.dragState.active=false;if(!feedback.resumeWorkStatusAnim())feedback.playIdle();if(wasDragged)window.pet.call('move-end').catch(()=>{});});
   character.addEventListener('click',event=>{if(event.detail===0)setInput(!inputVisible);});
   document.addEventListener('contextmenu',event=>{event.preventDefault();hideInspector();window.pet.call('menu');});
   input.addEventListener('keydown',event=>{
