@@ -122,13 +122,14 @@ let roleState = {
   ],
 }
 const roleCalls = []
+let failSelect = false
 const roleSubs = new Set()
 window.nekoRoles = {
   getState: async () => roleState,
-  selectRole: async (id) => { roleCalls.push(['selectRole', id]); if (id !== 'bigfish') throw new Error('未接入'); return roleState },
+  selectRole: async (id) => { roleCalls.push(['selectRole', id]); if (failSelect) throw new Error('选择失败'); const r=roleState.roles.find(x=>x.id===id); if (id !== 'bigfish' && r?.backend !== 'codex') throw new Error('未接入'); roleState={...roleState,activeId:id}; return roleState },
   updateRole: async (id, patch) => {
     roleCalls.push(['updateRole', id, patch])
-    roleState = { ...roleState, roles: roleState.roles.map((r) => (r.id === id ? { ...r, ...patch } : r)) }
+    roleState = { ...roleState, roles: roleState.roles.map((r) => (r.id === id ? { ...r, ...patch, ...(Object.hasOwn(patch, 'backend') ? { enabled: !!patch.backend } : {}) } : r)) }
     return roleState
   },
   uploadAvatar: async (id) => {
@@ -151,6 +152,7 @@ const exportsObj = entry.factory((id) => {
   throw new Error(`unexpected ${id}`)
 })
 const seats = {}
+const seatsById = {}
 const seatSpecs = {}
 const disposers = []
 const opened = []
@@ -159,7 +161,7 @@ const ctx = {
   effect(fn) { const d = fn(); if (typeof d === 'function') disposers.push(d) },
   slots: {
     inject(_key, cb) { const d = cb(); disposers.push(d); return () => {} },
-    register(spec, component) { seats[spec.name] = component; seatSpecs[spec.name] = spec; return () => { delete seats[spec.name]; delete seatSpecs[spec.name] } },
+    register(spec, component) { if (spec.id) seatsById[spec.id] = component; seats[spec.name] = component; seatSpecs[spec.name] = spec; return () => { delete seats[spec.name]; delete seatSpecs[spec.name] } },
   },
 }
 exportsObj.apply(ctx)
@@ -251,6 +253,68 @@ const $$ = (s) => [...document.querySelectorAll(s)]
 const click = async (el) => act(async () => { el.dispatchEvent(new window.MouseEvent('click', { bubbles: true })) })
 const key = async (el, k) => act(async () => { el.dispatchEvent(new window.KeyboardEvent('keydown', { key: k, bubbles: true })) })
 const flush = () => act(async () => { await new Promise((r) => setTimeout(r, 5)) })
+
+
+// Codex consumes the live DSH registry and selection. All backend calls here
+// are mocks; real protocol and account behavior have separate integration tests.
+const codexEvents = new Set(), codexCalls = [], workspaceSubscribers = new Set(), selectionSubscribers = new Set()
+let selectedSession = 's-a'
+let workspaceItems = [{ workspaceId: 'w-a', title: '项目 A', path: '/tmp/a', sessionIds: ['s-a'] }, { workspaceId: 'w-b', title: '项目 B', path: '/tmp/b', sessionIds: ['s-b'] }]
+ctx.get = (key) => key === 'workspaces' ? { list: { getSnapshot: () => ({ phase: 'ready', items: workspaceItems }), subscribe: (cb) => { workspaceSubscribers.add(cb); return () => workspaceSubscribers.delete(cb) } } } : undefined
+ctx.uiWorkspace.selection = { getSnapshot: () => ({ sessionId: selectedSession }), subscribe: (cb) => { selectionSubscribers.add(cb); return () => selectionSubscribers.delete(cb) } }
+window.nekoWorkbench.codex = {
+  start: async (request) => { codexCalls.push(['start', request]); return { threadId: 't-a' } },
+  send: async (request) => { codexCalls.push(['send', request]); return { turnId: 'turn-a' } },
+  cancel: async () => ({ accepted: true }), approval: async () => ({ accepted: true }),
+  onEvent: (cb) => { codexEvents.add(cb); return () => codexEvents.delete(cb) },
+}
+const codexHost = document.createElement('div'); document.body.appendChild(codexHost)
+const codexRoot = ReactDOMClient.createRoot(codexHost)
+await act(async () => { codexRoot.render(React.createElement(seatsById['neko.codex-workbench'])) })
+await flush()
+assert.equal($('.neko-codex-switch-position'), null, 'no assistant switch in composer')
+await act(async () => { roleState = { ...roleState, roles: roleState.roles.map(r => r.id === 'yui' ? { ...r, backend: 'codex', enabled: true } : r) }; for (const fn of roleSubs) fn(roleState) })
+await click($('.neko-role[data-role="yui"] .neko-role__main'))
+await flush()
+assert.deepEqual(roleCalls.at(-1), ['selectRole', 'yui'])
+assert.match($('.neko-codex-project').textContent, /项目 A/)
+await click([...$$('.neko-codex-compose button')].find((el) => el.textContent === '连接当前工作区'))
+assert.deepEqual(codexCalls[0], ['start', { workspaceId: 'w-a', path: '/tmp/a' }])
+const codexText = $('.neko-codex-compose textarea')
+await act(async () => { Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set.call(codexText, '测试项目'); codexText.dispatchEvent(new window.Event('input', { bubbles: true })) })
+await click([...$$('.neko-codex-compose button')].find((el) => el.textContent === '发送'))
+assert.deepEqual(codexCalls[1], ['send', { text: '测试项目' }])
+await click($('.neko-role[data-role="yui"] .neko-role__settings'))
+let runningBackendPicker = $('.neko-role-panel .neko-role-backend')
+assert.equal(runningBackendPicker.disabled, true, 'last Codex entry cannot be unbound while a real task is running')
+assert.match($('.neko-role-panel').textContent, /Codex 正在连接或运行/)
+const roleCallCount = roleCalls.length
+await act(async () => { runningBackendPicker.value = ''; runningBackendPicker.dispatchEvent(new window.Event('change', { bubbles: true })) })
+assert.equal(roleCalls.length, roleCallCount, 'programmatic unbind is also refused while running')
+await act(async () => { roleState = { ...roleState, roles: roleState.roles.map(r => r.id === 'claude' ? { ...r, backend: 'codex', enabled: true } : r) }; for (const fn of roleSubs) fn(roleState) })
+assert.equal($('.neko-role-panel .neko-role-backend').disabled, false, 'a second real Codex entry permits changing this binding')
+await act(async () => { roleState = { ...roleState, roles: roleState.roles.map(r => r.id === 'claude' ? { ...r, backend: null, enabled: false } : r) }; for (const fn of roleSubs) fn(roleState) })
+assert.equal($('.neko-role-panel .neko-role-backend').disabled, true)
+await click($('.neko-role[data-role="yui"] .neko-role__settings'))
+await click($('.neko-role[data-role="bigfish"] .neko-role__main'))
+assert.equal($('.neko-codex-view'), null, 'DSH remains selectable during a Codex task')
+await click($('.neko-role[data-role="yui"] .neko-role__main'))
+assert.ok($('.neko-codex-view'), 'running Codex task can be revisited')
+await act(async () => { for (const callback of codexEvents) callback({ type: 'turn-completed', threadId: 't-a', turnId: 'turn-a', status: 'interrupted' }) })
+await click($('.neko-role[data-role="yui"] .neko-role__settings'))
+runningBackendPicker = $('.neko-role-panel .neko-role-backend')
+assert.equal(runningBackendPicker.disabled, false, 'binding is editable after the task finishes')
+await click($('.neko-role[data-role="yui"] .neko-role__settings'))
+assert.match($('.neko-codex-error').textContent, /中断/)
+await act(async () => { selectedSession = 's-b'; for (const callback of selectionSubscribers) callback() })
+assert.match($('.neko-codex-project').textContent, /项目 B/)
+assert.equal($('.neko-codex-compose textarea').disabled, true, 'old Codex thread must not send into newly selected project')
+await click($('.neko-role[data-role="bigfish"] .neko-role__main'))
+assert.equal($('.neko-codex-view'), null, 'DSH seat returns to the same selected project')
+assert.equal(selectedSession, 's-b', 'switching seats does not change DSH project')
+await act(async () => { roleState = { ...roleState, roles: roleState.roles.map(r => r.id === 'yui' ? { ...r, backend: null, enabled: false } : r) }; for (const fn of roleSubs) fn(roleState) })
+await act(async () => codexRoot.unmount()); codexHost.remove()
+assert.equal(workspaceSubscribers.size, 0); assert.equal(selectionSubscribers.size, 0); assert.equal(codexEvents.size, 0)
 
 // --- hero gallery + scoped CSS -----------------------------------------------
 
@@ -473,7 +537,7 @@ assert.match(css2, /nav\[data-neko-tools="folded"\] \{ display: none !important;
 const rows = $$('.neko-role')
 assert.deepEqual(rows.map((r) => r.querySelector('.neko-role__name').textContent), ['Yui', '大肥鱼', 'Claude小姐'])
 assert.deepEqual(rows.map((r) => r.dataset.enabled), ['false', 'true', 'false'])
-assert.deepEqual(rows.map((r) => (r.querySelector('.neko-role__tag') || {}).textContent || ''), ['未接入', '', '未接入'])
+assert.deepEqual(rows.map((r) => (r.querySelector('.neko-role__tag') || {}).textContent || ''), ['未接入', 'DSH', '未接入'])
 assert.equal($$('.neko-role__tools').length, 1, 'only the live role has tools')
 assert.ok(rows[1].querySelector('.neko-role__tools'))
 assert.equal($$('.neko-role__settings').length, 3, 'every role has settings')
@@ -484,25 +548,19 @@ assert.equal(rows[1].dataset.active, 'true')
 await click(rows[1].querySelector('.neko-role__main'))
 await flush()
 assert.deepEqual(roleCalls.at(-1), ['selectRole', 'bigfish'])
-assert.deepEqual(opened, ['root-session-1'], 'existing root session opened')
+assert.deepEqual(opened, [], 'switching DSH does not reset the selected workspace')
 // Placeholder role: no select, no session, clear message.
 await click(rows[0].querySelector('.neko-role__main'))
 await flush()
-assert.ok(!roleCalls.some((c) => c[0] === 'selectRole' && c[1] === 'yui'))
-assert.equal(opened.length, 1)
+assert.equal(roleCalls.filter((c) => c[0] === 'selectRole' && c[1] === 'yui').length, 2)
+assert.equal(opened.length, 0)
 assert.match($('.neko-role[data-role="yui"] .neko-role__notice').textContent, /暂未接入/)
-// openSession error is reported, not faked.
-await act(async () => {
-  roleState = { ...roleState, workspaceSessionId: 'boom' }
-  for (const fn of roleSubs) fn(roleState)
-})
+// Bridge failure is reported and does not pretend to switch.
+failSelect = true
 await click($('.neko-role[data-role="bigfish"] .neko-role__main'))
 await flush()
-assert.match($('.neko-role[data-role="bigfish"] .neko-role__notice').textContent, /会话已失效/)
-await act(async () => {
-  roleState = { ...roleState, workspaceSessionId: 'root-session-1' }
-  for (const fn of roleSubs) fn(roleState)
-})
+assert.match($('.neko-role[data-role="bigfish"] .neko-role__notice').textContent, /选择失败/)
+failSelect = false
 
 // Tools overlay = the ORIGINAL nav, shown in place.
 const toolsBtn = $('.neko-role__tools')
@@ -556,7 +614,7 @@ await click(claudeRow().querySelector('.neko-role__settings'))
 await flush()
 const rp = $('.neko-role-panel')
 assert.ok(rp)
-assert.match(rp.textContent, /未接入/)
+assert.match(rp.textContent, /未绑定工作助手/)
 const input = rp.querySelector('input')
 assert.equal(document.activeElement, input)
 const setValue = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
@@ -574,6 +632,15 @@ assert.deepEqual(roleCalls.at(-1), ['uploadAvatar', 'claude'])
 assert.equal(claudeRow().querySelector('.neko-role__img').getAttribute('src'), 'data:image/png;base64,iVBORw0KGgo=')
 assert.equal($$('.neko-role-panel .neko-tile').length, 6, 'custom tile appears for the role')
 assert.equal(claudeRow().dataset.enabled, 'false', 'customizing does not connect the role')
+const backendPicker = $('.neko-role-panel .neko-role-backend')
+assert.ok(backendPicker, 'explicit Codex binding setting is available')
+await act(async () => { backendPicker.value = 'codex'; backendPicker.dispatchEvent(new window.Event('change', { bubbles: true })) })
+await flush()
+assert.deepEqual(roleCalls.at(-1), ['updateRole', 'claude', { backend: 'codex' }])
+assert.equal(claudeRow().dataset.enabled, 'true', 'explicit binding enables Codex')
+await act(async () => { backendPicker.value = ''; backendPicker.dispatchEvent(new window.Event('change', { bubbles: true })) })
+await flush()
+assert.equal(claudeRow().dataset.enabled, 'false')
 assert.equal($('.neko-avatar-btn img').getAttribute('src'), globalSrc, 'global avatar unchanged')
 await key(document.activeElement, 'Escape')
 await flush()

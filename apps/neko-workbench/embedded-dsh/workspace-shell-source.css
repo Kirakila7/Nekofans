@@ -1,4 +1,5 @@
 body[data-neko-workspace-shell] { --nws-bg:var(--dsw-alias-bg-layer-1,#fbfeff); --nws-border:var(--dsw-alias-border-l1,#c4dbe6); --nws-text:var(--dsw-alias-label-primary,#17303d); --nws-muted:var(--dsw-alias-label-secondary,#637d8c); --nws-hover:var(--dsw-alias-interactive-bg-hover,#ddedf4); }
+body[data-neko-workspace-shell] .neko-codex-view,
 body[data-neko-workspace-shell] .neko-avatar-anchor,
 body[data-neko-workspace-shell] .neko-avatar-portal,
 body[data-neko-workspace-shell] .neko-role-host .neko-roles,

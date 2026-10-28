@@ -62,7 +62,7 @@ async function run() {
   assert.equal(card.querySelector('.neh-service-summary strong').textContent, '账号');
   assert.equal(card.querySelector('.neh-service-summary span').textContent, '工作台账号');
   assert.equal(card.querySelector('.neh-wallet').textContent, '暂不可读取');
-  assert.equal(card.querySelector('.neh-empty-world').textContent, '未登录');
+  assert.equal(card.querySelectorAll('[data-neko-account-pet]').length, 0, 'signed-out accounts do not display a logged-in character');
   assert.match(card.querySelector('.neh-menu-help').textContent, /下方登录按钮/);
   assert.equal(reads, 0, 'signed-out account never requests a balance');
   assert.deepEqual([...menu.querySelectorAll('button[role="menuitem"]')], originalButtons);
