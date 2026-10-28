@@ -523,13 +523,17 @@ window.__ModuleLoader__.load({
 
     // --- sidebar roles (window.nekoRoles) -----------------------------------
 
-    /**
-     * Three fixed role seats under 新会话. Only LIVE_ROLE is connected: it
-     * opens the existing DSH root session and owns the folded native tools.
-     * The others are honest placeholders (rename / avatar only). Role
-     * config is separate from the decorative top-left avatar.
-     */
-    const LIVE_ROLE = 'bigfish' // the only connected role in this prototype
+    /** Three editable role seats; backends are explicitly bound independently
+     * from names and avatars. The DSH seat owns the folded native tools. */
+    const LIVE_ROLE = 'bigfish' // DSH role; other seats explicitly opt in to Codex.
+    let assistantView = 'dsh'
+    const assistantViewListeners = new Set()
+    function setAssistantView(next) {
+      if (!['dsh', 'codex'].includes(next) || assistantView === next) return
+      if (next === 'codex') currentCommunityPane?.hide()
+      assistantView = next
+      for (const listener of [...assistantViewListeners]) listener(next)
+    }
     const ROLE_DEFAULTS = Object.freeze([
       Object.freeze({ id: 'yui', name: 'Yui', avatarId: 'yui' }),
       Object.freeze({ id: 'bigfish', name: '大肥鱼', avatarId: 'bigfish' }),
@@ -568,8 +572,9 @@ window.__ModuleLoader__.load({
           name: checked.name || def.name,
           avatarId,
           customDataUrl,
-          // Availability is code-owned: the host can only turn the live role off.
-          enabled: def.id === LIVE_ROLE && r.enabled !== false,
+          // Backend binding is separate from a role's editable name and avatar.
+          backend: def.id === LIVE_ROLE ? 'dsh' : r.backend === 'codex' ? 'codex' : null,
+          enabled: (def.id === LIVE_ROLE || r.backend === 'codex') && r.enabled !== false,
         }
       })
       const activeId = roles.some((r) => r.id === src.activeId && r.enabled) ? src.activeId : LIVE_ROLE
@@ -590,11 +595,8 @@ window.__ModuleLoader__.load({
       return ok ? b : null
     }
 
-    /**
-     * Role state for one apply(). host.openSession is ctx.uiWorkspace.openSession;
-     * entering the live role selects it natively, then opens the REAL session
-     * id the bridge returned. Nothing here creates a session or sends a prompt.
-     */
+    /** Role state for one apply(). Selecting a seat switches its associated
+     * assistant view without changing the native project or DSH session. */
     function createRolesStore(bridge, host) {
       const listeners = new Set()
       let disposed = false
@@ -630,6 +632,8 @@ window.__ModuleLoader__.load({
       function accept(raw) {
         if (raw && typeof raw === 'object') {
           const state = sanitizeRoles(raw)
+          const active = state.roles.find((r) => r.id === state.activeId && r.enabled)
+          setAssistantView(active?.backend || 'dsh')
           emit({ state, ready: true })
           return state
         }
@@ -653,7 +657,7 @@ window.__ModuleLoader__.load({
         })
       }
 
-      /** Live role: select natively, then open its existing DSH root session. */
+      /** Select a bound seat while preserving the user's current project. */
       async function enter(id) {
         const r = role(id)
         if (!r || snapshot.pending.enter) return false
@@ -669,10 +673,8 @@ window.__ModuleLoader__.load({
         setPending({ enter: id })
         try {
           const next = accept(await withTimeout(bridge.selectRole(id), BRIDGE_TIMEOUT_MS))
-          const sessionId = next && next.workspaceSessionId
-          if (!sessionId) throw new Error('工作台会话尚未就绪')
-          if (!host || typeof host.openSession !== 'function') throw new Error('当前 DSH 不支持打开会话')
-          host.openSession(sessionId)
+          if (!next || next.activeId !== id) throw new Error('角色切换未完成')
+          currentCommunityPane?.hide()
           return true
         } catch (error) {
           notify(id, 'error', '无法进入会话：' + errorText(error))
@@ -697,6 +699,10 @@ window.__ModuleLoader__.load({
         if (patch && Object.hasOwn(patch, 'avatarId')) {
           if (!SELECTABLE_IDS.includes(patch.avatarId) || (patch.avatarId === 'custom' && !r.customDataUrl)) return false
           clean.avatarId = patch.avatarId
+        }
+        if (patch && Object.hasOwn(patch, 'backend')) {
+          if (id === LIVE_ROLE || ![null, 'codex'].includes(patch.backend)) return false
+          clean.backend = patch.backend
         }
         if (!Object.keys(clean).length) return false
         clearNotice(id)
@@ -1238,7 +1244,7 @@ function SidebarMark({ size }) {
         { id: panelId, label: `${role.name} 设置`, className: 'neko-role-panel', popover: pop, width: ROLE_PANEL_WIDTH },
         h('div', { className: 'neko-pop__head' },
           h('span', { className: 'neko-pop__title' }, `${role.name} 设置`),
-          h('span', { className: 'neko-pop__hint' }, role.enabled ? '已接入' : '未接入 · 只改名字和头像'),
+          h('span', { className: 'neko-pop__hint' }, role.enabled ? `已绑定 ${role.backend === 'dsh' ? 'DSH' : 'Codex'}` : '未绑定工作助手'),
         ),
         h(
           'form',
@@ -1267,6 +1273,11 @@ function SidebarMark({ size }) {
             snap.pending.save === role.id ? '保存中…' : '保存',
           ),
         ),
+        role.id !== LIVE_ROLE ? h('label', { className: 'neko-pop__hint', htmlFor: `${panelId}-backend` }, '工作助手',
+          h('select', { id: `${panelId}-backend`, className: 'neko-input neko-role-backend', value: role.backend || '', disabled: busy,
+            onChange: (event) => store.update(role.id, { backend: event.target.value || null }) },
+          h('option', { value: '' }, '未绑定'), h('option', { value: 'codex' }, 'Codex'))) :
+          h('p', { className: 'neko-pop__hint' }, '工作助手：DSH'),
         h('div', { className: 'neko-picker__grid', role: 'group', 'aria-label': `${role.name} 的头像` }, ...tiles),
         h(
           'button',
@@ -1304,7 +1315,7 @@ function SidebarMark({ size }) {
               'aria-disabled': role.enabled ? undefined : 'true',
               'aria-current': active ? 'true' : undefined,
               'aria-busy': entering ? 'true' : undefined,
-              title: role.enabled ? `进入${role.name}的会话` : `${role.name}：未接入，只能改名字和头像`,
+              title: role.enabled ? `进入${role.name}（${role.backend === 'dsh' ? 'DSH' : 'Codex'}）` : `${role.name}：未绑定工作助手`,
               onClick: (event) => {
                 event.stopPropagation()
                 store.enter(role.id)
@@ -1315,7 +1326,7 @@ function SidebarMark({ size }) {
             entering
               ? h('span', { className: 'neko-role__tag' }, '打开中…')
               : role.enabled
-                ? null
+                ? h('span', { className: 'neko-role__tag' }, role.backend === 'dsh' ? 'DSH' : 'Codex')
                 : h('span', { className: 'neko-role__tag' }, '未接入'),
           ),
           tools
@@ -3381,7 +3392,12 @@ function installAvatarTheme(options) { return NekoAvatarTheme.install(options) }
     }
 
     function CodexWorkbench({ ctx }) {
-      const [mode, setMode] = useState('dsh')
+      const [mode, setMode] = useState(assistantView)
+      useEffect(() => {
+        assistantViewListeners.add(setMode)
+        setMode(assistantView)
+        return () => assistantViewListeners.delete(setMode)
+      }, [])
       const [workspace, setWorkspace] = useState(() => readSharedWorkspace(ctx))
       const [connected, setConnected] = useState(null)
       const [messages, setMessages] = useState([])
@@ -3469,16 +3485,11 @@ function installAvatarTheme(options) { return NekoAvatarTheme.install(options) }
         try { await api.approval({ requestId: approval.requestId, decision }); setApproval(null) }
         catch (e) { setError(e?.message || '审批未提交') }
       }
-      const switchMode = (next) => { if (next === 'codex') currentCommunityPane?.hide(); setMode(next) }
       if (!bounds || !ReactDOM?.createPortal) return null
       const style = { left: `${bounds.x}px`, top: `${bounds.y}px`, width: `${bounds.width}px`, height: `${bounds.height}px` }
-      const chooser = h('div', { className: 'neko-codex-switch', role: 'group', 'aria-label': '选择工作助手' },
-        h('button', { type: 'button', title: 'DSH', 'aria-label': '切换到 DSH', 'aria-pressed': mode === 'dsh', onClick: () => switchMode('dsh') }, h(AvatarImg, { src: builtinSrc(LIVE_ROLE), size: 28 })),
-        h('button', { type: 'button', title: 'Codex', 'aria-label': '切换到 Codex', 'aria-pressed': mode === 'codex', onClick: () => switchMode('codex') }, h('span', { className: 'neko-codex-avatar', 'aria-hidden': true }, 'C')))
       const view = mode !== 'codex' ? null : h('section', { className: 'neko-codex-view', style, 'aria-label': 'Codex 工作区' },
         h('header', { className: 'neko-codex-header' }, h('strong', null, 'Codex'),
-          h('span', { className: 'neko-codex-project', title: project?.path || '' }, project ? `工作区：${project.title}` : workspace.phase === 'loading' ? '正在读取工作区…' : '请从左侧选择工作区'),
-          h('button', { type: 'button', onClick: () => switchMode('dsh') }, '返回 DSH')),
+          h('span', { className: 'neko-codex-project', title: project?.path || '' }, project ? `工作区：${project.title}` : workspace.phase === 'loading' ? '正在读取工作区…' : '请从左侧选择工作区')),
         h('div', { className: 'neko-codex-thread', 'aria-live': 'polite' },
           !ready ? h('p', { role: 'status' }, 'Codex 连接尚未就绪，请重新打开工作台。') : null,
           connected && !matching ? h('p', { role: 'status' }, `工作区已切换；当前 Codex 会话属于 ${connected.title}。${busy ? '请等待任务结束或停止后再连接新工作区。' : '请连接当前工作区。'}`) : null,
@@ -3492,14 +3503,12 @@ function installAvatarTheme(options) { return NekoAvatarTheme.install(options) }
           !matching ? h('button', { type: 'button', disabled: !ready || !project || starting || busy, onClick: connect }, starting ? '正在连接…' : '连接当前工作区') : null,
           h('textarea', { value: draft, disabled: !matching || starting || !!approval, placeholder: matching ? '告诉 Codex 你想完成什么…' : '连接当前工作区后开始', onChange: (e) => setDraft(e.target.value), onKeyDown: (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent?.isComposing) { e.preventDefault(); send() } } }),
           busy ? h('button', { type: 'button', onClick: () => api.cancel().catch((e) => setError(e?.message || '无法停止任务')) }, '停止') : h('button', { type: 'button', disabled: !matching || !draft.trim() || starting, onClick: send }, '发送')))
-      return ReactDOM.createPortal(h(React.Fragment, null, view,
-        h('div', { className: 'neko-codex-switch-position', style: { left: `${bounds.x + 20}px`, top: `${bounds.y + bounds.height - 52}px` } }, chooser)), document.body)
+      return ReactDOM.createPortal(view, document.body)
     }
     function installCodexStyles() {
       const element = document.createElement('style')
       element.textContent = `
-.neko-codex-switch-position{position:fixed;z-index:55;pointer-events:none}.neko-codex-switch{display:flex;gap:5px;pointer-events:auto}.neko-codex-switch button{display:grid;place-items:center;width:34px;height:34px;padding:2px;border:1px solid #ccd9e6;border-radius:50%;background:#fff;cursor:pointer}.neko-codex-switch button[aria-pressed="true"]{outline:2px solid #7b9bd4;outline-offset:1px}.neko-codex-avatar{display:grid;place-items:center;width:27px;height:27px;border-radius:50%;background:#283a3b;color:white;font-size:15px;font-weight:700}
-.neko-codex-view{position:fixed;z-index:50;display:flex;flex-direction:column;background:var(--dsw-alias-bg-base,#edf3f8);color:var(--dsw-alias-label-primary,#17283a);font:14px system-ui,sans-serif}.neko-codex-header{display:flex;align-items:center;gap:12px;padding:18px 24px;border-bottom:1px solid #dbe4ec}.neko-codex-header button{margin-left:auto}.neko-codex-project{color:#607489;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.neko-codex-thread{flex:1;overflow:auto;padding:22px max(24px,calc((100% - 720px)/2));white-space:pre-wrap}.neko-codex-message{margin-bottom:18px}.neko-codex-message p{margin:5px 0;overflow-wrap:anywhere}.neko-codex-message--user{background:#fff;border-radius:14px;padding:12px}.neko-codex-error{color:#a63333}.neko-codex-approval{border:1px solid #e0be73;border-radius:12px;padding:12px;background:#fff9e9}.neko-codex-approval p{white-space:pre-wrap;overflow-wrap:anywhere}.neko-codex-compose{display:flex;align-items:end;gap:8px;margin:0 auto 22px;width:min(720px,calc(100% - 48px));padding-left:80px;box-sizing:border-box}.neko-codex-compose textarea{flex:1;min-width:0;min-height:56px;max-height:140px;resize:vertical;border:1px solid #b8ccdc;border-radius:14px;padding:12px;font:inherit}.neko-codex-view button{border:1px solid #b8ccdc;border-radius:9px;background:white;color:inherit;padding:8px 11px;cursor:pointer}.neko-codex-view button:disabled{opacity:.5;cursor:default}
+.neko-codex-view{position:fixed;z-index:50;display:flex;flex-direction:column;background:var(--dsw-alias-bg-base,#edf3f8);color:var(--dsw-alias-label-primary,#17283a);font:14px system-ui,sans-serif}.neko-codex-header{display:flex;align-items:center;gap:12px;padding:18px 24px;border-bottom:1px solid #dbe4ec}.neko-codex-header button{margin-left:auto}.neko-codex-project{color:#607489;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.neko-codex-thread{flex:1;overflow:auto;padding:22px max(24px,calc((100% - 720px)/2));white-space:pre-wrap}.neko-codex-message{margin-bottom:18px}.neko-codex-message p{margin:5px 0;overflow-wrap:anywhere}.neko-codex-message--user{background:#fff;border-radius:14px;padding:12px}.neko-codex-error{color:#a63333}.neko-codex-approval{border:1px solid #e0be73;border-radius:12px;padding:12px;background:#fff9e9}.neko-codex-approval p{white-space:pre-wrap;overflow-wrap:anywhere}.neko-codex-compose{display:flex;align-items:end;gap:8px;margin:0 auto 22px;width:min(720px,calc(100% - 48px));box-sizing:border-box}.neko-codex-compose textarea{flex:1;min-width:0;min-height:56px;max-height:140px;resize:vertical;border:1px solid #b8ccdc;border-radius:14px;padding:12px;font:inherit}.neko-codex-view button{border:1px solid #b8ccdc;border-radius:9px;background:white;color:inherit;padding:8px 11px;cursor:pointer}.neko-codex-view button:disabled{opacity:.5;cursor:default}
 `
       document.head.appendChild(element)
       return () => element.remove()
