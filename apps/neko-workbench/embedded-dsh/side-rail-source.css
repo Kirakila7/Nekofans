@@ -62,3 +62,7 @@ body[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account
 body[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account] .neh-providers { display: none; }
 body[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account]:hover { background: var(--dsw-alias-interactive-bg-hover, #ddedf4); }
 body[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account]:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary, #246b91); outline-offset: 2px; }
+/* Press and disabled cues for rail icon buttons (focus ring is defined above). */
+.neko-side-rail__button:active:not(:disabled) { background: var(--dsw-alias-interactive-bg-active, #d0e5ef); }
+.neko-side-rail__button:disabled { opacity: .45; cursor: not-allowed; }
+.neko-side-rail__button:disabled:hover { background: transparent; }

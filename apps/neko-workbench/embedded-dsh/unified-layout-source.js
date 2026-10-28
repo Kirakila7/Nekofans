@@ -9,45 +9,82 @@ function installUnifiedLayout(options = {}) {
   const el = (tag, cls, text) => { const n = doc.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; };
   const button = (label, cls, fn) => { const b = el('button', cls, label); b.type = 'button'; if (fn) b.addEventListener('click', fn); return b; };
   const style = el('style'); style.dataset.nekoUnifiedStyle = ''; style.textContent = options.cssText || ''; doc.head.appendChild(style);
+  const SLOT_NAMES = { side: '侧栏', left: '左面板', right: '右面板' };
+  const MIN_RATIO = 0.25, MAX_RATIO = 0.75;
+  const clampRatio = value => Math.max(MIN_RATIO, Math.min(MAX_RATIO, Number.isFinite(value) ? value : 0.5));
+  // Human-readable name of what a slot currently shows; the sidebar's
+  // "workspace" is DSH's native navigation, not a second coding surface.
+  const describe = (slot, value) => slot === 'side'
+    ? ({ workspace: '工作区导航', community: '社区', bilibili: 'B站视频' })[value] || '工作区导航'
+    : ({ coding: '工作区', community: '社区', bilibili: 'B站视频' })[value] || '空';
   const trigger = button('▤', 'neko-side-rail__button neko-layout-entry', toggleConfig);
   trigger.title = '配置界面布局'; trigger.setAttribute('aria-label', '配置界面布局'); trigger.setAttribute('aria-expanded', 'false');
+  trigger.setAttribute('aria-haspopup', 'dialog'); trigger.setAttribute('aria-controls', 'neko-unified-config');
   const container = doc.querySelector('.neko-workspace-rail-controls') || rail;
   container.appendChild(trigger);
-  const config = el('section', 'neko-unified-config'); config.dataset.nekoUnifiedConfig = ''; config.hidden = true;
-  config.setAttribute('role', 'dialog'); config.setAttribute('aria-label', '界面配置');
-  const close = button('×', 'close', () => setConfig(false)); close.setAttribute('aria-label', '关闭界面配置');
-  const title = el('h2', '', '界面配置'), explanation = el('p', '', '选择区域，再选择显示内容。');
+  const config = el('section', 'neko-unified-config'); config.dataset.nekoUnifiedConfig = ''; config.hidden = true; config.id = 'neko-unified-config';
+  config.setAttribute('role', 'dialog'); config.setAttribute('aria-labelledby', 'neko-unified-config-title'); config.setAttribute('aria-describedby', 'neko-unified-config-help');
+  const close = button('×', 'close', () => setConfig(false, true)); close.setAttribute('aria-label', '关闭界面配置'); close.title = '关闭（Esc）';
+  const title = el('h2', '', '界面配置'), explanation = el('p', 'help', '① 选一个区域 ② 点选内容，或把内容拖到窗口里的目标区域。选择内容会自动启用自定义布局。');
+  title.id = 'neko-unified-config-title'; explanation.id = 'neko-unified-config-help';
+  const summary = el('p', 'summary'); summary.dataset.nekoUnifiedSummary = ''; summary.setAttribute('role', 'status'); summary.setAttribute('aria-live', 'polite');
   const toggle = button('启用自定义布局', 'toggle', () => update({ ...layout, enabled: !layout.enabled }));
   const targets = el('div', 'choices'), contents = el('div', 'choices'); targets.setAttribute('role', 'group'); targets.setAttribute('aria-label', '显示区域');
   contents.setAttribute('role', 'group'); contents.setAttribute('aria-label', '显示内容');
   let target = 'left';
-  const targetButtons = {}, contentButtons = {};
-  for (const [key, label] of [['side', '侧栏'], ['left', '左面板'], ['right', '右面板']]) {
-    targetButtons[key] = button(label, '', () => { target = key; renderConfig(); }); targetButtons[key].dataset.target = key; targets.appendChild(targetButtons[key]);
+  const targetButtons = {}, targetCurrent = {}, contentButtons = {};
+  for (const key of ['side', 'left', 'right']) {
+    const b = button('', '', () => { target = key; renderConfig(); }); b.dataset.target = key;
+    const current = el('small', 'current'); current.setAttribute('aria-hidden', 'true');
+    b.append(el('span', 'name', SLOT_NAMES[key]), current); targetButtons[key] = b; targetCurrent[key] = current; targets.appendChild(b);
   }
-  for (const [key, label] of [['coding', '工作区'], ['community', '社区'], ['bilibili', '视频']]) {
-    contentButtons[key] = button(label, '', () => choose(key)); contentButtons[key].draggable = true;
+  for (const [key, label] of [['coding', '工作区'], ['community', '社区'], ['bilibili', 'B站视频']]) {
+    contentButtons[key] = button(label, '', () => choose(key)); contentButtons[key].draggable = true; contentButtons[key].title = `点选放入所选区域，或拖到目标区域`;
     contentButtons[key].dataset.nekoLayoutDrag = key; contentButtons[key].dataset.content = key; contents.appendChild(contentButtons[key]);
   }
+  // Left/right panes can be emptied so a two-pane layout can go back to one.
+  contentButtons.none = button('不显示', 'none', () => choose(null)); contentButtons.none.dataset.content = 'none'; contents.appendChild(contentButtons.none);
+  const hint = el('p', 'hint');
   const swap = button('⇄ 交换左右面板', 'toggle', () => update({ ...layout, left: layout.right, right: layout.left }));
-  const info = el('p', 'message', '侧栏保留账号和角色生活区；窄窗口可在左右面板之间切换。'); info.setAttribute('role', 'status');
-  config.append(close, title, explanation, toggle, el('strong', '', '显示区域'), targets, el('strong', '', '显示内容'), contents, swap, info);
+  const info = el('p', 'message'); info.setAttribute('role', 'status'); info.setAttribute('aria-live', 'polite');
+  config.append(close, title, explanation, summary, toggle, el('strong', '', '显示区域'), targets, el('strong', '', '显示内容'), contents, hint, swap, info);
   doc.body.appendChild(config);
-  const mobile = el('nav', 'neko-unified-mobile'); mobile.setAttribute('aria-label', '窄窗口面板'); mobile.hidden = true;
+  // Escape closes the dialog from anywhere, but only returns focus to ▤ when
+  // focus was inside the dialog (or nowhere); a focused DSH input keeps it.
+  function escapeConfig(event) {
+    if (event.key !== 'Escape' || config.hidden || event.defaultPrevented) return;
+    const active = doc.activeElement, inside = config.contains(active);
+    if (!inside && active && active !== doc.body && active !== trigger) { void setConfig(false); return; }
+    event.preventDefault(); event.stopPropagation(); void setConfig(false, true);
+  }
+  doc.addEventListener('keydown', escapeConfig);
+  const mobile = el('nav', 'neko-unified-mobile'); mobile.setAttribute('aria-label', '窄窗口面板切换'); mobile.hidden = true;
   let activeMain = 'left';
-  const mobileLeft = button('左面板', '', () => { activeMain = 'left'; schedule(); });
-  const mobileRight = button('右面板', '', () => { activeMain = 'right'; schedule(); }); mobile.append(mobileLeft, mobileRight); doc.body.appendChild(mobile);
-  const divider = el('div', 'neko-unified-divider'); divider.hidden = true; divider.setAttribute('role', 'separator'); divider.setAttribute('aria-label', '拖动调整两栏宽度'); divider.tabIndex = 0; doc.body.appendChild(divider);
+  const mobileLeft = button('左面板', '', () => { activeMain = 'left'; schedule(); }); mobileLeft.dataset.nekoMobileSlot = 'left';
+  const mobileRight = button('右面板', '', () => { activeMain = 'right'; schedule(); }); mobileRight.dataset.nekoMobileSlot = 'right';
+  mobile.append(mobileLeft, mobileRight); doc.body.appendChild(mobile);
+  const divider = el('div', 'neko-unified-divider'); divider.hidden = true; divider.setAttribute('role', 'separator'); divider.setAttribute('aria-label', '调整左右面板宽度'); divider.tabIndex = 0;
+  divider.setAttribute('aria-orientation', 'vertical'); divider.setAttribute('aria-valuemin', String(MIN_RATIO * 100)); divider.setAttribute('aria-valuemax', String(MAX_RATIO * 100));
+  divider.title = '拖动调整宽度 · 双击恢复各半 · 方向键微调'; doc.body.appendChild(divider);
+  // Transient notice for errors that happen while the configuration dialog is
+  // closed (divider save, layout geometry). It sits in the top 40px band, where
+  // site panels draw their renderer-owned toolbar, so a native view never
+  // covers it.
+  const notice = el('div', 'neko-unified-notice'); notice.hidden = true; notice.setAttribute('role', 'status'); notice.setAttribute('aria-live', 'polite'); doc.body.appendChild(notice);
+  let noticeTimer = null;
   const drops = {};
-  for (const [slot, label] of [['side','放到侧栏'],['left','放到左面板'],['right','放到右面板']]) {
-    const zone = el('div', 'neko-unified-drop', label); zone.hidden = true; zone.dataset.nekoDropSlot = slot;
-    zone.addEventListener('dragover', event => { if (draggedContent) event.preventDefault(); });
+  for (const slot of ['side', 'left', 'right']) {
+    const zone = el('div', 'neko-unified-drop'); zone.hidden = true; zone.dataset.nekoDropSlot = slot;
+    const label = el('strong', '', `放到${SLOT_NAMES[slot]}`), current = el('small'); zone.append(label, current);
+    zone.addEventListener('dragenter', event => { if (!draggedContent) return; event.preventDefault(); zone.dataset.active = 'true'; });
+    zone.addEventListener('dragover', event => { if (!draggedContent) return; event.preventDefault(); if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'; zone.dataset.active = 'true'; });
+    zone.addEventListener('dragleave', () => { zone.removeAttribute('data-active'); });
     zone.addEventListener('drop', event => {
       if (!draggedContent) return;
       event.preventDefault(); const value = draggedContent; draggedContent = null; hideDrops();
-      target = slot; choose(value); void setConfig(false);
+      target = slot; choose(value); void setConfig(false, true);
     });
-    doc.body.appendChild(zone); drops[slot] = zone;
+    doc.body.appendChild(zone); drops[slot] = { zone, current };
   }
   let layout = { enabled: false, side: 'workspace', left: 'coding', right: null, ratio: 0.5 };
   let disposed = false, frame = 0, revision = 0, requestId = 0, codingNode = null, codingInert = false, suspended = false, drag = null, draggedContent = null;
@@ -56,6 +93,10 @@ function installUnifiedLayout(options = {}) {
   function makePanel(slot) {
     const node = el('section', 'neko-unified-panel'); node.hidden = true; node.dataset.nekoUnifiedSlot = slot;
     const header = el('header'), name = el('strong'), back = button('上一页', '', () => action(slot, 'back'));
+    // The header is renderer DOM above the native view, so short feedback lives
+    // in the title line instead of the body text that the site view covers.
+    // The body status (role=status) is announced; this visible copy is not.
+    const titleText = el('span', 'title'), note = el('span', 'note'); note.setAttribute('aria-hidden', 'true'); name.append(titleText, note);
     const reload = button('刷新', '', () => action(slot, 'reload'));
     const play = button('官方播放', '', () => action(slot, 'play-official'));
     const share = button('分享', '', () => action(slot, 'copy-video-link'));
@@ -63,43 +104,109 @@ function installUnifiedLayout(options = {}) {
     back.setAttribute('aria-label', '返回上一页'); reload.setAttribute('aria-label', '刷新当前页面');
     play.hidden = share.hidden = true; header.append(name, back, reload, play, share, leave);
     const status = el('p', 'status'); status.setAttribute('role', 'status'); node.append(header, status); doc.body.appendChild(node);
-    panels[slot] = { node, header, name, back, reload, play, share, leave, status, site: null };
+    panels[slot] = { node, header, name, titleText, note, back, reload, play, share, leave, status, site: null, noteTimer: null };
   }
   for (const slot of ['side', 'left', 'right']) makePanel(slot);
+  // kind: 'loading' | 'error' | 'ok'. 'ok' notes clear themselves; load and
+  // error states stay until the site reports a new state.
+  function panelNote(slot, text, kind = 'ok') {
+    const p = panels[slot]; if (!p) return;
+    if (p.noteTimer) { win.clearTimeout(p.noteTimer); p.noteTimer = null; }
+    p.note.textContent = text ? ' · ' + text : ''; p.status.textContent = text || '';
+    if (text) p.node.dataset.state = kind; else p.node.removeAttribute('data-state');
+    p.name.title = text ? `${p.titleText.textContent}：${text}` : p.titleText.textContent;
+    if (text && kind === 'ok') p.noteTimer = win.setTimeout(() => { p.noteTimer = null; if (!disposed && p.node.dataset.state === 'ok') panelNote(slot, ''); }, 2500);
+  }
   function action(slot, actionName) {
+    // Reload resolves only after the page has loaded, so announce it first.
+    if (actionName === 'reload') panelNote(slot, '正在刷新…', 'loading');
     void Promise.resolve(bridge.community({ action: actionName, slot })).then(result => {
-      if (actionName === 'copy-video-link' && result?.ok) panels[slot].status.textContent = '链接已复制';
-    }).catch(() => { if (!disposed) panels[slot].status.textContent = actionName === 'copy-video-link' ? '复制失败，请重试' : '操作未完成，请重试'; });
+      if (disposed) return;
+      if (actionName === 'copy-video-link') panelNote(slot, result?.ok ? '链接已复制' : '复制失败，请重试', result?.ok ? 'ok' : 'error');
+      else if (actionName === 'reload' && panels[slot].node.dataset.state === 'loading') panelNote(slot, '');
+    }).catch(() => { if (!disposed) panelNote(slot, actionName === 'copy-video-link' ? '复制失败，请重试' : '操作未完成，请重试', 'error'); });
+  }
+  function showNotice(text) {
+    if (disposed) return;
+    if (!config.hidden) { info.textContent = text; return; }
+    if (!text) { clearNotice(); return; }
+    if (notice.textContent !== text) notice.textContent = text;
+    notice.hidden = false;
+    if (noticeTimer) win.clearTimeout(noticeTimer);
+    noticeTimer = win.setTimeout(clearNotice, 5000);
+  }
+  function clearNotice() {
+    if (noticeTimer) win.clearTimeout(noticeTimer);
+    noticeTimer = null; notice.hidden = true; notice.textContent = '';
+  }
+  function summaryText() {
+    if (!layout.enabled) return '自定义布局未启用：显示 DSH 原生单栏工作区。选择任一内容即可启用。';
+    const parts = ['side', 'left', 'right'].map(slot => `${SLOT_NAMES[slot]}：${describe(slot, layout[slot])}`);
+    const two = layout.left && layout.right, left = Math.round(clampRatio(layout.ratio) * 100);
+    return '当前 ' + parts.join(' · ') + (two ? `（宽度 ${left}% / ${100 - left}%）` : '');
   }
   function renderConfig() {
     trigger.setAttribute('aria-expanded', String(!config.hidden));
-    toggle.textContent = layout.enabled ? '关闭自定义布局' : '启用自定义布局';
+    toggle.textContent = layout.enabled ? '关闭自定义布局（恢复单栏）' : '启用自定义布局';
     toggle.setAttribute('aria-pressed', String(layout.enabled));
-    for (const key of Object.keys(targetButtons)) targetButtons[key].setAttribute('aria-pressed', String(key === target));
-    const value = target === 'side' && layout.side === 'workspace' ? 'coding' : layout[target];
+    summary.textContent = summaryText(); config.dataset.enabled = String(layout.enabled);
+    for (const key of Object.keys(targetButtons)) {
+      const shown = describe(key, layout[key]);
+      targetButtons[key].setAttribute('aria-pressed', String(key === target));
+      targetButtons[key].setAttribute('aria-label', `${SLOT_NAMES[key]}，当前显示${shown}`);
+      if (targetCurrent[key].textContent !== shown) targetCurrent[key].textContent = shown;
+    }
+    const value = target === 'side' && layout.side === 'workspace' ? 'coding' : layout[target] ?? 'none';
     for (const key of Object.keys(contentButtons)) contentButtons[key].setAttribute('aria-pressed', String(key === value));
-    swap.disabled = !layout.enabled;
+    contentButtons.coding.textContent = target === 'side' ? '工作区导航' : '工作区';
+    const other = target === 'left' ? 'right' : 'left';
+    contentButtons.none.hidden = target === 'side';
+    // Keep at least one main pane; an empty window has nothing to return to.
+    contentButtons.none.disabled = target !== 'side' && !layout[other];
+    contentButtons.none.title = contentButtons.none.disabled ? `${SLOT_NAMES[other]}也为空，至少保留一个面板` : `清空${SLOT_NAMES[target]}，另一侧占满宽度`;
+    hint.textContent = target === 'side'
+      ? '侧栏：选「工作区导航」恢复 DSH 原生会话列表；账号和角色生活区始终留在侧栏底部。'
+      : `${SLOT_NAMES[target]}：每个内容只在一个区域打开；已在别处的会移过来，原区域换成这里之前的内容（侧栏则恢复工作区导航）。窄窗口顶部可切换左右面板。`;
+    swap.disabled = !layout.enabled || !layout.left && !layout.right;
   }
-  async function setConfig(open) {
+  function focusFirst() { (targetButtons[target] || close).focus?.(); }
+  async function setConfig(open, returnFocus = false) {
     if (disposed || config.hidden === !open) return;
     config.hidden = !open; suspended = open && layout.enabled; renderConfig();
+    if (open) { info.textContent = ''; clearNotice(); focusFirst(); }
+    else if (returnFocus && trigger.isConnected) trigger.focus?.();
     if (suspended) hideAll(); else schedule();
   }
   function toggleConfig() { void setConfig(config.hidden); }
   function clean(next) { return { enabled: !!next.enabled, side: next.side, left: next.left, right: next.right, ratio: next.ratio }; }
+  let confirmed = null;
+  function applySaved(saved) {
+    const enabling = !layout.enabled && saved.enabled;
+    layout = clean(saved); confirmed = { ...layout }; renderConfig();
+    if (enabling) options.hideLegacy?.();
+    if (layout.enabled) doc.body.setAttribute('data-neko-unified-enabled', '');
+    else { doc.body.removeAttribute('data-neko-unified-enabled'); hideAll(); clearCoding(); }
+    if (layout.enabled && layout.side !== 'workspace') doc.querySelector('.neko-side-rail__expand:not([hidden])')?.click();
+    suspended = !config.hidden && layout.enabled; schedule();
+  }
   async function update(next, raise = false) {
     const ticket = ++revision;
     try {
       const saved = await bridge.workspace({ action: 'set-pane-layout', layout: clean(next) });
       if (disposed || ticket !== revision) { if (raise) throw Error('界面配置已变化，请重试'); return; }
-      const enabling = !layout.enabled && saved.enabled;
-      layout = clean(saved); renderConfig();
-      if (enabling) options.hideLegacy?.();
-      if (layout.enabled) doc.body.setAttribute('data-neko-unified-enabled', '');
-      else { doc.body.removeAttribute('data-neko-unified-enabled'); hideAll(); clearCoding(); }
-      if (layout.enabled && layout.side !== 'workspace') doc.querySelector('.neko-side-rail__expand:not([hidden])')?.click();
-      suspended = !config.hidden && layout.enabled; schedule();
-    } catch (error) { if (!disposed && ticket === revision) info.textContent = error?.message || '界面配置未能保存，请重试'; if (raise) throw error; }
+      info.textContent = ''; applySaved(saved);
+    } catch (error) {
+      if (!disposed && ticket === revision) {
+        // A previous write can have reached disk before its acknowledgement.
+        // Read back the durable state rather than restoring a stale snapshot.
+        let restored = confirmed;
+        try { restored = clean(await bridge.workspace({ action: 'pane-layout' })); } catch { /* use the last acknowledged layout */ }
+        if (disposed || ticket !== revision) { if (raise) throw error; return; }
+        if (restored) applySaved(restored);
+        showNotice('界面配置未能保存：' + (error?.message || '请重试'));
+      }
+      if (raise) throw error;
+    }
   }
   function chooseFor(slot, value, raise = false) { target = slot; return choose(value, raise); }
   function choose(value, raise = false) {
@@ -172,7 +279,7 @@ function installUnifiedLayout(options = {}) {
     const p = panels[slot]; if (!rect || rect.width < 80 || rect.height < 80 || !site) { p.node.hidden = true; closeView(slot); return; }
     p.node.hidden = false;
     const title = site === 'community' ? 'N.E.K.O. 社区' : 'B站视频';
-    if (p.name.textContent !== title) p.name.textContent = title;
+    if (p.titleText.textContent !== title) { p.titleText.textContent = title; p.node.setAttribute('aria-label', `${SLOT_NAMES[slot]}：${title}`); }
     p.play.hidden = p.share.hidden = site !== 'bilibili';
     const boundsStyle = { left: `${Math.round(rect.x)}px`, top: `${Math.round(rect.y)}px`, width: `${Math.round(rect.width)}px`, height: `${Math.round(rect.height)}px` };
     for (const [key, value] of Object.entries(boundsStyle)) if (p.node.style[key] !== value) p.node.style[key] = value;
@@ -181,11 +288,11 @@ function installUnifiedLayout(options = {}) {
     if (targetBounds.height <= 1) { closeView(slot); return; }
     const key = JSON.stringify(targetBounds), current = placements.get(slot);
     if (current !== site) {
-      closeView(slot); placements.set(slot, site); p.status.textContent = `正在加载${p.name.textContent}…`;
+      closeView(slot); placements.set(slot, site); panelNote(slot, `正在加载${title}…`, 'loading');
       p.play.disabled = p.share.disabled = true; p.site = site;
       const ticket = ++requestId; openTickets[slot] = ticket;
       void Promise.resolve(bridge.community({ action: 'open', site, slot, bounds: targetBounds, requestId: ticket })).catch(() => {
-        if (!disposed && placements.get(slot) === site && openTickets[slot] === ticket) p.status.textContent = '页面未能打开，请检查网络或点击刷新。';
+        if (!disposed && placements.get(slot) === site && openTickets[slot] === ticket) panelNote(slot, '页面未能打开，请检查网络后点「刷新」', 'error');
       });
     } else if (lastRects[slot] !== key) void Promise.resolve(bridge.community({ action: 'layout', slot, bounds: targetBounds })).catch(() => {});
     lastRects[slot] = key;
@@ -223,7 +330,10 @@ function installUnifiedLayout(options = {}) {
     const two = !!layout.left && !!layout.right;
     if (narrow && !layout[activeMain]) activeMain = layout.left ? 'left' : 'right';
     mobile.hidden = !(narrow && two);
-    mobileLeft.setAttribute('aria-pressed', String(activeMain === 'left')); mobileRight.setAttribute('aria-pressed', String(activeMain === 'right'));
+    if (!mobile.hidden) {
+      mobileLeft.setAttribute('aria-pressed', String(activeMain === 'left')); mobileRight.setAttribute('aria-pressed', String(activeMain === 'right'));
+      mobileLeft.setAttribute('aria-label', `左面板：${describe('left', layout.left)}`); mobileRight.setAttribute('aria-label', `右面板：${describe('right', layout.right)}`);
+    }
     const x = Math.round(full.x), y = Math.round(full.y), w = Math.round(full.width), h = Math.round(full.height);
     const split = Math.round(w * Math.max(0.25, Math.min(0.75, layout.ratio)));
     const bar = narrow && two ? 36 : 0;
@@ -236,7 +346,11 @@ function installUnifiedLayout(options = {}) {
     const codeRect = codingSide && rects[codingSide];
     setCoding(center, codeRect || full, codingSide === 'right' && two && !narrow ? 'end' : 'start', !!codeRect);
     divider.hidden = !two || narrow;
-    if (!divider.hidden) Object.assign(divider.style, { left: `${x+split-4}px`, top: `${y}px`, height: `${h}px` });
+    if (!divider.hidden) {
+      Object.assign(divider.style, { left: `${x + split - 4}px`, top: `${y}px`, height: `${h}px` });
+      const percent = Math.round(clampRatio(layout.ratio) * 100);
+      divider.setAttribute('aria-valuenow', String(percent)); divider.setAttribute('aria-valuetext', `左面板 ${percent}% · 右面板 ${100 - percent}%`);
+    }
     for (const slot of ['side', 'left', 'right']) {
       const value = layout[slot];
       const site = value === 'community' || value === 'bilibili' ? value : null;
@@ -245,14 +359,20 @@ function installUnifiedLayout(options = {}) {
     }
   }
   function schedule() { if (disposed || frame) return; frame = (win.requestAnimationFrame || (fn => win.setTimeout(fn, 16)))(place); }
-  function hideDrops() { for (const zone of Object.values(drops)) zone.hidden = true; }
+  function hideDrops() {
+    for (const [, { zone }] of Object.entries(drops)) {
+      zone.hidden = true; zone.removeAttribute('data-active');
+    }
+  }
   function showDrops() {
     const geo = findGeometry(); if (!geo) return;
-    const f = geo.full, split = Math.round(f.width * Math.max(.25, Math.min(.75, layout.ratio)));
-    const positions = { side:geo.side, left:{ ...f, width:split }, right:{ ...f, x:f.x+split, width:f.width-split } };
-    for (const [slot, zone] of Object.entries(drops)) {
+    const f = geo.full, split = Math.round(f.width * clampRatio(layout.ratio));
+    const positions = { side: geo.side, left: { ...f, width: split }, right: { ...f, x: f.x + split, width: f.width - split } };
+    for (const [slot, { zone, current }] of Object.entries(drops)) {
       const r = positions[slot]; if (!r || r.width < 60 || r.height < 80) continue;
-      Object.assign(zone.style, { left:`${r.x}px`,top:`${r.y}px`,width:`${r.width}px`,height:`${r.height}px` }); zone.hidden = false;
+      const shown = describe(slot, layout[slot]);
+      current.textContent = shown !== '空' ? `当前：${shown}` : '';
+      Object.assign(zone.style, { left: `${r.x}px`, top: `${r.y}px`, width: `${r.width}px`, height: `${r.height}px` }); zone.hidden = false;
     }
   }
   function startContentDrag(event) {
@@ -293,12 +413,18 @@ function installUnifiedLayout(options = {}) {
   win.addEventListener('resize', schedule); doc.addEventListener('scroll', schedule, true);
   function visibilityChanged() { if (doc.visibilityState === 'hidden') hideAll(); else schedule(); }
   doc.addEventListener('visibilitychange', visibilityChanged); win.addEventListener('focus', visibilityChanged);
-  divider.addEventListener('pointerdown', e => { if (e.button !== 0) return; const geo = findGeometry(); if (!geo) return; drag = { pointerId:e.pointerId, left:geo.full.x, width:geo.full.width }; divider.setPointerCapture?.(e.pointerId); e.preventDefault(); });
-  divider.addEventListener('pointermove', e => { if (!drag || drag.pointerId !== e.pointerId) return; layout.ratio = Math.max(.25, Math.min(.75, (e.clientX - drag.left) / drag.width)); schedule(); });
-  divider.addEventListener('pointerup', e => { if (!drag || drag.pointerId !== e.pointerId) return; drag = null; void update(layout); });
-  divider.addEventListener('pointercancel', () => { drag = null; });
-  divider.addEventListener('dblclick', () => update({ ...layout, ratio:.5 }));
-  divider.addEventListener('keydown', e => { if (!['ArrowLeft','ArrowRight'].includes(e.key)) return; e.preventDefault(); void update({ ...layout, ratio:Math.max(.25, Math.min(.75, layout.ratio+(e.key==='ArrowLeft'?-.05:.05))) }); });
+  divider.addEventListener('pointerdown', e => { if (e.button !== 0) return; const geo = findGeometry(); if (!geo) return; drag = { pointerId: e.pointerId, left: geo.full.x, width: geo.full.width, started: layout.ratio }; divider.setPointerCapture?.(e.pointerId); divider.dataset.dragging = 'true'; e.preventDefault(); });
+  divider.addEventListener('pointermove', e => { if (!drag || drag.pointerId !== e.pointerId) return; layout.ratio = clampRatio((e.clientX - drag.left) / drag.width); schedule(); });
+  divider.addEventListener('pointerup', e => { if (!drag || drag.pointerId !== e.pointerId) return; const started = drag.started, moved = Math.abs(layout.ratio - started) >= 0.01; drag = null; divider.removeAttribute('data-dragging'); if (moved) void update(layout); else { layout.ratio = started; schedule(); } });
+  divider.addEventListener('pointercancel', e => { if (!drag || drag.pointerId !== e.pointerId) return; layout.ratio = drag.started; drag = null; divider.removeAttribute('data-dragging'); schedule(); });
+  divider.addEventListener('dblclick', () => void update({ ...layout, ratio: 0.5 }));
+  divider.addEventListener('keydown', e => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+    e.preventDefault();
+    const step = e.shiftKey ? 0.1 : 0.05;
+    const next = e.key === 'Home' ? MIN_RATIO : e.key === 'End' ? MAX_RATIO : clampRatio(layout.ratio + (e.key === 'ArrowLeft' ? -step : step));
+    void update({ ...layout, ratio: next });
+  });
   function shortcut(event) {
     if (!layout.enabled) return;
     const item = event.target.closest?.('.neko-community-yui, .neko-side-rail__bilibili'); if (!item) return;
@@ -337,25 +463,26 @@ function installUnifiedLayout(options = {}) {
       return;
     }
     const p = panels[state.slot];
-    if (state.status === 'loading') p.status.textContent = '正在加载…';
-    if (state.status === 'ready') p.status.textContent = '';
-    if (state.status === 'error') p.status.textContent = '页面未能打开，请检查网络或点击刷新。';
+    if (state.status === 'loading') panelNote(state.slot, '正在加载…', 'loading');
+    if (state.status === 'ready') panelNote(state.slot, '');
+    if (state.status === 'error') panelNote(state.slot, '页面未能打开，请检查网络后点「刷新」', 'error');
     if (typeof state.canGoBack === 'boolean') p.back.disabled = !state.canGoBack;
     if (typeof state.canShare === 'boolean') p.share.disabled = !state.canShare;
     if (typeof state.canPlayOfficial === 'boolean') p.play.disabled = !state.canPlayOfficial || !!state.isOfficialPlayer;
   });
   Promise.resolve(bridge.workspace({ action:'pane-layout' })).then(saved => {
     if (disposed || revision) return;
-    layout = clean(saved); renderConfig();
+    layout = confirmed = clean(saved); renderConfig();
     if (layout.enabled) { options.hideLegacy?.(); doc.body.setAttribute('data-neko-unified-enabled',''); }
     observe(); schedule();
-  }).catch(() => { if (!disposed) info.textContent = '布局暂不可用，请更新工作台后重试。'; });
+  }).catch(() => { if (!disposed) showNotice('布局暂不可用，请更新工作台后重试'); });
   renderConfig();
   return () => {
     disposed = true; revision++; hideAll(); clearCoding(); doc.body.removeAttribute('data-neko-unified-enabled');
-    observer.disconnect(); overlayObserver.disconnect(); resize?.disconnect(); win.removeEventListener('resize', schedule); doc.removeEventListener('scroll', schedule, true); doc.removeEventListener('click', shortcut, true); doc.removeEventListener('neko-unified-open-community', visitCommunity);
-    doc.removeEventListener('visibilitychange', visibilityChanged); win.removeEventListener('focus', visibilityChanged); if (recoveryTimer) win.clearTimeout(recoveryTimer);
+    observer.disconnect(); overlayObserver.disconnect(); resize?.disconnect(); win.removeEventListener('resize', schedule); doc.removeEventListener('scroll', schedule, true); doc.removeEventListener('click', shortcut, true); doc.removeEventListener('neko-unified-open-community', visitCommunity); doc.removeEventListener('keydown', escapeConfig);
+    doc.removeEventListener('visibilitychange', visibilityChanged); win.removeEventListener('focus', visibilityChanged); if (recoveryTimer) win.clearTimeout(recoveryTimer); if (noticeTimer) win.clearTimeout(noticeTimer);
+    for (const p of Object.values(panels)) if (p.noteTimer) win.clearTimeout(p.noteTimer);
     if (frame) (win.cancelAnimationFrame || win.clearTimeout)(frame); if (typeof unsubscribe === 'function') unsubscribe();
-    trigger.remove(); config.remove(); mobile.remove(); divider.remove(); for (const p of Object.values(panels)) p.node.remove(); for (const zone of Object.values(drops)) zone.remove(); style.remove();
+    trigger.remove(); config.remove(); mobile.remove(); divider.remove(); notice.remove(); for (const p of Object.values(panels)) p.node.remove(); for (const { zone } of Object.values(drops)) zone.remove(); style.remove();
   };
 }

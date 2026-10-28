@@ -23,7 +23,7 @@ body[data-neko-workspace-shell] button[data-neko-new-session="plus"] { position:
 .neko-custom-seat__pick:disabled { cursor:not-allowed; opacity:1; color:#66788c; }
 .neko-custom-seat__pick:disabled .neko-custom-seat__provider { color:#526a82; border-color:#b7c8d9; background:#edf3f9; }
 .neko-custom-seat__settings { width:28px; height:30px; font-size:20px !important; }
-.neko-custom-seat button:hover,.neko-session-browser button:hover { background:var(--nws-hover); border-radius:7px; }
+.neko-custom-seat button:hover:not(:disabled),.neko-session-browser button:hover:not(:disabled) { background:var(--nws-hover); border-radius:7px; }
 .neko-session-browser { display:flex; flex-direction:column; flex:1; min-height:80px; overflow:hidden; padding:0 12px; color:var(--nws-text); font:12px/1.5 system-ui,sans-serif; }
 .neko-session-browser__header { display:flex; align-items:center; justify-content:space-between; margin:3px 0 7px; }
 .neko-session-all { text-align:left; font-weight:600 !important; padding:4px; }
@@ -56,7 +56,7 @@ body[data-neko-workspace-shell] button[data-neko-new-session="plus"] { position:
 .neko-rail-companion .neko-companion-character { width:min(40px, 100%); height:min(50px, 100%); transform:none; cursor:inherit; }
 .neko-rail-companion img.neko-companion-poster,.neko-rail-companion video.neko-companion-video { width:100%; height:100%; border-radius:0; object-fit:contain; }
 .neko-rail-companion [hidden] { display:none !important; }
-.neko-companion-character:focus-visible { outline:1px dashed var(--nws-border); outline-offset:-3px; border-radius:12px; }
+.neko-companion-character:focus-visible { outline:2px dashed #4c89ad; outline-offset:-3px; border-radius:12px; }
 .neko-companion-poster,.neko-companion-video { display:block; position:absolute; inset:0; width:100%; height:100%; background:transparent; object-position:center; object-fit:cover; pointer-events:none; }
 .neko-companion-history { position:absolute; z-index:4; bottom:calc(100% + 6px); left:0; right:0; box-sizing:border-box; height:96px; overflow:auto; margin:0; padding:10px; border:1px solid color-mix(in srgb,var(--nws-muted) 18%,transparent); border-radius:10px; background:var(--dsw-specific-sidebar-fill,var(--nws-bg)); box-shadow:0 4px 16px #17303d0a; line-height:18px; white-space:pre-wrap; overflow-wrap:anywhere; }
 .neko-companion-message,.neko-companion-empty { margin:0; font-size:12px; line-height:18px; }
@@ -66,7 +66,7 @@ body[data-neko-workspace-shell] button[data-neko-new-session="plus"] { position:
 .neko-companion-form textarea { flex:1; min-width:0; resize:none; height:34px; padding:7px; box-sizing:border-box; border:1px solid color-mix(in srgb,var(--nws-muted) 22%,transparent); border-radius:8px; color:inherit; background:transparent; font:12px/18px system-ui; }
 .neko-companion-form button { display:grid; place-items:center; flex:none; width:26px; height:30px; padding:3px; border:0; border-radius:6px; background:transparent; color:var(--nws-muted); cursor:pointer; }
 .neko-companion-form button:hover,.neko-companion-history-toggle[aria-expanded="true"] { background:color-mix(in srgb,var(--nws-muted) 9%,transparent); color:var(--nws-text); }
-.neko-companion-form button:focus-visible { outline:1px solid var(--nws-muted); outline-offset:1px; }
+.neko-companion-form button:focus-visible { outline:2px solid #4c89ad; outline-offset:1px; }
 .neko-companion-history-toggle svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round; }
 .neko-office-panel { position:fixed; z-index:28; display:flex; flex-direction:column; box-sizing:border-box; padding:22px clamp(18px,5vw,75px) 24px; color:var(--nws-text); background:var(--dsw-alias-bg-base,#edf6fa); font:14px/1.65 system-ui,sans-serif; }
 .neko-office-panel[hidden],.neko-workspace-modal[hidden],.neko-companion-dock [hidden] { display:none !important; }
@@ -121,10 +121,24 @@ body[data-neko-workspace-shell] button[data-neko-new-session="plus"] { position:
 .neko-seat-editor { display:grid; gap:12px; padding-top:18px; }
 .neko-seat-editor label { display:grid; gap:5px; }
 .neko-seat-editor input,.neko-seat-editor select { width:100%; box-sizing:border-box; background:var(--nws-bg); color:inherit; border:1px solid var(--nws-border); border-radius:7px; padding:7px 9px; font:13px system-ui; }
-.neko-workspace-form-error { color:#bd5c4e; margin:0; }
+.neko-workspace-form-error { color:#b05042; margin:0; }
 .neko-workspace-form-error:empty { display:none; }
 @media(max-height:700px) { .neko-companion-character { height:76px; } .neko-custom-seat__pick { padding-top:4px; padding-bottom:4px; } }
 
 .neko-workspace-connections { margin:0 0 8px; font-size:12px; color:var(--nws-muted); }
 
 body[data-neko-workspace-shell] [data-neko-companion-footer] { display:block !important; width:100%; min-width:0; align-self:stretch; box-sizing:border-box; }
+
+/* Interaction states: hover/press cues on enabled controls only, visible focus
+   rings, and busy/disabled cues. Disabled (e.g. Codex 测试中) never gets hover. */
+.neko-session-browser button:disabled,.neko-custom-seat button:disabled { cursor:not-allowed; }
+.neko-workspace-session:disabled { color:var(--nws-muted); }
+.neko-office-panel button:hover:not(:disabled),.neko-workspace-modal button:hover:not(:disabled) { background:var(--nws-hover); }
+.neko-office-panel button:disabled,.neko-workspace-modal button:disabled { cursor:not-allowed; }
+.neko-custom-seat button:active:not(:disabled),.neko-session-browser button:active:not(:disabled),.neko-office-panel button:active:not(:disabled),.neko-workspace-modal button:active:not(:disabled),.neko-companion-form button:active:not(:disabled),.neko-companion-menu button:active:not(:disabled) { background:var(--dsw-alias-interactive-bg-active,#d0e5ef); }
+.neko-workspace-modal button:focus-visible,.neko-workspace-modal input:focus-visible,.neko-workspace-modal select:focus-visible,.neko-session-search:focus-visible,.neko-companion-form textarea:focus-visible { outline:2px solid #4c89ad; outline-offset:2px; }
+.neko-companion-menu button:focus-visible { box-shadow:inset 0 0 0 2px #4c89ad; }
+.neko-session-refresh[aria-busy="true"],.neko-office-panel button[aria-busy="true"],.neko-workspace-modal button[aria-busy="true"],.neko-companion-menu button[aria-busy="true"] { cursor:progress; }
+.neko-session-refresh[aria-busy="true"] { opacity:.55; }
+.neko-project-list[aria-busy="true"] { opacity:.6; transition:opacity .15s ease; }
+.neko-workspace-form-error:not(:empty) { padding:6px 9px; border-radius:7px; background:#fbeeeb; }

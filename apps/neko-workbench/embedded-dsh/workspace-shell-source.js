@@ -43,6 +43,7 @@ function installWorkspaceShell(options = {}) {
   listHeader.append(allButton, refreshButton);
   const search = el('input', 'neko-session-search'); search.type = 'search'; search.placeholder = '搜索工作会话或项目'; search.setAttribute('aria-label', '搜索工作会话或项目'); search.addEventListener('input', () => { searchText = search.value.toLowerCase(); renderCatalog(); });
   const listStatus = el('p', 'neko-session-status'), projectList = el('div', 'neko-project-list');
+  listStatus.setAttribute('role', 'status'); listStatus.setAttribute('aria-live', 'polite');
   sessionBrowser.append(listHeader, search, listStatus, projectList);
   const dock = own(el('section', 'neko-companion-dock')); dock.setAttribute('aria-label', '主 agent 聊天');
   const character = el('div', 'neko-companion-character');
@@ -404,6 +405,7 @@ function installWorkspaceShell(options = {}) {
     }));
     if (catalog?.nextDshOffset != null) projectList.appendChild(button('加载更多 DSH 会话', 'neko-workspace-more', () => refreshCatalog(true, catalog.nextDshOffset)));
     const unavailable = Object.entries(catalog?.providers || {}).filter(([, status]) => status !== 'ready' && status !== 'testing').map(([name]) => name.toUpperCase());
+    refreshButton.setAttribute('aria-busy', String(listLoading)); projectList.setAttribute('aria-busy', String(listLoading));
     listStatus.textContent = listLoading ? '正在读取本地工作会话…' : unavailable.length ? unavailable.join('、') + ' 会话暂不可读取，可刷新重试' : codexPaused() ? 'Codex 测试中，暂不可用' : rows.length ? '' : seat && !seat.provider ? '请配置这个工作 agent' : '暂无匹配的工作会话';
   }
   async function refreshCatalog(force = false, dshOffset = 0) {

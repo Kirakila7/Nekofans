@@ -1,8 +1,11 @@
-# Local test workbench 0.28.5
+# Local test workbench 0.28.6
 
 The daily artifact is built from this repository. `config/daily-release.json` is the version authority; every app includes `Contents/Resources/WORKBENCH_BUILD.json` with the source commit and SHA-256 of every shipped source file. Historical QA checkouts and profiles are not release inputs.
 
 ## Included local workbench changes
+
+- Interaction and accessibility refinements, with layout, regions, characters and the light-blue palette unchanged. Enabled controls show hover and press states; disabled controls (including Codex, which stays 测试中 and unavailable) show none. Keyboard focus rings are 2px. Async saves expose `aria-busy` and cannot be submitted twice. The session list announces loading and errors. Low-contrast text and buttons now use darker shades of the same hues.
+- Unified layout configuration is easier to understand. The ▤ dialog shows what each region currently holds, labels the sidebar choice 工作区导航, and offers 不显示 to return two panes to one (at least one main pane always remains). Escape closes the dialog. The divider supports arrow keys, Home/End and double-click reset, and reports its value to assistive technology. Drop zones highlight the target region. Panel headers show refresh, copy and error states that the native site view previously covered. A failed save reverts to the last saved layout. The persisted layout format is unchanged. Synthetic JSDOM tests cover these controls. Real community login, Bilibili playback and production DSH layout were not verified in this change.
 
 - When its original workspace position is hidden, the main companion moves into the persistent rail's empty area, where it can roam or be dragged; it returns when the original position is visible. The existing character, interaction menu and chat draft are retained, and reduced-motion settings stop automatic movement.
 - Channel startup protects newer start/pause actions from stale status responses.
