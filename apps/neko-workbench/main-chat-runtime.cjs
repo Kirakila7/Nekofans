@@ -47,13 +47,13 @@ function parseApiInput(input, shared) {
 }
 
 class WorkbenchMainChat {
-  constructor({ dataDir, repositoryRoot, safeStorage, fetch: fetchImpl, initialBackend = 'chat-api', sharedModules } = {}) {
+  constructor({ dataDir, repositoryRoot, safeStorage, fetch: fetchImpl, initialBackend = 'chat-api', sharedModules, memoryProvider } = {}) {
     this.dataDir = path.join(dataDir, 'main-chat');
     this.repositoryRoot = repositoryRoot;
     this.personasDir = path.join(this.dataDir, 'personas');
     this.configFile = path.join(this.dataDir, 'app-config.json');
     this.secretStore = new WorkbenchSecretStore(path.join(this.dataDir, 'secrets', 'chat-api-key.encrypted'), safeStorage);
-    this.fetch = fetchImpl; this.initialBackend = BACKENDS.has(initialBackend) ? initialBackend : 'chat-api';
+    this.fetch = fetchImpl; this.memoryProvider = memoryProvider; this.initialBackend = BACKENDS.has(initialBackend) ? initialBackend : 'chat-api';
     this.shared = sharedModules; this.opened = null; this.listeners = new Set(); this.tail = Promise.resolve();
     this.closed = false; this.backend = this.initialBackend; this.configError = '';
   }
@@ -88,7 +88,7 @@ class WorkbenchMainChat {
   openNow() {
     if (this.closed) throw new Error('聊天服务已关闭');
     this.opened = this.shared.openMainChat({ settings: this.settings, personasDir: this.personasDir,
-      dataDir: this.dataDir, secretStore: this.secretStore, ...(this.fetch ? { fetch: this.fetch } : {}) });
+      dataDir: this.dataDir, secretStore: this.secretStore, ...(this.memoryProvider ? { memory: this.memoryProvider } : {}), ...(this.fetch ? { fetch: this.fetch } : {}) });
     this.offState = this.opened.service.subscribe(() => this.publish());
     this.offMemory = this.opened.memory?.subscribe(() => this.publish());
     this.offSummaries = this.opened.summaries?.subscribe(() => this.publish());
@@ -104,8 +104,9 @@ class WorkbenchMainChat {
     // Querying the macOS keychain can prompt/block. DSH startup does not need it.
     if (checkSecureStorage) this.secureStorageAvailable = this.secretStore.available();
     return clone({ backend: this.backend, settings: this.settings || null, hasKey: this.secretStore.has(),
-      secureStorageAvailable: this.secureStorageAvailable ?? null, ready: !!this.opened, error: this.configError,
-      memoryAvailable: this.backend === 'chat-api' && !!this.opened?.memory,
+      secureStorageAvailable: this.secureStorageAvailable ?? null, ready: !!this.opened, error: this.configError || this.memoryProvider?.error || this.memoryProvider?.service?.error || '',
+      memoryBackend: this.memoryProvider ? 'neko' : 'local',
+      memoryAvailable: this.backend === 'chat-api' && (!!this.opened?.memory || !!this.memoryProvider),
       voiceStatus: '未接入', chat: this.opened?.service.state() || { personaId: PERSONA, phase: 'idle' } });
   }
   subscribe(listener) { this.listeners.add(listener); listener(this.read()); return () => this.listeners.delete(listener); }
@@ -114,7 +115,13 @@ class WorkbenchMainChat {
   async send(text) {
     if (this.closed || this.backend !== 'chat-api' || !this.opened) throw new Error('请先启用聊天 API');
     if (typeof text !== 'string' || !text.trim() || text.length > 8000) throw new Error('请输入 1～8000 字的消息');
-    return this.opened.service.send(text);
+    const result = await this.opened.service.send(text);
+    if (result.status === 'completed' && this.memoryProvider) {
+      try { await this.memoryProvider.commitTurn({ personaId: PERSONA, text }, { personaId: PERSONA, id: result.messageId, text: result.text }); }
+      catch { this.memoryProvider.error ||= '记忆写入未完成，请检查记忆服务'; }
+      this.publish();
+    }
+    return result;
   }
   selectBackend(backend) {
     return this.serial(async () => {
@@ -161,6 +168,7 @@ class WorkbenchMainChat {
     finally { store.close(); }
   }
   async memories() {
+    if (!this.closed && this.backend === 'chat-api' && this.memoryProvider) return { items: await this.memoryProvider.list(), summaries: [], readOnly: true };
     if (this.closed || this.backend !== 'chat-api' || !this.opened?.memory) throw new Error('请在聊天 API 模式管理轻量记忆');
     const [items, summaries] = await Promise.all([this.opened.memory.list(), this.opened.summaries?.list() || []]);
     return { items: items.map(({ audioRef, ...item }) => item), summaries };
@@ -178,7 +186,7 @@ class WorkbenchMainChat {
     else throw new Error('记忆操作无效');
     return this.memories();
   }
-  close() { this.closed = true; this.cancel(); return this.serial(async () => { this.closeOpened(); this.listeners.clear(); }); }
+  close() { this.closed = true; this.cancel(); return this.serial(async () => { await this.memoryProvider?.tail; this.closeOpened(); this.listeners.clear(); }); }
 }
 
 function trustedLocalCaller(event, window, expectedUrl) {

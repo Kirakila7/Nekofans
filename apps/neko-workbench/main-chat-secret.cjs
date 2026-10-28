@@ -8,7 +8,15 @@ function atomicBytes(file, bytes) {
   const temporary = `${file}.${randomUUID()}.tmp`;
   try {
     fs.writeFileSync(temporary, bytes, { flag: 'wx', mode: 0o600 });
-    fs.renameSync(temporary, file);
+    // A reader or antivirus may briefly hold the destination on Windows.
+    // Keep the old file intact and retry the atomic replacement, never unlink it.
+    for (let attempt = 0; ; attempt++) {
+      try { fs.renameSync(temporary, file); break; }
+      catch (error) {
+        if (process.platform !== 'win32' || !['EPERM', 'EACCES', 'EBUSY'].includes(error.code) || attempt >= 8) throw error;
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
+      }
+    }
   } finally { fs.rmSync(temporary, { force: true }); }
 }
 

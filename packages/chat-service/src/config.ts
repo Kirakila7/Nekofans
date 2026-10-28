@@ -111,14 +111,14 @@ export function openMainChat(opts: OpenMainChatOptions): OpenedMainChat {
     });
     // Continue the latest conversation so history survives a restart.
     const conversationId = conversations.latestConversationId(settings.personaId) ?? `main-${randomUUID()}`;
-    summaries = new SqliteSummaryStore(join(dataDir, "memories.sqlite"), conversations);
+    if (!opts.memory) summaries = new SqliteSummaryStore(join(dataDir, "memories.sqlite"), conversations);
     const service = new MainChatService({
       persona: () => personas.get(settings.personaId),
       provider,
       conversations,
       memory,
       summaries,
-      proposeMemories: extractMemoryProposals,
+      proposeMemories: localMemory ? extractMemoryProposals : undefined,
       conversationId,
       maxOutputTokens: settings.maxOutputTokens,
     });
@@ -126,7 +126,9 @@ export function openMainChat(opts: OpenMainChatOptions): OpenedMainChat {
     return {
       service,
       memory: localMemory?.forPersona(settings.personaId),
-      summaries: summaries.forConversation(settings.personaId, conversationId),
+      summaries: summaries?.forConversation(settings.personaId, conversationId) ?? {
+        list: async () => [], sources: async () => [], remove: async () => {}, subscribe: () => () => {},
+      },
       secretStore,
       close() {
         if (closed) return;

@@ -3,11 +3,13 @@
   function mountSettings(host,pet){
     host.innerHTML='<main class="chat-panel"><h1>聊天 API 设置</h1><p>主角色独立聊天，任务继续从 DSH 工作台发起。</p><form class="api-form"><label>协议<select name="protocol"><option value="openai-compatible">OpenAI 兼容</option><option value="anthropic">Anthropic</option></select></label><label>API 基础地址<input name="baseUrl" type="url" maxlength="2048" placeholder="https://example.com/v1"></label><label>模型<input name="model" type="text" maxlength="200" autocomplete="off"></label><div class="api-limits"><label>超时（毫秒）<input name="requestTimeoutMs" type="number" min="1000" max="300000" required></label><label>回复 Token 上限<input name="maxOutputTokens" type="number" min="1" max="32000" required></label></div><label>新密钥<input name="apiKey" type="password" maxlength="16384" autocomplete="new-password" placeholder="留空保留已存密钥"></label><label class="check-label"><input name="clearKey" type="checkbox">清除已保存密钥</label><p class="key-state"></p><p>保存后使用 Chat API，与可选本机 N.E.K.O. 连接互斥。密钥只保存在本机系统加密存储中。</p><p class="feature-status">原生语音：未接入，当前使用文字聊天。</p><button type="submit">保存并使用 Chat API</button><p role="status" aria-live="polite"></p></form><nav class="chat-settings-links"><button type="button" class="open-chat-memory">聊天记忆…</button><button type="button" class="open-local-neko">连接本机 N.E.K.O.（可选）…</button></nav></main>';
     const form=host.querySelector('form'),get=name=>form.elements.namedItem(name),status=host.querySelector('[role=status]'),saved=host.querySelector('.key-state'),button=form.querySelector('button');
-    let loaded=false,disposed=false;
+    let loaded=false,disposed=false,secureStorageAvailable=null;
     function render(snapshot){
       if(disposed||!snapshot)return;
       if(snapshot.settings&&!loaded){for(const name of ['protocol','baseUrl','model','requestTimeoutMs','maxOutputTokens'])get(name).value=String(snapshot.settings[name]??'');loaded=true;}
-      saved.textContent=(snapshot.hasKey?'密钥已加密保存':'尚未保存密钥')+(snapshot.secureStorageAvailable?'':' · 系统加密存储不可用');
+      if(typeof snapshot.secureStorageAvailable==='boolean')secureStorageAvailable=snapshot.secureStorageAvailable;
+      saved.textContent=(snapshot.hasKey?'密钥已加密保存':'尚未保存密钥')+(secureStorageAvailable===false?' · 系统加密存储不可用':secureStorageAvailable===null?' · 正在检查系统加密存储':'');
+      host.querySelector('.feature-status').textContent=snapshot.memoryBackend==='neko'?'聊天记忆：N.E.K.O. 后台服务（使用官方免费模型处理记忆）；原生语音未接入。':'原生语音：未接入，当前使用文字聊天。';
       if(!loaded)status.textContent=snapshot.error||'正在装配聊天服务…';
     }
     host.querySelector('.open-chat-memory').addEventListener('click',()=>pet.call('chat-open-memory').catch(()=>{status.textContent='聊天记忆窗口未能打开';}));
@@ -38,7 +40,8 @@
       const token=++generation;status.textContent='正在读取…';
       try{
         const [memory,messages]=await Promise.all([pet.call('chat-memory-read'),pet.call('chat-history')]);
-        if(disposed||token!==generation)return;items.replaceChildren(node('h2','偏好与事实'));summaries.replaceChildren(node('h2','自动摘要'));
+        if(disposed||token!==generation)return;items.replaceChildren(node('h2','偏好与事实'));summaries.replaceChildren(...(memory.readOnly?[]:[node('h2','自动摘要')]));
+        if(memory.readOnly){host.querySelector('.memory-panel > p').textContent='聊天记忆由 N.E.K.O. 后台服务整理，当前页面仅支持查看。';items.append(node('p','当前使用独立 N.E.K.O. 记忆服务；此处暂时仅支持查看。','empty-state'));for(const item of memory.items)items.append(node('p',item.text,'memory-card'));history.replaceChildren(...messages.slice(-60).map(message=>node('p',(message.role==='user'?'你：':'角色：')+message.text,'history-message')));status.textContent='已读取 N.E.K.O. 记忆';return;}
         if(!memory.items.length)items.append(node('p','还没有记忆；聊天产生的候选会显示在这里。','empty-state'));
         for(const item of memory.items){
           const card=node('article',undefined,'memory-card'),heading=node('p',item.confirmation==='confirmed'?'已确认':'待确认','memory-badge');
