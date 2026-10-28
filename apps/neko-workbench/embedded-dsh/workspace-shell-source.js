@@ -263,7 +263,7 @@ function installWorkspaceShell(options = {}) {
     }
     return choices;
   }
-  function connectionSummary() { const connected = phase => ['ready', 'connected'].includes(phase) ? '已连接' : phase === 'error' ? '连接出错' : '未连接'; return 'N.E.K.O.：' + connected(state?.neko?.connection) + ' · 工作台：' + connected(state?.workbench?.connection); }
+  function connectionSummary() { const connected = phase => ['ready', 'connected'].includes(phase) ? '已连接' : phase === 'starting' ? '启动中' : phase === 'error' ? '连接出错' : '未连接'; return '记忆服务：' + (state?.memory?.provider === 'neko' ? connected(state.memory.connection) : '本地轻量记忆') + ' · N.E.K.O. 客户端：' + connected(state?.neko?.connection) + ' · 工作台：' + connected(state?.workbench?.connection); }
   function openSettings(kind = 'general', id) {
     hideSocial(); modalBody.replaceChildren(); modalTitle.textContent = kind === 'seat' ? '自定义工作 agent' : '工作台设置'; modal.setAttribute('aria-label', modalTitle.textContent); modal.hidden = false;
     if (kind !== 'seat') {
