@@ -123,14 +123,23 @@ function installUnifiedLayout(options = {}) {
       item = item.parentElement;
     }
     if (!frameNode || !center) return null;
-    const bounds = frameNode.getBoundingClientRect(), sideRect = sidebar.getBoundingClientRect();
+    const bounds = frameNode.getBoundingClientRect(), slotRect = sidebar.getBoundingClientRect();
+    // DSH's sidebar slot can be display:contents and therefore have no box;
+    // the corresponding grid track is the visible sidebar in that case.
+    const sideRect = slotRect.width > 0 && slotRect.height > 0 ? slotRect : item.getBoundingClientRect();
     const columns = win.getComputedStyle(frameNode).gridTemplateColumns.trim().split(/\s+/).map(Number.parseFloat);
     if (columns.length < 2 || !Number.isFinite(columns[0]) || !Number.isFinite(columns[1]) || columns[1] < 100) return null;
     const full = { x: bounds.left + columns[0], y: bounds.top, width: columns[1], height: bounds.height };
     if (![full.x, full.y, full.width, full.height].every(Number.isFinite) || full.height < 100) return null;
     let sideBottom = sideRect.bottom;
-    for (const selector of ['.neko-companion-dock', '[data-slot="settings.launcher"]']) {
-      const part = sidebar.querySelector(selector)?.getBoundingClientRect();
+    const settingsSlot = sidebar.querySelector('[data-slot="sidebar.settings"]') || item.querySelector('[data-slot="sidebar.settings"]');
+    const footer = sidebar.querySelector('[data-neko-companion-footer]') || item.querySelector('[data-neko-companion-footer]');
+    const dock = sidebar.querySelector('.neko-companion-dock') || item.querySelector('.neko-companion-dock');
+    const launcher = sidebar.querySelector('[data-slot="settings.launcher"]') || item.querySelector('[data-slot="settings.launcher"]');
+    // The native settings slot may itself be display:contents; its parent is
+    // the visible footer containing both the companion and account area.
+    for (const node of [settingsSlot?.parentElement, footer, dock, launcher]) {
+      const part = node?.getBoundingClientRect();
       if (part && part.height > 0 && part.top > sideRect.top + 60) sideBottom = Math.min(sideBottom, part.top);
     }
     return { frameNode, center, full, side: { x: sideRect.left, y: sideRect.top, width: sideRect.width, height: Math.max(0, sideBottom - sideRect.top) } };

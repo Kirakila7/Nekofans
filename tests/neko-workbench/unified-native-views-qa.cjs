@@ -58,12 +58,14 @@ if (!process.versions.electron || process.env.NEKO_UNIFIED_NATIVE_QA_CHILD !== '
     const fixture = `<!doctype html><html><head><style>
       html,body{height:100%;margin:0}.neko-side-rail{position:fixed;left:0;top:0;width:64px;height:100%;z-index:40}
       #frame{display:grid;grid-template-columns:220px minmax(0,1fr);margin-left:64px;width:calc(100% - 64px);height:100%}
-      [data-slot=sidebar]{position:relative;height:100%;width:220px;box-sizing:border-box}
+      #side-track{position:relative;height:100%;width:220px;box-sizing:border-box}
+      [data-slot=sidebar],[data-slot="sidebar.settings"]{display:contents}
+      .settingsArea{position:absolute;bottom:0;height:124px;width:100%}
       .neko-companion-dock{position:absolute;bottom:0;height:120px;width:100%}
       .fixture_centerCol_hash42{display:flex;flex-direction:column;min-width:0;overflow:hidden}
       #draft{width:90%;height:90px}.neko-unified-panel{font-family:system-ui}
       </style></head><body><aside class="neko-side-rail" data-neko-side-rail><div class="neko-workspace-rail-controls"></div></aside>
-      <div id="frame"><div><aside data-slot="sidebar"><div>原有工作区</div><div class="neko-companion-dock">原有角色与账号区</div></aside></div>
+      <div id="frame"><div id="side-track"><aside data-slot="sidebar"><div>原有工作区</div><div class="settingsArea"><div data-slot="sidebar.settings"><div class="neko-companion-dock">原有角色与账号区</div><div data-slot="settings.launcher"></div></div></div></aside></div>
       <main class="fixture_centerCol_hash42"><textarea id="draft">local coding draft</textarea></main></div></body></html>`;
     const host = new BrowserWindow({ width:1200, height:800, useContentSize:true, show:false, webPreferences:{ sandbox:true, contextIsolation:true, nodeIntegration:false, preload } });
     const preloadUrl = require('node:url').pathToFileURL(preload).href;
@@ -123,8 +125,13 @@ if (!process.versions.electron || process.env.NEKO_UNIFIED_NATIVE_QA_CHILD !== '
       const video = children.find(v=>v.webContents?.getURL().startsWith('https://m.bilibili.com/'));
       assert(video && children.includes(community), 'community and video views coexist after real UI interaction');
       const sidebar = await read(`(() => {const h=document.querySelector('[data-neko-unified-slot=side] header').getBoundingClientRect(),
-        dock=document.querySelector('.neko-companion-dock').getBoundingClientRect();return {headerBottom:h.bottom,dockTop:dock.top};})()`);
+        dock=document.querySelector('.neko-companion-dock').getBoundingClientRect(),slot=document.querySelector('[data-slot=sidebar]').getBoundingClientRect(),
+        track=document.querySelector('#side-track').getBoundingClientRect(),footer=document.querySelector('.settingsArea').getBoundingClientRect();
+        return {headerBottom:h.bottom,dockTop:dock.top,slotWidth:slot.width,slotHeight:slot.height,trackWidth:track.width,footerTop:footer.top};})()`);
+      assert.equal(sidebar.slotWidth, 0); assert.equal(sidebar.slotHeight, 0);
+      assert(sidebar.trackWidth >= 100, 'display:contents sidebar is mapped to its visible grid track');
       assert(video.getBounds().y >= Math.floor(sidebar.headerBottom));
+      assert(video.getBounds().y + video.getBounds().height <= Math.ceil(sidebar.footerTop), 'side web view does not cover settings footer');
       assert(video.getBounds().y + video.getBounds().height <= Math.ceil(sidebar.dockTop), 'side web view does not cover companion/account');
       assert.equal(await read("document.querySelector('#draft').value"), 'local coding draft');
       assert(requests.some(r=>r.action==='open' && r.slot==='right' && r.site==='community'));

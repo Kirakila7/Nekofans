@@ -103,3 +103,21 @@ test('hidden overlay and account ancestors neither block panels nor miss later v
   lateRole.removeAttribute('role'); await sleep(); assert.equal(count('open'),6,'removing dialog role restores the view');
   f.cleanup();
 });
+test('display:contents sidebar uses the grid track and preserves the companion and settings footer', {skip:!JSDOM}, async t=>{
+  const f=fixture(t); await sleep();
+  const sidebar=f.d.querySelector('[data-slot="sidebar"]'), track=f.d.querySelector('#track');
+  sidebar.style.display='contents';
+  sidebar.getBoundingClientRect=()=>({left:0,top:0,right:0,bottom:0,width:0,height:0});
+  track.getBoundingClientRect=()=>({left:64,top:0,right:284,bottom:780,width:220,height:780});
+  const area=f.d.createElement('div'), slot=f.d.createElement('div'); slot.dataset.slot='sidebar.settings';
+  const dock=f.d.querySelector('.neko-companion-dock'), launcher=f.d.querySelector('[data-slot="settings.launcher"]');
+  area.getBoundingClientRect=()=>({left:64,top:635,right:284,bottom:780,width:220,height:145});
+  area.appendChild(slot); slot.append(dock,launcher); sidebar.appendChild(area);
+  await openConfig(f); select(f,'target','side');select(f,'content','community');await sleep();
+  f.d.querySelector('.neko-unified-config .close').click();await sleep();
+  const opened=f.calls.find(x=>x.action==='open'&&x.slot==='side'); assert(opened, 'side view is not hidden when slot has no layout box');
+  assert.equal(opened.site,'community');assert.equal(opened.bounds.x,64);assert.equal(opened.bounds.width,220);
+  assert(opened.bounds.y+opened.bounds.height<=635,'native view ends before account and companion footer');
+  assert.equal(dock.querySelector('textarea').value,'personal draft'); assert.equal(f.d.querySelector('#draft').value,'coding draft');
+  f.cleanup();
+});
