@@ -8,9 +8,9 @@ const { validCustom } = require('./workbench-appearance.cjs');
 
 const AVATAR_IDS = new Set(['yui', 'devcat', 'bigfish', 'claude', 'gemini', 'custom']);
 const DEFAULT_ROLES = Object.freeze([
-  Object.freeze({ id: 'yui', name: '开发喵', avatarId: 'devcat', customDataUrl: null, backend: 'codex', enabled: true }),
-  Object.freeze({ id: 'bigfish', name: '大肥鱼', avatarId: 'bigfish', customDataUrl: null, backend: 'dsh', enabled: true }),
-  Object.freeze({ id: 'claude', name: 'Claude小姐', avatarId: 'claude', customDataUrl: null, backend: null, enabled: false }),
+  Object.freeze({ id: 'yui', name: 'Yui', avatarId: 'yui', customDataUrl: null, enabled: false }),
+  Object.freeze({ id: 'bigfish', name: '大肥鱼', avatarId: 'bigfish', customDataUrl: null, enabled: true }),
+  Object.freeze({ id: 'claude', name: 'Claude小姐', avatarId: 'claude', customDataUrl: null, enabled: false }),
 ]);
 const IMAGE_ERROR = '头像必须是有效的 PNG 图片，且不超过 1 MB。';
 
@@ -117,15 +117,9 @@ function createRolesStore(file) {
         value.roles = value.roles.map(role => {
           const entry = saved.roles.find(item => item && typeof item === 'object' && item.id === role.id);
           if (!entry) return role;
-          // Old role seats keep their appearance and remain unbound until the
-          // user explicitly chooses an assistant in the settings.
-          const legacy = !Object.hasOwn(entry, 'backend');
-          if (role.id === 'yui' && legacy) { role.name = 'Yui'; role.avatarId = 'yui'; role.backend = null; }
           try { role.name = normalizeName(entry.name); } catch {}
           if (validPngDataUrl(entry.customDataUrl)) role.customDataUrl = entry.customDataUrl;
           if (AVATAR_IDS.has(entry.avatarId) && (entry.avatarId !== 'custom' || role.customDataUrl)) role.avatarId = entry.avatarId;
-          if (role.id !== 'bigfish') role.backend = entry.backend === 'codex' ? 'codex' : null;
-          role.enabled = role.backend !== null;
           return role;
         });
       }
@@ -161,13 +155,10 @@ function createRolesStore(file) {
   }
   return {
     get,
-    update(id, patch, { codexBusy = false } = {}) {
-      const current = findRole(id);
+    update(id, patch) {
+      findRole(id);
       if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw new Error('角色设置格式无效。');
       if (Object.hasOwn(patch, 'customDataUrl')) throw new Error('自定义头像请通过上传 PNG 图片设置。');
-      if (codexBusy && current.backend === 'codex' && Object.hasOwn(patch, 'backend') && patch.backend === null && value.roles.filter(item => item.backend === 'codex').length === 1) {
-        throw new Error('Codex 正在处理任务，请先完成或停止任务，再解除最后一个 Codex 角色的绑定。');
-      }
       const next = get();
       const role = next.roles.find(item => item.id === id);
       if (Object.hasOwn(patch, 'name')) role.name = normalizeName(patch.name);
@@ -177,17 +168,7 @@ function createRolesStore(file) {
         }
         role.avatarId = patch.avatarId;
       }
-      if (Object.hasOwn(patch, 'backend')) {
-        if (id === 'bigfish') {
-          if (patch.backend !== 'dsh') throw new Error('大肥鱼固定连接 DSH。');
-        } else {
-          if (patch.backend !== null && patch.backend !== 'codex') throw new Error('请选择 Codex 或暂不连接。');
-          role.backend = patch.backend;
-          role.enabled = role.backend !== null;
-          if (!role.enabled && next.activeId === id) next.activeId = 'bigfish';
-        }
-      }
-      // Identity and availability are derived by code, never from arbitrary fields.
+      // Role identity, availability, backend routing and arbitrary fields are code-owned.
       return save(next);
     },
     upload(id, pngDataUrl) {
@@ -201,7 +182,7 @@ function createRolesStore(file) {
     },
     select(id) {
       const role = findRole(id);
-      if (!role.enabled) throw new Error(`${role.name} 暂未接入，请在角色设置中选择助手。`);
+      if (!role.enabled) throw new Error(`${role.name} 暂未接入，当前仅大肥鱼可用。`);
       const next = get();
       next.activeId = role.id;
       return save(next);

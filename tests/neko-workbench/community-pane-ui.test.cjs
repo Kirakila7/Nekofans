@@ -87,6 +87,14 @@ test('opening, resizing and returning preserve the original coding DOM and focus
   assert.equal(f.workbenchUnsubscribed, true);
 });
 
+test('B站 rail home requests a real homepage navigation while retaining the coding draft', async () => {
+  const f = fixture(); f.main.textContent = 'unsent coding draft';
+  await f.pane.open('bilibili', { home: true });
+  assert.equal(f.calls[0].site, 'bilibili'); assert.equal(f.calls[0].home, true);
+  assert.equal(f.main.textContent, 'unsent coding draft');
+  await f.pane.hide(); f.pane.dispose();
+});
+
 test('B站 immersion expands the same view and restores sidebar, bounds and draft on exit', async () => {
   const f = fixture();
   f.main.textContent = 'unsent coding draft';

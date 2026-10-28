@@ -66,7 +66,7 @@ function selectDesktopPets(actors,orders,limit,now=Date.now()){
   const pinned=ordered.filter(actor=>actor.pinned).slice(0,capacity);
   const active=ordered.filter(actor=>!actor.pinned&&actor.active);
   const selected=[...pinned,...fairTake(active,families,capacity-pinned.length,tick)];
-  const feedback=ordered.filter(actor=>!actor.pinned&&!actor.active&&actor.displayUntil>now);
+  const feedback=ordered.filter(actor=>!actor.pinned&&!actor.active&&(actor.returningHome||actor.displayUntil>now));
   selected.push(...fairTake(feedback,families,capacity-selected.length,tick));
   const chosen=new Set(selected);
   // Selection priority controls membership; visible order still keeps a task
@@ -77,8 +77,8 @@ function nextDesktopRefreshAt(actors,orders,limit,now=Date.now()){
   const ordered=orderedDesktopPets(actors,orders),capacity=normalizeLimit(limit);
   const pinned=Math.min(capacity,ordered.filter(actor=>actor.pinned).length),free=capacity-pinned;
   const active=ordered.filter(actor=>!actor.pinned&&actor.active).length;
-  const feedback=ordered.filter(actor=>!actor.pinned&&!actor.active&&actor.displayUntil>now);
-  const candidates=feedback.map(actor=>actor.displayUntil);
+  const feedback=ordered.filter(actor=>!actor.pinned&&!actor.active&&(actor.returningHome||actor.displayUntil>now));
+  const candidates=feedback.filter(actor=>actor.displayUntil>now).map(actor=>actor.displayUntil);
   const feedbackSlots=Math.max(0,free-active);
   if(free>0&&(active>free||(feedbackSlots>0&&feedback.length>feedbackSlots)))candidates.push((Math.floor(now/DESKTOP_ROTATION_MS)+1)*DESKTOP_ROTATION_MS);
   return candidates.length?Math.min(...candidates):null;

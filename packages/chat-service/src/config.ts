@@ -72,6 +72,10 @@ export interface OpenMainChatOptions {
   /** Default: DPAPI file at <dataDir>/secrets/chat-api-key.dpapi. */
   secretStore?: SecretStore;
   memory?: MemoryProvider;
+  memoryContext?: import("./service.ts").MainChatServiceOptions["memoryContext"];
+  onTurnSaved?: import("./service.ts").MainChatServiceOptions["onTurnSaved"];
+  /** Disable local proposal/summary processing when a native engine owns memory. */
+  localMemoryProcessing?: boolean;
 }
 
 export interface OpenedMainChat {
@@ -116,9 +120,11 @@ export function openMainChat(opts: OpenMainChatOptions): OpenedMainChat {
       persona: () => personas.get(settings.personaId),
       provider,
       conversations,
-      memory,
-      summaries,
-      proposeMemories: extractMemoryProposals,
+      memory: opts.localMemoryProcessing === false ? undefined : memory,
+      memoryContext: opts.memoryContext,
+      onTurnSaved: opts.onTurnSaved,
+      summaries: opts.localMemoryProcessing === false ? undefined : summaries,
+      proposeMemories: opts.localMemoryProcessing === false ? undefined : extractMemoryProposals,
       conversationId,
       maxOutputTokens: settings.maxOutputTokens,
     });

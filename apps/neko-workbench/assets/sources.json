@@ -13,5 +13,19 @@
     "speaking": "碎碎念-对屏碎碎念",
     "drag": "被鼠标拖拽悬空反馈",
     "hello": "点击回应-元气挥手"
+  },
+  "derivedAssets": {
+    "subagentRunning": {
+      "source": "dsh-pet@0.3.7/assets/webm/原地左转奔跑.webm",
+      "sourceSha256": "79882aedd7b77caaacce1a34dece68e2f001a3dbfa5f9d049c1ce2fc04518d52",
+      "file": "original-status/子代理-持续奔跑.webm",
+      "trimSeconds": [
+        2,
+        3.9
+      ],
+      "sha256": "e71f95cc3ec7343278f188e4811b487f8354557ddb69ab82c238c1c958b9a39c",
+      "encoding": "VP9 alpha; running segment loop; no generated replacement",
+      "license": "LICENSE.dsh-pet"
+    }
   }
 }

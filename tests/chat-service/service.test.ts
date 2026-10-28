@@ -110,6 +110,20 @@ test("streams connecting -> replying -> idle and saves both messages", async () 
   assert.deepEqual(p.inputs[0].messages.map((m) => m.text), ["你好"]);
 });
 
+test("stalled native memory handoff does not delay completion of a saved reply", { timeout: 2000 }, async () => {
+  const entered = gate(), stalled = gate();
+  const svc = service(fakeProvider([[{ delta: "saved" }, { complete: "native-handoff" }]]), {
+    onTurnSaved: async () => { entered.open(); await stalled.promise; },
+  });
+  try {
+    const pending = svc.send("remember this");
+    await entered.promise;
+    assert.equal((await pending).status, "completed");
+    assert.equal(svc.state().phase, "idle");
+    assert.deepEqual((await store.recent("bigfish", svc.conversationId, 10)).map(m => m.role), ["user", "assistant"]);
+  } finally { stalled.open(); svc.dispose(); }
+});
+
 test("state() returns a copy", () => {
   const svc = service(fakeProvider([]));
   const s = svc.state();
@@ -194,6 +208,7 @@ test("API errors resolve with fixed text, keep the user message, save no reply",
   const raw = "upstream said sk-secret-123";
   const cases: Array<[unknown, string, string]> = [
     [new ChatApiError("auth", raw, 401), "auth", "API 密钥无效或没有权限"],
+    [new ChatApiError("insufficient_balance", raw, 402), "insufficient_balance", "DeepSeek API 余额不足，请检查 API 平台余额"],
     [new ChatApiError("timeout", raw), "timeout", "聊天 API 响应超时"],
     [new Error(raw), "internal", "聊天 API 出错了"],
   ];
