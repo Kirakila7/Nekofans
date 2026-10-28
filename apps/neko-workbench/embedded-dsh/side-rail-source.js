@@ -12,6 +12,13 @@ function installWorkbenchSideRail(options = {}) {
   const theme = doc.createElement('div'); theme.className = 'neko-side-rail__theme'; theme.setAttribute('aria-hidden', 'true');
   const space = doc.createElement('div'); space.className = 'neko-side-rail__space'; space.setAttribute('aria-hidden', 'true');
   const bottom = doc.createElement('nav'); bottom.className = 'neko-side-rail__bottom'; bottom.setAttribute('aria-label', 'B站与养鱼');
+  const expand = doc.createElement('button'); expand.type = 'button'; expand.className = 'neko-side-rail__button neko-side-rail__expand';
+  expand.setAttribute('aria-label', '展开侧边栏'); expand.title = '展开侧边栏'; expand.hidden = true;
+  const expandIcon = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  expandIcon.setAttribute('viewBox', '0 0 24 24'); expandIcon.setAttribute('aria-hidden', 'true');
+  const expandPath = doc.createElementNS('http://www.w3.org/2000/svg', 'path');
+  for (const [key, value] of Object.entries({ d: 'M5 4.5h14a1.5 1.5 0 0 1 1.5 1.5v12a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 18V6A1.5 1.5 0 0 1 5 4.5Zm4.5 0v15M13 9l3 3-3 3', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.6, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' })) expandPath.setAttribute(key, value);
+  expandIcon.appendChild(expandPath); expand.appendChild(expandIcon);
   const bili = doc.createElement('button'); bili.type = 'button'; bili.className = 'neko-side-rail__button neko-side-rail__bilibili neko-community neko-bilibili';
   bili.setAttribute('aria-label', '哔哩哔哩主页'); bili.title = '哔哩哔哩主页';
   const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -32,10 +39,17 @@ function installWorkbenchSideRail(options = {}) {
   if (/^data:image\/(?:png|webp|jpeg);base64,/.test(options.accountAvatar || '')) accountImage.src = options.accountAvatar;
   account.appendChild(accountImage);
   const notice = doc.createElement('p'); notice.className = 'neko-side-rail__notice'; notice.hidden = true; notice.setAttribute('role', 'status');
-  bottom.append(bili, fish, account); rail.append(theme, space, bottom, notice);
+  bottom.append(expand, bili, fish, account); rail.append(theme, space, bottom, notice);
   const style = doc.createElement('style'); style.dataset.nekoSideRailStyle = ''; style.textContent = options.cssText || '';
   const originalBodyMarker = doc.body.getAttribute('data-neko-side-rail-layout');
-  const claimed = new Map(); let stopped = false, queued = false, pending = false, appRoot = null, nativeAccount = null;
+  const claimed = new Map(); let stopped = false, queued = false, pending = false, appRoot = null, nativeAccount = null, nativeToggle = null, hiddenFrame = null, previousGrid = null, sidebarDrag = null;
+  function releaseFrame() {
+    if (!hiddenFrame) return;
+    release(hiddenFrame, 'data-neko-sidebar-hidden-grid');
+    if (previousGrid?.value) hiddenFrame.style.setProperty('--neko-hidden-grid', previousGrid.value, previousGrid.priority);
+    else hiddenFrame.style.removeProperty('--neko-hidden-grid');
+    hiddenFrame = null; previousGrid = null;
+  }
   function mark(node, name, value = '') {
     if (!node) return;
     if (!claimed.has(node)) claimed.set(node, new Map());
@@ -55,6 +69,17 @@ function installWorkbenchSideRail(options = {}) {
   function sync() {
     queued = false; if (stopped) return;
     const sidebar = doc.querySelector('[data-slot="sidebar"]');
+    const frame = sidebar?.closest('[data-sidebar-collapsed="true"]');
+    nativeToggle = frame ? [...sidebar.querySelectorAll('button')].find(button => /^(打开侧边栏|展开侧边栏|open sidebar|expand sidebar)$/i.test((button.getAttribute('aria-label') || button.getAttribute('title') || '').trim())) : null;
+    const columns = frame?.style.gridTemplateColumns || '';
+    const hiddenColumns = /^\s*\S+\s+/.test(columns) ? columns.replace(/^\s*\S+\s+/, '0px ') : '';
+    if (hiddenFrame && (hiddenFrame !== frame || !nativeToggle || !hiddenColumns)) releaseFrame();
+    if (frame && nativeToggle && hiddenColumns) {
+      if (!hiddenFrame) { hiddenFrame = frame; previousGrid = { value: frame.style.getPropertyValue('--neko-hidden-grid'), priority: frame.style.getPropertyPriority('--neko-hidden-grid') }; }
+      if (frame.style.getPropertyValue('--neko-hidden-grid') !== hiddenColumns) frame.style.setProperty('--neko-hidden-grid', hiddenColumns);
+      mark(frame, 'data-neko-sidebar-hidden-grid');
+    }
+    expand.hidden = !hiddenFrame;
     let next = sidebar;
     while (next?.parentElement && next.parentElement !== doc.body) next = next.parentElement;
     if (!next || next === doc.body || next === rail || next.parentElement !== doc.body) next = null;
@@ -90,6 +115,21 @@ function installWorkbenchSideRail(options = {}) {
     finally { pending = false; if (!stopped) button.removeAttribute('aria-busy'); }
   }
   const onBili = () => act(bili, () => options.openBilibiliHome());
+  const onExpand = () => { if (!stopped && nativeToggle?.isConnected) nativeToggle.click(); };
+  const onDragStart = event => {
+    const handle = event.target?.closest?.('[data-side="sidebar"]');
+    if (event.button !== 0 || !handle) return;
+    const sidebar = doc.querySelector('[data-slot="sidebar"]');
+    if (!sidebar || !handle.parentElement?.contains(sidebar)) return;
+    sidebarDrag = { pointerId: event.pointerId, frame: handle.parentElement };
+  };
+  const onDragEnd = event => {
+    const drag = sidebarDrag; sidebarDrag = null;
+    if (!drag || drag.pointerId !== event.pointerId || event.type !== 'pointerup' || stopped) return;
+    const sidebar = doc.querySelector('[data-slot="sidebar"]');
+    const close = [...(sidebar?.querySelectorAll('button') || [])].find(button => /^(收起侧边栏|关闭侧边栏|close sidebar|collapse sidebar)$/i.test((button.getAttribute('aria-label') || button.getAttribute('title') || '').trim()));
+    if (close && event.clientX - drag.frame.getBoundingClientRect().left < 160) close.click();
+  };
   const onFish = () => act(fish, () => bridge.action('fish-settings'));
   const onAccount = () => {
     if (!nativeAccount?.isConnected || stopped) return;
@@ -99,16 +139,19 @@ function installWorkbenchSideRail(options = {}) {
     if (event.target !== nativeAccount) return;
     Promise.resolve().then(() => { if (!stopped && nativeAccount?.getAttribute('aria-expanded') !== 'true') account.focus(); });
   };
-  bili.addEventListener('click', onBili); fish.addEventListener('click', onFish);
+  expand.addEventListener('click', onExpand); bili.addEventListener('click', onBili); fish.addEventListener('click', onFish);
   account.addEventListener('click', onAccount); doc.addEventListener('focusin', onFocus);
+  doc.addEventListener('pointerdown', onDragStart, true); doc.addEventListener('pointerup', onDragEnd); doc.addEventListener('pointercancel', onDragEnd);
   doc.head.appendChild(style); doc.body.prepend(rail); doc.body.setAttribute('data-neko-side-rail-layout', '');
   const observer = new win.MutationObserver(schedule);
-  observer.observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-label', 'aria-expanded'] });
+  observer.observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-label', 'aria-expanded', 'data-sidebar-collapsed', 'style'] });
   sync();
   return () => {
     if (stopped) return; stopped = true; observer.disconnect();
-    bili.removeEventListener('click', onBili); fish.removeEventListener('click', onFish);
+    expand.removeEventListener('click', onExpand); bili.removeEventListener('click', onBili); fish.removeEventListener('click', onFish);
     account.removeEventListener('click', onAccount); doc.removeEventListener('focusin', onFocus);
+    doc.removeEventListener('pointerdown', onDragStart, true); doc.removeEventListener('pointerup', onDragEnd); doc.removeEventListener('pointercancel', onDragEnd);
+    releaseFrame();
     for (const [node, attrs] of [...claimed]) for (const name of [...attrs.keys()]) release(node, name);
     if (doc.body.getAttribute('data-neko-side-rail-layout') === '') {
       if (originalBodyMarker === null) doc.body.removeAttribute('data-neko-side-rail-layout');
