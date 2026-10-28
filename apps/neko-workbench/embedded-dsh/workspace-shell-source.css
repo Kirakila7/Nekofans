@@ -49,8 +49,11 @@ body[data-neko-workspace-shell] button[data-neko-new-session="plus"] { position:
 .neko-companion-menu button:disabled { opacity:.5; cursor:wait; }
 .neko-companion-menu__status { max-width:220px; margin:3px 8px; color:var(--nws-muted); font-size:11px; overflow-wrap:anywhere; }
 .neko-companion-menu__status:empty { display:none; }
-.neko-rail-companion { flex:none; width:44px; height:52px; padding:0; }
-.neko-rail-companion .neko-companion-character { width:40px; height:50px; transform:none; cursor:pointer; }
+.neko-side-rail__space { position:relative; width:calc(100% + 24px); overflow:hidden; }
+.neko-rail-companion { flex:none; width:44px; height:52px; padding:0; cursor:pointer; }
+.neko-rail-companion[data-neko-rail-roam] { position:absolute; left:0; top:0; z-index:1; max-width:100%; max-height:100%; touch-action:none; cursor:grab; }
+.neko-rail-companion[data-dragging="true"] { cursor:grabbing; }
+.neko-rail-companion .neko-companion-character { width:min(40px, 100%); height:min(50px, 100%); transform:none; cursor:inherit; }
 .neko-rail-companion img.neko-companion-poster,.neko-rail-companion video.neko-companion-video { width:100%; height:100%; border-radius:0; object-fit:contain; }
 .neko-rail-companion [hidden] { display:none !important; }
 .neko-companion-character:focus-visible { outline:1px dashed var(--nws-border); outline-offset:-3px; border-radius:12px; }

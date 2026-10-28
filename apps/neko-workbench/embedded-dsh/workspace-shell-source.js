@@ -117,9 +117,79 @@ function installWorkspaceShell(options = {}) {
     if (expand && !expand.hidden) expand.click();
     dock.scrollIntoView?.({ block: 'nearest' }); chatInput.focus();
   }
-  const railCompanion = own(button('', 'neko-side-rail__button neko-rail-companion', () => toggleCompanionMenu(railCompanion)));
-  railCompanion.hidden = true; railCompanion.title = '大肥鱼 · 点击互动';
-  railCompanion.setAttribute('aria-label', '大肥鱼互动菜单');
+  const railCompanion = own(button('', 'neko-side-rail__button neko-rail-companion', () => {
+    if (suppressRailClick) { suppressRailClick = false; return; }
+    toggleCompanionMenu(railCompanion);
+  }));
+  railCompanion.hidden = true; railCompanion.title = '点击互动 · 拖动位置 · 方向键移动';
+  railCompanion.setAttribute('aria-label', '大肥鱼互动菜单，可拖动，方向键移动');
+  let railSpace = null, railSpaceBeforeAria = null, railX = null, railY = null, railDrag = null;
+  let railWalkTimer = null, suppressRailClick = false, railClickTimer = null, lastRailSize = '';
+  function railBounds() {
+    if (!railSpace) return null;
+    const space = railSpace.getBoundingClientRect(), pet = railCompanion.getBoundingClientRect();
+    if (space.width <= 0 || space.height <= 0) return null;
+    return { space, x: Math.max(0, space.width - (pet.width || Math.min(44, space.width))), y: Math.max(0, space.height - (pet.height || Math.min(52, space.height))) };
+  }
+  function stopRailWalking() { if (railWalkTimer !== null) win.clearTimeout(railWalkTimer); railWalkTimer = null; }
+  function setRailPosition(x, y, duration = 0) {
+    const bounds = railBounds(); if (!bounds) return;
+    railX = Math.max(0, Math.min(bounds.x, Number.isFinite(x) ? x : bounds.x / 2));
+    railY = Math.max(0, Math.min(bounds.y, Number.isFinite(y) ? y : 0));
+    railCompanion.style.transition = duration > 0 ? `left ${duration}ms linear, top ${duration}ms linear` : 'none';
+    railCompanion.style.left = railX + 'px'; railCompanion.style.top = railY + 'px';
+  }
+  function syncRailWalking() {
+    stopRailWalking();
+    if (disposed || !companionInRail || railCompanion.hidden || railDrag || !companionMenu.hidden) return;
+    if (motion?.matches || doc.visibilityState === 'hidden') { freezeRailPosition(); return; }
+    const bounds = railBounds(); if (!bounds) return;
+    if (railX === null || railY === null) setRailPosition(bounds.x / 2, 0);
+    if (bounds.x < 1 && bounds.y < 1) return;
+    railWalkTimer = win.setTimeout(() => {
+      railWalkTimer = null;
+      const current = railBounds();
+      if (!current || disposed || !companionInRail || railCompanion.hidden || motion?.matches || doc.visibilityState === 'hidden' || railDrag || !companionMenu.hidden) return;
+      const x = Math.random() * current.x, y = Math.random() * current.y;
+      const duration = Math.max(1200, Math.min(12000, Math.hypot(x - railX, y - railY) / 20 * 1000));
+      setRailPosition(x, y, duration);
+      railWalkTimer = win.setTimeout(syncRailWalking, duration + 1800);
+    }, 1800);
+  }
+  function freezeRailPosition() {
+    const bounds = railBounds(); if (!bounds) return;
+    const pet = railCompanion.getBoundingClientRect();
+    setRailPosition(pet.left - bounds.space.left, pet.top - bounds.space.top);
+  }
+  railCompanion.addEventListener('pointerdown', event => {
+    if (event.button !== 0 || !companionInRail || !railSpace || railDrag) return;
+    stopRailWalking(); freezeRailPosition(); suppressRailClick = false;
+    railDrag = { id:event.pointerId, x:event.clientX, y:event.clientY, left:railX, top:railY, moved:false };
+    try { railCompanion.setPointerCapture(event.pointerId); } catch {}
+  });
+  railCompanion.addEventListener('pointermove', event => {
+    if (!railDrag || railDrag.id !== event.pointerId) return;
+    const dx = event.clientX - railDrag.x, dy = event.clientY - railDrag.y;
+    if (!railDrag.moved && Math.hypot(dx, dy) > 5) { railDrag.moved = true; closeCompanionMenu(false); railCompanion.dataset.dragging = 'true'; }
+    if (railDrag.moved) { event.preventDefault(); setRailPosition(railDrag.left + dx, railDrag.top + dy); }
+  });
+  function finishRailDrag(event) {
+    if (!railDrag || railDrag.id !== event.pointerId) return;
+    const moved = railDrag.moved || event.type !== 'pointerup'; railDrag = null; delete railCompanion.dataset.dragging;
+    suppressRailClick = moved;
+    if (railClickTimer !== null) win.clearTimeout(railClickTimer);
+    railClickTimer = win.setTimeout(() => { suppressRailClick = false; railClickTimer = null; }, 0);
+    try { railCompanion.releasePointerCapture(event.pointerId); } catch {}
+    syncRailWalking();
+  }
+  for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) railCompanion.addEventListener(type, finishRailDrag);
+  railCompanion.addEventListener('keydown', event => {
+    if (!companionInRail || !railSpace || !['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault(); stopRailWalking(); freezeRailPosition(); const bounds = railBounds(); if (!bounds) return;
+    setRailPosition(event.key === 'ArrowLeft' ? railX - 8 : event.key === 'ArrowRight' ? railX + 8 : railX,
+      event.key === 'Home' ? 0 : event.key === 'End' ? bounds.y : event.key === 'ArrowUp' ? railY - 8 : event.key === 'ArrowDown' ? railY + 8 : railY);
+    syncRailWalking();
+  });
   const companionMenu = own(el('div', 'neko-companion-menu')); companionMenu.id = 'neko-companion-menu'; companionMenu.hidden = true;
   companionMenu.setAttribute('role', 'menu'); companionMenu.setAttribute('aria-label', '大肥鱼互动');
   const visitButton = button('社区串门', 'neko-companion-menu__visit', async () => {
@@ -143,6 +213,7 @@ function installWorkspaceShell(options = {}) {
     for (const trigger of [character, railCompanion]) trigger.setAttribute('aria-expanded', 'false');
     if (restoreFocus && companionMenuAnchor?.isConnected) companionMenuAnchor.focus();
     companionMenuAnchor = null;
+    syncRailWalking();
   }
   function positionCompanionMenu() {
     if (companionMenu.hidden || !companionMenuAnchor) return;
@@ -153,6 +224,7 @@ function installWorkspaceShell(options = {}) {
   }
   function toggleCompanionMenu(anchor) {
     if (!companionMenu.hidden) { closeCompanionMenu(); return; }
+    if (anchor === railCompanion) { stopRailWalking(); freezeRailPosition(); }
     companionMenuAnchor = anchor; companionMenuStatus.textContent = ''; companionMenu.hidden = false;
     for (const trigger of [character, railCompanion]) trigger.setAttribute('aria-expanded', 'true');
     positionCompanionMenu(); (visitButton.disabled ? companionChatButton : visitButton).focus();
@@ -179,7 +251,8 @@ function installWorkspaceShell(options = {}) {
       visible = r.width > 0 && r.height > 0 && r.right > 0 && r.left < win.innerWidth && r.bottom > 0 && r.top < win.innerHeight;
     }
     const needsRail = !visible;
-    if (needsRail !== companionInRail || (needsRail && character.parentNode !== railCompanion)) {
+    const changed = needsRail !== companionInRail || (needsRail && character.parentNode !== railCompanion);
+    if (changed) {
       closeCompanionMenu(false);
       companionInRail = needsRail;
       if (needsRail) {
@@ -193,7 +266,13 @@ function installWorkspaceShell(options = {}) {
       syncCharacter();
     }
     if (railCompanion.hidden !== !needsRail) railCompanion.hidden = !needsRail;
+    if (changed) {
+      if (!needsRail) { stopRailWalking(); railDrag = null; delete railCompanion.dataset.dragging; }
+      else { setRailPosition(railX, railY); syncRailWalking(); }
+    }
   }
+  motion?.addEventListener?.('change', syncRailWalking);
+  doc.addEventListener('visibilitychange', syncRailWalking);
   let historyKey = '', chatError = '';
   form.addEventListener('submit', async event => {
     event.preventDefault(); const text = chatInput.value.trim(); if (!text || sending || state?.companion?.working) return;
@@ -468,7 +547,21 @@ function installWorkspaceShell(options = {}) {
     if (disposed) return;
     const found = options.locateSidebar?.(); const root = found?.root || found?.slot || doc.querySelector('[data-slot="sidebar"]');
     const rail = doc.querySelector('[data-neko-side-rail]'), theme = rail?.querySelector('.neko-side-rail__theme');
-    if (rail && railCompanion.parentNode !== rail) rail.prepend(railCompanion);
+    const space = rail?.querySelector('.neko-side-rail__space') || null;
+    if (space !== railSpace) {
+      stopRailWalking();
+      if (railSpace) { if (railSpaceBeforeAria === null) railSpace.removeAttribute('aria-hidden'); else railSpace.setAttribute('aria-hidden', railSpaceBeforeAria); resize?.unobserve?.(railSpace); }
+      railSpace = space; railSpaceBeforeAria = space?.getAttribute('aria-hidden') ?? null; lastRailSize = '';
+      if (space) { space.setAttribute('aria-hidden', 'false'); resize?.observe(space); }
+    }
+    if (space) {
+      railCompanion.setAttribute('data-neko-rail-roam', '');
+      if (railCompanion.parentNode !== space) space.appendChild(railCompanion);
+    } else {
+      railCompanion.removeAttribute('data-neko-rail-roam');
+      railCompanion.style.removeProperty('left'); railCompanion.style.removeProperty('top'); railCompanion.style.removeProperty('transition');
+      if (rail && railCompanion.parentNode !== rail) rail.prepend(railCompanion);
+    }
     if (theme && officeButton.parentNode !== theme) { if (!nativeMarks.has(theme)) nativeMarks.set(theme, new Map()); nativeMarks.get(theme).set('aria-hidden', theme.getAttribute('aria-hidden')); theme.setAttribute('aria-hidden', ''); theme.appendChild(officeButton); }
     if (rail && railTop.parentNode !== rail) theme?.after(railTop);
     const mount = doc.querySelector('[data-neko-seat-mount]'); if (mount && seats.parentNode !== mount) mount.appendChild(seats);
@@ -479,6 +572,8 @@ function installWorkspaceShell(options = {}) {
     if (account && (dock.parentNode !== account.parentNode || dock.nextSibling !== account)) account.before(dock);
     watchDockAncestors();
     syncCompanionPlacement(rail);
+    const bounds = companionInRail ? railBounds() : null, size = bounds ? `${bounds.space.width}:${bounds.space.height}` : '';
+    if (bounds && size !== lastRailSize) { lastRailSize = size; setRailPosition(railX, railY); syncRailWalking(); }
     if (!companionInRail) setCompanionOffset(companionOffset);
     if (root) {
       const r = root.getBoundingClientRect(), strip = doc.querySelector('.neko-strip')?.getBoundingClientRect();
@@ -521,7 +616,7 @@ function installWorkspaceShell(options = {}) {
   const interval = win.setInterval(() => { if (doc.visibilityState !== 'hidden') refreshCatalog(true); }, 60000);
   place();
   return () => {
-    if (disposed) return; disposed = true; motion?.removeEventListener?.('change', syncCharacter); doc.removeEventListener('visibilitychange', syncCharacter); if (characterVideo) { characterVideo.pause(); characterVideo.removeAttribute('src'); characterVideo.load(); } observer.disconnect(); ancestorObserver.disconnect(); intersection?.disconnect(); resize?.disconnect(); win.clearInterval(interval);
+    if (disposed) return; disposed = true; motion?.removeEventListener?.('change', syncCharacter); motion?.removeEventListener?.('change', syncRailWalking); doc.removeEventListener('visibilitychange', syncCharacter); doc.removeEventListener('visibilitychange', syncRailWalking); stopRailWalking(); if (railClickTimer !== null) win.clearTimeout(railClickTimer); if (railSpace) { if (railSpaceBeforeAria === null) railSpace.removeAttribute('aria-hidden'); else railSpace.setAttribute('aria-hidden', railSpaceBeforeAria); } if (characterVideo) { characterVideo.pause(); characterVideo.removeAttribute('src'); characterVideo.load(); } observer.disconnect(); ancestorObserver.disconnect(); intersection?.disconnect(); resize?.disconnect(); win.clearInterval(interval);
     win.removeEventListener('resize', place); doc.removeEventListener('scroll', schedule, true); doc.removeEventListener('click', nativeNew, true); doc.removeEventListener('keydown', escape, true);
     doc.removeEventListener('pointerdown', dismissCompanionMenu, true);
     for (const release of releases) if (typeof release === 'function') release();
