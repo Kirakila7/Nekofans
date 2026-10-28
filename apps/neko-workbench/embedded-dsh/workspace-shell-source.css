@@ -69,6 +69,14 @@ body[data-neko-workspace-shell] .neko-hero-pick__name { display:none !important;
 .neko-office-welcome p { font-size:13px; }
 .neko-office-form { flex:none; background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:18px; padding:12px 15px; box-shadow:0 5px 24px #13304808; }
 .neko-office-form textarea { width:100%; resize:vertical; max-height:180px; min-height:65px; color:inherit; background:transparent; border:0; font:14px/1.65 system-ui; outline:none; box-sizing:border-box; }
+.neko-office-controls { display:flex; align-items:center; flex-wrap:wrap; gap:8px 14px; padding:8px 0; border-top:1px solid var(--nws-border); }
+.neko-office-control { display:flex; align-items:center; gap:6px; min-width:0; font-size:11px; color:var(--nws-muted); }
+.neko-office-control select { box-sizing:border-box; max-width:min(240px,48vw); min-height:32px; padding:4px 8px; border:1px solid var(--nws-border); border-radius:8px; color:var(--nws-text); background:var(--nws-bg); font:12px/1.5 system-ui; }
+.neko-office-control select:focus-visible,.neko-office-panel button:focus-visible { outline:2px solid #4c89ad; outline-offset:2px; }
+.neko-office-control select:disabled { opacity:.6; }
+.neko-office-model-status { margin:0 0 6px; color:var(--nws-muted); font-size:11px; }
+.neko-office-model-status[hidden] { display:none; }
+.neko-office-form-footer { flex-wrap:wrap; }
 .neko-office-form-footer { display:flex; align-items:center; gap:8px; }
 .neko-office-form-footer span { flex:1; color:var(--nws-muted); font-size:10px; }
 .neko-office-error { font-size:12px; color:var(--nws-muted); margin:4px 0 8px; }

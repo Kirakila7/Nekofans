@@ -9,7 +9,15 @@ const text = (value, max = 20000) => typeof value === 'string' ? value.slice(0, 
 const validId = id => typeof id === 'string' && /^[A-Za-z0-9_:-]{1,180}$/.test(id);
 function threadRow(t) {
   if (!validId(t?.id) || t.ephemeral || t.parentThreadId) return null;
-  return { id: t.id, provider: 'codex', title: text(t.name || t.preview || 'Codex 会话', 160), cwd: text(t.cwd, 4096), updatedAt: Number(t.updatedAt) * 1000 || 0, status: text(t.status?.type, 40), model: text(t.model, 160) };
+  return { id: t.id, provider: 'codex', title: text(t.name || t.preview || 'Codex 会话', 160), cwd: text(t.cwd, 4096), updatedAt: Number(t.updatedAt) * 1000 || 0, status: text(t.status?.type, 40), model: text(t.model, 160), reasoningEffort: text(t.reasoningEffort, 80) };
+}
+function modelRow(value) {
+  const clean = (v, max) => typeof v === 'string' && v.length <= max && !/[\p{Cc}\p{Cf}]/u.test(v) ? v.trim() : '';
+  const model = clean(value?.model, 160);
+  if (!model || value.hidden === true) return null;
+  const supportedReasoningEfforts = [...new Map((Array.isArray(value.supportedReasoningEfforts) ? value.supportedReasoningEfforts : []).slice(0, 30).map(e => ({ reasoningEffort: clean(e?.reasoningEffort, 80), description: text(e?.description, 500) })).filter(e => e.reasoningEffort).map(e => [e.reasoningEffort, e])).values()];
+  const defaultEffort = clean(value.defaultReasoningEffort, 80);
+  return { model, displayName: clean(value.displayName, 160) || model, description: text(value.description, 500), isDefault: value.isDefault === true, supportedReasoningEfforts, defaultReasoningEffort: supportedReasoningEfforts.some(e => e.reasoningEffort === defaultEffort) ? defaultEffort : null };
 }
 function visibleItem(item) {
   if (!item || typeof item.id !== 'string') return null;
@@ -24,6 +32,7 @@ function visibleItem(item) {
 function createCodexWorkspace({ env = process.env, spawnProcess = spawn, resolveExecutable = () => resolveCodex({ env }), defaultCwd, onState = () => {}, timeoutMs = 25000 } = {}) {
   let child = null, ready = null, closed = false, seq = 0, selectionVersion = 0, buffer = '', selected = null, view = { status: 'idle', thread: null, items: [], approvals: [], error: '' };
   const pending = new Map(), rows = new Map(), loaded = new Set(), ownedTurns = new Map(), finishedTurns = new Set(), starting = new Set(), approvals = new Map(), roots = new Set([defaultCwd].filter(Boolean));
+  let modelCatalog = null, modelsLoading = null, modelsUpdatedAt = 0;
   const emit = () => onState(structuredClone(view));
   function failure() { return Error('Codex 本地接口暂不可用，请检查原生登录或稍后重试'); }
   function write(message) { if (!child || child.stdin.destroyed) throw failure(); child.stdin.write(JSON.stringify(message) + '\n'); }
@@ -83,7 +92,7 @@ function createCodexWorkspace({ env = process.env, spawnProcess = spawn, resolve
       buffer = '';
       const own = child;
       own.stderr.on('data', () => {}); own.stdin.on('error', failAll); own.once('error', failAll);
-      own.once('close', () => { if (child !== own) return; child = null; ready = null; loaded.clear(); failAll(); const hadWork = ownedTurns.size || starting.size; ownedTurns.clear(); approvals.clear(); view.approvals = []; if (!closed && hadWork) { view.status = 'error'; view.error = 'Codex 连接已断开，请在原生客户端核对任务状态'; emit(); } });
+      own.once('close', () => { if (child !== own) return; child = null; ready = null; modelCatalog = null; loaded.clear(); failAll(); const hadWork = ownedTurns.size || starting.size; ownedTurns.clear(); approvals.clear(); view.approvals = []; if (!closed && hadWork) { view.status = 'error'; view.error = 'Codex 连接已断开，请在原生客户端核对任务状态'; emit(); } });
       own.stdout.setEncoding('utf8'); own.stdout.on('data', chunk => {
         if (child !== own) return;
         buffer += chunk; if (buffer.length > 16 * 1024 * 1024) { failAll(); own.kill(); return; }
@@ -95,7 +104,7 @@ function createCodexWorkspace({ env = process.env, spawnProcess = spawn, resolve
           else if (pending.has(m.id)) { const e = pending.get(m.id); pending.delete(m.id); clearTimeout(e.timer); m.error ? e.reject(failure()) : e.resolve(m.result); }
         }
       });
-      await request('initialize', { clientInfo: { name: 'neko_workbench', title: 'N.E.K.O. 工作台', version: '0.27.0' }, capabilities: null });
+      await request('initialize', { clientInfo: { name: 'neko_workbench', title: 'N.E.K.O. 工作台', version: require('./package.json').version }, capabilities: null });
       write({ method: 'initialized' });
     })();
     try { await ready; } catch (error) { ready = null; child?.kill('SIGTERM'); throw error; }
@@ -108,6 +117,25 @@ function createCodexWorkspace({ env = process.env, spawnProcess = spawn, resolve
       cursor = result?.nextCursor; more = !!cursor; if (!cursor) break;
     }
     return { sessions: found, more, status: 'ready' };
+  }
+  async function models({ force = false } = {}) {
+    await ensure();
+    if (modelsLoading) return structuredClone(await modelsLoading);
+    if (!force && modelCatalog && Date.now() - modelsUpdatedAt < 60000) return structuredClone(modelCatalog);
+    modelsLoading = (async () => {
+      const found = new Map(), cursors = new Set(); let cursor = null;
+      for (let page = 0; page < 20; page++) {
+        const result = await request('model/list', { limit: 100, includeHidden: false, ...(cursor ? { cursor } : {}) });
+        if (!Array.isArray(result?.data)) throw Error('Codex 模型列表暂不可用，请刷新重试');
+        for (const raw of result.data.slice(0, 100)) { const row = modelRow(raw); if (row) found.set(row.model, row); }
+        cursor = result.nextCursor;
+        if (!cursor) { modelCatalog = { models: [...found.values()] }; modelsUpdatedAt = Date.now(); return modelCatalog; }
+        if (typeof cursor !== 'string' || cursors.has(cursor)) break;
+        cursors.add(cursor);
+      }
+      throw Error('Codex 模型列表读取不完整，请刷新重试');
+    })();
+    try { return structuredClone(await modelsLoading); } finally { modelsLoading = null; }
   }
   async function read(id) {
     if (!validId(id) || !rows.has(id)) throw Error('请从会话列表选择 Codex 会话');
@@ -124,19 +152,30 @@ function createCodexWorkspace({ env = process.env, spawnProcess = spawn, resolve
     emit(); return structuredClone(view);
   }
   function allowRoot(cwd) { if (typeof cwd !== 'string' || !path.isAbsolute(cwd) || !fs.statSync(cwd).isDirectory()) throw Error('请选择存在的项目目录'); roots.add(cwd); return cwd; }
-  async function send({ id = null, cwd = defaultCwd, message }) {
+  async function send({ id = null, cwd = defaultCwd, message, model = null, effort = null }) {
     if (typeof message !== 'string' || !message.trim() || message.length > 30000) throw Error('请输入 1–30000 字的任务');
     if (view.status === 'working' && selected === id) throw Error('当前会话正在运行，请等待完成或先停止');
     if (!roots.has(cwd)) throw Error('请从已有项目选择目录');
+    if (model !== null && (typeof model !== 'string' || !model || model.length > 160)) throw Error('请选择有效的 Codex 模型');
+    if (effort !== null && (typeof effort !== 'string' || !effort || effort.length > 80)) throw Error('请选择有效的思考强度');
+    const overrides = {};
+    if (model !== null) {
+      const choice = (await models()).models.find(m => m.model === model);
+      if (!choice) throw Error('所选模型不在当前 Codex 列表中，请刷新模型列表或选择本机默认');
+      if (effort !== null && !choice.supportedReasoningEfforts.some(e => e.reasoningEffort === effort)) throw Error('所选模型不支持这个思考强度，请重新选择');
+      overrides.model = model;
+      if (effort || choice.defaultReasoningEffort) overrides.effort = effort || choice.defaultReasoningEffort;
+    } else if (effort !== null) throw Error('请先选择具体模型，再设置思考强度');
     await ensure();
     let raw;
     if (id) { if (!validId(id) || !rows.has(id)) throw Error('会话不存在'); if (!loaded.has(id)) raw = (await request('thread/resume', { threadId: id, excludeTurns: true })).thread; }
-    else raw = (await request('thread/start', { cwd, ephemeral: false })).thread;
+    else raw = (await request('thread/start', { cwd, ephemeral: false, ...(overrides.model ? { model: overrides.model } : {}) })).thread;
     if (raw) { const row = threadRow(raw); if (!row) throw failure(); rows.set(row.id, row); id = raw.id; loaded.add(id); }
     selected = id; ++selectionVersion; if (view.thread?.id !== id) view = { status: 'idle', thread: rows.get(id), items: [], approvals: [...approvals.values()].map(a => a.display), error: '' };
     starting.add(id);
     try {
-      const result = await request('turn/start', { threadId: id, input: [{ type: 'text', text: message.trim(), text_elements: [] }] });
+      const result = await request('turn/start', { threadId: id, input: [{ type: 'text', text: message.trim(), text_elements: [] }], ...overrides });
+      if (overrides.model && rows.has(id)) { Object.assign(rows.get(id), { model: overrides.model, reasoningEffort: overrides.effort || '' }); if (selected === id) view.thread = rows.get(id); }
       const turn = result.turn;
       const finished = finishedTurns.has(turn?.id) || ['completed', 'interrupted', 'failed'].includes(turn?.status);
       if (turn?.id && !finished) ownedTurns.set(id, turn.id);
@@ -158,6 +197,6 @@ function createCodexWorkspace({ env = process.env, spawnProcess = spawn, resolve
     await new Promise(resolve => { const term = setTimeout(() => own.kill('SIGTERM'), 500), kill = setTimeout(() => own.kill('SIGKILL'), 2500), deadline = setTimeout(done, 3000); function done() { clearTimeout(term); clearTimeout(kill); clearTimeout(deadline); resolve(); } own.once('close', done); own.stdin.end(); });
     failAll();
   }
-  return { list, read, send, stop, approve, allowRoot, dispose, snapshot: () => structuredClone(view) };
+  return { list, models, read, send, stop, approve, allowRoot, dispose, snapshot: () => structuredClone(view) };
 }
-module.exports = { createCodexWorkspace, threadRow, visibleItem };
+module.exports = { createCodexWorkspace, threadRow, modelRow, visibleItem };

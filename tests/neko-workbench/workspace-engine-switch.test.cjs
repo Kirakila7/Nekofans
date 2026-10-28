@@ -12,6 +12,7 @@ test('existing assistant entries switch the visible engine and preserve independ
   if(request.action==='state')return structuredClone(layout);
   if(request.action==='update'){updates.push(structuredClone(request.patch));layout={...layout,...request.patch};return structuredClone(layout);}
   if(request.action==='codex-state')return {status:'idle',thread:null,items:[],approvals:[]};
+  if(request.action==='codex-models')return {models:[]};
   if(request.action==='catalog')return {providers:{dsh:'ready',codex:'ready'},sessions:[{provider:'dsh',id:'d',cwd:'/project',title:'DSH task'},{provider:'codex',id:'c',cwd:'/project',title:'Codex task'}]};
   throw Error('Switching views must not start a model or task: '+request.action);
  }};

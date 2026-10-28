@@ -27,6 +27,7 @@ const {createRolesStore}=require('./workbench-roles.cjs');
 const {createWorkspaceLayout}=require('./workspace-layout.cjs');
 const {createWorkspaceController,companionSnapshot}=require('./workspace-controller.cjs');
 const {createCodexWorkspace}=require('./codex-workspace.cjs');
+const {createCodexModelChoices}=require('./codex-model-choices.cjs');
 const {createCodexAccountService}=require('./codex-account.cjs');
 const codexAccount=createCodexAccountService();
 let dshSkin=null;
@@ -38,6 +39,7 @@ const data=runtimePaths.dataDir,workspace=runtimePaths.workspaceDir;
 const workbenchAppearance=createAppearanceStore(path.join(data,'workbench-appearance.json'));
 const workbenchRoles=createRolesStore(path.join(data,'workbench-roles.json'));
 const workspaceLayout=createWorkspaceLayout(path.join(data,'workspace-layout.json'));
+const codexModelChoices=createCodexModelChoices(path.join(data,'codex-model-choices.json'));
 let workspaceRevision=0;
 const codexWorkspace=createCodexWorkspace({defaultCwd:workspace,onState:value=>{
   if(dshWindow&&!dshWindow.isDestroyed()&&isWorkbenchOrigin(dshWindow.webContents.getURL()))dshWindow.webContents.send('workbench:office-state',value);
@@ -685,7 +687,10 @@ ipcMain.handle('workbench:call',async(event,method,value)=>{
     }
     if(p.action==='codex-read')return codexWorkspace.read(p.id);
     if(p.action==='codex-state')return codexWorkspace.snapshot();
-    if(p.action==='codex-send')return codexWorkspace.send({id:p.id,cwd:p.cwd,message:p.message});
+    if(p.action==='codex-models')return codexWorkspace.models({force:p.force===true});
+    if(p.action==='codex-model-choices')return codexModelChoices.get();
+    if(p.action==='codex-model-choice')return codexModelChoices.set(p.id,{model:p.model,effort:p.effort});
+    if(p.action==='codex-send')return codexWorkspace.send({id:p.id,cwd:p.cwd,message:p.message,model:p.model,effort:p.effort});
     if(p.action==='codex-stop')return codexWorkspace.stop();
     if(p.action==='codex-approve')return codexWorkspace.approve(p.key,p.decision);
     if(p.action==='choose-project'){

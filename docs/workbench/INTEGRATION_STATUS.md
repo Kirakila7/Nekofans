@@ -1,4 +1,4 @@
-# Unified daily workbench 0.28.0
+# Unified daily workbench 0.28.1
 
 The daily artifact is built from this repository. `config/daily-release.json` is the version authority; every app includes `Contents/Resources/WORKBENCH_BUILD.json` with the source commit and SHA-256 of every shipped source file. Historical QA checkouts and profiles are not release inputs.
 
@@ -6,6 +6,8 @@ The daily artifact is built from this repository. `config/daily-release.json` is
 
 - Shared native DSH accounts, plugins and sessions; Codex app-server workspace and read-only account/quota entry.
 - Existing switch positions preserved. Picking a bound assistant updates its sidebar selection and right-hand engine together; DSH and Codex drafts stay separate.
+- Codex model and reasoning selectors read the native `model/list` catalog and send explicit choices with `turn/start`. Only advertised reasoning options are shown. Native-default mode preserves existing Codex configuration. Per-conversation choices are stored in a private local workbench file, independent of the DSH port; they do not rewrite native Codex configuration. Listing a model does not prove permission to execute it.
+- New Codex tasks retain the created thread ID for follow-up messages. Failed sends preserve drafts and error feedback; missing catalog choices require explicit correction instead of silently switching models.
 - Compact companion chat, background-integrated draggable character, role appearances and the 0.27.4 child-session/helper animation rules.
 - Workbench PR #5 native N.E.K.O. memory, including in-flight sync draining and canonical macOS recovery paths.
 - Workbench PR #6 QQ/Bilibili coordination and routing, plus the local DeepSeek API preset and error-handling fixes.

@@ -34,13 +34,17 @@ function nativeFixture(t,mode='normal'){
  const out=m=>process.stdout.write(JSON.stringify(m)+'\\n');const row=id=>({id,cwd:${JSON.stringify(dir)},name:'Native '+id,status:{type:'idle'},updatedAt:1});let approval;
  rl.on('line',line=>{const m=JSON.parse(line);fs.appendFileSync(${JSON.stringify(log)},JSON.stringify(m)+'\\n');if(!m.method){approval=m;return;}if(m.id==null)return;
  let result={};if(m.method==='thread/list')result={data:[row('one'),row('two'),{...row('child'),parentThreadId:'one'}],nextCursor:null};
+ if(m.method==='model/list'){
+  if(${JSON.stringify(mode)}==='models-error'){out({id:m.id,error:{message:'private upstream token'}});return;}
+  result=m.params.cursor?{data:[{model:'fixture-fast',displayName:'Fixture Fast',defaultReasoningEffort:'low',supportedReasoningEfforts:[{reasoningEffort:'low',description:'Quick'}]}],nextCursor:null}:{data:[{model:'fixture-deep',displayName:'Fixture Deep',isDefault:true,defaultReasoningEffort:'medium',supportedReasoningEfforts:[{reasoningEffort:'medium',description:'Balanced'},{reasoningEffort:'high',description:'Thorough'}]},{model:'hidden-model',hidden:true},{displayName:'malformed'}],nextCursor:'page-2'};
+ }
  if(m.method==='thread/read')result={thread:row(m.params.threadId)};
  if(m.method==='thread/turns/list')result={data:[{id:'old-turn',items:[{id:'user',type:'userMessage',content:[{type:'text',text:'hello'}]},{id:'a',type:'agentMessage',text:'native reply'}]}]};
  if(m.method==='thread/start')result={thread:row('new')};if(m.method==='thread/resume')result={thread:row(m.params.threadId)};
  if(m.method==='turn/start'){result={turn:{id:'turn',status:'inProgress',items:[]}};out({method:'turn/started',params:{threadId:m.params.threadId,turn:result.turn}});
  ${mode==='fast' ? "out({method:'turn/completed',params:{threadId:m.params.threadId,turn:{id:'turn',status:'completed',items:[]}}});" : "setTimeout(()=>out({id:900,method:'item/commandExecution/requestApproval',params:{threadId:m.params.threadId,turnId:'turn',command:'echo test',cwd:"+JSON.stringify(dir)+"}}),5);"}
  }out({id:m.id,result});});`);
- const c=createCodexWorkspace({defaultCwd:dir,resolveExecutable:()=>'/native/codex',spawnProcess:(exe,args,opts)=>{assert.equal(exe,'/native/codex');assert.deepEqual(args,['app-server','--listen','stdio://']);assert.equal(opts.shell,false);return spawn(process.execPath,[file],opts);},timeoutMs:1000});t.after(()=>c.dispose());return {c,dir,messages:()=>fs.existsSync(log)?fs.readFileSync(log,'utf8').trim().split('\n').map(JSON.parse):[]};
+ const c=createCodexWorkspace({defaultCwd:dir,resolveExecutable:()=>'/native/codex',spawnProcess:(exe,args,opts)=>{assert.equal(exe,'/native/codex');assert.deepEqual(args,['app-server','--listen','stdio://']);assert.equal(opts.shell,false);return spawn(process.execPath,[file],opts);},timeoutMs:5000});t.after(()=>c.dispose());return {c,dir,messages:()=>fs.existsSync(log)?fs.readFileSync(log,'utf8').trim().split('\n').map(JSON.parse):[]};
 }
 test('Codex browsing is read-only; explicit send retains native defaults and requires per-operation approval',async t=>{
  const f=nativeFixture(t);assert.equal((await f.c.list()).sessions.length,2);await f.c.read('one');assert.equal(f.c.snapshot().items[1].text,'native reply');assert(!f.messages().some(m=>/resume|start/.test(m.method)));
@@ -52,6 +56,31 @@ test('Codex browsing is read-only; explicit send retains native defaults and req
 });
 test('a turn completing before the start reply never leaves a phantom working task',async t=>{
  const f=nativeFixture(t,'fast');await f.c.list();await f.c.read('one');await f.c.send({id:'one',cwd:f.dir,message:'quick'});assert.equal(f.c.snapshot().status,'idle');await assert.rejects(f.c.stop(),/没有/);
+});
+test('Codex model selection discovers all visible pages and applies model and effort to both new and existing tasks',async t=>{
+ const f=nativeFixture(t,'fast');
+ const catalog=await f.c.models();assert.deepEqual(catalog.models.map(m=>m.model),['fixture-deep','fixture-fast']);
+ catalog.models[0].displayName='tampered';assert.equal((await f.c.models()).models[0].displayName,'Fixture Deep');
+ assert.equal(f.messages().filter(m=>m.method==='model/list').length,2,'concurrent UI and send use the cached native catalog');
+ assert(!f.messages().some(m=>/thread\/(start|resume)|turn\/start/.test(m.method)),'listing models never starts a task');
+ await f.c.list();await f.c.read('one');
+ await f.c.send({id:'one',cwd:f.dir,message:'existing',model:'fixture-deep',effort:'high'});
+ let turns=f.messages().filter(m=>m.method==='turn/start');assert.equal(turns[0].params.model,'fixture-deep');assert.equal(turns[0].params.effort,'high');
+ assert.equal(f.c.snapshot().thread.model,'fixture-deep');assert.equal(f.c.snapshot().thread.reasoningEffort,'high');
+ await f.c.send({cwd:f.dir,message:'new',model:'fixture-fast'});
+ const start=f.messages().find(m=>m.method==='thread/start');assert.equal(start.params.model,'fixture-fast');
+ turns=f.messages().filter(m=>m.method==='turn/start');assert.equal(turns[1].params.effort,'low','a model switch uses that model default rather than inheriting an incompatible effort');
+ assert(!f.messages().some(m=>/config\//.test(m.method)),'model choice does not rewrite native global configuration');
+ await f.c.models({force:true});assert.equal(f.messages().filter(m=>m.method==='model/list').length,4);
+});
+test('unsupported model/effort combinations are rejected before creating or resuming any task',async t=>{
+ const f=nativeFixture(t,'fast');
+ for(const choice of [{model:'hidden-model'},{model:'missing'},{model:'fixture-fast',effort:'high'},{effort:'high'},{model:42},{model:'fixture-deep',effort:{}}]) await assert.rejects(f.c.send({cwd:f.dir,message:'do not start',...choice}));
+ assert(!f.messages().some(m=>/thread\/(start|resume)|turn\/start/.test(m.method)));
+});
+test('native catalog errors stay sanitized and native-default tasks can still run',async t=>{
+ const f=nativeFixture(t,'models-error');await assert.rejects(f.c.models(),e=>!e.message.includes('private upstream token'));
+ await f.c.send({cwd:f.dir,message:'use native config'});const turn=f.messages().find(m=>m.method==='turn/start');assert(!('model'in turn.params));assert(!('effort'in turn.params));
 });
 let JSDOM;try{({JSDOM}=require(path.join(process.env.NEKO_DOM_DEPS||'/private/tmp/neko-sidebar-dom-20261026','node_modules/jsdom')));}catch{}
 test('workspace DOM keeps three configurable filters, all sessions reset, collapsible private chat and native UI restoration',{skip:!JSDOM},async t=>{

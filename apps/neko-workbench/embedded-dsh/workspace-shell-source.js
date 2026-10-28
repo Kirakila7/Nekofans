@@ -11,6 +11,15 @@ function installWorkspaceShell(options = {}) {
   let disposed = false, queued = false, layout = null, state = null, catalog = null, selectedProject = '', selectedId = null, searchText = '', layoutVersion = -1, listLoading = false, sending = false, socialOpen = false;
   let office = { status: 'idle', thread: null, items: [], approvals: [], error: '' };
   const nativeMarks = new Map(), nodes = [], releases = [], drafts = new Map(), groupOpen = new Set();
+  const modelChoices = new Map();
+  const currentModelChoice = () => modelChoices.get(selectedId || 'new') || { model: null, effort: null };
+  function rememberModelChoice(key, choice) {
+    modelChoices.delete(key); modelChoices.set(key, { ...choice });
+    while (modelChoices.size > 200) modelChoices.delete(modelChoices.keys().next().value);
+    call({ action: 'codex-model-choice', id: key, ...choice }).catch(() => { if (!disposed) showOfficeError(Error('模型选择未能保存到本机，本次发送仍使用当前选择')); });
+  }
+  let codexModels = [], modelsState = 'idle', modelsError = '', modelRenderKey = '', officeErrorText = '', officeReading = false, sendContext = null;
+  const effortLabel = value => ({ none: '关闭', minimal: '极低', low: '低', medium: '中', high: '高', xhigh: '很高', max: '极高', ultra: '最高' })[value] || value;
   const own = node => { node.dataset.nekoWorkspaceOwned = ''; nodes.push(node); return node; };
   const call = request => bridge.workspace(request);
   const hideSocial = () => { options.hideSocial?.(); socialOpen = false; };
@@ -111,21 +120,33 @@ function installWorkspaceShell(options = {}) {
   const officeError = el('p', 'neko-office-error'); officeError.setAttribute('role', 'status');
   const officeApprovals = el('div', 'neko-office-approvals');
   const officeForm = el('form', 'neko-office-form'), officeInput = el('textarea'); officeInput.rows = 3; officeInput.maxLength = 30000; officeInput.placeholder = '给 Codex 分配工作任务…'; officeInput.setAttribute('aria-label', 'Codex 工作任务');
+  const modelControls = el('div', 'neko-office-controls');
+  const modelLabel = el('label', 'neko-office-control', '模型'), modelSelect = el('select', 'neko-office-model-select'); modelSelect.setAttribute('aria-label', 'Codex 模型'); modelLabel.appendChild(modelSelect);
+  const effortLabelNode = el('label', 'neko-office-control', '思考'), effortSelect = el('select', 'neko-office-effort-select'); effortSelect.setAttribute('aria-label', 'Codex 思考强度'); effortLabelNode.appendChild(effortSelect);
+  const modelsRefresh = button('↻', 'neko-office-model-refresh', () => refreshModels(true)); modelsRefresh.setAttribute('aria-label', '刷新 Codex 模型列表'); modelsRefresh.title = '从 Codex 重新读取模型列表';
+  const modelsStatus = el('p', 'neko-office-model-status'); modelsStatus.setAttribute('role', 'status'); modelsStatus.setAttribute('aria-live', 'polite');
+  modelControls.append(modelLabel, effortLabelNode, modelsRefresh);
   const officeFooter = el('div', 'neko-office-form-footer'), officeCaption = el('span', '', 'Codex 原生执行层 · 沿用本机配置');
   const stopButton = button('停止', 'neko-office-stop', () => call({ action: 'codex-stop' }).catch(showOfficeError));
   const sendButton = el('button', 'neko-office-send', '发送'); sendButton.type = 'submit';
-  officeFooter.append(officeCaption, stopButton, sendButton); officeForm.append(officeInput, officeFooter);
+  officeFooter.append(officeCaption, stopButton, sendButton); officeForm.append(officeInput, modelControls, modelsStatus, officeFooter);
   panel.append(officeHeader, officeHistory, officeError, officeApprovals, officeForm); doc.body.appendChild(panel);
   officeInput.addEventListener('input', () => drafts.set(selectedId || 'new', officeInput.value));
   let officeSending = false, officeRenderKey = '', readVersion = 0;
+  modelSelect.addEventListener('change', () => { rememberModelChoice(selectedId || 'new', { model: modelSelect.value || null, effort: null }); renderOffice(); });
+  effortSelect.addEventListener('change', () => { rememberModelChoice(selectedId || 'new', { ...currentModelChoice(), effort: effortSelect.value || null }); renderOffice(); });
   officeForm.addEventListener('submit', async event => {
-    event.preventDefault(); const message = officeInput.value.trim(); if (!message || officeSending) return;
-    officeSending = true; sendButton.disabled = true; officeError.textContent = '';
+    event.preventDefault(); const message = officeInput.value.trim(); if (!message || officeSending || officeReading || office.status === 'working' || sendButton.disabled) return;
+    const key = selectedId || 'new', version = readVersion, draft = officeInput.value, choice = { ...currentModelChoice() };
+    officeSending = true; sendContext = { id: selectedId, version }; officeErrorText = ''; renderOffice();
     try {
-      const next = await call({ action: 'codex-send', id: selectedId, cwd: office.thread?.cwd || selectedProject || state?.workspaceRoot, message });
-      drafts.delete(selectedId || 'new'); officeInput.value = ''; if (next.thread?.id === selectedId || officeSending) { office = next; } else { office.approvals = next.approvals || []; } renderOffice(); refreshCatalog(true);
-    } catch (error) { showOfficeError(error); }
-    finally { officeSending = false; renderOffice(); }
+      const next = await call({ action: 'codex-send', id: selectedId, cwd: office.thread?.cwd || selectedProject || state?.workspaceRoot, message, ...choice });
+      if (drafts.get(key) === draft) drafts.delete(key);
+      if (version === readVersion) { office = next; selectedId = next.thread?.id || selectedId; if (selectedId) rememberModelChoice(selectedId, choice); if (officeInput.value === draft) officeInput.value = ''; }
+      else office.approvals = next.approvals || [];
+      renderOffice(); refreshCatalog(true);
+    } catch (error) { if (version === readVersion) showOfficeError(error); }
+    finally { officeSending = false; sendContext = null; renderOffice(); }
   });
   officeInput.addEventListener('keydown', event => { if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && !event.isComposing) { event.preventDefault(); officeForm.requestSubmit(); } });
   const modal = own(el('div', 'neko-workspace-modal')); modal.hidden = true; modal.setAttribute('role', 'dialog'); modal.setAttribute('aria-modal', 'true');
@@ -134,7 +155,17 @@ function installWorkspaceShell(options = {}) {
   modalHeader.append(modalTitle, modalClose); const modalBody = el('div', 'neko-workspace-modal__body'); modalCard.append(modalHeader, modalBody); modal.appendChild(modalCard); doc.body.appendChild(modal);
   modal.addEventListener('pointerdown', event => { if (event.target === modal) closeSettings(); });
   function showError(error) { listStatus.textContent = error?.message || '工作台操作未完成，请重试'; }
-  function showOfficeError(error) { officeError.textContent = error?.message || 'Codex 操作未完成，请重试'; }
+  function showOfficeError(error) { officeErrorText = error?.message || 'Codex 操作未完成，请重试'; officeError.textContent = officeErrorText; }
+  async function refreshModels(force = false) {
+    if (disposed || modelsState === 'loading' || !force && modelsState !== 'idle') return;
+    modelsState = 'loading'; modelsError = ''; renderOffice();
+    try {
+      const next = await call({ action: 'codex-models', force });
+      if (!Array.isArray(next?.models)) throw Error('Codex 模型列表暂不可用');
+      if (!disposed) { codexModels = next.models; modelsState = 'ready'; }
+    } catch { if (!disposed) { modelsState = 'error'; modelsError = '模型列表读取失败，可刷新重试，或沿用本机默认'; } }
+    if (!disposed) renderOffice();
+  }
   async function saveLayout(patch) {
     try { layout = await call({ action: 'update', patch }); renderLayout(); }
     catch (error) { showError(error); }
@@ -194,12 +225,14 @@ function installWorkspaceShell(options = {}) {
     hideSocial(); closeSettings();
     if (row.provider === 'dsh') { await saveLayout({ officeMode: 'dsh' }); options.openDshSession?.(row.id); }
     else {
-      const version = ++readVersion; selectedId = row.id; selectedProject = row.cwd; officeInput.value = drafts.get(row.id) || '';
+      const version = ++readVersion; selectedId = row.id; selectedProject = row.cwd; officeInput.value = drafts.get(row.id) || ''; officeReading = true; officeErrorText = '';
       await saveLayout({ officeMode: 'codex' }); officeError.textContent = '正在读取原生 Codex 会话…';
-      try { const next = await call({ action: 'codex-read', id: row.id }); if (!disposed && version === readVersion) { office = next; } if (!disposed && version === readVersion) { officeError.textContent = ''; renderOffice(); } } catch (error) { showOfficeError(error); }
+      try { const next = await call({ action: 'codex-read', id: row.id }); if (!disposed && version === readVersion) office = next; }
+      catch (error) { if (!disposed && version === readVersion) showOfficeError(error); }
+      finally { if (!disposed && version === readVersion) { officeReading = false; renderOffice(); } }
     }
   }
-  function newOffice() { ++readVersion; hideSocial(); selectedId = null; office = { status: 'idle', thread: null, items: [], approvals: office.approvals || [], error: '' }; officeInput.value = drafts.get('new') || ''; officeRenderKey = ''; renderOffice(); officeInput.focus(); }
+  function newOffice() { ++readVersion; hideSocial(); selectedId = null; officeReading = false; officeErrorText = ''; office = { status: 'idle', thread: null, items: [], approvals: office.approvals || [], error: '' }; officeInput.value = drafts.get('new') || ''; officeRenderKey = ''; renderOffice(); officeInput.focus(); }
   function renderCompanion() {
     const c = state?.companion || {}, open = !!layout?.companionHistoryOpen, wasHidden = history.hidden;
     history.hidden = !open; historyToggle.setAttribute('aria-expanded', String(open)); historyToggle.setAttribute('aria-label', open ? '收起聊天记录' : '展开聊天记录'); historyToggle.title = open ? '收起聊天记录' : '展开聊天记录';
@@ -217,10 +250,30 @@ function installWorkspaceShell(options = {}) {
   function renderOffice() {
     if (!layout) return;
     panel.hidden = layout.officeMode !== 'codex' || socialOpen;
+    if (!panel.hidden && modelsState === 'idle') refreshModels();
     for (const main of doc.querySelectorAll('main')) { if (socialOpen) continue; if (main.closest('[data-neko-workspace-owned]')) continue; if (!panel.hidden) markNative(main, 'inert'); else if (nativeMarks.get(main)?.has('inert')) { const before = nativeMarks.get(main).get('inert'); if (before === null) main.removeAttribute('inert'); else main.setAttribute('inert', before); nativeMarks.get(main).delete('inert'); } }
     officeTitle.textContent = office.thread?.title || 'Codex'; officeModel.textContent = office.thread?.model || '本机默认模型';
     const cwd = office.thread?.cwd || selectedProject || state?.workspaceRoot || '';
     projectButton.textContent = cwd ? cwd.split(/[\\/]/).filter(Boolean).at(-1) || cwd : '选择项目'; projectButton.title = cwd || '选择项目';
+    const choice = currentModelChoice(), pickedModel = codexModels.find(m => m.model === choice.model), busy = officeSending || officeReading || office.status === 'working';
+    const invalidChoice = !!choice.model && (!pickedModel || modelsState !== 'ready' || choice.effort && !pickedModel.supportedReasoningEfforts.some(e => e.reasoningEffort === choice.effort));
+    const modelKey = JSON.stringify([codexModels, choice, office.thread?.model]);
+    if (modelKey !== modelRenderKey) {
+      modelRenderKey = modelKey;
+      const option = (value, label) => { const n = el('option', '', label); n.value = value; return n; };
+      modelSelect.replaceChildren(option('', office.thread?.model ? '沿用会话 · ' + office.thread.model : '本机默认'));
+      for (const m of codexModels) { const n = option(m.model, m.displayName + (m.isDefault ? ' · 推荐' : '')); n.title = m.description || m.model; modelSelect.appendChild(n); }
+      if (choice.model && !pickedModel) { const n = option(choice.model, choice.model + ' · 暂不可用'); n.disabled = true; modelSelect.appendChild(n); }
+      modelSelect.value = choice.model || '';
+      effortSelect.replaceChildren(option('', pickedModel?.defaultReasoningEffort ? '默认 · ' + effortLabel(pickedModel.defaultReasoningEffort) : '模型默认'));
+      for (const e of pickedModel?.supportedReasoningEfforts || []) { const n = option(e.reasoningEffort, effortLabel(e.reasoningEffort)); n.title = e.description; effortSelect.appendChild(n); }
+      if (choice.effort && !pickedModel?.supportedReasoningEfforts.some(e => e.reasoningEffort === choice.effort)) { const n = option(choice.effort, choice.effort + ' · 暂不可用'); n.disabled = true; effortSelect.appendChild(n); }
+      effortSelect.value = choice.effort || '';
+    }
+    modelSelect.disabled = busy; effortSelect.disabled = busy || !pickedModel?.supportedReasoningEfforts.length; modelsRefresh.disabled = busy || modelsState === 'loading';
+    modelsStatus.textContent = modelsState === 'loading' ? '正在读取 Codex 模型…' : modelsError || (invalidChoice ? '已选模型或思考强度暂不可用，请重新选择或刷新' : modelsState === 'ready' && !codexModels.length ? '暂无可选模型，可沿用本机默认' : '');
+    modelsStatus.hidden = !modelsStatus.textContent;
+    officeCaption.textContent = (busy ? '执行于 Codex' : '发送到 Codex') + ' · ' + (pickedModel?.displayName || choice.model || office.thread?.model || '本机默认') + (pickedModel ? ' · 思考：' + effortLabel(choice.effort || pickedModel.defaultReasoningEffort || '默认') : '') + ' · ⌘/Ctrl Enter 发送';
     const key = JSON.stringify(office.items || []);
     if (key !== officeRenderKey) {
       const bottom = officeHistory.scrollHeight - officeHistory.scrollTop - officeHistory.clientHeight < 60; officeRenderKey = key;
@@ -235,8 +288,8 @@ function installWorkspaceShell(options = {}) {
       if (!children.length) { const welcome = el('div', 'neko-office-welcome'); welcome.append(image(avatar('devcat')), el('h2', '', 'Codex 工作界面'), el('p', '', '选择一个本地工作会话，或在当前项目创建任务')); officeHistory.appendChild(welcome); }
       if (bottom) officeHistory.scrollTop = officeHistory.scrollHeight;
     }
-    officeError.textContent = office.error || (office.status === 'working' ? 'Codex 正在工作…' : '');
-    sendButton.disabled = officeSending || office.status === 'working'; stopButton.hidden = office.status !== 'working';
+    officeError.textContent = officeErrorText || office.error || (officeReading ? '正在读取原生 Codex 会话…' : office.status === 'working' ? 'Codex 正在工作…' : '');
+    sendButton.disabled = busy || invalidChoice; sendButton.textContent = officeSending ? '发送中…' : '发送'; stopButton.hidden = office.status !== 'working';
     officeApprovals.replaceChildren(...(office.approvals || []).map(a => {
       const box = el('section', 'neko-office-approval'); box.append(el('strong', '', a.title), el('p', '', [a.threadTitle, a.cwd].filter(Boolean).join(' · ')), el('pre', '', a.command || a.reason || 'Codex 请求确认此操作'));
       box.append(button('允许本次', '', () => call({ action: 'codex-approve', key: a.key, decision: 'accept' }).catch(showOfficeError)), button('拒绝', '', () => call({ action: 'codex-approve', key: a.key, decision: 'decline' }).catch(showOfficeError))); return box;
@@ -326,9 +379,9 @@ function installWorkspaceShell(options = {}) {
     if (disposed) return; state = next; const connections = modalBody.querySelector('.neko-workspace-connections'); if (connections) connections.textContent = connectionSummary(); if (!selectedProject) selectedProject = next.workspaceRoot || '';
     renderCompanion(); if (next.workspaceRevision !== layoutVersion) { layoutVersion = next.workspaceRevision; call({ action: 'state' }).then(value => { if (!disposed) { layout = value; renderLayout(); } }).catch(showError); }
   }));
-  if (typeof bridge.subscribeOffice === 'function') releases.push(bridge.subscribeOffice(next => { if (disposed) return; if (next.thread?.id === selectedId || officeSending) { office = next; } else { office.approvals = next.approvals || []; } renderOffice(); }));
+  if (typeof bridge.subscribeOffice === 'function') releases.push(bridge.subscribeOffice(next => { if (disposed) return; if (next.thread?.id === selectedId || sendContext?.version === readVersion && sendContext.id === null) { office = next; } else { office.approvals = next.approvals || []; } renderOffice(); }));
   if (typeof bridge.subscribeCommunity === 'function') releases.push(bridge.subscribeCommunity(next => { if (disposed) return; socialOpen = next.status !== 'hidden'; renderOffice(); }));
-  Promise.all([bridge.getState(), call({ action: 'state' }), call({ action: 'codex-state' })]).then(([s, l, c]) => { if (!disposed) { state = s; layout = l; office = c; selectedProject ||= s.workspaceRoot || ''; renderLayout(); refreshCatalog(); } }).catch(showError);
+  Promise.all([bridge.getState(), call({ action: 'state' }), call({ action: 'codex-state' }), call({ action: 'codex-model-choices' }).catch(() => null)]).then(([s, l, c, choices]) => { if (!disposed) { for (const [id, choice] of Object.entries(choices || {})) modelChoices.set(id, choice); state = s; layout = l; office = c; selectedId = c.thread?.id || null; selectedProject ||= s.workspaceRoot || ''; renderLayout(); refreshCatalog(); } }).catch(showError);
   syncCharacter();
   const interval = win.setInterval(() => { if (doc.visibilityState !== 'hidden') refreshCatalog(true); }, 60000);
   place();
