@@ -23,6 +23,8 @@ const {NekoChat,localBase}=require('./neko-chat.cjs');
 const {skinPatch,applySkinCookie}=require('./embedded-dsh/dsh-skin-patch.cjs');
 const {createAppearanceStore}=require('./workbench-appearance.cjs');
 const {createRolesStore}=require('./workbench-roles.cjs');
+const {createCodexAccountService}=require('./codex-account.cjs');
+const codexAccount=createCodexAccountService();
 let dshSkin=null;
 const workbenchOnly=process.env.PET_WORKBENCH_ONLY==='1'; // Local visual QA only; normal launches show every pet.
 const {cleanPrompt,humanMessage,activity,acceptHuman}=require('./pet-context.js');
@@ -608,6 +610,10 @@ ipcMain.handle('workbench:roles',async(event,method,p={})=>{
 ipcMain.handle('workbench:call',async(event,method,value)=>{
   assertWorkbenchCaller(event);
   if(method==='state')return workbenchState();
+  if(method==='accounts'){
+    if(value==null||typeof value!=='object'||Array.isArray(value))throw new Error('账号读取参数无效');
+    return {codex:await codexAccount.read({includeQuota:value.includeQuota===true,force:value.force===true})};
+  }
   if(method==='fish'){return fishAction(value);}
   if(method==='qqbot'){return qqbotAction(value);}
   if(method==='avatar'){workbenchAppearance.select(value);broadcast();return workbenchState();}
@@ -693,7 +699,7 @@ app.on('before-quit',event=>{
   if(shutdownStarted)return;
   shutdownStarted=true;quitting=true;communityController.dispose();catMotion.dispose();clearTimeout(nekoRetry);clearTimeout(rosterTimer);for(const timer of terminalTimers.values())clearTimeout(timer);terminalTimers.clear();nekoChat.close();save();
   const current=childLifecycle;
-  Promise.allSettled([mainChatRuntime?.close(),current?.stop()]).finally(()=>{shutdownComplete=true;app.quit();});
+  Promise.allSettled([mainChatRuntime?.close(),current?.stop(),codexAccount.dispose()]).finally(()=>{shutdownComplete=true;app.quit();});
 });
 process.on('SIGTERM',()=>app.quit());
 process.on('SIGINT',()=>app.quit());

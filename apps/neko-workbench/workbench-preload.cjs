@@ -4,6 +4,7 @@ const {contextBridge,ipcRenderer}=require('electron');
 const call=(method,value)=>ipcRenderer.invoke('workbench:call',method,value);
 contextBridge.exposeInMainWorld('nekoWorkbench',Object.freeze({
   getState:()=>call('state'),
+  getAccounts:({includeQuota=false,force=false}={})=>call('accounts',{includeQuota:includeQuota===true,force:force===true}),
   setAvatar:id=>call('avatar',id),
   uploadAvatar:()=>call('upload-avatar'),
   action:name=>call('action',name),
