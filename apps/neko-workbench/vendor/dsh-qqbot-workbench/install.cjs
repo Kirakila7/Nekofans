@@ -27,6 +27,61 @@ function prepareProfile(root) {
 }
 function adaptPlugin(root, pluginDir) {
   const runtimeImport = (name, members) => `const { pathToFileURL: __qqPathToFileURL } = await import('node:url');\nconst { join: __qqJoin } = await import('node:path');\n${members} = await import(__qqPathToFileURL(__qqJoin(process.env.NEKO_WORKBENCH_DSH_MODULES, '${name}')).href);`;
+  // Upstream uses homedir() for preferences and DSH settings, which would
+  // silently mix this instance with an unrelated global QQ bot/profile.
+  // Keep the adapted code fail-closed and scoped to the host-owned directory.
+  const privateFiles = `
+import * as __nekoFs from 'node:fs';
+import * as __nekoPath from 'node:path';
+function __nekoPrivatePath(name) {
+  const root = process.env.NEKO_WORKBENCH_QQBOT_PROFILE;
+  const data = process.env.NEKO_WORKBENCH_DATA_DIR;
+  if (!root || !data || !__nekoPath.isAbsolute(root) || !__nekoPath.isAbsolute(data) ||
+      __nekoPath.resolve(root) !== __nekoPath.resolve(data, 'qqbot-runtime') ||
+      !['settings.yaml', 'model-prefs.json'].includes(name)) throw Error('QQ profile unavailable');
+  const parent = __nekoFs.lstatSync(data);
+  if (!parent.isDirectory() || parent.isSymbolicLink() ||
+      (typeof process.getuid === 'function' && parent.uid !== process.getuid())) throw Error('QQ profile unavailable');
+  const st = __nekoFs.lstatSync(root);
+  if (!st.isDirectory() || st.isSymbolicLink() || (st.mode & 0o077) !== 0 ||
+      (typeof process.getuid === 'function' && st.uid !== process.getuid())) throw Error('QQ profile unavailable');
+  return __nekoPath.join(root, name);
+}
+function __nekoFileOK(fd) {
+  const st = __nekoFs.fstatSync(fd);
+  if (!st.isFile() || st.nlink !== 1 || (typeof process.getuid === 'function' && st.uid !== process.getuid())) throw Error('QQ profile file unavailable');
+  return st;
+}
+function __nekoReadPrivate(file) {
+  const fd = __nekoFs.openSync(file, __nekoFs.constants.O_RDONLY | __nekoFs.constants.O_NOFOLLOW);
+  try {
+    const st = __nekoFileOK(fd);
+    if ((st.mode & 0o077) !== 0) throw Error('QQ profile file unavailable');
+    return __nekoFs.readFileSync(fd, 'utf8');
+  } finally { __nekoFs.closeSync(fd); }
+}
+function __nekoWritePrivate(file, value) {
+  const fd = __nekoFs.openSync(file, __nekoFs.constants.O_WRONLY | __nekoFs.constants.O_CREAT | __nekoFs.constants.O_NOFOLLOW, 0o600);
+  try {
+    __nekoFileOK(fd);
+    __nekoFs.fchmodSync(fd, 0o600);
+    __nekoFs.ftruncateSync(fd, 0);
+    __nekoFs.writeFileSync(fd, value, 'utf8');
+  } finally { __nekoFs.closeSync(fd); }
+}
+`;
+  change(path.join(pluginDir,'dist/model/settings-reader.js'),s=>{
+    s=replaceOnce(s,"import { homedir } from 'node:os';",privateFiles,'settings private helpers');
+    s=replaceOnce(s,"const settingsPath = resolve(homedir(), '.dsh', 'settings.yaml');","const settingsPath = __nekoPrivatePath('settings.yaml');",'private model settings');
+    return replaceOnce(s,"const content = readFileSync(settingsPath, 'utf8');","const content = __nekoReadPrivate(settingsPath);",'private settings read');
+  });
+  change(path.join(pluginDir,'dist/model/prefs-store.js'),s=>{
+    s=replaceOnce(s,"import { homedir } from 'node:os';",privateFiles,'preferences private helpers');
+    s=replaceOnce(s,"this.prefsPath = resolve(homedir(), '.dsh-qqbot', 'model-prefs.json');","this.prefsPath = __nekoPrivatePath('model-prefs.json');",'private preferences path');
+    s=replaceOnce(s,"const content = readFileSync(this.prefsPath, 'utf8');","const content = __nekoReadPrivate(this.prefsPath);",'private preferences read');
+    s=replaceOnce(s,"mkdirSync(dirname(this.prefsPath), { recursive: true });",'', 'private preferences directory');
+    return replaceOnce(s,"writeFileSync(this.prefsPath, JSON.stringify(data, null, 2), 'utf8');","__nekoWritePrivate(this.prefsPath, JSON.stringify(data, null, 2));",'private preferences write');
+  });
   change(path.join(pluginDir,'dist/config.js'),s=>replaceOnce(s,"import Schema from '@deepseek-ai/schemastery';",runtimeImport('schemastery/lib/index.mjs','const { default: Schema }'),'schema runtime'));
   change(path.join(pluginDir,'dist/session/session-manager.js'),s=>replaceOnce(s,"import { SessionId } from '@deepseek-ai/dsh-session';",runtimeImport('dsh-session/lib/index.js','const { SessionId }'),'session runtime'));
   change(path.join(pluginDir,'dist/session/session-manager.js'),s=>{
@@ -74,14 +129,14 @@ function adaptPlugin(root, pluginDir) {
     s=replaceOnce(s,'function QQBotSettingsSection() {','function QQBotSettingsSection() {\n            installPanelStyles();','client styles');
     return replaceOnce(s,'exports.apply = apply;','exports.QQBotSettingsSection = QQBotSettingsSection;\n        exports.apply = apply;','client export');
   });
-  fs.writeFileSync(path.join(root,'installed-adapter.json'),JSON.stringify({version:'0.5.3',revision:6})+'\n',{encoding:'utf8',mode:0o600});
+  fs.writeFileSync(path.join(root,'installed-adapter.json'),JSON.stringify({version:'0.5.3',revision:7})+'\n',{encoding:'utf8',mode:0o600});
 }
 async function install(root, modulesDir, options={}) {
   const actual=crypto.createHash('sha256').update(fs.readFileSync(ARCHIVE)).digest('hex');
   if(actual!==SHA)throw Error('QQ 官方插件包校验失败');
   const profile=prepareProfile(root), pkg=path.join(root,'node_modules/@tencent-connect/dsh-qqbot');
   const marker=path.join(root,'installed-adapter.json');
-  let ready=false; try{const m=JSON.parse(fs.readFileSync(marker,'utf8'));ready=m.version==='0.5.3'&&m.revision===6&&fs.existsSync(path.join(pkg,'dist/index.js'));}catch{}
+  let ready=false; try{const m=JSON.parse(fs.readFileSync(marker,'utf8'));ready=m.version==='0.5.3'&&m.revision===7&&fs.existsSync(path.join(pkg,'dist/index.js'));}catch{}
   if(!ready){
     fs.writeFileSync(path.join(root,'package.json'),JSON.stringify({name:'neko-qqbot-runtime',version:'1.0.0',private:true,dependencies:{'@tencent-connect/dsh-qqbot':'file:./dsh-qqbot.tgz'}})+'\n',{mode:0o600});
     fs.copyFileSync(ARCHIVE,path.join(root,'dsh-qqbot.tgz'));
