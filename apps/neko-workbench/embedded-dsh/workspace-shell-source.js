@@ -136,8 +136,18 @@ function installWorkspaceShell(options = {}) {
   function showError(error) { listStatus.textContent = error?.message || '工作台操作未完成，请重试'; }
   function showOfficeError(error) { officeError.textContent = error?.message || 'Codex 操作未完成，请重试'; }
   async function saveLayout(patch) {
-    try { layout = await call({ action: 'update', patch }); renderLayout(); }
-    catch (error) { showError(error); }
+    try { layout = await call({ action: 'update', patch }); renderLayout(); return true; }
+    catch (error) { showError(error); return false; }
+  }
+  async function newSeatSession(seat) {
+    if (!seat.provider) { openSettings('seat', seat.id); return; }
+    hideSocial(); closeSettings();
+    if (!await saveLayout({ activeSeatId: seat.id, officeMode: seat.provider })) return;
+    if (seat.provider === 'codex') { selectedProject = seat.projectRoot || state?.workspaceRoot || ''; newOffice(); return; }
+    try {
+      if (typeof options.openDshNew !== 'function') throw Error('无法打开 DSH 工作界面，请重试');
+      await options.openDshNew(seat.projectRoot);
+    } catch (error) { showError(error); }
   }
   function renderLayout() {
     if (!layout || disposed) return;
@@ -153,9 +163,11 @@ function installWorkspaceShell(options = {}) {
         saveLayout({ activeSeatId: seat.id, officeMode: seat.provider });
       });
       pick.setAttribute('aria-pressed', String(active === seat.id));
-      pick.append(image(seat.avatarId === 'custom' ? seat.customDataUrl : avatar(seat.avatarId)), el('span', 'neko-custom-seat__name', seat.name), el('span', 'neko-custom-seat__provider', seat.provider?.toUpperCase() || '未绑定'));
+      pick.append(image(seat.avatarId === 'custom' ? seat.customDataUrl : avatar(seat.avatarId)), el('span', 'neko-custom-seat__name', seat.name));
+      const add = button('+', 'neko-custom-seat__new', () => newSeatSession(seat));
+      add.setAttribute('aria-label', '新建 ' + seat.name + ' 工作会话'); add.title = seat.provider ? '新建 ' + seat.name + ' 工作会话' : '先配置 ' + seat.name;
       const settings = button('⋯', 'neko-custom-seat__settings', () => openSettings('seat', seat.id)); settings.setAttribute('aria-label', '配置工作 agent：' + seat.name);
-      row.append(pick, settings); return row;
+      row.append(pick, add, el('span', 'neko-custom-seat__provider', seat.provider?.toUpperCase() || '未绑定'), settings); return row;
     }));
     renderCatalog(); renderCompanion(); renderOffice(); place();
   }

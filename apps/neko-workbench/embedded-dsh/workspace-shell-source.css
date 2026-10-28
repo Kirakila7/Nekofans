@@ -4,8 +4,10 @@ body[data-neko-workspace-shell] .neko-avatar-anchor,
 body[data-neko-workspace-shell] .neko-avatar-portal,
 body[data-neko-workspace-shell] .neko-role-host .neko-roles,
 body[data-neko-workspace-shell] .neko-role-host .neko-community,
+body[data-neko-workspace-shell] .neko-mode-switch,
 body[data-neko-workspace-shell] [data-neko-session-browser-original],
 body[data-neko-workspace-shell] .neko-hero-pick__name { display:none !important; }
+body[data-neko-workspace-shell] button[data-neko-new-session="plus"] { position:absolute !important; visibility:hidden !important; pointer-events:none !important; }
 .neko-workspace-rail-controls { display:flex; flex-direction:column; gap:10px; padding-top:14px; }
 .neko-workspace-settings { font-size:24px; line-height:1; }
 .neko-office-switch { border:1px solid var(--nws-border); background:var(--nws-hover); }
@@ -17,7 +19,8 @@ body[data-neko-workspace-shell] .neko-hero-pick__name { display:none !important;
 .neko-custom-seat button:focus-visible,.neko-session-browser button:focus-visible { outline:2px solid #4c89ad; outline-offset:-2px; }
 .neko-custom-seat img { width:27px; height:27px; object-fit:contain; flex:none; }
 .neko-custom-seat__name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; }
-.neko-custom-seat__provider { font-size:10px; color:var(--nws-muted); border:1px solid var(--nws-border); border-radius:4px; padding:1px 4px; }
+.neko-custom-seat__new { flex:none; width:26px; height:28px; padding:0; color:var(--nws-muted) !important; font-size:20px !important; line-height:1; }
+.neko-custom-seat__provider { flex:none; font-size:10px; color:var(--nws-muted); border:1px solid var(--nws-border); border-radius:4px; padding:1px 4px; }
 .neko-custom-seat__settings { width:28px; height:30px; font-size:20px !important; }
 .neko-custom-seat button:hover,.neko-session-browser button:hover { background:var(--nws-hover); border-radius:7px; }
 .neko-session-browser { display:flex; flex-direction:column; flex:1; min-height:80px; overflow:hidden; padding:0 12px; color:var(--nws-text); font:12px/1.5 system-ui,sans-serif; }
