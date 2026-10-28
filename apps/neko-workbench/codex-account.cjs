@@ -8,6 +8,9 @@ const { spawn } = require('node:child_process');
 
 function resolveCodex({ env = process.env, home = os.homedir(), exists = fs.existsSync } = {}) {
   const candidates = env.NEKO_WORKBENCH_CODEX_CLI ? [env.NEKO_WORKBENCH_CODEX_CLI] : [
+    '/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex',
+    path.join(home, 'Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex'),
+    path.join(home, 'Desktop/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex'),
     path.join(home, '.local/bin/codex'), path.join(home, '.codex/bin/codex'),
     '/opt/homebrew/bin/codex', '/usr/local/bin/codex',
     ...(env.PATH || '').split(path.delimiter).filter(p => path.isAbsolute(p)).map(p => path.join(p, process.platform === 'win32' ? 'codex.exe' : 'codex')),

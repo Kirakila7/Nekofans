@@ -1169,6 +1169,7 @@ function SidebarMark({ size }) {
                 type: 'button',
                 role: 'radio',
                 className: 'neko-hero-pick',
+                'aria-label': a.name,
                 'aria-checked': selected ? 'true' : 'false',
                 'aria-busy': snap.pending.avatar === a.id ? 'true' : undefined,
                 'aria-disabled': locked ? 'true' : undefined,
@@ -1441,6 +1442,7 @@ function SidebarMark({ size }) {
           h(BilibiliEntry, { snap: workbenchSnap, store: workbenchStore })),
         h(Notice, { notice: workbenchSnap.notice, scope: 'community' }),
         h(WorkspaceModeSwitch, { snap: workbenchSnap, store: workbenchStore }),
+        h('div', { 'data-neko-seat-mount': '', className: 'neko-seat-mount' }),
         h('div', { className: 'neko-roles', role: 'group', 'aria-label': '角色' },
           ...snap.state.roles.map((role) =>
             h(RoleRow, { key: role.id, role, snap, store, tools: role.id === LIVE_ROLE ? tools : null }),
@@ -1449,6 +1451,354 @@ function SidebarMark({ size }) {
         ),
       )
     }
+
+// @neko-workspace-shell:start
+const WORKSPACE_SHELL_CSS = "body[data-neko-workspace-shell] { --nws-bg:var(--dsw-alias-bg-layer-1,#fbfeff); --nws-border:var(--dsw-alias-border-l1,#c4dbe6); --nws-text:var(--dsw-alias-label-primary,#17303d); --nws-muted:var(--dsw-alias-label-secondary,#637d8c); --nws-hover:var(--dsw-alias-interactive-bg-hover,#ddedf4); }\nbody[data-neko-workspace-shell] .neko-avatar-anchor,\nbody[data-neko-workspace-shell] .neko-avatar-portal,\nbody[data-neko-workspace-shell] .neko-role-host .neko-roles,\nbody[data-neko-workspace-shell] .neko-role-host .neko-community,\nbody[data-neko-workspace-shell] [data-neko-session-browser-original],\nbody[data-neko-workspace-shell] .neko-hero-pick__name { display:none !important; }\n.neko-workspace-rail-controls { display:flex; flex-direction:column; gap:10px; padding-top:14px; }\n.neko-workspace-settings { font-size:24px; line-height:1; }\n.neko-office-switch { border:1px solid var(--nws-border); background:var(--nws-hover); }\n.neko-custom-seats { display:grid; gap:3px; margin:10px 0 6px; }\n.neko-custom-seat { display:flex; align-items:center; border-radius:9px; min-width:0; }\n.neko-custom-seat[data-active=\"true\"] { background:var(--nws-hover); }\n.neko-custom-seat__pick { display:flex; align-items:center; gap:9px; flex:1; min-width:0; padding:7px 8px; text-align:left; }\n.neko-custom-seat button,.neko-session-browser button { border:0; color:inherit; background:transparent; font:inherit; cursor:pointer; }\n.neko-custom-seat button:focus-visible,.neko-session-browser button:focus-visible { outline:2px solid #4c89ad; outline-offset:-2px; }\n.neko-custom-seat img { width:27px; height:27px; object-fit:contain; flex:none; }\n.neko-custom-seat__name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; }\n.neko-custom-seat__provider { font-size:10px; color:var(--nws-muted); border:1px solid var(--nws-border); border-radius:4px; padding:1px 4px; }\n.neko-custom-seat__settings { width:28px; height:30px; font-size:20px !important; }\n.neko-custom-seat button:hover,.neko-session-browser button:hover { background:var(--nws-hover); border-radius:7px; }\n.neko-session-browser { display:flex; flex-direction:column; flex:1; min-height:80px; overflow:hidden; padding:0 12px; color:var(--nws-text); font:12px/1.5 system-ui,sans-serif; }\n.neko-session-browser__header { display:flex; align-items:center; justify-content:space-between; margin:3px 0 7px; }\n.neko-session-all { text-align:left; font-weight:600 !important; padding:4px; }\n.neko-session-refresh { width:26px; height:26px; font-size:19px !important; }\n.neko-session-search { width:100%; min-height:31px; border:1px solid var(--nws-border); border-radius:8px; background:transparent; color:inherit; padding:5px 9px; outline-offset:2px; }\n.neko-session-status { font-size:11px; color:var(--nws-muted); margin:4px 0; }\n.neko-session-status:empty { display:none; }\n.neko-project-list { overflow:auto; flex:1; min-height:0; padding-bottom:8px; }\n.neko-workspace-project { margin-top:9px; }\n.neko-workspace-project__heading { display:flex; align-items:center; min-width:0; gap:4px; }\n.neko-workspace-project__name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; flex:1; text-align:left; padding:4px 3px; font-weight:600 !important; }\n.neko-workspace-project__provider { color:var(--nws-muted); font-size:9px; padding-right:3px; }\n.neko-workspace-session { display:block; width:100%; text-align:left; padding:6px 8px 6px 15px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }\n.neko-workspace-session[data-selected=\"true\"] { background:var(--nws-hover); border-radius:6px; }\n.neko-workspace-more { width:100%; padding:8px; }\n.neko-companion-dock { position:relative; display:grid; grid-template-columns:minmax(0,1fr); flex:none; min-width:0; width:auto; box-sizing:border-box; margin:0 12px 7px; padding:0; border:0; color:var(--nws-text); background:transparent; font:12px/1.5 system-ui,sans-serif; }\n.neko-companion-character { justify-self:center; width:76px; height:90px; position:relative; transform:translateX(var(--neko-companion-offset,0px)); cursor:grab; touch-action:none; user-select:none; -webkit-user-select:none; }\n.neko-companion-character[data-dragging=\"true\"] { cursor:grabbing; }\n.neko-companion-character:focus-visible { outline:1px dashed var(--nws-border); outline-offset:-3px; border-radius:12px; }\n.neko-companion-poster,.neko-companion-video { display:block; position:absolute; inset:0; width:100%; height:100%; background:transparent; object-position:center; object-fit:cover; pointer-events:none; }\n.neko-companion-history { position:absolute; z-index:4; bottom:calc(100% + 6px); left:0; right:0; box-sizing:border-box; height:96px; overflow:auto; margin:0; padding:10px; border:1px solid color-mix(in srgb,var(--nws-muted) 18%,transparent); border-radius:10px; background:var(--dsw-specific-sidebar-fill,var(--nws-bg)); box-shadow:0 4px 16px #17303d0a; line-height:18px; white-space:pre-wrap; overflow-wrap:anywhere; }\n.neko-companion-message,.neko-companion-empty { margin:0; font-size:12px; line-height:18px; }\n.neko-companion-empty { color:var(--nws-muted); }\n.neko-companion-status { margin:4px 0 0; color:var(--nws-muted); font-size:10px; }\n.neko-companion-form { display:flex; align-items:center; gap:4px; min-width:0; }\n.neko-companion-form textarea { flex:1; min-width:0; resize:none; height:34px; padding:7px; box-sizing:border-box; border:1px solid color-mix(in srgb,var(--nws-muted) 22%,transparent); border-radius:8px; color:inherit; background:transparent; font:12px/18px system-ui; }\n.neko-companion-form button { display:grid; place-items:center; flex:none; width:26px; height:30px; padding:3px; border:0; border-radius:6px; background:transparent; color:var(--nws-muted); cursor:pointer; }\n.neko-companion-form button:hover,.neko-companion-history-toggle[aria-expanded=\"true\"] { background:color-mix(in srgb,var(--nws-muted) 9%,transparent); color:var(--nws-text); }\n.neko-companion-form button:focus-visible { outline:1px solid var(--nws-muted); outline-offset:1px; }\n.neko-companion-history-toggle svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round; }\n.neko-office-panel { position:fixed; z-index:28; display:flex; flex-direction:column; box-sizing:border-box; padding:22px clamp(18px,5vw,75px) 24px; color:var(--nws-text); background:var(--dsw-alias-bg-base,#edf6fa); font:14px/1.65 system-ui,sans-serif; }\n.neko-office-panel[hidden],.neko-workspace-modal[hidden],.neko-companion-dock [hidden] { display:none !important; }\n.neko-office-header { display:flex; align-items:center; gap:10px; min-height:42px; flex:none; }\n.neko-office-brand { width:32px; height:32px; object-fit:contain; }\n.neko-office-header strong { max-width:45%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }\n.neko-office-model { font-size:11px; color:var(--nws-muted); margin-right:auto; }\n.neko-office-panel button,.neko-workspace-modal button { color:inherit; background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:8px; padding:6px 11px; font:12px/1.5 system-ui; cursor:pointer; }\n.neko-office-panel button:disabled,.neko-workspace-modal button:disabled,.neko-companion-form button:disabled { opacity:.45; cursor:default; }\n.neko-office-history { flex:1; min-height:80px; overflow:auto; padding:22px 0; }\n.neko-office-item { margin:0 0 18px; white-space:pre-wrap; overflow-wrap:anywhere; }\n.neko-office-item[data-kind=\"user\"] { margin-left:15%; padding:12px 16px; background:var(--nws-bg); border-radius:16px; }\n.neko-office-item[data-kind=\"activity\"] { color:var(--nws-muted); font-size:12px; border-left:2px solid var(--nws-border); padding-left:12px; }\n.neko-office-item summary { cursor:pointer; }\n.neko-office-item__text { max-height:650px; overflow:auto; }\n.neko-office-welcome { text-align:center; display:grid; justify-items:center; padding-top:12vh; color:var(--nws-muted); }\n.neko-office-welcome img { width:100px; height:100px; object-fit:contain; }\n.neko-office-welcome h2 { font-size:20px; margin:12px 0 0; color:var(--nws-text); }\n.neko-office-welcome p { font-size:13px; }\n.neko-office-form { flex:none; background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:18px; padding:12px 15px; box-shadow:0 5px 24px #13304808; }\n.neko-office-form textarea { width:100%; resize:vertical; max-height:180px; min-height:65px; color:inherit; background:transparent; border:0; font:14px/1.65 system-ui; outline:none; box-sizing:border-box; }\n.neko-office-form-footer { display:flex; align-items:center; gap:8px; }\n.neko-office-form-footer span { flex:1; color:var(--nws-muted); font-size:10px; }\n.neko-office-error { font-size:12px; color:var(--nws-muted); margin:4px 0 8px; }\n.neko-office-error:empty { display:none; }\n.neko-office-approvals { max-height:28vh; overflow:auto; }\n.neko-office-approval { border:1px solid var(--nws-border); background:var(--nws-bg); border-radius:10px; padding:12px; margin:8px 0; }\n.neko-office-approval pre { white-space:pre-wrap; overflow-wrap:anywhere; font-size:11px; }\n.neko-office-approval button { margin-right:8px; }\n.neko-workspace-modal { position:fixed; inset:0; z-index:220; display:grid; place-items:center; padding:24px; background:#0c24394d; color:var(--nws-text); font:13px/1.6 system-ui,sans-serif; }\n.neko-workspace-modal__card { width:min(460px,90vw); max-height:85vh; overflow:auto; background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:18px; box-shadow:0 24px 80px #17303d30; padding:20px; }\n.neko-workspace-modal__card > header { display:flex; align-items:center; justify-content:space-between; }\n.neko-workspace-modal h2 { font-size:18px; margin:0; }\n.neko-workspace-modal h3 { font-size:13px; margin:20px 0 9px; }\n.neko-office-choices { display:flex; gap:8px; }\n.neko-office-choice { flex:1; display:grid; justify-items:center; gap:7px; padding:14px 8px !important; }\n.neko-office-choice img { width:45px; height:45px; object-fit:contain; }\n.neko-office-choice[aria-pressed=\"true\"] { outline:2px solid #4c89ad; outline-offset:-2px; }\n.neko-workspace-palettes { display:flex; gap:10px; margin-bottom:18px; }\n.neko-workspace-palettes button { padding:4px; }\n.neko-workspace-palettes img { width:35px; height:35px; object-fit:contain; }\n.neko-workspace-setting-link { display:block; width:100%; text-align:left; margin-top:8px; }\n.neko-workspace-note { font-size:11px; color:var(--nws-muted); margin-top:17px; }\n.neko-seat-editor { display:grid; gap:12px; padding-top:18px; }\n.neko-seat-editor label { display:grid; gap:5px; }\n.neko-seat-editor input,.neko-seat-editor select { width:100%; box-sizing:border-box; background:var(--nws-bg); color:inherit; border:1px solid var(--nws-border); border-radius:7px; padding:7px 9px; font:13px system-ui; }\n.neko-workspace-form-error { color:#bd5c4e; margin:0; }\n.neko-workspace-form-error:empty { display:none; }\n@media(max-height:700px) { .neko-companion-character { height:76px; } .neko-custom-seat__pick { padding-top:4px; padding-bottom:4px; } }\n\n.neko-workspace-connections { margin:0 0 8px; font-size:12px; color:var(--nws-muted); }\n\nbody[data-neko-workspace-shell] [data-neko-companion-footer] { display:block !important; width:100%; min-width:0; align-self:stretch; box-sizing:border-box; }\n";
+function installWorkspaceShell(options = {}) {
+  const doc = options.document || (typeof document !== 'undefined' ? document : null);
+  const win = options.window || (typeof window !== 'undefined' ? window : null);
+  const bridge = options.bridge || win?.nekoWorkbench;
+  if (!doc?.body || !win?.MutationObserver || typeof bridge?.workspace !== 'function' || typeof bridge.companion !== 'function' || doc.querySelector('[data-neko-workspace-shell]')) return () => {};
+  const el = (tag, className, text) => { const n = doc.createElement(tag); if (className) n.className = className; if (text !== undefined) n.textContent = text; return n; };
+  const button = (label, className, click) => { const n = el('button', className, label); n.type = 'button'; if (click) n.addEventListener('click', click); return n; };
+  const image = (src, className) => { const n = el('img', className); n.alt = ''; n.draggable = false; if (src) n.src = src; return n; };
+  const avatar = id => options.avatar?.(id) || '';
+  const style = el('style'); style.dataset.nekoWorkspaceShell = ''; style.textContent = options.cssText || ''; doc.head.appendChild(style);
+  let disposed = false, queued = false, layout = null, state = null, catalog = null, selectedProject = '', selectedId = null, searchText = '', layoutVersion = -1, listLoading = false, sending = false, socialOpen = false;
+  let office = { status: 'idle', thread: null, items: [], approvals: [], error: '' };
+  const nativeMarks = new Map(), nodes = [], releases = [], drafts = new Map(), groupOpen = new Set();
+  const own = node => { node.dataset.nekoWorkspaceOwned = ''; nodes.push(node); return node; };
+  const call = request => bridge.workspace(request);
+  const hideSocial = () => { options.hideSocial?.(); socialOpen = false; };
+  function markNative(node, name) { if (!node) return; if (!nativeMarks.has(node)) nativeMarks.set(node, new Map()); const attrs = nativeMarks.get(node); if (!attrs.has(name)) attrs.set(name, node.getAttribute(name)); if (!node.hasAttribute(name)) node.setAttribute(name, ''); }
+  const railTop = own(el('div', 'neko-workspace-rail-controls'));
+  const officeButton = own(button('', 'neko-side-rail__button neko-office-switch', () => openSettings('office')));
+  officeButton.setAttribute('aria-label', '切换工作界面'); officeButton.title = '切换 DSH / Codex 工作界面';
+  const officeImage = image(avatar('bigfish')); officeButton.appendChild(officeImage);
+  const settingsButton = button('⚙', 'neko-side-rail__button neko-workspace-settings', () => openSettings('general'));
+  settingsButton.setAttribute('aria-label', '工作台设置'); settingsButton.title = '工作台设置';
+  const communityButton = button('', 'neko-side-rail__button neko-community neko-community-yui', () => { closeSettings(); Promise.resolve(options.openCommunity?.()).catch(showError); });
+  communityButton.setAttribute('aria-label', 'Yui · N.E.K.O. 社区'); communityButton.title = 'N.E.K.O. 原生社区'; communityButton.appendChild(image(avatar('yui')));
+  railTop.append(settingsButton, communityButton);
+  const seats = own(el('div', 'neko-custom-seats')); seats.setAttribute('role', 'group'); seats.setAttribute('aria-label', '自定义工作 agent');
+  const sessionBrowser = own(el('section', 'neko-session-browser')); sessionBrowser.setAttribute('aria-label', '全部工作会话');
+  const listHeader = el('div', 'neko-session-browser__header');
+  const allButton = button('全部工作会话', 'neko-session-all', () => saveLayout({ activeSeatId: null }));
+  const refreshButton = button('↻', 'neko-session-refresh', () => refreshCatalog(true)); refreshButton.setAttribute('aria-label', '刷新本地工作会话');
+  listHeader.append(allButton, refreshButton);
+  const search = el('input', 'neko-session-search'); search.type = 'search'; search.placeholder = '搜索工作会话或项目'; search.setAttribute('aria-label', '搜索工作会话或项目'); search.addEventListener('input', () => { searchText = search.value.toLowerCase(); renderCatalog(); });
+  const listStatus = el('p', 'neko-session-status'), projectList = el('div', 'neko-project-list');
+  sessionBrowser.append(listHeader, search, listStatus, projectList);
+  const dock = own(el('section', 'neko-companion-dock')); dock.setAttribute('aria-label', '主 agent 聊天');
+  const character = el('div', 'neko-companion-character');
+  character.setAttribute('role', 'slider'); character.tabIndex = 0; character.setAttribute('aria-label', '左右移动大肥鱼'); character.setAttribute('aria-orientation', 'horizontal'); character.title = '左右拖动 · Home 回到中间';
+  let companionOffset = 0, companionDrag = null;
+  function setCompanionOffset(value) {
+    const width = dock.clientWidth || dock.getBoundingClientRect().width;
+    const spriteWidth = character.offsetWidth || 76;
+    const limit = Math.max(0, Math.floor(Math.min(48, (width - spriteWidth) / 2 - 8)));
+    companionOffset = Math.round(Math.max(-limit, Math.min(limit, Number.isFinite(value) ? value : 0)));
+    character.style.setProperty('--neko-companion-offset', companionOffset + 'px');
+    character.setAttribute('aria-valuemin', String(-Math.floor(limit))); character.setAttribute('aria-valuemax', String(Math.floor(limit))); character.setAttribute('aria-valuenow', String(companionOffset));
+    character.setAttribute('aria-valuetext', companionOffset === 0 ? '居中' : (companionOffset < 0 ? '向左 ' : '向右 ') + Math.abs(companionOffset) + ' 像素');
+  }
+  character.addEventListener('pointerdown', event => {
+    if (event.button !== 0 || companionDrag) return;
+    setCompanionOffset(companionOffset); companionDrag = { pointerId: event.pointerId, x: event.clientX, offset: companionOffset };
+    character.dataset.dragging = 'true'; event.preventDefault();
+    try { character.setPointerCapture(event.pointerId); } catch {}
+  });
+  character.addEventListener('pointermove', event => {
+    if (!companionDrag || companionDrag.pointerId !== event.pointerId) return;
+    setCompanionOffset(companionDrag.offset + event.clientX - companionDrag.x);
+  });
+  const finishCompanionDrag = event => { if (!companionDrag || companionDrag.pointerId !== event.pointerId) return; companionDrag = null; character.removeAttribute('data-dragging'); try { character.releasePointerCapture(event.pointerId); } catch {} };
+  character.addEventListener('pointerup', finishCompanionDrag); character.addEventListener('pointercancel', finishCompanionDrag); character.addEventListener('lostpointercapture', finishCompanionDrag);
+  character.addEventListener('dragstart', event => event.preventDefault());
+  character.addEventListener('keydown', event => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home'].includes(event.key)) return;
+    event.preventDefault(); setCompanionOffset(event.key === 'Home' ? 0 : companionOffset + (event.key === 'ArrowLeft' ? -8 : 8));
+  });
+  const characterPoster = image(options.companionPosterSrc || avatar('bigfish'), 'neko-companion-poster');
+  character.appendChild(characterPoster);
+  const motion = win.matchMedia?.('(prefers-reduced-motion: reduce)'); let characterVideo = null, videoFailed = false;
+  if (options.companionVideoSrc) {
+    characterVideo = el('video', 'neko-companion-video'); characterVideo.muted = characterVideo.defaultMuted = true;
+    characterVideo.autoplay = true; characterVideo.loop = true; characterVideo.playsInline = true; characterVideo.preload = 'metadata';
+    characterVideo.setAttribute('muted', ''); characterVideo.setAttribute('playsinline', ''); characterVideo.setAttribute('aria-hidden', 'true'); characterVideo.hidden = true;
+    characterVideo.addEventListener('error', () => { videoFailed = true; syncCharacter(); });
+    characterVideo.addEventListener('playing', () => { if (!videoFailed && !motion?.matches && doc.visibilityState !== 'hidden') { characterVideo.hidden = false; characterPoster.hidden = true; } });
+    characterVideo.src = options.companionVideoSrc; character.appendChild(characterVideo);
+  }
+  function syncCharacter() {
+    if (!characterVideo) return;
+    const paused = videoFailed || motion?.matches || doc.visibilityState === 'hidden';
+    if (paused) { characterVideo.pause(); characterVideo.hidden = true; characterPoster.hidden = false; }
+    else { try { characterVideo.play()?.catch(() => { characterPoster.hidden = false; characterVideo.hidden = true; }); } catch {} }
+  }
+  motion?.addEventListener?.('change', syncCharacter); doc.addEventListener('visibilitychange', syncCharacter);
+  const history = el('div', 'neko-companion-history'); history.id = 'neko-companion-history'; history.hidden = true; history.tabIndex = 0; history.setAttribute('role', 'log'); history.setAttribute('aria-label', '主 agent 最近聊天记录'); history.setAttribute('aria-live', 'polite');
+  const chatStatus = el('p', 'neko-companion-status'); chatStatus.hidden = true; chatStatus.setAttribute('role', 'status');
+  const form = el('form', 'neko-companion-form'), chatInput = el('textarea'); chatInput.rows = 1; chatInput.placeholder = '说点什么…'; chatInput.maxLength = 8000; chatInput.setAttribute('aria-label', '给主 agent 的消息');
+  const chatSend = el('button', '', '↑'); chatSend.type = 'submit'; chatSend.setAttribute('aria-label', '发送给主 agent');
+  const historyToggle = button('', 'neko-companion-history-toggle', () => saveLayout({ companionHistoryOpen: !layout?.companionHistoryOpen }));
+  historyToggle.setAttribute('aria-controls', history.id); historyToggle.setAttribute('aria-label', '展开聊天记录'); historyToggle.title = '展开聊天记录'; historyToggle.setAttribute('aria-expanded', 'false');
+  const historyIcon = doc.createElementNS('http://www.w3.org/2000/svg', 'svg'); historyIcon.setAttribute('viewBox', '0 0 24 24'); historyIcon.setAttribute('aria-hidden', 'true');
+  const historyPath = doc.createElementNS('http://www.w3.org/2000/svg', 'path'); historyPath.setAttribute('d', 'M4 5h16v11H9l-5 4V5Zm4 4h8M8 12h5'); historyIcon.appendChild(historyPath); historyToggle.appendChild(historyIcon);
+  const chatStop = button('■', 'neko-companion-stop', () => bridge.companion({ action: 'stop' }).catch(error => { chatError = error.message || '未能停止回复'; renderCompanion(); })); chatStop.setAttribute('aria-label', '停止回复'); chatStop.title = '停止回复'; chatStop.hidden = true;
+  form.append(historyToggle, chatInput, chatSend, chatStop); dock.append(character, history, form, chatStatus);
+  let historyKey = '', chatError = '';
+  form.addEventListener('submit', async event => {
+    event.preventDefault(); const text = chatInput.value.trim(); if (!text || sending || state?.companion?.working) return;
+    chatError = '';
+    if (!state?.companion?.ready) { try { await bridge.action('chat-settings'); } catch (error) { chatError = error.message || '请从左上角设置连接聊天'; } renderCompanion(); return; }
+    const draft = chatInput.value; sending = true; renderCompanion();
+    try { await bridge.companion({ action: 'send', text }); if (chatInput.value === draft) chatInput.value = ''; }
+    catch (error) { chatError = error.message || '消息未发送，请重试'; }
+    finally { sending = false; renderCompanion(); }
+  });
+  chatInput.addEventListener('keydown', event => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); form.requestSubmit(); } });
+  const panel = own(el('section', 'neko-office-panel')); panel.hidden = true; panel.setAttribute('aria-label', 'Codex 工作界面');
+  const officeHeader = el('header', 'neko-office-header'); const officeTitle = el('strong', '', 'Codex'); const officeModel = el('span', 'neko-office-model');
+  const projectButton = button('选择项目', 'neko-office-project', async () => { try { const cwd = await call({ action: 'choose-project' }); if (cwd) { selectedProject = cwd; renderOffice(); } } catch (error) { showOfficeError(error); } });
+  const newButton = button('＋', 'neko-office-new', () => newOffice()); newButton.setAttribute('aria-label', '新建 Codex 工作会话');
+  officeHeader.append(image(avatar('devcat'), 'neko-office-brand'), officeTitle, officeModel, projectButton, newButton);
+  const officeHistory = el('div', 'neko-office-history'); officeHistory.setAttribute('role', 'log'); officeHistory.setAttribute('aria-label', 'Codex 工作会话记录');
+  const officeError = el('p', 'neko-office-error'); officeError.setAttribute('role', 'status');
+  const officeApprovals = el('div', 'neko-office-approvals');
+  const officeForm = el('form', 'neko-office-form'), officeInput = el('textarea'); officeInput.rows = 3; officeInput.maxLength = 30000; officeInput.placeholder = '给 Codex 分配工作任务…'; officeInput.setAttribute('aria-label', 'Codex 工作任务');
+  const officeFooter = el('div', 'neko-office-form-footer'), officeCaption = el('span', '', 'Codex 原生执行层 · 沿用本机配置');
+  const stopButton = button('停止', 'neko-office-stop', () => call({ action: 'codex-stop' }).catch(showOfficeError));
+  const sendButton = el('button', 'neko-office-send', '发送'); sendButton.type = 'submit';
+  officeFooter.append(officeCaption, stopButton, sendButton); officeForm.append(officeInput, officeFooter);
+  panel.append(officeHeader, officeHistory, officeError, officeApprovals, officeForm); doc.body.appendChild(panel);
+  officeInput.addEventListener('input', () => drafts.set(selectedId || 'new', officeInput.value));
+  let officeSending = false, officeRenderKey = '', readVersion = 0;
+  officeForm.addEventListener('submit', async event => {
+    event.preventDefault(); const message = officeInput.value.trim(); if (!message || officeSending) return;
+    officeSending = true; sendButton.disabled = true; officeError.textContent = '';
+    try {
+      const next = await call({ action: 'codex-send', id: selectedId, cwd: office.thread?.cwd || selectedProject || state?.workspaceRoot, message });
+      drafts.delete(selectedId || 'new'); officeInput.value = ''; if (next.thread?.id === selectedId || officeSending) { office = next; } else { office.approvals = next.approvals || []; } renderOffice(); refreshCatalog(true);
+    } catch (error) { showOfficeError(error); }
+    finally { officeSending = false; renderOffice(); }
+  });
+  officeInput.addEventListener('keydown', event => { if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && !event.isComposing) { event.preventDefault(); officeForm.requestSubmit(); } });
+  const modal = own(el('div', 'neko-workspace-modal')); modal.hidden = true; modal.setAttribute('role', 'dialog'); modal.setAttribute('aria-modal', 'true');
+  const modalCard = el('section', 'neko-workspace-modal__card'), modalHeader = el('header'), modalTitle = el('h2');
+  const modalClose = button('×', 'neko-workspace-modal__close', closeSettings); modalClose.setAttribute('aria-label', '关闭工作台设置');
+  modalHeader.append(modalTitle, modalClose); const modalBody = el('div', 'neko-workspace-modal__body'); modalCard.append(modalHeader, modalBody); modal.appendChild(modalCard); doc.body.appendChild(modal);
+  modal.addEventListener('pointerdown', event => { if (event.target === modal) closeSettings(); });
+  function showError(error) { listStatus.textContent = error?.message || '工作台操作未完成，请重试'; }
+  function showOfficeError(error) { officeError.textContent = error?.message || 'Codex 操作未完成，请重试'; }
+  async function saveLayout(patch) {
+    try { layout = await call({ action: 'update', patch }); renderLayout(); }
+    catch (error) { showError(error); }
+  }
+  function renderLayout() {
+    if (!layout || disposed) return;
+    officeImage.src = avatar(layout.officeMode === 'codex' ? 'devcat' : 'bigfish');
+    officeButton.setAttribute('aria-label', '工作界面：' + (layout.officeMode === 'codex' ? 'Codex' : 'DSH') + '，点击切换');
+    doc.body.setAttribute('data-neko-office-mode', layout.officeMode);
+    const active = layout.activeSeatId;
+    seats.replaceChildren(...layout.seats.map(seat => {
+      const row = el('div', 'neko-custom-seat'); row.dataset.active = String(active === seat.id);
+      const pick = button('', 'neko-custom-seat__pick', () => {
+        if (!seat.provider) { openSettings('seat', seat.id); return; }
+        hideSocial();
+        saveLayout({ activeSeatId: seat.id, officeMode: seat.provider });
+      });
+      pick.setAttribute('aria-pressed', String(active === seat.id));
+      pick.append(image(seat.avatarId === 'custom' ? seat.customDataUrl : avatar(seat.avatarId)), el('span', 'neko-custom-seat__name', seat.name), el('span', 'neko-custom-seat__provider', seat.provider?.toUpperCase() || '未绑定'));
+      const settings = button('⋯', 'neko-custom-seat__settings', () => openSettings('seat', seat.id)); settings.setAttribute('aria-label', '配置工作 agent：' + seat.name);
+      row.append(pick, settings); return row;
+    }));
+    renderCatalog(); renderCompanion(); renderOffice(); place();
+  }
+  function renderCatalog() {
+    if (!layout) return;
+    const seat = layout.seats.find(s => s.id === layout.activeSeatId);
+    allButton.textContent = seat ? seat.name + ' 的工作项目' : '全部工作会话'; allButton.setAttribute('aria-pressed', String(!seat));
+    const rows = (catalog?.sessions || []).filter(s => (!seat || s.provider === seat.provider && (!seat.projectRoot || s.cwd === seat.projectRoot)) && (!searchText || (s.title + ' ' + s.cwd + ' ' + s.provider).toLowerCase().includes(searchText)));
+    const groups = new Map();
+    for (const item of rows) { const key = item.provider + ':' + item.cwd; if (!groups.has(key)) groups.set(key, { provider: item.provider, cwd: item.cwd, sessions: [] }); groups.get(key).sessions.push(item); }
+    projectList.replaceChildren(...[...groups].map(([key, group]) => {
+      const section = el('section', 'neko-workspace-project'), heading = el('div', 'neko-workspace-project__heading');
+      const name = group.cwd?.split(/[\\/]/).filter(Boolean).at(-1) || '未指定项目';
+      const folder = button('▾ ' + name, 'neko-workspace-project__name', () => { if (groupOpen.has(key)) groupOpen.delete(key); else groupOpen.add(key); renderCatalog(); });
+      folder.title = group.cwd || '未指定项目';
+      heading.append(folder, el('span', 'neko-workspace-project__provider', group.provider.toUpperCase())); section.appendChild(heading);
+      if (!groupOpen.has(key)) for (const row of group.sessions) {
+        const link = button(row.title, 'neko-workspace-session', () => openSession(row));
+        link.title = row.title; link.dataset.selected = String(row.provider === 'codex' && row.id === selectedId);
+        section.appendChild(link);
+      }
+      return section;
+    }));
+    if (catalog?.nextDshOffset != null) projectList.appendChild(button('加载更多 DSH 会话', 'neko-workspace-more', () => refreshCatalog(true, catalog.nextDshOffset)));
+    const unavailable = Object.entries(catalog?.providers || {}).filter(([, status]) => status !== 'ready').map(([name]) => name.toUpperCase());
+    listStatus.textContent = listLoading ? '正在读取本地工作会话…' : unavailable.length ? unavailable.join('、') + ' 会话暂不可读取，可刷新重试' : rows.length ? '' : seat && !seat.provider ? '请配置这个工作 agent' : '暂无匹配的工作会话';
+  }
+  async function refreshCatalog(force = false, dshOffset = 0) {
+    if (disposed || listLoading) return;
+    listLoading = true; renderCatalog();
+    try { const next = await call({ action: 'catalog', force, dshOffset }); if (!disposed) catalog = next; }
+    catch (error) { showError(error); }
+    finally { listLoading = false; if (!disposed) renderCatalog(); }
+  }
+  async function openSession(row) {
+    hideSocial(); closeSettings();
+    if (row.provider === 'dsh') { await saveLayout({ officeMode: 'dsh' }); options.openDshSession?.(row.id); }
+    else {
+      const version = ++readVersion; selectedId = row.id; selectedProject = row.cwd; officeInput.value = drafts.get(row.id) || '';
+      await saveLayout({ officeMode: 'codex' }); officeError.textContent = '正在读取原生 Codex 会话…';
+      try { const next = await call({ action: 'codex-read', id: row.id }); if (!disposed && version === readVersion) { office = next; } if (!disposed && version === readVersion) { officeError.textContent = ''; renderOffice(); } } catch (error) { showOfficeError(error); }
+    }
+  }
+  function newOffice() { ++readVersion; hideSocial(); selectedId = null; office = { status: 'idle', thread: null, items: [], approvals: office.approvals || [], error: '' }; officeInput.value = drafts.get('new') || ''; officeRenderKey = ''; renderOffice(); officeInput.focus(); }
+  function renderCompanion() {
+    const c = state?.companion || {}, open = !!layout?.companionHistoryOpen, wasHidden = history.hidden;
+    history.hidden = !open; historyToggle.setAttribute('aria-expanded', String(open)); historyToggle.setAttribute('aria-label', open ? '收起聊天记录' : '展开聊天记录'); historyToggle.title = open ? '收起聊天记录' : '展开聊天记录';
+    chatSend.hidden = !!c.working; chatStop.hidden = !c.working; chatSend.disabled = sending; chatSend.title = c.ready ? '发送消息' : '连接聊天设置';
+    chatStatus.textContent = chatError || c.error || ''; chatStatus.hidden = !chatStatus.textContent;
+    const key = JSON.stringify(c.messages || []);
+    if (key !== historyKey) {
+      const bottom = history.scrollHeight - history.scrollTop - history.clientHeight < 30; historyKey = key;
+      history.replaceChildren(...(c.messages || []).map(m => { const line = el('p', 'neko-companion-message'); line.dataset.role = m.role; line.append(el('strong', '', m.role === 'user' ? '你：' : m.role === 'error' ? '提示：' : '回复：'), doc.createTextNode(m.text)); return line; }));
+      if (!history.children.length) history.appendChild(el('p', 'neko-companion-empty', '暂无聊天记录'));
+      if (bottom) history.scrollTop = history.scrollHeight;
+    }
+    if (wasHidden && open) history.scrollTop = history.scrollHeight;
+  }
+  function renderOffice() {
+    if (!layout) return;
+    panel.hidden = layout.officeMode !== 'codex' || socialOpen;
+    for (const main of doc.querySelectorAll('main')) { if (socialOpen) continue; if (main.closest('[data-neko-workspace-owned]')) continue; if (!panel.hidden) markNative(main, 'inert'); else if (nativeMarks.get(main)?.has('inert')) { const before = nativeMarks.get(main).get('inert'); if (before === null) main.removeAttribute('inert'); else main.setAttribute('inert', before); nativeMarks.get(main).delete('inert'); } }
+    officeTitle.textContent = office.thread?.title || 'Codex'; officeModel.textContent = office.thread?.model || '本机默认模型';
+    const cwd = office.thread?.cwd || selectedProject || state?.workspaceRoot || '';
+    projectButton.textContent = cwd ? cwd.split(/[\\/]/).filter(Boolean).at(-1) || cwd : '选择项目'; projectButton.title = cwd || '选择项目';
+    const key = JSON.stringify(office.items || []);
+    if (key !== officeRenderKey) {
+      const bottom = officeHistory.scrollHeight - officeHistory.scrollTop - officeHistory.clientHeight < 60; officeRenderKey = key;
+      const old = new Map([...officeHistory.children].map(n => [n.dataset.item, n]));
+      const children = (office.items || []).map(item => {
+        let n = old.get(item.id); if (!n) { n = el(item.kind === 'activity' ? 'details' : 'article', 'neko-office-item'); n.dataset.item = item.id; n.dataset.kind = item.kind; }
+        const value = (item.title || '') + '\n' + item.text;
+        if (n._nekoContent !== value) { n._nekoContent = value; n.replaceChildren(); if (item.kind === 'activity') n.appendChild(el('summary', '', item.title)); n.appendChild(el('div', 'neko-office-item__text', item.text)); }
+        return n;
+      });
+      officeHistory.replaceChildren(...children);
+      if (!children.length) { const welcome = el('div', 'neko-office-welcome'); welcome.append(image(avatar('devcat')), el('h2', '', 'Codex 工作界面'), el('p', '', '选择一个本地工作会话，或在当前项目创建任务')); officeHistory.appendChild(welcome); }
+      if (bottom) officeHistory.scrollTop = officeHistory.scrollHeight;
+    }
+    officeError.textContent = office.error || (office.status === 'working' ? 'Codex 正在工作…' : '');
+    sendButton.disabled = officeSending || office.status === 'working'; stopButton.hidden = office.status !== 'working';
+    officeApprovals.replaceChildren(...(office.approvals || []).map(a => {
+      const box = el('section', 'neko-office-approval'); box.append(el('strong', '', a.title), el('p', '', [a.threadTitle, a.cwd].filter(Boolean).join(' · ')), el('pre', '', a.command || a.reason || 'Codex 请求确认此操作'));
+      box.append(button('允许本次', '', () => call({ action: 'codex-approve', key: a.key, decision: 'accept' }).catch(showOfficeError)), button('拒绝', '', () => call({ action: 'codex-approve', key: a.key, decision: 'decline' }).catch(showOfficeError))); return box;
+    }));
+  }
+  function closeSettings() { if (modal.hidden) return; modal.hidden = true; settingsButton.focus(); }
+  function officeChoices() {
+    const choices = el('div', 'neko-office-choices');
+    for (const [id, name, pic] of [['dsh', 'DSH', 'bigfish'], ['codex', 'Codex', 'devcat'], ['claude', 'Claude · 待接入', 'claude']]) {
+      const b = button('', 'neko-office-choice', async () => { hideSocial(); await saveLayout({ officeMode: id }); closeSettings(); });
+      b.disabled = id === 'claude'; b.setAttribute('aria-pressed', String(layout?.officeMode === id)); b.append(image(avatar(pic)), el('span', '', name)); choices.appendChild(b);
+    }
+    return choices;
+  }
+  function connectionSummary() { const connected = phase => ['ready', 'connected'].includes(phase) ? '已连接' : phase === 'error' ? '连接出错' : '未连接'; return 'N.E.K.O.：' + connected(state?.neko?.connection) + ' · 工作台：' + connected(state?.workbench?.connection); }
+  function openSettings(kind = 'general', id) {
+    hideSocial(); modalBody.replaceChildren(); modalTitle.textContent = kind === 'seat' ? '自定义工作 agent' : '工作台设置'; modal.setAttribute('aria-label', modalTitle.textContent); modal.hidden = false;
+    if (kind !== 'seat') {
+      modalBody.append(el('h3', '', '右侧工作界面'), officeChoices());
+      if (kind === 'general') {
+        modalBody.append(el('h3', '', '头像与配色'));
+        const palette = el('div', 'neko-workspace-palettes');
+        for (const id of ['yui', 'devcat', 'bigfish', 'claude', 'gemini']) { const b = button('', '', () => bridge.setAvatar(id).catch(showError)); b.setAttribute('aria-label', '配色：' + id); b.appendChild(image(avatar(id))); palette.appendChild(b); }
+        modalBody.append(palette, button('主 agent 聊天设置', 'neko-workspace-setting-link', () => { closeSettings(); bridge.action('chat-settings'); }), button('账号、隐私 / 高级设置', 'neko-workspace-setting-link', () => { closeSettings(); options.openNativeSettings?.(); }));
+        modalBody.append(el('h3', '', '连接与工作台'));
+        const connections = el('p', 'neko-workspace-connections', connectionSummary());
+        connections.setAttribute('role', 'status'); modalBody.appendChild(connections);
+        const actions = el('div', 'neko-workspace-actions'), actionError = el('p', 'neko-workspace-form-error'); actionError.setAttribute('role', 'status');
+        for (const [action, label] of options.settingsActions || []) {
+          if (action === 'neko-settings') continue; // The main-chat settings entry above opens the same native window.
+          const item = button(label, 'neko-workspace-setting-link', async () => {
+            const controls = [...actions.querySelectorAll('button')]; controls.forEach(b => b.disabled = true); item.setAttribute('aria-busy', 'true'); actionError.textContent = '';
+            try { const result = await bridge.action(action); if (result?.ok === false) throw Error('操作未完成，请重试'); if (!['connect-neko', 'reconnect-workbench', 'connection-status'].includes(action)) closeSettings(); }
+            catch (error) { actionError.textContent = error.message || '操作未完成，请重试'; }
+            finally { controls.forEach(b => b.disabled = false); item.removeAttribute('aria-busy'); }
+          }); item.dataset.workbenchAction = action; actions.appendChild(item);
+        }
+        modalBody.append(actions, actionError, el('p', 'neko-workspace-note', 'DSH 与 Codex 沿用本机登录；主 agent 陪伴聊天单独连接。'));
+      }
+    } else {
+      const seat = layout?.seats.find(s => s.id === id); if (!seat) return;
+      const edit = el('form', 'neko-seat-editor');
+      const nameLabel = el('label', '', '名称'), name = el('input'); name.value = seat.name; name.maxLength = 24; nameLabel.appendChild(name);
+      const providerLabel = el('label', '', '执行平台'), provider = el('select');
+      for (const [value, label] of [['', '暂不绑定'], ['dsh', 'DSH'], ['codex', 'Codex']]) { const option = el('option', '', label); option.value = value; provider.appendChild(option); } provider.value = seat.provider || ''; providerLabel.appendChild(provider);
+      const projectLabel = el('label', '', '工作项目范围'), project = el('select'); const all = el('option', '', '全部项目'); all.value = ''; project.appendChild(all);
+      for (const cwd of [...new Set((catalog?.projects || []).map(p => p.cwd).filter(Boolean))]) { const option = el('option', '', cwd); option.value = cwd; project.appendChild(option); } project.value = seat.projectRoot || ''; projectLabel.appendChild(project);
+      const avatarLabel = el('label', '', '头像'), pick = el('select');
+      for (const id of ['yui', 'devcat', 'bigfish', 'claude', 'gemini', ...(seat.customDataUrl ? ['custom'] : [])]) { const option = el('option', '', ({ yui: 'Yui', devcat: '开发喵', bigfish: '大肥鱼', claude: 'Claude娘', gemini: 'Gemini小猫', custom: '自定义头像' })[id]); option.value = id; pick.appendChild(option); } pick.value = seat.avatarId; avatarLabel.appendChild(pick);
+      const upload = button('上传头像…', 'neko-workspace-setting-link', async () => { try { layout = await call({ action: 'upload-seat', id: seat.id }); renderLayout(); openSettings('seat', seat.id); } catch (e) { error.textContent = e.message || '上传未完成'; } });
+      const error = el('p', 'neko-workspace-form-error'); error.setAttribute('role', 'status');
+      const save = el('button', 'neko-seat-save', '保存'); save.type = 'submit';
+      edit.append(nameLabel, providerLabel, projectLabel, avatarLabel, upload, error, save);
+      edit.addEventListener('submit', async e => { e.preventDefault(); try { layout = await call({ action: 'update-seat', id: seat.id, patch: { name: name.value, provider: provider.value || null, projectRoot: project.value || null, avatarId: pick.value } }); renderLayout(); closeSettings(); } catch (e) { error.textContent = e.message || '未能保存'; } });
+      modalBody.appendChild(edit);
+    }
+    modalClose.focus();
+  }
+  function place() {
+    if (disposed) return;
+    const found = options.locateSidebar?.(); const root = found?.root || found?.slot || doc.querySelector('[data-slot="sidebar"]');
+    const rail = doc.querySelector('[data-neko-side-rail]'), theme = rail?.querySelector('.neko-side-rail__theme');
+    if (theme && officeButton.parentNode !== theme) { if (!nativeMarks.has(theme)) nativeMarks.set(theme, new Map()); nativeMarks.get(theme).set('aria-hidden', theme.getAttribute('aria-hidden')); theme.setAttribute('aria-hidden', ''); theme.appendChild(officeButton); }
+    if (rail && railTop.parentNode !== rail) theme?.after(railTop);
+    const mount = doc.querySelector('[data-neko-seat-mount]'); if (mount && seats.parentNode !== mount) mount.appendChild(seats);
+    const nativeBrowser = doc.querySelector('[data-slot="sidebar.workspaces"]');
+    if (nativeBrowser) { markNative(nativeBrowser, 'data-neko-session-browser-original'); if (sessionBrowser.parentNode !== nativeBrowser.parentNode || sessionBrowser.nextSibling !== nativeBrowser) nativeBrowser.before(sessionBrowser); }
+    const account = doc.querySelector('[data-slot="settings.launcher"]');
+    if (account?.parentElement) markNative(account.parentElement, 'data-neko-companion-footer');
+    if (account && (dock.parentNode !== account.parentNode || dock.nextSibling !== account)) account.before(dock);
+    setCompanionOffset(companionOffset);
+    if (root) {
+      const r = root.getBoundingClientRect(), strip = doc.querySelector('.neko-strip')?.getBoundingClientRect();
+      const x = Math.ceil(r.right), bottom = strip?.top > 0 ? strip.top : win.innerHeight;
+      Object.assign(panel.style, { left: x + 'px', top: '0px', width: Math.max(0, win.innerWidth - x) + 'px', height: Math.max(0, bottom) + 'px' });
+    }
+  }
+  function schedule() { if (!disposed && !queued) { queued = true; Promise.resolve().then(() => { queued = false; place(); }); } }
+  function nativeNew(event) { if (layout?.officeMode !== 'codex' || !event.target.closest?.('[data-neko-new-session="plus"]')) return; event.preventDefault(); event.stopImmediatePropagation(); newOffice(); }
+  function escape(event) { if (event.key !== 'Escape') return; if (!modal.hidden) { event.stopPropagation(); closeSettings(); } else if (layout?.companionHistoryOpen && dock.contains(doc.activeElement)) { event.preventDefault(); saveLayout({ companionHistoryOpen: false }); historyToggle.focus(); } }
+  const observer = new win.MutationObserver(schedule); observer.observe(doc.body, { childList: true, subtree: true });
+  win.addEventListener('resize', place); doc.addEventListener('click', nativeNew, true); doc.addEventListener('keydown', escape, true);
+  const resize = win.ResizeObserver ? new win.ResizeObserver(place) : null;
+  if (options.locateSidebar?.()?.root) resize?.observe(options.locateSidebar().root);
+  doc.body.setAttribute('data-neko-workspace-shell', '');
+  if (typeof bridge.subscribe === 'function') releases.push(bridge.subscribe(next => {
+    if (disposed) return; state = next; const connections = modalBody.querySelector('.neko-workspace-connections'); if (connections) connections.textContent = connectionSummary(); if (!selectedProject) selectedProject = next.workspaceRoot || '';
+    renderCompanion(); if (next.workspaceRevision !== layoutVersion) { layoutVersion = next.workspaceRevision; call({ action: 'state' }).then(value => { if (!disposed) { layout = value; renderLayout(); } }).catch(showError); }
+  }));
+  if (typeof bridge.subscribeOffice === 'function') releases.push(bridge.subscribeOffice(next => { if (disposed) return; if (next.thread?.id === selectedId || officeSending) { office = next; } else { office.approvals = next.approvals || []; } renderOffice(); }));
+  if (typeof bridge.subscribeCommunity === 'function') releases.push(bridge.subscribeCommunity(next => { if (disposed) return; socialOpen = next.status !== 'hidden'; renderOffice(); }));
+  Promise.all([bridge.getState(), call({ action: 'state' }), call({ action: 'codex-state' })]).then(([s, l, c]) => { if (!disposed) { state = s; layout = l; office = c; selectedProject ||= s.workspaceRoot || ''; renderLayout(); refreshCatalog(); } }).catch(showError);
+  syncCharacter();
+  const interval = win.setInterval(() => { if (doc.visibilityState !== 'hidden') refreshCatalog(true); }, 60000);
+  place();
+  return () => {
+    if (disposed) return; disposed = true; motion?.removeEventListener?.('change', syncCharacter); doc.removeEventListener('visibilitychange', syncCharacter); if (characterVideo) { characterVideo.pause(); characterVideo.removeAttribute('src'); characterVideo.load(); } observer.disconnect(); resize?.disconnect(); win.clearInterval(interval);
+    win.removeEventListener('resize', place); doc.removeEventListener('click', nativeNew, true); doc.removeEventListener('keydown', escape, true);
+    for (const release of releases) if (typeof release === 'function') release();
+    for (const [node, attrs] of nativeMarks) for (const [name, before] of attrs) { if (node.getAttribute(name) === '') { if (before === null) node.removeAttribute(name); else node.setAttribute(name, before); } }
+    doc.body.removeAttribute('data-neko-workspace-shell'); doc.body.removeAttribute('data-neko-office-mode');
+    for (const n of nodes) n.remove(); style.remove();
+  };
+}
+
+// @neko-workspace-shell:end
 
 // @neko-side-rail:start
 const SIDE_RAIL_CSS = "/* One independent rail; the native session/sidebar/composer layout remains. */\nbody[data-neko-side-rail-layout] { --neko-rail-width: 64px; }\nbody[data-neko-side-rail-layout] [data-neko-rail-app] {\n  width: calc(100% - var(--neko-rail-width)) !important;\n  margin-left: var(--neko-rail-width) !important; min-width: 0;\n}\n.neko-side-rail {\n  position: fixed; inset: 0 auto 0 0; z-index: 40;\n  display: flex; flex-direction: column; align-items: center;\n  width: var(--neko-rail-width, 64px); box-sizing: border-box; padding: 14px 12px 12px;\n  border-right: 1px solid var(--dsw-alias-border-l1, #c4dbe6);\n  background: var(--dsw-alias-bg-layer-1, #fbfeff);\n  color: var(--dsw-alias-label-primary, #17303d);\n  -webkit-app-region: no-drag;\n}\n.neko-side-rail__theme { width: 40px; height: 40px; flex: none; }\n.neko-side-rail__space { flex: 1; min-height: 32px; }\n.neko-side-rail__bottom { display: flex; flex-direction: column; gap: 12px; }\n.neko-side-rail__button {\n  display: grid; place-items: center; width: 40px; height: 40px; padding: 4px;\n  border: 0; border-radius: 12px; background: transparent; color: inherit; cursor: pointer;\n}\n.neko-side-rail__button:hover { background: var(--dsw-alias-interactive-bg-hover, #ddedf4); }\n.neko-side-rail__button:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary, #246b91); outline-offset: 2px; }\n.neko-side-rail__button[aria-busy=\"true\"] { opacity: .55; cursor: progress; }\n.neko-side-rail__button[aria-expanded=\"true\"], .neko-side-rail__button[aria-pressed=\"true\"] { background: var(--dsw-alias-interactive-bg-active, #d0e5ef); }\n.neko-side-rail__button svg { display: block; width: 24px; height: 24px; }\n.neko-side-rail__button img { display: block; width: 36px; height: 36px; object-fit: contain; border-radius: 10px; }\n.neko-side-rail__notice {\n  position: absolute; bottom: 60px; left: 72px; width: 190px; padding: 10px 12px; margin: 0;\n  border: 1px solid var(--dsw-alias-border-l1, #c4dbe6); border-radius: 10px;\n  background: var(--dsw-alias-bg-layer-1, #fbfeff); color: inherit; font: 12px/1.5 system-ui, sans-serif;\n}\n.neko-side-rail__notice[hidden] { display: none; }\nbody[data-neko-side-rail-layout] .neko-avatar-anchor {\n  position: fixed; left: 12px; top: 14px; width: 40px !important; height: 40px !important; z-index: 41;\n}\nbody[data-neko-side-rail-layout] .neko-avatar-portal .neko-avatar--mark {\n  width: 100%; height: 100%; object-fit: contain;\n}\nbody[data-neko-side-rail-layout] .neko-role-host .neko-bilibili,\nbody[data-neko-side-rail-layout] [data-neko-rail-fish-original] { display: none !important; }\nbody[data-neko-side-rail-layout] .neko-role-host .neko-social-actions { grid-template-columns: 1fr; }\nbody[data-neko-side-rail-layout] [data-slot=\"settings.launcher\"] { height: 0; min-height: 0; margin: 0; padding: 0; }\nbody[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-account-habitat][data-neko-unified-account] {\n  position: fixed; left: 12px; bottom: 12px; z-index: 41;\n  display: grid !important; place-items: center; width: 40px !important; height: 40px !important;\n  min-height: 40px !important; padding: 4px !important; margin: 0 !important;\n  border: 0 !important; border-radius: 12px; background: transparent;\n  opacity: 0 !important; pointer-events: none !important;\n}\nbody[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account] .neh-launcher {\n  display: block !important; width: 32px !important; height: 32px !important;\n}\nbody[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account] .neh-identity { display: block; }\nbody[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account] .neh-developer-avatar { width: 32px; height: 32px; }\nbody[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account] .neh-developer-name,\nbody[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account] .neh-providers { display: none; }\nbody[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account]:hover { background: var(--dsw-alias-interactive-bg-hover, #ddedf4); }\nbody[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account]:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary, #246b91); outline-offset: 2px; }\n";
@@ -3620,6 +3970,7 @@ function installAvatarTheme(options) { return NekoAvatarTheme.install(options) }
       ctx.effect(() => installRolesStore(ctx), 'neko-brand: roles bridge')
       ctx.effect(() => installCommunityPane(), 'neko-brand: community coding pane')
       ctx.effect(() => installWorkbenchSideRail({ cssText: SIDE_RAIL_CSS, fishAvatar: builtinSrc(LIVE_ROLE), fishLabel: avatarName(LIVE_ROLE) + ' · 养鱼界面', accountAvatar: builtinSrc('devcat'), beforeAccount: () => currentCommunityPane?.hide(), openBilibiliHome: () => currentCommunityPane?.open('bilibili', { home: true }) }), 'neko-brand: left navigation rail')
+      ctx.effect(() => installWorkspaceShell({ cssText: WORKSPACE_SHELL_CSS, avatar: builtinSrc, companionVideoSrc: ACCOUNT_PET_ART.video, companionPosterSrc: ACCOUNT_PET_ART.still, settingsActions: [...ACTION_GROUPS.flat(), ['connection-status', '连接详情']], locateSidebar: () => locateSidebar(), hideSocial: () => currentCommunityPane?.hide(), openCommunity: () => currentCommunityPane?.open('community'), openDshSession: id => ctx.uiWorkspace.openSession(id), openNativeSettings: () => { const trigger = document.querySelector('[data-slot="settings.launcher"] button.hjANda_trigger[aria-haspopup="menu"]'); trigger?.click(); setTimeout(() => { const item = [...document.querySelectorAll('[role="menuitem"]')].find(n => /^(设置|settings)$/.test((n.querySelector('._itemLabel_4ub78_190') || n).textContent.replace(/\s+/g, '').toLowerCase())); item?.click(); }, 100); } }), 'neko-brand: workspace shell')
       ctx.effect(() => installCompactRunningStatus(), 'neko-brand: compact running status')
 
       // SlotCore chooses the lowest priority for the same list id. The
@@ -3642,8 +3993,7 @@ function installAvatarTheme(options) { return NekoAvatarTheme.install(options) }
         ['sidebar.brand.mark', SidebarMark, undefined],
         ['sidebar.brand.name', SidebarName, undefined],
         ['conversation.hero.brand.mark', HeroGallery, undefined],
-        // root-scope single slot the layout leaves empty by default
-        ['shell.bottom', ProductStrip, 100],
+        // Keep shell.bottom empty; workbench actions live in the top-left settings.
       ]
       for (const [name, component, order] of seats) {
         const spec = order === undefined ? { name } : { name, order }
@@ -3683,6 +4033,7 @@ function installAvatarTheme(options) { return NekoAvatarTheme.install(options) }
     exports.createCommunityPane = createCommunityPane
     exports.getWorkspaceMode = () => workspaceMode
     exports.CommunityEntry = CommunityEntry
+    exports.installWorkspaceShell = installWorkspaceShell
     exports.RoleSeats = RoleSeats
     return module.exports
   },

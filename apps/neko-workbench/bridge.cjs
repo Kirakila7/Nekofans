@@ -8,6 +8,7 @@ const {catalogOrder,mergeCatalogOrder}=require('./pet-roster.cjs');
 const {cleanPrompt,historyContext}=require('./pet-context.js');
 const {resolveRuntimePaths}=require('./runtime-config.cjs');
 const {createTaskSessionTracker}=require('./task-session-tracker.cjs');
+const {readDshWorkspaceCatalog}=require('./dsh-workspace-catalog.cjs');
 const runtimePaths=resolveRuntimePaths();
 const runtime=runtimePaths.modulesDir;
 let createUserMessage,carrierKeyOf;
@@ -152,6 +153,7 @@ exports.apply=function(ctx){
       return {sessionId:root.agent.id,provider:options.provider,model:options.model,uiUrl:ctx.connection.authenticatedUrl(ctx.webApp.getAdvertisedUrl())};
     }
     if(!root)throw new Error('DSH 尚未就绪');
+    if(method==='workspace-catalog')return readDshWorkspaceCatalog(ctx,p);
     if(method==='fish-care'){
       if(!['status','start','pause'].includes(p.action))throw new Error('未知养鱼操作');
       const fish=await import(require('node:url').pathToFileURL(require('node:path').join(__dirname,'vendor/dsh-bili-whale/lib/index.js')).href);

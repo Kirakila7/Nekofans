@@ -8,6 +8,8 @@ test('fish defaults stay in the isolated workspace and preserve existing setting
     const env=fishEnvironment(runtime,{DSH_NODE:'/bundled/node'});assert.equal(env.BILI_WHALE_CONFIG,p.config);assert.equal(env.DSH_NODE,'/bundled/node');assert(!('HOME'in env));assert.equal(process.env.HOME,before);
     cfg.persona.name='我的鱼';fs.writeFileSync(p.config,JSON.stringify(cfg));const persona=path.join(p.home,'.bili-ai/persona.md');fs.writeFileSync(persona,'custom persona');prepareFishCare(runtime);
     assert.equal(JSON.parse(fs.readFileSync(p.config)).persona.name,'我的鱼');assert.equal(fs.readFileSync(persona,'utf8'),'custom persona');assert(fs.readFileSync(path.join(p.root,'bili.mjs'),'utf8').includes('vendor/dsh-bili-whale'));
+    const launcher=path.join(p.root,'bili.mjs');fs.utimesSync(launcher,new Date(1000000),new Date(1000000));prepareFishCare(runtime);assert.equal(fs.statSync(launcher).mtimeMs,1000000,'startup leaves an unchanged launcher untouched');
+    prepareFishCare(runtime,{baseDir:'/new/install'});assert(fs.readFileSync(launcher,'utf8').includes('/new/install/vendor/dsh-bili-whale'),'a changed installation still updates the launcher');
     assert.deepEqual(fishPaths(runtime),p);
   }finally{fs.rmSync(dir,{recursive:true,force:true});}
 });

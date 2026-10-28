@@ -59,7 +59,7 @@ if(view==='chat-settings'){
   let hoverTimer,overCharacter=false;
   function hideInspector(){clearTimeout(hoverTimer);hoverTimer=null;inspector.hidden=true;host.querySelector('.pet').classList.remove('inspector-open');}
   function scheduleInspector(){
-    if(actor()?.id==='main'&&actor()?.chatBackend==='chat-api')return;
+    if(actor()?.kind==='task'||actor()?.id==='main'&&actor()?.chatBackend==='chat-api')return;
     if(!overCharacter||inputVisible||dragStart||dragged||hoverTimer||!inspector.hidden)return;
     hoverTimer=setTimeout(()=>{hoverTimer=null;if(overCharacter&&!inputVisible&&!dragStart){inspector.hidden=false;host.querySelector('.pet').classList.add('inspector-open');}},240);
   }
@@ -69,12 +69,13 @@ if(view==='chat-settings'){
   const tierTag=document.createElement('div');tierTag.className='pet-tier';host.querySelector('.pet').append(tierTag);
   const feedback = new window.DshPetFeedback(actorId,videos,bubble);
   const appearance=window.PetAppearance.install({character,videos,feedback,document,matchMedia:query=>window.matchMedia(query),onHeadInset:value=>host.querySelector('.pet').style.setProperty('--media-head-inset',String(value))});
-  let desktopMotion=null;
+  let desktopMotion=null,runningPresentation=false;
   const stopMotion=window.pet.onMotion?.(value=>{
     desktopMotion=value;appearance.setMotion(value);
     const pet=host.querySelector('.pet');pet.dataset.agentMotion=value?.phase||'';
     pet.dataset.motionRetire=String(value?.retire!==false);
     pet.style.setProperty('--agent-lean',Math.max(-6,Math.min(6,Number(value?.lean)||0))+'deg');
+    const a=actor();if(a)renderAnimation(a);
     passThrough();
   });
   window.addEventListener('unload',()=>stopMotion?.(),{once:true});
@@ -104,8 +105,35 @@ if(view==='chat-settings'){
   window.addEventListener('mousemove',passThrough);
   window.addEventListener('mouseleave',()=>{lastHover=null;passThrough();});
   function showBubble(text) {feedback.showLocal(text);}
+  function renderAnimation(a) {
+    const visual=window.PetChatPresentation.animationActor(a,desktopMotion);
+    appearance.render(state,visual);
+    if(visual.presentationRunning){
+      feedback.workOn=false;feedback.workText=null;feedback.workState=null;
+      if(!dragged&&feedback.anim!=='子代理-持续奔跑')feedback.switchTo('子代理-持续奔跑',false);
+    }else if(a.work){
+      // Landing can happen without a new task tick. Apply the latest real work
+      // snapshot immediately instead of leaving the airborne running loop on.
+      if(runningPresentation){feedback.prevWorkTick=-1;feedback.prevWorkState=null;}
+      feedback.onWorkTick(a.work,a.work.tick);
+      if(runningPresentation&&!a.work.state)feedback.playIdle();
+    }
+    if(a.kind==='task'){feedback.workOn=false;feedback.workText=null;feedback.renderBubble?.();}
+    runningPresentation=!!visual.presentationRunning;
+  }
+  function resumeAnimation() {
+    const a=actor();
+    if(a&&window.PetChatPresentation.animationActor(a,desktopMotion).presentationRunning)feedback.switchTo('子代理-持续奔跑',false);
+    else if(!feedback.resumeWorkStatusAnim())feedback.playIdle();
+  }
   function setInput(visible) {
-    if(visible&&actor()?.kind==='task'){window.pet.call('open-task').catch(error=>showBubble(error.message));return;}
+    const a=actor(),tier=window.PetChatPresentation.role(a); if(!a)return;
+    if(tier==='subagent'){inputVisible=false;form.remove();bubble.hidden=true;host.querySelector('.pet').classList.remove('chat-open','task-chat-open');return;}
+    if(tier==='task'){
+      inputVisible=visible;form.hidden=true;const pet=host.querySelector('.pet');pet.classList.remove('chat-open');pet.classList.toggle('task-chat-open',visible);
+      character.setAttribute('aria-expanded',String(visible));window.pet.call('motion-input',{active:visible}).catch(()=>{});passThrough();hideInspector();
+      feedback.showLocal(visible?window.PetChatPresentation.taskChatText(a):'',{persistent:visible});return;
+    }
     inputVisible=visible;form.hidden=!visible;host.querySelector('.pet').classList.toggle('chat-open',visible);
     window.pet.call('motion-input',{active:visible}).catch(()=>{});passThrough();
     if(visible){hideInspector();input.focus();}else scheduleInspector();
@@ -117,11 +145,13 @@ if(view==='chat-settings'){
     const appearanceId=window.PetAppearance.selected(state,a);host.querySelector('.pet').dataset.appearance=appearanceId;host.querySelector('.pet').dataset.media=String(appearanceId!==window.PetAppearance.ORIGINAL);
     host.querySelector('.pet').style.setProperty('--appearance-scale',String(window.PetAppearance.scaleFor(state,a)));
     host.querySelector('.pet').style.setProperty('--frame-aspect',String(window.PetAppearance.frameAspect(state,a)));
-    appearance.render(state,a);
+    renderAnimation(a);
     passThrough();
-    if(work)feedback.onWorkTick(work,work.tick);
+    if(a.kind==='task')hideInspector();
+    if(a.id!=='main'&&a.kind!=='task'){form.remove();inputVisible=false;host.querySelector('.pet').classList.remove('chat-open','task-chat-open');}
+
     nameTag.querySelector('.logo-letter').textContent=Array.from(a.name)[0]||'鲸';nameTag.classList.toggle('is-pinned',!!a.pinned);nameTag.title=a.name+(a.pinned?' · 常驻桌面':'')+(a.dshName&&a.nickname?'\nDSH：'+a.dshName:'');nameTag.setAttribute('aria-label',a.name);
-    character.setAttribute('aria-label',a.kind==='task'?'打开任务：'+a.name:'与'+a.name+'聊天');
+    character.setAttribute('aria-label',a.id==='main'?'与'+a.name+'聊天':a.kind==='task'?'展开或收起子会话聊天：'+a.name:'查看子代理状态：'+a.name);if(a.kind==='task')character.setAttribute('aria-expanded',String(inputVisible));else character.removeAttribute('aria-expanded');
     const preview=window.PetContext.preview(a);for(const field of inspector.querySelectorAll('dd'))field.textContent=preview[field.dataset.field];
     input.setAttribute('aria-label','给'+a.name+'发消息');
     input.title=a.id==='main'?(a.chatBackend==='chat-api'?'独立聊天 API · 大肥鱼':'N.E.K.O. · '+(state.neko.character||'等待连接')):a.name+(a.task?'\n任务：'+a.task:'');
@@ -132,6 +162,10 @@ if(view==='chat-settings'){
     input.placeholder=a.id==='main'?(busy(a)?'正在回复，可点右侧停止':a.chatBackend==='chat-api'?(state.mainChat?.hasKey&&state.mainChat?.settings?.model?'和大肥鱼聊聊，回车发送':'右键 → 聊天 API 设置'):state.neko.connection==='ready'?'和'+state.neko.character+'说点什么，回车发送':'N.E.K.O. 未连接，右键设置'):input.readOnly?'只读子任务，在 DSH 查看':busy(a)?((a.work?.task||a.task)?.slice(0,25)||'正在做，稍等一下…'):shortName+'：发消息，回车发送';
     if(a.id==='main'&&a.chatBackend==='chat-api'){
       hideInspector();bubble.tabIndex=0;bubble.title='最近回复，可滚动查看全文';apiReplyPresenter.render(a);
+    }else if(a.kind==='task'){
+      apiReplyPresenter.reset();bubble.tabIndex=0;bubble.title='子会话聊天消息';feedback.showLocal(inputVisible?window.PetChatPresentation.taskChatText(a):'',{persistent:inputVisible});
+    }else if(a.id!=='main'){
+      apiReplyPresenter.reset();feedback.showLocal('');bubble.hidden=true;bubble.removeAttribute('tabindex');bubble.removeAttribute('title');
     }else{
       if(apiReplyPresenter.reset())shownReply=shownNotice=undefined;
       bubble.removeAttribute('tabindex');bubble.removeAttribute('title');
@@ -167,10 +201,10 @@ if(view==='chat-settings'){
   character.addEventListener('pointerup',async()=>{
     if(!dragStart)return;
     dragStart=null;
-    if(dragged){feedback.dragState.active=false;dragged=false;overCharacter=false;hideInspector();if(!feedback.resumeWorkStatusAnim())feedback.playIdle();await window.pet.call('move-end');}
+    if(dragged){feedback.dragState.active=false;dragged=false;overCharacter=false;hideInspector();resumeAnimation();await window.pet.call('move-end');}
     else setInput(!inputVisible);
   });
-  character.addEventListener('pointercancel',()=>{const wasDragged=dragged;dragStart=null;dragged=false;overCharacter=false;hideInspector();feedback.dragState.active=false;if(!feedback.resumeWorkStatusAnim())feedback.playIdle();if(wasDragged)window.pet.call('move-end').catch(()=>{});});
+  character.addEventListener('pointercancel',()=>{const wasDragged=dragged;dragStart=null;dragged=false;overCharacter=false;hideInspector();feedback.dragState.active=false;resumeAnimation();if(wasDragged)window.pet.call('move-end').catch(()=>{});});
   character.addEventListener('click',event=>{if(event.detail===0)setInput(!inputVisible);});
   document.addEventListener('contextmenu',event=>{event.preventDefault();hideInspector();window.pet.call('menu');});
   input.addEventListener('keydown',event=>{
@@ -178,7 +212,7 @@ if(view==='chat-settings'){
     if(event.key==='Escape'){event.preventDefault();setInput(false);}
   });
   form.addEventListener('submit',async event=>{
-    event.preventDefault();const text=input.value.trim();const a=actor();if(!text||!a)return;
+    event.preventDefault();const text=input.value.trim();const a=actor();if(!text||!a||a.id!=='main')return;
     if(busy(a)){showBubble('我还在做，等我一下。');return;}
     try {await window.pet.call('prompt',{id:actorId,text});input.value='';setInput(false);}
     catch(error){showBubble(error.message);}

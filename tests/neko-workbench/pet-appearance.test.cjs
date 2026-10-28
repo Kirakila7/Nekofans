@@ -33,7 +33,7 @@ function fixture(reduced=false){
 }
 test('native kitten switches live without stale video playback, keeps work state, stops patrol for drag and restores original media',()=>{
  const f=fixture(),actor={id:'task-real',kind:'task',active:true,status:'working',work:{state:'thinking'}},state={preferences:{taskAppearance:A.CAT}};
- f.presenter.render(state,actor);assert.equal(f.motion.hidden,false);assert.equal(f.image.src,A.assets.running);assert.equal(f.motion.dataset.phase,'running');assert(f.videos.every(v=>v.hidden&&v.paused&&v.loaded));
+ f.presenter.render(state,actor);assert.equal(f.motion.hidden,false);assert.equal(f.image.src,A.assets.idle);assert.equal(f.motion.dataset.phase,'idle');assert(f.videos.every(v=>v.hidden&&v.paused&&v.loaded));
  const oldVideoReady=()=>{if(f.feedback.pending&&f.feedback.pending.gen!==8)return;assert.fail('old video must remain cancelled');};oldVideoReady();
  const writes=f.image.srcWrites;f.presenter.render(state,actor);f.feedback.switchTo('thinking',false);assert.equal(f.image.srcWrites,writes);assert.deepEqual(f.calls,[]);
  f.feedback.dragState.active=true;f.feedback.switchTo('drag',true);assert.equal(f.image.src,A.assets.drag);assert.equal(f.motion.dataset.phase,'drag');

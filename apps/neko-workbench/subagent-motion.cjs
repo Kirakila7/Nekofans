@@ -3,6 +3,10 @@
 const FRAME_MS = 40, EXPLORE_SPEED = 90, RETURN_SPEED = 260, HOME_REST_MS = 1300;
 const {clampBounds,bodyBounds,clusterLayout,neighbourClusters,fountainOrigin,fountainFrame,separation}=require('./pet-swarm.cjs');
 const contains = (r, p) => p && p.x >= r.x && p.x <= r.x + r.width && p.y >= r.y && p.y <= r.y + r.height;
+function motionOptions(actor,preferences={},explore=false) {
+  const helper=actor?.id!=='main'&&actor?.kind!=='task';
+  return {fountain:preferences.subagentFountain!==false,cluster:helper&&preferences.subagentClustering!==false,explore:helper&&explore};
+}
 function homeTarget(home, size, area, index = 0) {
   // Gather at the main character's feet; stagger helpers into a small fan.
   const side = index % 2 ? 1 : -1, ring = Math.floor(index / 2) + 1;
@@ -73,15 +77,15 @@ function createSubagentMotion({ now = Date.now, random = Math.random, getHome, g
   }
   function tick() {
     const time = now(), dt = Math.max(0, Math.min(.12, (time - lastTick) / 1000)); lastTick = time;
-    const home = getHome(), cursor = getCursor(), completed = [], peers=[...records.values()];
-    if(home&&peers.some(r=>r.cluster)) {
-      const key=JSON.stringify([home,...peers.map(r=>[r.id,r.point.width,r.point.height,r.body])]);
+    const home = getHome(), cursor = getCursor(), completed = [], peers=[...records.values()],swarm=peers.filter(r=>r.cluster);
+    if(home&&swarm.length) {
+      const key=JSON.stringify([home,...swarm.map(r=>[r.id,r.point.width,r.point.height,r.body])]);
       if(key!==layoutKey){
-        const homeKey=JSON.stringify(home),geometry=new Map(peers.map(r=>[r.id,JSON.stringify([r.point.width,r.point.height,r.body])]));
+        const homeKey=JSON.stringify(home),geometry=new Map(swarm.map(r=>[r.id,JSON.stringify([r.point.width,r.point.height,r.body])]));
         const preserve=homeKey===layoutHome&&[...geometry].every(([id,value])=>!layoutGeometry.has(id)||layoutGeometry.get(id)===value);
-        layout=clusterLayout(peers,home,getArea(home),preserve?layout?.targets:null);layoutKey=key;layoutHome=homeKey;layoutGeometry=geometry;
+        layout=clusterLayout(swarm,home,getArea(home),preserve?layout?.targets:null);layoutKey=key;layoutHome=homeKey;layoutGeometry=geometry;
       }
-      if(time-lastClusters>=240){layout.labels=neighbourClusters(peers).labels;lastClusters=time;}
+      if(time-lastClusters>=240){layout.labels=neighbourClusters(swarm).labels;lastClusters=time;}
     }
     for (const record of records.values()) {
       const w = record.window;
@@ -163,4 +167,4 @@ function createSubagentMotion({ now = Date.now, random = Math.random, getHome, g
   return Object.freeze({ sync, keepPosition, resumeFromDrag, replay, tick, dispose, snapshot });
 }
 
-module.exports = { FRAME_MS, HOME_REST_MS, clampBounds, homeTarget, exploreTarget, stepToward, createSubagentMotion };
+module.exports = { FRAME_MS, HOME_REST_MS, motionOptions, clampBounds, homeTarget, exploreTarget, stepToward, createSubagentMotion };

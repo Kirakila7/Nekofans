@@ -3,7 +3,7 @@ const {spawn} = require('node:child_process');
 const {resolveRuntimePaths,prepareRuntimeDirectories,assertDshRuntime,buildDshPatch,buildDshLaunch}=require('./runtime-config.cjs');
 const {createDshLifecycle}=require('./dsh-lifecycle.cjs');
 const {createSocialController}=require('./community-config.cjs');
-const {createSubagentMotion}=require('./subagent-motion.cjs');
+const {createSubagentMotion,motionOptions}=require('./subagent-motion.cjs');
 const {WorkbenchMainChat,trustedLocalCaller}=require('./main-chat-runtime.cjs');
 const {pathToFileURL}=require('node:url');
 const fs = require('node:fs');
@@ -23,6 +23,9 @@ const {NekoChat,localBase}=require('./neko-chat.cjs');
 const {skinPatch,applySkinCookie}=require('./embedded-dsh/dsh-skin-patch.cjs');
 const {createAppearanceStore}=require('./workbench-appearance.cjs');
 const {createRolesStore}=require('./workbench-roles.cjs');
+const {createWorkspaceLayout}=require('./workspace-layout.cjs');
+const {createWorkspaceController,companionSnapshot}=require('./workspace-controller.cjs');
+const {createCodexWorkspace}=require('./codex-workspace.cjs');
 const {createCodexAccountService}=require('./codex-account.cjs');
 const codexAccount=createCodexAccountService();
 let dshSkin=null;
@@ -33,6 +36,14 @@ prepareRuntimeDirectories(runtimePaths);
 const data=runtimePaths.dataDir,workspace=runtimePaths.workspaceDir;
 const workbenchAppearance=createAppearanceStore(path.join(data,'workbench-appearance.json'));
 const workbenchRoles=createRolesStore(path.join(data,'workbench-roles.json'));
+const workspaceLayout=createWorkspaceLayout(path.join(data,'workspace-layout.json'));
+let workspaceRevision=0;
+const codexWorkspace=createCodexWorkspace({defaultCwd:workspace,onState:value=>{
+  if(dshWindow&&!dshWindow.isDestroyed()&&isWorkbenchOrigin(dshWindow.webContents.getURL()))dshWindow.webContents.send('workbench:office-state',value);
+}});
+const workspaceController=createWorkspaceController({layout:workspaceLayout,codex:codexWorkspace,readDsh:params=>{
+  if(state.connection!=='ready')throw Error('DSH 尚未就绪');return rpc('workspace-catalog',params);
+}});
 app.setName('N.E.K.O. 桌宠工作台');
 app.setPath('userData',runtimePaths.userDataDir);
 if(!app.requestSingleInstanceLock())app.quit();
@@ -91,7 +102,7 @@ async function chooseAvatar(title='上传工作台头像'){
   const side=Math.min(size.width,size.height),png=image.crop({x:Math.floor((size.width-side)/2),y:Math.floor((size.height-side)/2),width:side,height:side}).resize({width:256,height:256,quality:'best'}).toPNG();
   return 'data:image/png;base64,'+png.toString('base64');
 }
-function workbenchState(){return {avatar:workbenchAppearance.get(),navigation:workbenchNavigation,fish:state.fish,neko:{enabled:state.neko.enabled===true,connection:state.neko.connection,character:state.neko.character,error:String(state.neko.error||'').slice(0,300)},workbench:{connection:state.connection,error:String(state.error||'').slice(0,300)}};}
+function workbenchState(){return {avatar:workbenchAppearance.get(),workspaceRoot:workspace,workspaceRevision,companion:companionSnapshot(state),navigation:workbenchNavigation,fish:state.fish,neko:{enabled:state.neko.enabled===true,connection:state.neko.connection,character:state.neko.character,error:String(state.neko.error||'').slice(0,300)},workbench:{connection:state.connection,error:String(state.error||'').slice(0,300)}};}
 async function openFishSettings(){workbenchNavigation={...workbenchNavigation,fishSettingsRevision:(workbenchNavigation?.fishSettingsRevision||0)+1};await openDsh();await communityController.action(dshWindow,{action:'hide'});broadcast();}
 async function fishAction(action){
   if(!['status','start','pause'].includes(action))throw Error('未知养鱼操作');
@@ -109,6 +120,7 @@ function showConnectionStatus(){return dialog.showMessageBox(dshWindow&&!dshWind
 async function workbenchAction(name){
   switch(name){
     case 'fish-settings':await openFishSettings();break;
+    case 'chat-settings':editChatSettings();break;
     case 'open-community':throw new Error('请使用工作台社区入口打开内嵌社区');
     case 'neko-settings':editChatSettings();break;
     case 'open-neko':await openNeko();break;
@@ -198,7 +210,7 @@ const pinnedCount=()=>orderedDesktopPets(state.actors,{taskOrder:state.taskOrder
 function exploringCat(a){return a.id!=='main'&&a.kind!=='task'&&a.metadataReady&&a.metadataSource==='dsh-subagent-catalog'&&state.preferences.subagentExploration!==false&&petAppearance.selected(state,a)===petAppearance.CAT;}
 function nativePet(a){return a.id!=='main'&&a.metadataReady&&['dsh-subagent-catalog','dsh-task-session'].includes(a.metadataSource);}
 function motionPet(a){return nativePet(a)&&(state.preferences.subagentFountain!==false||state.preferences.subagentClustering!==false||exploringCat(a));}
-function gathersHome(a){return nativePet(a)&&(state.preferences.subagentClustering!==false||exploringCat(a));}
+function gathersHome(a){const motion=motionOptions(a,state.preferences,exploringCat(a));return nativePet(a)&&(motion.cluster||motion.explore);}
 function motionBody(a,w,bounds){
   const zoom=w.webContents.getZoomFactor?.()||1,scale=petAppearance.scaleFor(state,a),height=(a.stageWidth||239)*9/16*scale*zoom;
   const original=petAppearance.selected(state,a)===petAppearance.ORIGINAL;
@@ -234,7 +246,7 @@ function reconcilePets(){
     }
     w.setTitle(a.name);
     if(a.present&&motionPet(a)&&!workbenchOnly)explorers.push({id:a.id,sessionId:a.sessionId,window:w,active:!!a.active,returning:!!a.returningHome,
-      explore:exploringCat(a),fountain:state.preferences.subagentFountain!==false,cluster:state.preferences.subagentClustering!==false,
+      ...motionOptions(a,state.preferences,exploringCat(a)),
       body:motionBody(a,w,windowBounds(w)),retire:!a.pinned});
     if(a.present){if(!workbenchOnly&&!w.webContents.isLoading()&&!w.isVisible())w.showInactive();}else if(w.isVisible())w.hide();
   }
@@ -409,7 +421,7 @@ function restart(){
   }).catch(engineError);
 }
 function options(){return {show:false,webPreferences:{preload:path.join(base,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}};}
-function showInput(id='main'){const a=state.actors.find(a=>a.id===id);if(!a)return;if(a.kind==='task'){openTaskSession(a).catch(engineError);return;}if(id!=='main'&&!a.present){openDsh().catch(engineError);return;}const w=createPetWindow(a);w.show();w.webContents.send('pet:input');setTimeout(()=>{app.focus({steal:true});w.focus();w.webContents.focus();},0);}
+function showInput(id='main'){const a=state.actors.find(a=>a.id===id);if(!a)return;if(id!=='main'&&a.kind!=='task'){openDsh().catch(engineError);return;}if(id!=='main'&&!a.present){openDsh().catch(engineError);return;}const w=createPetWindow(a);w.show();w.webContents.send('pet:input');setTimeout(()=>{app.focus({steal:true});w.focus();w.webContents.focus();},0);}
 async function openTaskSession(a){if(a.kind!=='task'||!a.metadataReady)throw new Error('这个任务会话尚未就绪');workbenchNavigation={sessionId:a.sessionId,revision:(workbenchNavigation?.revision||0)+1};await openDsh();broadcast();}
 function popupMainMenu(){const w=petWindows.get('main');if(w){w.show();setTimeout(()=>{app.focus({steal:true});w.focus();mainMenu().popup({window:w});},0);}}
 async function openDsh(){
@@ -610,6 +622,44 @@ ipcMain.handle('workbench:roles',async(event,method,p={})=>{
 ipcMain.handle('workbench:call',async(event,method,value)=>{
   assertWorkbenchCaller(event);
   if(method==='state')return workbenchState();
+  if(method==='workspace'){
+    const p=value;
+    if(!p||typeof p!=='object'||Array.isArray(p))throw Error('工作台请求无效');
+    if(p.action==='state')return workspaceController.state();
+    if(p.action==='update'){workspaceController.update(p.patch);workspaceRevision++;broadcast();return workspaceController.state();}
+    if(p.action==='catalog')return workspaceController.catalog({force:p.force===true,dshOffset:p.dshOffset??0});
+    if(p.action==='update-seat'){workspaceController.updateSeat(p.id,p.patch);workspaceRevision++;broadcast();return workspaceController.state();}
+    if(p.action==='upload-seat'){
+      if(!workspaceLayout.get().seats.some(s=>s.id===p.id))throw Error('工作入口不存在');
+      const image=await chooseAvatar('上传工作 agent 头像');if(image){workspaceController.uploadSeat(p.id,image);workspaceRevision++;}broadcast();return workspaceController.state();
+    }
+    if(p.action==='codex-read')return codexWorkspace.read(p.id);
+    if(p.action==='codex-state')return codexWorkspace.snapshot();
+    if(p.action==='codex-send')return codexWorkspace.send({id:p.id,cwd:p.cwd,message:p.message});
+    if(p.action==='codex-stop')return codexWorkspace.stop();
+    if(p.action==='codex-approve')return codexWorkspace.approve(p.key,p.decision);
+    if(p.action==='choose-project'){
+      const result=await dialog.showOpenDialog(dshWindow,{title:'选择工作项目',properties:['openDirectory']});
+      return result.canceled?null:codexWorkspace.allowRoot(result.filePaths[0]);
+    }
+    throw Error('未知工作台请求');
+  }
+  if(method==='companion'){
+    if(!value||typeof value!=='object'||Array.isArray(value))throw Error('聊天请求无效');
+    if(value.action==='read')return companionSnapshot(state);
+    if(value.action==='stop'){if(mainChatRuntime?.backend==='chat-api')mainChatRuntime.cancel();else nekoChat.close();return companionSnapshot(state);}
+    if(value.action==='send'){
+      const text=String(value.text||'').trim();if(!text||text.length>8000)throw Error('请输入 1–8000 字的消息');
+      const a=state.actors[0];
+      if(mainChatRuntime?.backend==='chat-api')return startApiPrompt(text);
+      if(!state.neko.enabled)throw Error('请先设置主 agent 的聊天连接');
+      if(busy(a))throw Error('主 agent 正在回复');
+      if(state.neko.connection!=='ready')await connectNeko();
+      if(state.neko.connection!=='ready')throw Error('主 agent 聊天尚未连接，请检查设置');
+      const result=nekoChat.send(text);a.messages.push({role:'user',text,time:Date.now(),requestId:result.requestId});acceptHuman(a,{text,time:Date.now()});update();return result;
+    }
+    throw Error('未知聊天请求');
+  }
   if(method==='accounts'){
     if(value==null||typeof value!=='object'||Array.isArray(value))throw new Error('账号读取参数无效');
     return {codex:await codexAccount.read({includeQuota:value.includeQuota===true,force:value.force===true})};
@@ -699,7 +749,7 @@ app.on('before-quit',event=>{
   if(shutdownStarted)return;
   shutdownStarted=true;quitting=true;communityController.dispose();catMotion.dispose();clearTimeout(nekoRetry);clearTimeout(rosterTimer);for(const timer of terminalTimers.values())clearTimeout(timer);terminalTimers.clear();nekoChat.close();save();
   const current=childLifecycle;
-  Promise.allSettled([mainChatRuntime?.close(),current?.stop(),codexAccount.dispose()]).finally(()=>{shutdownComplete=true;app.quit();});
+  Promise.allSettled([mainChatRuntime?.close(),current?.stop(),codexAccount.dispose(),codexWorkspace.dispose()]).finally(()=>{shutdownComplete=true;app.quit();});
 });
 process.on('SIGTERM',()=>app.quit());
 process.on('SIGINT',()=>app.quit());

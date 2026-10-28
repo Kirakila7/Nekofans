@@ -1,10 +1,13 @@
 const {contextBridge,ipcRenderer}=require('electron');
-// Dedicated to the authenticated local workbench. No file paths, pet state,
+// Dedicated to the authenticated local workbench. No arbitrary filesystem access, pet state,
 // credentials, shell commands or arbitrary IPC are exposed to the web page.
 const call=(method,value)=>ipcRenderer.invoke('workbench:call',method,value);
 contextBridge.exposeInMainWorld('nekoWorkbench',Object.freeze({
   getState:()=>call('state'),
   getAccounts:({includeQuota=false,force=false}={})=>call('accounts',{includeQuota:includeQuota===true,force:force===true}),
+  workspace:request=>call('workspace',request),
+  companion:request=>call('companion',request),
+  subscribeOffice:callback=>{const listener=(_event,state)=>callback(state);ipcRenderer.on('workbench:office-state',listener);return()=>ipcRenderer.removeListener('workbench:office-state',listener);},
   setAvatar:id=>call('avatar',id),
   uploadAvatar:()=>call('upload-avatar'),
   action:name=>call('action',name),
