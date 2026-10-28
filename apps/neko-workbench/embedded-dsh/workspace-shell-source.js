@@ -46,8 +46,8 @@ function installWorkspaceShell(options = {}) {
   sessionBrowser.append(listHeader, search, listStatus, projectList);
   const dock = own(el('section', 'neko-companion-dock')); dock.setAttribute('aria-label', '主 agent 聊天');
   const character = el('div', 'neko-companion-character');
-  character.setAttribute('role', 'slider'); character.tabIndex = 0; character.setAttribute('aria-label', '左右移动大肥鱼'); character.setAttribute('aria-orientation', 'horizontal'); character.title = '左右拖动 · Home 回到中间';
-  let companionOffset = 0, companionDrag = null, companionInRail = false, dockIntersecting = null, observedDockParent = null;
+  character.setAttribute('role', 'slider'); character.tabIndex = 0; character.setAttribute('aria-label', '大肥鱼，点击打开互动菜单，左右方向键移动'); character.setAttribute('aria-orientation', 'horizontal'); character.title = '点击互动 · 左右拖动 · Home 回到中间';
+  let companionOffset = 0, companionDrag = null, suppressCompanionClick = false, companionInRail = false, dockIntersecting = null, observedDockParent = null;
   function setCompanionOffset(value) {
     const width = dock.clientWidth || dock.getBoundingClientRect().width;
     const spriteWidth = character.offsetWidth || 76;
@@ -59,18 +59,26 @@ function installWorkspaceShell(options = {}) {
   }
   character.addEventListener('pointerdown', event => {
     if (event.button !== 0 || companionDrag || companionInRail) return;
-    setCompanionOffset(companionOffset); companionDrag = { pointerId: event.pointerId, x: event.clientX, offset: companionOffset };
+    suppressCompanionClick = false;
+    setCompanionOffset(companionOffset); companionDrag = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, offset: companionOffset, moved: false };
     character.dataset.dragging = 'true'; event.preventDefault();
     try { character.setPointerCapture(event.pointerId); } catch {}
   });
   character.addEventListener('pointermove', event => {
     if (!companionDrag || companionDrag.pointerId !== event.pointerId) return;
+    if (!companionDrag.moved && Math.hypot(event.clientX - companionDrag.x, event.clientY - companionDrag.y) > 5) { companionDrag.moved = true; closeCompanionMenu(false); }
     setCompanionOffset(companionDrag.offset + event.clientX - companionDrag.x);
   });
-  const finishCompanionDrag = event => { if (!companionDrag || companionDrag.pointerId !== event.pointerId) return; companionDrag = null; character.removeAttribute('data-dragging'); try { character.releasePointerCapture(event.pointerId); } catch {} };
+  const finishCompanionDrag = event => { if (!companionDrag || companionDrag.pointerId !== event.pointerId) return; suppressCompanionClick = companionDrag.moved || event.type !== 'pointerup'; companionDrag = null; character.removeAttribute('data-dragging'); try { character.releasePointerCapture(event.pointerId); } catch {} };
   character.addEventListener('pointerup', finishCompanionDrag); character.addEventListener('pointercancel', finishCompanionDrag); character.addEventListener('lostpointercapture', finishCompanionDrag);
   character.addEventListener('dragstart', event => event.preventDefault());
+  character.addEventListener('click', event => {
+    if (companionInRail) return;
+    if (suppressCompanionClick) { suppressCompanionClick = false; event.preventDefault(); return; }
+    if (event.button === 0) toggleCompanionMenu(character);
+  });
   character.addEventListener('keydown', event => {
+    if (['Enter', ' ', 'ArrowDown'].includes(event.key)) { event.preventDefault(); toggleCompanionMenu(character); return; }
     if (!['ArrowLeft', 'ArrowRight', 'Home'].includes(event.key)) return;
     event.preventDefault(); setCompanionOffset(event.key === 'Home' ? 0 : companionOffset + (event.key === 'ArrowLeft' ? -8 : 8));
   });
@@ -104,13 +112,60 @@ function installWorkspaceShell(options = {}) {
   form.append(historyToggle, chatInput, chatSend, chatStop); dock.append(character, history, form, chatStatus);
   // Move the existing animated character, rather than creating another pet.
   // The chat and its draft stay mounted in the original dock throughout.
-  const railCompanion = own(button('', 'neko-side-rail__button neko-rail-companion', () => {
+  function focusCompanionChat() {
     const expand = doc.querySelector('.neko-side-rail__expand');
     if (expand && !expand.hidden) expand.click();
-    else { dock.scrollIntoView?.({ block: 'nearest' }); chatInput.focus(); }
-  }));
-  railCompanion.hidden = true; railCompanion.title = '主 agent · 大肥鱼';
-  railCompanion.setAttribute('aria-label', '主 agent 大肥鱼');
+    dock.scrollIntoView?.({ block: 'nearest' }); chatInput.focus();
+  }
+  const railCompanion = own(button('', 'neko-side-rail__button neko-rail-companion', () => toggleCompanionMenu(railCompanion)));
+  railCompanion.hidden = true; railCompanion.title = '大肥鱼 · 点击互动';
+  railCompanion.setAttribute('aria-label', '大肥鱼互动菜单');
+  const companionMenu = own(el('div', 'neko-companion-menu')); companionMenu.id = 'neko-companion-menu'; companionMenu.hidden = true;
+  companionMenu.setAttribute('role', 'menu'); companionMenu.setAttribute('aria-label', '大肥鱼互动');
+  const visitButton = button('社区串门', 'neko-companion-menu__visit', async () => {
+    if (visitButton.disabled) return;
+    visitButton.disabled = true; visitButton.setAttribute('aria-busy', 'true'); companionMenuStatus.textContent = '';
+    try {
+      if (typeof options.openCommunity !== 'function') throw Error('社区入口暂不可用，请稍后重试');
+      closeSettings(); await options.openCommunity(); if (!disposed) closeCompanionMenu(false);
+    } catch (error) { if (!disposed) companionMenuStatus.textContent = error?.message || '社区暂时无法打开，请重试'; }
+    finally { visitButton.disabled = false; visitButton.removeAttribute('aria-busy'); }
+  });
+  const companionChatButton = button('和我聊聊', 'neko-companion-menu__chat', () => { closeCompanionMenu(false); focusCompanionChat(); });
+  for (const item of [visitButton, companionChatButton]) item.setAttribute('role', 'menuitem');
+  const companionMenuStatus = el('p', 'neko-companion-menu__status'); companionMenuStatus.setAttribute('role', 'status');
+  companionMenu.append(visitButton, companionChatButton, companionMenuStatus); doc.body.appendChild(companionMenu);
+  let companionMenuAnchor = null;
+  for (const trigger of [character, railCompanion]) { trigger.setAttribute('aria-haspopup', 'menu'); trigger.setAttribute('aria-controls', companionMenu.id); trigger.setAttribute('aria-expanded', 'false'); }
+  function closeCompanionMenu(restoreFocus = true) {
+    if (companionMenu.hidden) return;
+    companionMenu.hidden = true;
+    for (const trigger of [character, railCompanion]) trigger.setAttribute('aria-expanded', 'false');
+    if (restoreFocus && companionMenuAnchor?.isConnected) companionMenuAnchor.focus();
+    companionMenuAnchor = null;
+  }
+  function positionCompanionMenu() {
+    if (companionMenu.hidden || !companionMenuAnchor) return;
+    const r = companionMenuAnchor.getBoundingClientRect(), width = companionMenu.offsetWidth || 180, height = companionMenu.offsetHeight || 100;
+    const left = Math.max(8, Math.min(r.left, win.innerWidth - width - 8));
+    const top = Math.max(8, Math.min(r.top >= height + 14 ? r.top - height - 6 : r.bottom + 6, win.innerHeight - height - 8));
+    Object.assign(companionMenu.style, { left: left + 'px', top: top + 'px' });
+  }
+  function toggleCompanionMenu(anchor) {
+    if (!companionMenu.hidden) { closeCompanionMenu(); return; }
+    companionMenuAnchor = anchor; companionMenuStatus.textContent = ''; companionMenu.hidden = false;
+    for (const trigger of [character, railCompanion]) trigger.setAttribute('aria-expanded', 'true');
+    positionCompanionMenu(); (visitButton.disabled ? companionChatButton : visitButton).focus();
+  }
+  companionMenu.addEventListener('keydown', event => {
+    const items = [visitButton, companionChatButton].filter(item => !item.disabled);
+    if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+      event.preventDefault(); const index = items.indexOf(doc.activeElement);
+      items[event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (index + (event.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length]?.focus();
+    } else if (event.key === 'Tab') closeCompanionMenu(false);
+  });
+  function dismissCompanionMenu(event) { if (!companionMenu.contains(event.target) && !character.contains(event.target) && !railCompanion.contains(event.target)) closeCompanionMenu(false); }
+  doc.addEventListener('pointerdown', dismissCompanionMenu, true);
   function syncCompanionPlacement(rail) {
     if (!rail) return;
     const connected = dock.isConnected;
@@ -125,6 +180,7 @@ function installWorkspaceShell(options = {}) {
     }
     const needsRail = !visible;
     if (needsRail !== companionInRail || (needsRail && character.parentNode !== railCompanion)) {
+      closeCompanionMenu(false);
       companionInRail = needsRail;
       if (needsRail) {
         companionDrag = null; character.removeAttribute('data-dragging');
@@ -429,10 +485,11 @@ function installWorkspaceShell(options = {}) {
       const x = Math.ceil(r.right), bottom = strip?.top > 0 ? strip.top : win.innerHeight;
       Object.assign(panel.style, { left: x + 'px', top: '0px', width: Math.max(0, win.innerWidth - x) + 'px', height: Math.max(0, bottom) + 'px' });
     }
+    positionCompanionMenu();
   }
-  function schedule() { if (!disposed && !queued) { queued = true; Promise.resolve().then(() => { queued = false; place(); }); } }
+  function schedule() { if (!disposed && !queued) { queued = true; Promise.resolve().then(() => { queued = false; place(); positionCompanionMenu(); }); } }
   function nativeNew(event) { if (layout?.officeMode !== 'codex' || !event.target.closest?.('[data-neko-new-session="plus"]')) return; event.preventDefault(); event.stopImmediatePropagation(); newOffice(); }
-  function escape(event) { if (event.key !== 'Escape') return; if (!modal.hidden) { event.stopPropagation(); closeSettings(); } else if (layout?.companionHistoryOpen && dock.contains(doc.activeElement)) { event.preventDefault(); saveLayout({ companionHistoryOpen: false }); historyToggle.focus(); } }
+  function escape(event) { if (event.key !== 'Escape') return; if (!companionMenu.hidden) { event.preventDefault(); event.stopPropagation(); closeCompanionMenu(); } else if (!modal.hidden) { event.stopPropagation(); closeSettings(); } else if (layout?.companionHistoryOpen && dock.contains(doc.activeElement)) { event.preventDefault(); saveLayout({ companionHistoryOpen: false }); historyToggle.focus(); } }
   const observer = new win.MutationObserver(schedule); observer.observe(doc.body, { childList: true, subtree: true });
   // Observe only the dock's ancestors for inline style changes: watching every
   // style mutation would also watch our own drag/position updates.
@@ -466,6 +523,7 @@ function installWorkspaceShell(options = {}) {
   return () => {
     if (disposed) return; disposed = true; motion?.removeEventListener?.('change', syncCharacter); doc.removeEventListener('visibilitychange', syncCharacter); if (characterVideo) { characterVideo.pause(); characterVideo.removeAttribute('src'); characterVideo.load(); } observer.disconnect(); ancestorObserver.disconnect(); intersection?.disconnect(); resize?.disconnect(); win.clearInterval(interval);
     win.removeEventListener('resize', place); doc.removeEventListener('scroll', schedule, true); doc.removeEventListener('click', nativeNew, true); doc.removeEventListener('keydown', escape, true);
+    doc.removeEventListener('pointerdown', dismissCompanionMenu, true);
     for (const release of releases) if (typeof release === 'function') release();
     for (const [node, attrs] of nativeMarks) for (const [name, before] of attrs) { if (node.getAttribute(name) === '') { if (before === null) node.removeAttribute(name); else node.setAttribute(name, before); } }
     doc.body.removeAttribute('data-neko-workspace-shell'); doc.body.removeAttribute('data-neko-office-mode');

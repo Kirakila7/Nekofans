@@ -28,7 +28,8 @@ test('main companion moves to the highest rail position when its dock is hidden,
   frame.setAttribute('data-sidebar-collapsed','true'); expand.hidden=false; await tick();
   assert.equal(character.parentElement,fallback); assert.equal(fallback.hidden,false); assert.equal(character.getAttribute('aria-hidden'),'true');
   expand.addEventListener('click',()=>{frame.setAttribute('data-sidebar-collapsed','false');expand.hidden=true;});
-  fallback.click(); await tick();
+  fallback.click(); await tick();assert(!d.querySelector('.neko-companion-menu').hidden);
+  d.querySelector('.neko-companion-menu__chat').click(); await tick();
   assert.equal(character.parentElement,dock); assert(fallback.hidden); assert.equal(character.getAttribute('aria-hidden'),null); assert.equal(input.value,'unsent fixture');
   root.style.display='none'; await tick(); assert.equal(character.parentElement,fallback);
   root.style.display=''; await tick(); assert.equal(character.parentElement,dock);
