@@ -83,7 +83,8 @@ function buildDshPatch(runtime, { baseDir = __dirname, skin = { rows: [], insert
     { id: 'ui-settings-models', config: { credentialOnboarding: false } },
     ...skin.rows,
     { insert: [{ id: 'pet-lab-bridge', name: path.join(baseDir, 'bridge.cjs') }, ...skin.insert,
-      {id:'dsh-bili-whale',name:path.join(baseDir,'vendor/dsh-bili-whale/lib/index.js')}] },
+      {id:'dsh-bili-whale',name:path.join(baseDir,'vendor/dsh-bili-whale/lib/index.js')},
+      {id:'neko-qqbot-workbench',name:path.join(baseDir,'vendor/dsh-qqbot-workbench/index.cjs')}] },
   ];
 }
 

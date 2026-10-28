@@ -157,6 +157,11 @@ exports.apply=function(ctx){
       const fish=await import(require('node:url').pathToFileURL(require('node:path').join(__dirname,'vendor/dsh-bili-whale/lib/index.js')).href);
       return fish.workbenchAction(p.action);
     }
+    if(method==='qqbot-care'){
+      if(!['status','start','pause'].includes(p.action))throw new Error('未知 QQ 机器人操作');
+      const qqbot=await import(require('node:url').pathToFileURL(require('node:path').join(__dirname,'vendor/dsh-qqbot-workbench/index.cjs')).href);
+      return qqbot.qqbotAction(p.action);
+    }
     if(method==='prompt'){
       if(p.sessionId===root.agent.id){root.agent.followup(send(p.text));return {sessionId:root.agent.id};}
       const record=catalog.get(String(p.sessionId));
