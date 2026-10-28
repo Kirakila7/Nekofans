@@ -49,6 +49,13 @@ if(view==='chat-settings'){
     catch {document.getElementById('saved').textContent='保存失败，请再试一次';}
   };
 } else {
+  if(actorId==='main'){
+    const audio=new AudioContext();
+    const bridge={speak:(text,requestId)=>window.pet.call('tts-speak',{text,requestId}),stop:requestId=>window.pet.call('tts-stop',{requestId}),onEvent:handler=>window.pet.onTts(handler)};
+    const player=window.NekoTtsPlayer.createPlayer({bridge,context:audio});
+    const off=window.pet.onTts(event=>{if(event?.type==='reply')void player.speak(event.text).catch(()=>{});else if(event?.type==='cancel')void player.stop();});
+    window.addEventListener('unload',()=>{off();void player.close();void audio.close();},{once:true});
+  }
   host.innerHTML = '<main class="pet"><div class="pet-bubble is-whisper" role="status" hidden></div><button class="character" type="button"><video class="pet-video" autoplay muted playsinline aria-hidden="true"></video><video class="pet-video" autoplay muted playsinline aria-hidden="true"></video></button><form class="chat" hidden><span class="chat-whale" aria-hidden="true"><svg viewBox="0 0 40 32" fill="none"><path d="M12 20C5 21 2 17 3 13C7 13 10 14 12 17C11 12 13 9 17 9C19 13 17 17 15 19" fill="#7EBCE5"/><path d="M12 19C12 12 19 9 26 11C34 12 38 17 36 23C34 29 20 29 15 25C13 24 12 22 12 19Z" fill="#78B8E3"/><path d="M16 23C21 27 30 27 34 23" stroke="#DFF3FF" stroke-width="3" stroke-linecap="round"/><path d="M23 21C23 24 20 25 19 23" fill="#509CCC"/><circle cx="31" cy="17" r="1.3" fill="#385B7C"/><path d="M25 7V4M22 6L20 4M28 6L30 3" stroke="#8EC9EC" stroke-width="1.7" stroke-linecap="round"/></svg></span><span class="chat-water" aria-hidden="true"><svg viewBox="0 0 72 12" fill="none"><path d="M1 5C7 0 13 0 19 5S31 10 37 5S49 0 55 5S67 10 73 5M1 11C7 6 13 6 19 11S31 16 37 11S49 6 55 11S67 16 73 11" stroke="#8CC3E8" stroke-width="1.2"/></svg></span><input type="text" autocomplete="off" spellcheck="false" maxlength="30000"></form></main>';
   const character = host.querySelector('.character');
   const videos = host.querySelectorAll('video');
