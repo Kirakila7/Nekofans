@@ -527,7 +527,17 @@ window.__ModuleLoader__.load({
      * from names and avatars. The DSH seat owns the folded native tools. */
     const LIVE_ROLE = 'bigfish' // DSH role; other seats explicitly opt in to Codex.
     let assistantView = 'dsh'
+    let codexTaskRunning = false
     const assistantViewListeners = new Set()
+    const codexTaskListeners = new Set()
+    function setCodexTaskRunning(next) {
+      if (codexTaskRunning === next) return
+      codexTaskRunning = next
+      for (const listener of [...codexTaskListeners]) listener(next)
+    }
+    function lastCodexSeatLocked(state, role) {
+      return codexTaskRunning && role?.backend === 'codex' && state.roles.filter((r) => r.backend === 'codex' && r.enabled).length === 1
+    }
     function setAssistantView(next) {
       if (!['dsh', 'codex'].includes(next) || assistantView === next) return
       if (next === 'codex') currentCommunityPane?.hide()
@@ -702,6 +712,10 @@ window.__ModuleLoader__.load({
         }
         if (patch && Object.hasOwn(patch, 'backend')) {
           if (id === LIVE_ROLE || ![null, 'codex'].includes(patch.backend)) return false
+          if (patch.backend === null && lastCodexSeatLocked(snapshot.state, r)) {
+            notify(id, 'info', 'Codex 正在连接或运行，请先等待完成或停止任务，再取消最后一个 Codex 入口')
+            return false
+          }
           clean.backend = patch.backend
         }
         if (!Object.keys(clean).length) return false
@@ -1208,10 +1222,17 @@ function SidebarMark({ size }) {
     /** Per-role settings: name, builtin avatar or uploaded PNG. Never touches the global avatar. */
     function RoleSettings({ role, snap, store, pop, panelId }) {
       const [draft, setDraft] = useState(role.name)
+      const [codexRunning, setCodexRunning] = useState(codexTaskRunning)
+      useEffect(() => {
+        codexTaskListeners.add(setCodexRunning)
+        setCodexRunning(codexTaskRunning)
+        return () => codexTaskListeners.delete(setCodexRunning)
+      }, [])
       useEffect(() => {
         if (pop.open) setDraft(role.name)
       }, [pop.open])
       const busy = Boolean(snap.pending.save || snap.pending.upload || snap.pending.enter)
+      const lockedBackend = codexRunning && lastCodexSeatLocked(snap.state, role)
       const tiles = AVATARS.map((a) =>
         h(PickerTile, {
           key: a.id,
@@ -1274,9 +1295,10 @@ function SidebarMark({ size }) {
           ),
         ),
         role.id !== LIVE_ROLE ? h('label', { className: 'neko-pop__hint', htmlFor: `${panelId}-backend` }, '工作助手',
-          h('select', { id: `${panelId}-backend`, className: 'neko-input neko-role-backend', value: role.backend || '', disabled: busy,
+          h('select', { id: `${panelId}-backend`, className: 'neko-input neko-role-backend', value: role.backend || '', disabled: busy || lockedBackend,
             onChange: (event) => store.update(role.id, { backend: event.target.value || null }) },
-          h('option', { value: '' }, '未绑定'), h('option', { value: 'codex' }, 'Codex'))) :
+          h('option', { value: '' }, '未绑定'), h('option', { value: 'codex' }, 'Codex')),
+          lockedBackend ? h('span', { role: 'status', className: 'neko-pop__hint' }, 'Codex 正在连接或运行；请先完成或停止任务，再取消最后一个 Codex 入口。') : null) :
           h('p', { className: 'neko-pop__hint' }, '工作助手：DSH'),
         h('div', { className: 'neko-picker__grid', role: 'group', 'aria-label': `${role.name} 的头像` }, ...tiles),
         h(
@@ -3442,7 +3464,7 @@ function installAvatarTheme(options) { return NekoAvatarTheme.install(options) }
         if (!ready) return undefined
         const off = api.onEvent((event) => {
           if (!event || typeof event !== 'object') return
-          if (event.type === 'error' && !event.threadId) { activeThread.current = null; lock.current = false; setConnected(null); setBusy(false); setApproval(null); setError(event.message || 'Codex 服务已断开'); return }
+          if (event.type === 'error' && !event.threadId) { activeThread.current = null; lock.current = false; setConnected(null); setBusy(false); setCodexTaskRunning(false); setApproval(null); setError(event.message || 'Codex 服务已断开'); return }
           if (!activeThread.current || event.threadId !== activeThread.current) return
           if (event.type === 'delta' && typeof event.delta === 'string') {
             const id = String(event.itemId || event.turnId || 'reply')
@@ -3451,34 +3473,34 @@ function installAvatarTheme(options) { return NekoAvatarTheme.install(options) }
               if (index < 0) return [...old, { id, role: 'assistant', text: event.delta }]
               const copy = [...old]; copy[index] = { ...copy[index], text: copy[index].text + event.delta }; return copy
             })
-          } else if (event.type === 'turn-started') setBusy(true)
+          } else if (event.type === 'turn-started') { setBusy(true); setCodexTaskRunning(true) }
           else if (event.type === 'turn-completed') {
-            setBusy(false); lock.current = false; setApproval(null)
+            setBusy(false); setCodexTaskRunning(false); lock.current = false; setApproval(null)
             if (event.error) setError(typeof event.error === 'string' ? event.error : event.error.message || 'Codex 任务失败')
             else if (event.status === 'interrupted') setError('Codex 任务已中断')
             else if (event.status !== 'completed') setError(`Codex 任务未完成${event.status ? `（${event.status}）` : ''}`)
           }
           else if (event.type === 'approval-request') setApproval(event)
-          else if (event.type === 'error') { setError(event.message || 'Codex 发生错误'); setBusy(false); lock.current = false }
+          else if (event.type === 'error') { setError(event.message || 'Codex 发生错误') }
         })
         return () => { if (typeof off === 'function') off() }
       }, [api, ready])
       const connect = async () => {
         if (!ready || !project || starting || busy) return
-        setStarting(true); setError('')
+        setStarting(true); setCodexTaskRunning(true); setError('')
         try {
           const result = await api.start({ workspaceId: project.workspaceId, path: project.path })
           if (!result || typeof result.threadId !== 'string' || !result.threadId) throw new Error('Codex 未返回有效会话')
           activeThread.current = result.threadId; setConnected({ ...project, threadId: result.threadId }); setMessages(histories.current.get(result.threadId) || []); setApproval(null)
         } catch (e) { activeThread.current = null; setConnected(null); setError(e?.message || '无法启动 Codex') }
-        finally { setStarting(false) }
+        finally { setStarting(false); setCodexTaskRunning(false) }
       }
       const send = async () => {
         const text = draft.trim()
         if (!ready || !matching || !text || busy || lock.current || approval) return
-        lock.current = true; setBusy(true); setError(''); setDraft('')
+        lock.current = true; setBusy(true); setCodexTaskRunning(true); setError(''); setDraft('')
         setMessages((old) => [...old, { id: `user-${Date.now()}-${old.length}`, role: 'user', text }])
-        try { await api.send({ text }) } catch (e) { setBusy(false); lock.current = false; setError(e?.message || '发送失败') }
+        try { await api.send({ text }) } catch (e) { setBusy(false); setCodexTaskRunning(false); lock.current = false; setError(e?.message || '发送失败') }
       }
       const decide = async (decision) => {
         if (!approval) return

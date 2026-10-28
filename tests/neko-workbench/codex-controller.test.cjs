@@ -34,8 +34,11 @@ test('only the DSH registry grants a project directory', async () => {
 
 test('sends and cancels the selected session and routes only its events', async () => {
   const { controller, calls, events, emit } = setup();
+  assert.equal(controller.isBusy(), false);
   await controller.start({ workspaceId: 'registered' });
+  assert.equal(controller.isBusy(), false);
   assert.deepEqual(await controller.send({ text: 'hello' }), { turnId: 'turn-1' });
+  assert.equal(controller.isBusy(), true);
   emit({ type: 'delta', threadId: 'other', delta: 'private' });
   emit({ type: 'delta', threadId: 'thread-1', turnId: 'turn-1', delta: 'hello' });
   assert.equal(events.length, 1);
@@ -44,8 +47,30 @@ test('sends and cancels the selected session and routes only its events', async 
   await controller.cancel();
   assert.deepEqual(calls.at(-1), ['cancel', { threadId: 'thread-1', turnId: 'turn-1' }]);
   emit({ type: 'turn-completed', threadId: 'thread-1', turnId: 'turn-1', status: 'interrupted' });
+  assert.equal(controller.isBusy(), false);
   await assert.rejects(controller.cancel(), /没有可停止/);
   controller.dispose();
+});
+
+test('busy state covers an in-flight start and an in-flight send before turn events arrive', async () => {
+  let allowResolve, allowSend;
+  const controller = createCodexController({
+    resolveWorkspace: () => new Promise(resolve => { allowResolve = resolve; }),
+    adapterFactory: () => ({ createSession: async () => ({ threadId: 't' }),
+      sendMessage: () => new Promise(resolve => { allowSend = resolve; }), dispose() {} })
+  });
+  const start = controller.start({ workspaceId: 'x' });
+  assert.equal(controller.isBusy(), true);
+  allowResolve({ workspaceId: 'x', path: '/private/tmp' });
+  await start;
+  assert.equal(controller.isBusy(), false);
+  const send = controller.send({ text: 'hello' });
+  assert.equal(controller.isBusy(), true);
+  allowSend({ turnId: 'turn-1' });
+  await send;
+  assert.equal(controller.isBusy(), true);
+  controller.dispose();
+  assert.equal(controller.isBusy(), false);
 });
 
 test('only a real approval for the active thread can be answered', async () => {

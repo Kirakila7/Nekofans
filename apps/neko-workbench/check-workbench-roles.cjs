@@ -140,6 +140,19 @@ try {
     assert.equal(role(createRolesStore(file('legacy.json')), 'yui').backend, 'codex');
   });
 
+  check('running Codex work cannot lose its last bound role', () => {
+    const store = createRolesStore(file('running-routing.json'));
+    const initial = store.get();
+    assert.throws(() => store.update('yui', { name: '不应保存', backend: null }, { codexBusy: true }), /先完成或停止/);
+    assert.deepEqual(store.get(), initial);
+    store.update('claude', { backend: 'codex' }, { codexBusy: true });
+    store.update('yui', { backend: null }, { codexBusy: true });
+    assert.equal(role(store, 'claude').backend, 'codex');
+    assert.throws(() => store.update('claude', { backend: null }, { codexBusy: true }), /先完成或停止/);
+    store.update('claude', { backend: null }, { codexBusy: false });
+    assert.equal(role(store, 'claude').backend, null);
+  });
+
   check('missing, damaged and unexpected top-level configuration falls back predictably', () => {
     for (const [index, content] of ['{broken', 'null', '[]', '{"roles":{}}', '{"roles":[null,42,"yui"]}'].entries()) {
       const target = file(`damaged-${index}.json`);

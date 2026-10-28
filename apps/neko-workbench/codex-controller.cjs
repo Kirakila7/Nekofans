@@ -27,6 +27,8 @@ function createCodexController({ resolveWorkspace, publish = () => {}, adapterFa
     catch { throw new Error('工作区目录不存在或无法访问'); }
   }
   return {
+    // Authoritative in the main process, including start/send race windows.
+    isBusy() { return Boolean(starting || sending || activeTurn || approvals.size); },
     async start({ workspaceId, path: proposedPath } = {}) {
       if (disposed) throw new Error('Codex 服务已关闭');
       if (starting || sending || activeTurn) throw new Error('Codex 正在处理任务，请等待完成或先停止');
@@ -64,7 +66,7 @@ function createCodexController({ resolveWorkspace, publish = () => {}, adapterFa
       adapter.respondApproval({ requestId, decision }); approvals.delete(requestId);
       return { accepted: true };
     },
-    dispose() { if (disposed) return; disposed = true; adapter.dispose(); current = null; sessions.clear(); approvals.clear(); }
+    dispose() { if (disposed) return; disposed = true; adapter.dispose(); current = null; activeTurn = null; sending = false; starting = false; sessions.clear(); approvals.clear(); }
   };
 }
 module.exports = { createCodexController };

@@ -570,7 +570,7 @@ ipcMain.handle('workbench:codex',async(event,method,p={})=>{
 ipcMain.handle('workbench:roles',async(event,method,p={})=>{
   assertWorkbenchCaller(event);
   if(method==='state')return rolesState();
-  if(method==='update'){workbenchRoles.update(p.id,p.patch);publishRoles();return rolesState();}
+  if(method==='update'){workbenchRoles.update(p.id,p.patch,{codexBusy:codexController.isBusy()});publishRoles();return rolesState();}
   if(method==='select'){workbenchRoles.select(p.id);publishRoles();return rolesState();}
   if(method==='upload'){
     const role=workbenchRoles.get().roles.find(item=>item.id===p.id);if(!role)throw new Error('未知角色');

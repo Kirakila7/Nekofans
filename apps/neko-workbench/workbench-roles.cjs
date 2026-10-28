@@ -161,10 +161,13 @@ function createRolesStore(file) {
   }
   return {
     get,
-    update(id, patch) {
-      findRole(id);
+    update(id, patch, { codexBusy = false } = {}) {
+      const current = findRole(id);
       if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw new Error('角色设置格式无效。');
       if (Object.hasOwn(patch, 'customDataUrl')) throw new Error('自定义头像请通过上传 PNG 图片设置。');
+      if (codexBusy && current.backend === 'codex' && Object.hasOwn(patch, 'backend') && patch.backend === null && value.roles.filter(item => item.backend === 'codex').length === 1) {
+        throw new Error('Codex 正在处理任务，请先完成或停止任务，再解除最后一个 Codex 角色的绑定。');
+      }
       const next = get();
       const role = next.roles.find(item => item.id === id);
       if (Object.hasOwn(patch, 'name')) role.name = normalizeName(patch.name);
