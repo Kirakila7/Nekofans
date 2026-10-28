@@ -3,7 +3,8 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 
 // One queue owns session selection and persona acknowledgement for all channels.
-export function createSessionDelivery({controller,dshHome,cwd,sessionId,config,persona,isBusy=()=>false,now=Date.now,log=()=>{},onSession=()=>{}}) {
+export function createSessionDelivery({controller,dshHome,cwd,sessionId,config,persona,route,isBusy=()=>false,now=Date.now,log=()=>{},onSession=()=>{}}) {
+  if(!route?.provider||!route?.model)throw Error('养鱼会话缺少工作台账号模型路线')
   const file=path.join(dshHome,'whale-session.json')
   let state={id:sessionId,startedAt:now()},ready=false,tail=Promise.resolve(),lastDelivered=0
   // 2026-10-24：进程启动后有没有投递过 —— 用来做「重启后首次必注入人设」
@@ -22,21 +23,33 @@ export function createSessionDelivery({controller,dshHome,cwd,sessionId,config,p
     try {fs.writeFileSync(tmp,JSON.stringify(next));fs.renameSync(tmp,file)} finally {fs.rmSync(tmp,{force:true})}
   }
   return {
-    send(request,signal,{retainUntilAck=false}={}) {
+    send(request,signal,{retainUntilAck=false,beforePrompt}={}) {
       const job=tail.then(async()=>{
         signal?.throwIfAborted()
         const cfg=config(),days=Number(cfg.sessionRotateDays??0),once=cfg.personaOncePerSession===true
-        const persist=retainUntilAck||!!state.pendingRequest||once||(Number.isFinite(days)&&days>0)
+        let persist=retainUntilAck||!!state.pendingRequest||once||(Number.isFinite(days)&&days>0)
         const rotating=!state.pendingRequest&&Number.isFinite(days)&&days>0&&now()-state.startedAt>=days*86400000&&now()-lastDelivered>=8*60000&&!isBusy()
         let next=rotating?{id:crypto.randomUUID(),startedAt:now(),rotatedFrom:state.id}:state
         if(retainUntilAck){
           if(!request.requestId)throw Error('可靠交付需要 requestId')
           next={...next,pendingRequest:request.requestId}
         }
-        let created = null
         if(!ready||rotating) {
-          try {created = await controller.create({sessionId:next.id,cwd})}
-          catch(e) {if(rotating)throw e;log('沿用现有会话；若投递失败将保留重试状态')}
+          try {
+            // create() only reuses blank sessions. Resume an existing session
+            // first so a restart cannot mint an unrelated empty conversation.
+            const found=rotating?null:await controller.resolveAgent(next.id)
+            if(found?.error&&found.error.code!=='session/not-found')throw Error('session unavailable')
+            if(!rotating&&!found?.agent&&found?.error?.code!=='session/not-found')throw Error('invalid session result')
+            if(rotating||found?.error?.code==='session/not-found'){
+              const created=await controller.create({sessionId:next.id,cwd})
+              if(typeof created?.sessionId!=='string'||!created.sessionId)throw Error('invalid session identity')
+              if(created.sessionId!==next.id){next={...next,id:created.sessionId};persist=true}
+              // Retain ownership even if model selection fails or pause
+              // arrives before the first prompt is accepted.
+              save(next);state=next;onSession(next.id)
+            }
+          }catch {const error=Error('养鱼会话未能创建或恢复，请检查工作台会话状态。');error.code='SESSION_UNAVAILABLE';throw error}
         }
         // 2026-10-24 修第二版（审查报告第 3 条 + 复审）：
         //   上一版想靠 create() 的返回字段判断"是不是新建会话" ✗
@@ -49,9 +62,18 @@ export function createSessionDelivery({controller,dshHome,cwd,sessionId,config,p
         //   之后同一会话内按 personaIHash 去重 ✓
         //   代价：每次重启多重注入一次人设（~1000 字）✓ 换来"她不会重启后失忆"✓
         //   只开 personaIze 开关时才这样；关着的时候每条都注入，和以前一样 ✓
+        // Pin the workbench account route on every new, resumed or rotated
+        // session before delivery. A recorded per-session model (an older
+        // selection or another key) must never decide what this prompt bills.
+        signal?.throwIfAborted()
+        // Reassert immediately before every prompt: the user can change a
+        // live session's model between deliveries without recreating it.
+        try {await controller.selectModel({sessionId:next.id,provider:route.provider,model:route.model,...(route.reasoningEffort?{reasoningEffort:route.reasoningEffort}:{})})}
+        catch {const error=Error('工作台账号模型不可用，养鱼未投递；请检查账号登录和模型状态。');error.code='MODEL_ROUTE_UNAVAILABLE';throw error}
+        signal?.throwIfAborted()
         const bootFirst = !booted
         if(persist)save(next)
-        if(rotating)log(`会话轮换：${state.id} → ${next.id}；旧会话保留`)
+        if(rotating)log(`会话轮换：${next.rotatedFrom} → ${next.id}；旧会话保留`)
         state=next;ready=true;onSession(state.id)
         signal?.throwIfAborted()
         const block=persona(),fingerprint=crypto.createHash('sha256').update(block).digest('hex')
@@ -62,8 +84,10 @@ export function createSessionDelivery({controller,dshHome,cwd,sessionId,config,p
         const content=[...(request.content??[])]
         if(content[0]?.type==='text')content[0]={...content[0],text:prefix+'\n'+content[0].text}
         else content.unshift({type:'text',text:prefix})
+        if(beforePrompt)await beforePrompt(state.id)
+        signal?.throwIfAborted()
         try {await controller.prompt({...request,sessionId:state.id,content},signal)}
-        catch(e) {ready=false;throw e}
+        catch {ready=false;const error=Error('工作台账号未能接收养鱼任务，请检查登录、余额与连接状态。');error.code='MODEL_DELIVERY_FAILED';throw error}
         booted=true   // 投递成功了才算
         lastDelivered=now()
         state={...state,personaHash:fingerprint,deliveredAt:lastDelivered}

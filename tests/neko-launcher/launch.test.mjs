@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { mkdtempSync, mkdirSync, writeFileSync, chmodSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { electronCandidates, moduleContainerExists, launchPlan, startWorkbench } from "../../scripts/start-neko-workbench.mjs";
 
 function fixture(t) {
@@ -22,7 +22,7 @@ function fixture(t) {
 
 test("explicit Electron paths are authoritative; no fallback hides a typo", () => {
   assert.deepEqual(electronCandidates({ root: "/repo", homeDir: "/home/test", platform: "darwin",
-    env: { NEKO_WORKBENCH_ELECTRON: "/missing/electron" } }), ["/missing/electron"]);
+    env: { NEKO_WORKBENCH_ELECTRON: "/missing/electron" } }), [resolve("/missing/electron")]);
   assert.equal(electronCandidates({ root: "/repo", homeDir: "/home/test", platform: "darwin", env: {} }).length, 2);
   assert.equal(electronCandidates({ root: "/repo", platform: "win32", env: {} }).length, 1);
 });

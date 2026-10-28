@@ -1,6 +1,10 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const path = require('node:path');
+const fs = require('node:fs');
+const os = require('node:os');
+const workspace = fs.realpathSync(os.tmpdir());
 const { createCodexController } = require('../../apps/neko-workbench/codex-controller.cjs');
 
 function setup() {
@@ -13,7 +17,7 @@ function setup() {
     dispose: () => calls.push(['dispose'])
   };
   const controller = createCodexController({
-    resolveWorkspace: async id => id === 'registered' ? { workspaceId: id, path: '/private/tmp' } : null,
+    resolveWorkspace: async id => id === 'registered' ? { workspaceId: id, path: workspace } : null,
     adapterFactory: options => { onEvent = options.onEvent; return adapter; },
     publish: event => events.push(event)
   });
@@ -25,8 +29,8 @@ test('only the DSH registry grants a project directory', async () => {
   await assert.rejects(controller.start({ workspaceId: 'unknown', path: '/' }), /无法验证/);
   await assert.rejects(controller.start({ workspaceId: 'registered', path: '/' }), /不匹配/);
   assert.equal(calls.length, 0);
-  assert.deepEqual(await controller.start({ workspaceId: 'registered', path: '/private/tmp' }), { threadId: 'thread-1' });
-  assert.equal(calls[0][1], '/private/tmp');
+  assert.deepEqual(await controller.start({ workspaceId: 'registered', path: workspace }), { threadId: 'thread-1' });
+  assert.equal(path.relative(workspace,calls[0][1]), '');
   assert.deepEqual(await controller.start({ workspaceId: 'registered' }), { threadId: 'thread-1' });
   assert.equal(calls.length, 1);
   controller.dispose();
@@ -61,7 +65,7 @@ test('busy state covers an in-flight start and an in-flight send before turn eve
   });
   const start = controller.start({ workspaceId: 'x' });
   assert.equal(controller.isBusy(), true);
-  allowResolve({ workspaceId: 'x', path: '/private/tmp' });
+  allowResolve({ workspaceId: 'x', path: workspace });
   await start;
   assert.equal(controller.isBusy(), false);
   const send = controller.send({ text: 'hello' });
@@ -87,7 +91,7 @@ test('only a real approval for the active thread can be answered', async () => {
 test('account refresh and update notifications preserve task state and never publish private fields', async () => {
   let notify; const accounts = [];
   const controller = createCodexController({
-    resolveWorkspace: async id => ({ workspaceId: id, path: '/private/tmp' }),
+    resolveWorkspace: async id => ({ workspaceId: id, path: workspace }),
     publishAccount: value => accounts.push(value),
     adapterFactory: ({ onEvent }) => {
       notify = onEvent;

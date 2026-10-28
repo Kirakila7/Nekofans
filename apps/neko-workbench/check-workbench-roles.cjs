@@ -14,9 +14,9 @@ const SECOND_PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYA
 const defaults = {
   activeId: 'bigfish',
   roles: [
-    { id: 'yui', name: '开发喵', avatarId: 'devcat', customDataUrl: null, backend: 'codex', enabled: true },
-    { id: 'bigfish', name: '大肥鱼', avatarId: 'bigfish', customDataUrl: null, backend: 'dsh', enabled: true },
-    { id: 'claude', name: 'Claude小姐', avatarId: 'claude', customDataUrl: null, backend: null, enabled: false },
+    { id: 'yui', name: 'Yui', avatarId: 'yui', customDataUrl: null, enabled: false },
+    { id: 'bigfish', name: '大肥鱼', avatarId: 'bigfish', customDataUrl: null, enabled: true },
+    { id: 'claude', name: 'Claude小姐', avatarId: 'claude', customDataUrl: null, enabled: false },
   ],
 };
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'neko-workbench-roles-'));
@@ -42,10 +42,10 @@ function pngWithComment(byteLength) {
 }
 
 try {
-  check('defaults contain fixed roles with independently routed DSH and Codex seats', () => {
+  check('defaults contain exactly three fixed role slots; only bigfish can be selected', () => {
     const store = createRolesStore(file('initial.json'));
     assert.deepEqual(store.get(), defaults);
-    assert.equal(store.select('yui').activeId, 'yui');
+    assert.throws(() => store.select('yui'), /暂未接入/);
     assert.throws(() => store.select('claude'), /暂未接入/);
     assert.deepEqual(store.select('bigfish'), defaults);
     assert.throws(() => store.select('another'), /未知角色/);
@@ -70,11 +70,11 @@ try {
     assert.deepEqual(fs.readdirSync(root).filter(name => name.endsWith('.tmp')), []);
   });
 
-  check('arbitrary patches cannot enable, replace or reorder a role', () => {
+  check('patches cannot enable, replace, reorder or route a role', () => {
     const store = createRolesStore(file('patches.json'));
     const snapshot = store.update('yui', { enabled: true, enable: true, id: 'bigfish', activeId: 'yui', model: 'anything', roles: [], unknown: 1 });
     assert.deepEqual(snapshot, defaults);
-    assert.throws(() => store.select('claude'), /暂未接入/);
+    assert.throws(() => store.select('yui'), /暂未接入/);
     assert.deepEqual(JSON.parse(fs.readFileSync(file('patches.json'), 'utf8')), defaults);
     assert.throws(() => store.update('yui', { customDataUrl: PIXEL }), /上传/);
     assert.equal(role(store, 'yui').customDataUrl, null);
@@ -94,63 +94,14 @@ try {
     assert.deepEqual(store.get(), {
       activeId: 'bigfish',
       roles: [
-        { id: 'yui', name: '已保存的结衣', avatarId: 'yui', customDataUrl: null, backend: null, enabled: false },
-        { id: 'bigfish', name: '工作鱼', avatarId: 'bigfish', customDataUrl: null, backend: 'dsh', enabled: true },
-        { id: 'claude', name: 'Claude小姐', avatarId: 'custom', customDataUrl: PIXEL, backend: null, enabled: false },
+        { id: 'yui', name: '已保存的结衣', avatarId: 'yui', customDataUrl: null, enabled: false },
+        { id: 'bigfish', name: '工作鱼', avatarId: 'bigfish', customDataUrl: null, enabled: true },
+        { id: 'claude', name: 'Claude小姐', avatarId: 'custom', customDataUrl: PIXEL, enabled: false },
       ],
     });
     assert.throws(() => store.select('claude'), /暂未接入/);
     store.select('bigfish');
     assert.deepEqual(JSON.parse(fs.readFileSync(file('mixed.json'), 'utf8')), store.get());
-  });
-
-  check('role backend is explicit, persists separately from appearance, and validates updates atomically', () => {
-    const store = createRolesStore(file('routing.json'));
-    const bound = store.update('claude', { backend: 'codex', avatarId: 'gemini', name: '自选角色' });
-    assert.equal(bound.roles[2].backend, 'codex');
-    assert.equal(bound.roles[2].enabled, true);
-    assert.equal(store.select('claude').activeId, 'claude');
-    store.update('claude', { avatarId: 'yui', name: '另一名字' });
-    assert.equal(role(store, 'claude').backend, 'codex');
-    assert.equal(role(createRolesStore(file('routing.json')), 'claude').backend, 'codex');
-    const before = store.get();
-    assert.throws(() => store.update('claude', { name: '不应保存', backend: 'dsh' }), /Codex/);
-    assert.throws(() => store.update('claude', { backend: 'fake' }), /Codex/);
-    assert.throws(() => store.update('bigfish', { backend: null }), /DSH/);
-    assert.deepEqual(store.get(), before);
-    const unbound = store.update('claude', { backend: null });
-    assert.equal(unbound.activeId, 'bigfish');
-    assert.equal(unbound.roles[2].enabled, false);
-    assert.throws(() => store.select('claude'), /暂未接入/);
-  });
-
-  check('legacy seats retain names and avatars without silently binding a backend', () => {
-    writeJson('legacy.json', { roles: [
-      { id: 'yui', name: 'Yui', avatarId: 'yui', customDataUrl: null, enabled: false },
-      { id: 'bigfish', name: '我的鱼', avatarId: 'bigfish', enabled: true },
-      { id: 'claude', name: '我自定义的角色', avatarId: 'devcat', enabled: false },
-    ] });
-    const store = createRolesStore(file('legacy.json'));
-    assert.deepEqual(role(store, 'yui'), { id: 'yui', name: 'Yui', avatarId: 'yui', customDataUrl: null, backend: null, enabled: false });
-    assert.equal(role(store, 'claude').name, '我自定义的角色');
-    assert.equal(role(store, 'claude').avatarId, 'devcat');
-    assert.equal(role(store, 'claude').backend, null);
-    assert.equal(role(store, 'bigfish').backend, 'dsh');
-    store.update('yui', { backend: 'codex' });
-    assert.equal(role(createRolesStore(file('legacy.json')), 'yui').backend, 'codex');
-  });
-
-  check('running Codex work cannot lose its last bound role', () => {
-    const store = createRolesStore(file('running-routing.json'));
-    const initial = store.get();
-    assert.throws(() => store.update('yui', { name: '不应保存', backend: null }, { codexBusy: true }), /先完成或停止/);
-    assert.deepEqual(store.get(), initial);
-    store.update('claude', { backend: 'codex' }, { codexBusy: true });
-    store.update('yui', { backend: null }, { codexBusy: true });
-    assert.equal(role(store, 'claude').backend, 'codex');
-    assert.throws(() => store.update('claude', { backend: null }, { codexBusy: true }), /先完成或停止/);
-    store.update('claude', { backend: null }, { codexBusy: false });
-    assert.equal(role(store, 'claude').backend, null);
   });
 
   check('missing, damaged and unexpected top-level configuration falls back predictably', () => {

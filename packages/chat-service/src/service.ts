@@ -27,6 +27,8 @@ export interface MainChatServiceOptions {
   conversations: ConversationStore;
   memory?: MemoryProvider;
   summaries?: SummaryProvider;
+  memoryContext?: (personaId: string, query: string, budget: number, signal: AbortSignal) => Promise<import("../../app-contracts/src/chat.ts").RecalledMemory[]>;
+  onTurnSaved?: (user: ChatMessage, assistant: ChatMessage) => Promise<void>;
   /** Separate budget for derived context, including metadata. Default 4000 characters. */
   summaryBudgetChars?: number;
   /** Summaries are optional context; never block a reply for longer than this. Default 1000 ms. */
@@ -57,6 +59,7 @@ export interface MainChatServiceOptions {
 const ERROR_TEXT: Readonly<Record<string, string>> = {
   not_configured: "聊天 API 还没配置好（地址、模型或密钥）",
   auth: "API 密钥无效或没有权限",
+  insufficient_balance: "DeepSeek API 余额不足，请检查 API 平台余额",
   rate_limit: "请求太频繁或额度不足，稍后再试",
   timeout: "聊天 API 响应超时",
   network: "连不上聊天 API",
@@ -69,7 +72,7 @@ const DEFAULT_ERROR_TEXT = "聊天 API 出错了";
 // Matches the overlay IPC limit; enforce it here too for callers that bypass IPC.
 const MAX_INPUT_CHARS = 8000;
 const API_FAILURE_CODES = new Set([
-  "not_configured", "auth", "rate_limit", "http", "network", "timeout", "refusal", "empty", "bad_response",
+  "not_configured", "auth", "insufficient_balance", "rate_limit", "http", "network", "timeout", "refusal", "empty", "bad_response",
 ]);
 
 /** Short user-facing text for an error code; unknown codes get the generic text. */
@@ -93,6 +96,8 @@ export class MainChatService implements MainChatPort {
   private readonly provider: ChatProvider;
   private readonly conversations: ConversationStore;
   private readonly memory: MemoryProvider | undefined;
+  private readonly memoryContext: MainChatServiceOptions["memoryContext"];
+  private readonly onTurnSaved: MainChatServiceOptions["onTurnSaved"];
   private readonly summaries: SummaryProvider | undefined;
   private readonly summaryBudgetChars: number;
   private readonly summaryTimeoutMs: number;
@@ -116,6 +121,8 @@ export class MainChatService implements MainChatPort {
     this.provider = opts.provider;
     this.conversations = opts.conversations;
     this.memory = opts.memory;
+    this.memoryContext = opts.memoryContext;
+    this.onTurnSaved = opts.onTurnSaved;
     this.summaries = opts.summaries;
     this.summaryBudgetChars = positiveInt(opts.summaryBudgetChars, 4000, "summaryBudgetChars");
     this.summaryTimeoutMs = positiveInt(opts.summaryTimeoutMs, 1000, "summaryTimeoutMs");
@@ -213,9 +220,24 @@ export class MainChatService implements MainChatPort {
 
     let memories: MemoryItem[] = [];
     let summaries: ConversationSummary[] = [];
+    let memoryContext: import("../../app-contracts/src/chat.ts").RecalledMemory[] | undefined;
     let messages: ChatMessage[];
     try {
-      if (this.memory) {
+      if (this.memoryContext) {
+        const deadline = new AbortController();
+        const combined = AbortSignal.any([signal, deadline.signal]);
+        const timer = setTimeout(() => deadline.abort(), 2000);
+        try {
+          memoryContext = await untilCancelled(Promise.race([
+            this.memoryContext(personaId, input, this.memoryBudgetTokens, combined),
+            new Promise<never>((_, reject) => combined.addEventListener("abort", () => reject(CANCELLED), { once: true })),
+          ]));
+        } catch (error) {
+          if (signal.aborted) throw error;
+          this.warn("main chat: memory context unavailable, continuing without recalled context");
+          memoryContext = [];
+        } finally { clearTimeout(timer); }
+      } else if (this.memory) {
         try {
           memories = await untilCancelled(this.memory.recall(personaId, input, this.memoryBudgetTokens));
         } catch (error) {
@@ -241,7 +263,7 @@ export class MainChatService implements MainChatPort {
     let completedId: string | null = null;
     try {
       const iterator = this.provider
-        .stream({ persona, messages, memories, summaries, maxOutputTokens: this.maxOutputTokens, signal })
+        .stream({ persona, messages, memories, summaries, memoryContext, maxOutputTokens: this.maxOutputTokens, signal })
         [Symbol.asyncIterator]();
       try {
         while (true) {
@@ -294,6 +316,13 @@ export class MainChatService implements MainChatPort {
     // The reply is committed now. Cancellation only skips optional proposal work; returning
     // completed preserves the contract that only completed turns have a saved assistant reply.
     await this.storeProposals(userMessage, signal);
+    if (this.onTurnSaved) {
+      // Older native extraction can hold the delivery queue for a model request.
+      // The committed raw turn is the recovery source; do not hold completion
+      // (or cancellation after the save) behind this optional handoff.
+      void Promise.resolve().then(() => this.onTurnSaved!(userMessage, assistantMessage))
+        .catch(() => this.warn("main chat: memory handoff pending; raw turn remains stored for recovery"));
+    }
     return this.finish(
       { personaId, phase: "idle", lastUserMessage: input, reply },
       { status: "completed", messageId: completedId, text: reply },

@@ -1,4 +1,5 @@
 import { createFishControl } from '../../../fish-care.cjs'
+import { accountRoute } from '../../../account-route.cjs'
 let workbenchController
 export async function workbenchAction(action){if(!workbenchController)throw Error('养鱼服务尚未就绪');return workbenchController.action(action)}
 import { AuthError, createCredentialStore, parseManualCookie } from './credentials.js'
@@ -310,7 +311,12 @@ function isTrustedReq(req) {
     })
     authRoute('start', () => qrAuth.start())
     authRoute('poll', body => qrAuth.poll(String(body.id ?? '')))
-    authRoute('cancel', async body => {await fishControl?.action('cancel-login');return qrAuth.cancel(String(body.id ?? ''))})
+    authRoute('cancel', async body => {
+      const paused=fishControl?.action('cancel-login')
+      const result=qrAuth.cancel(String(body.id ?? ''))
+      await paused
+      return result
+    })
 
     // Keep the original manual endpoint and paste formats as a fallback.
     route('exact', '/dsh-bili/api/cookie', async (req, res) => {
@@ -518,15 +524,34 @@ function isTrustedReq(req) {
       verify:async()=>{try{await verifyAccount(JSON.parse(fs.readFileSync(CRED_FILE,'utf8')))}catch(error){if(String(error.message).includes('登录验证失败'))error.code='AUTH_INVALID';throw error}},
       start:()=>{
         if(!NODE_EXE)throw Error('Node unavailable')
-        sched=startScheduler(ctx,{dshHome:DSH_HOME,biliMjs:resolveBiliMjs(),cwd:resolveWorkDir(readConfig().home,WORK_DIR),sessionId:'bili-whale',log:m=>console.log(m),onFailure:()=>fishControl.reportFailure()})
+        sched=startScheduler(ctx,{dshHome:DSH_HOME,biliMjs:resolveBiliMjs(),cwd:resolveWorkDir(readConfig().home,WORK_DIR),sessionId:'bili-whale',route:accountRoute(),log:m=>console.log(m),onFailure:()=>fishControl.reportFailure()})
         SCHED_STATUS={ok:true,reason:'已启动（每 60 秒检查作息）',at:new Date().toISOString()}
         return {stop(){sched?.stop();sched=null;SCHED_STATUS={ok:false,reason:'已暂停',at:new Date().toISOString()}}}
       },
       notify:value=>{try{process.stdout.write(JSON.stringify({method:'fish-care-state',params:value})+'\n')}catch{}}
     })
     workbenchController=fishControl
+    route('exact','/dsh-bili/api/read-once',async(req,res)=>{
+      if(!isTrustedReq(req)){json(res,403,{ok:false});return}
+      if(req.method==='GET'){json(res,200,{ok:true,state:sched?.readingStatus()??{phase:'idle',requestId:null}});return}
+      if(req.method!=='POST'){json(res,405,{ok:false});return}
+      if(fishControl.snapshot().phase!=='running'||!sched){json(res,409,{ok:false,error:'请先启动养鱼'});return}
+      json(res,200,{ok:true,state:await sched.readOnce()})
+    })
     const accountWatch=new AbortController()
-    ctx.inject(['deepseekAccount'],scope=>{const accountService=scope.deepseekAccount;if(accountService?.watch)(async()=>{try{for await(const view of accountService.watch(accountWatch.signal)){if(view.status==='credential-stored')await fishControl.afterModelLogin();else if(fishControl.snapshot().enabled)await fishControl.action('pause')}}catch{}})()})
+    ctx.inject(['deepseekAccount'],scope=>{
+      const accountService=scope.deepseekAccount
+      if(accountService?.watch)(async()=>{
+        try{
+          for await(const view of accountService.watch(accountWatch.signal)){
+            // Keep consuming account events while B站 verification is in
+            // flight, so a later logout can cancel the pending start.
+            if(view.status==='credential-stored')fishControl.afterModelLogin().catch(()=>{})
+            else if(['checking','login-required','running'].includes(fishControl.snapshot().phase))fishControl.action('pause').catch(()=>{})
+          }
+        }catch{}
+      })()
+    })
     route('exact','/dsh-bili/api/control',async(req,res)=>{
       if(!['GET','POST'].includes(req.method)){json(res,405,{ok:false});return}
       const action=req.method==='GET'?'status':JSON.parse(await readBody(req)||'{}').action

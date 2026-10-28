@@ -1,0 +1,39 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtempSync,rmSync,readdirSync,readFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join,resolve} from 'node:path';
+import {createServer,connect} from 'node:net';
+import {createServer as httpServer} from 'node:http';
+import {NekoMemoryWorker,NekoMemoryAdapter} from '../../apps/neko-workbench/memory/neko-adapter.mjs';
+const root=resolve(import.meta.dirname,'../..');
+const enabled=process.env.NEKO_MEMORY_COMPONENT_TEST==='1';
+
+test('native memory component: private lifecycle, durable replication, dedup, recall, deletion and restart', {skip:!enabled,timeout:180000},async t=>{
+  const directory=mkdtempSync(join(tmpdir(),'neko-native-memory-')),requests=[];
+  const api=httpServer((req,res)=>{let raw='';req.on('data',c=>raw+=c);req.on('end',()=>{const body=JSON.parse(raw);requests.push(body);
+    res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({id:'fixture',object:'chat.completion',choices:[{index:0,finish_reason:'stop',message:{role:'assistant',content:'[]'}}],usage:{prompt_tokens:1,completion_tokens:1}}));});});
+  await new Promise(r=>api.listen(0,'127.0.0.1',r));
+  const options={repositoryRoot:root,dataRoot:directory,getModel:async()=>({protocol:'openai-compatible',baseUrl:`http://127.0.0.1:${api.address().port}/v1`,model:'fixture-memory',apiKey:'synthetic-memory-key',requestTimeoutMs:5000}),getPersona:async()=>({prompt:'合成测试角色，不含真实用户资料。'})};
+  let worker=new NekoMemoryWorker(options),adapter=new NekoMemoryAdapter({worker});
+  t.after(async()=>{await worker.close();await new Promise(r=>{api.closeAllConnections();api.close(r);});rmSync(directory,{recursive:true,force:true});});
+  await worker.ensure();const port=Number(new URL(worker.url).port);
+  assert.equal((await fetch(worker.url+'/workbench-memory/health')).status,401);
+  assert.equal((await fetch(worker.url+'/workbench-memory/health',{headers:{authorization:'Bearer '+worker.token,origin:'https://example.invalid'}})).status,403);
+  assert.equal((await fetch(worker.url+'/cache/anything',{headers:{authorization:'Bearer '+worker.token}})).status,404);
+  const event={eventId:'test-fact-1',itemId:'test-preference',personaId:'bigfish',origin:'user',operation:'upsert',parents:[],occurredAt:'2026-10-28T00:00:00Z',value:{kind:'preference',text:'合成用户喜欢茉莉花茶',visibility:'private',certainty:'user-confirmed',evidenceRefs:['synthetic-message-1']}};
+  for(let i=0;i<10;i++)assert.deepEqual((await adapter.push([event])).ackedEventIds,[event.eventId]);
+  const first=await adapter.pull();assert.equal(first.events.filter(e=>e.eventId===event.eventId).length,1);
+  const recalled=await adapter.recall('茉莉花茶',512);assert(recalled.some(v=>v.text===event.value.text));assert.equal(recalled[0].certainty,'user-confirmed');
+  await assert.rejects(adapter.push([{...event,eventId:'foreign',personaId:'other'}]));
+  const deletion={eventId:'test-delete',itemId:event.itemId,personaId:'bigfish',origin:'user',operation:'delete',parents:[event.eventId],occurredAt:'2026-10-28T01:00:00Z'};
+  await adapter.push([deletion]);await adapter.push([event]);assert.equal((await adapter.recall('茉莉花茶',512)).length,0);
+  await worker.close();
+  await new Promise((resolve,reject)=>{const server=createServer();server.once('error',reject);server.listen(port,'127.0.0.1',()=>server.close(resolve));});
+  worker=new NekoMemoryWorker(options);adapter=new NekoMemoryAdapter({worker});await worker.ensure();
+  assert((await adapter.pull()).events.some(e=>e.eventId===deletion.eventId));assert.equal((await adapter.recall('茉莉花茶',512)).length,0);
+  const restore={...event,eventId:'test-restore',operation:'restore',parents:[deletion.eventId],occurredAt:'2026-10-28T02:00:00Z'};await adapter.push([restore]);
+  assert((await adapter.recall('茉莉花茶',512)).some(v=>v.text===event.value.text));
+  function inspect(dir){for(const entry of readdirSync(dir,{withFileTypes:true})){const file=join(dir,entry.name);if(entry.isDirectory())inspect(file);else if(/\.(?:json|jsonl|log|ndjson)$/.test(entry.name))assert(!readFileSync(file).includes(Buffer.from('synthetic-memory-key')));}}
+  inspect(directory);
+});
