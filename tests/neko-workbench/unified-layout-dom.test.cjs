@@ -25,13 +25,13 @@ async function nextFrame(w) {
   }
 }
 const source = fs.readFileSync(path.join(__dirname, '../../apps/neko-workbench/embedded-dsh/unified-layout-source.js'), 'utf8');
-function fixture(t, { accountBridge = false } = {}) {
-  const dom = new JSDOM('<body><aside data-neko-side-rail><div class="neko-workspace-rail-controls"></div></aside><div id="frame" style="display:grid;grid-template-columns:220px 800px 0px"><div id="track"><aside data-slot="sidebar"><section class="neko-companion-dock"><textarea>personal draft</textarea></section><div data-slot="settings.launcher"></div></aside></div><div class="some_centerCol_HASH_42"><textarea id="draft">coding draft</textarea></div><div></div></div></body>', { runScripts:'outside-only', pretendToBeVisual:true });
+function fixture(t, { accountBridge = false, savedLayout = null } = {}) {
+  const dom = new JSDOM('<body><aside data-neko-side-rail><div class="neko-workspace-rail-controls"></div><button class="neko-community-yui">社区</button><button class="neko-side-rail__bilibili">B站</button></aside><div id="frame" style="display:grid;grid-template-columns:220px 800px 0px"><div id="track"><aside data-slot="sidebar"><section class="neko-companion-dock"><textarea>personal draft</textarea></section><div data-slot="settings.launcher"></div></aside></div><div class="some_centerCol_HASH_42"><textarea id="draft">coding draft</textarea></div><div></div></div></body>', { runScripts:'outside-only', pretendToBeVisual:true });
   t.after(() => dom.window.close()); const w=dom.window, d=w.document;
   d.querySelector('#frame').getBoundingClientRect=()=>({left:64,top:0,right:1084,bottom:780,width:1020,height:780});
   d.querySelector('[data-slot="sidebar"]').getBoundingClientRect=()=>({left:64,top:0,right:284,bottom:780,width:220,height:780});
   d.querySelector('.neko-companion-dock').getBoundingClientRect=()=>({left:64,top:640,right:284,bottom:730,width:220,height:90});
-  let saved={enabled:false,side:'workspace',left:'coding',right:null,ratio:.5}, listener=null, accountListener=null, legacyClosed=0, releaseAccount;
+  let saved=savedLayout || {enabled:false,side:'workspace',left:'coding',right:null,ratio:.5}, listener=null, accountListener=null, legacyClosed=0, releaseAccount;
   const calls=[];
   const bridge={ workspace: async r => { calls.push(r); if(r.action==='pane-layout')return {...saved}; if(r.action==='set-pane-layout'){saved={...r.layout};return {...saved};} throw Error('bad request'); }, community: async r=>{calls.push(r);return {ok:true};}, subscribeCommunity:fn=>{listener=fn;return()=>{listener=null;};} };
   if (accountBridge) {
@@ -44,6 +44,32 @@ function fixture(t, { accountBridge = false } = {}) {
 }
 async function openConfig(f) { f.d.querySelector('.neko-layout-entry').click(); await sleep(); }
 function select(f, type, value) { f.d.querySelector(`[data-${type}="${value}"]`).click(); }
+test('startup uses two areas without overwriting saved multi-pane layout and can restore it', {skip:!JSDOM}, async t=>{
+  const previous={enabled:true,side:'workspace',left:'community',right:'bilibili',ratio:.4};
+  const f=fixture(t,{savedLayout:previous}); await sleep();
+  assert.deepEqual(f.saved,previous); assert.equal(f.calls.filter(x=>x.action==='set-pane-layout').length,0);
+  assert.equal(f.calls.filter(x=>x.action==='open').length,0,'no native site opens by default');
+  assert.equal(f.d.querySelector('#draft').value,'coding draft');
+  await openConfig(f); const restore=[...f.d.querySelectorAll('.neko-unified-config button')].find(b=>b.textContent==='恢复上次多栏布局');
+  assert(restore && !restore.hidden); restore.click(); f.d.querySelector('.neko-unified-config .close').click();
+  await waitFor(()=>f.calls.some(x=>x.action==='open'&&x.slot==='left'&&x.site==='community')&&f.calls.some(x=>x.action==='open'&&x.slot==='right'&&x.site==='bilibili'),'restored native views');
+  assert.deepEqual(f.saved,previous); assert.equal(f.calls.filter(x=>x.action==='set-pane-layout').length,0,'restore reuses saved layout without rewriting');
+  f.cleanup();
+});
+test('rail shortcuts open an optional middle panel while preserving coding and can close it', {skip:!JSDOM}, async t=>{
+  for (const [selector,site] of [['.neko-side-rail__bilibili','bilibili'],['.neko-community-yui','community']]) {
+    const f=fixture(t); await sleep(); f.d.querySelector(selector).click();
+    await waitFor(()=>f.calls.some(x=>x.action==='open'&&x.slot==='left'&&x.site===site),'shortcut opens adjacent pane');
+    assert.equal(f.saved.left,site); assert.equal(f.saved.right,'coding'); assert.equal(f.d.querySelector('#draft').value,'coding draft');
+    const panel=f.d.querySelector('[data-neko-unified-slot="left"]');
+    const back=[...panel.querySelectorAll('button')].find(b=>b.textContent==='返回工作区');
+    assert(back && !back.disabled); back.click();
+    await waitFor(()=>f.calls.some(x=>x.action==='hide'&&x.slot==='left'),'optional pane closes');
+    assert.equal(f.saved.left,null); assert.equal(f.saved.right,'coding');
+    assert.equal(f.calls.filter(x=>x.action==='open'&&x.slot==='right'&&x.site===site).length,0,'site does not move into coding pane');
+    f.cleanup();
+  }
+});
 test('community identity entry works in a multi-pane layout without affecting Bilibili', {skip:!JSDOM}, async t=>{
   const f=fixture(t,{accountBridge:true}); await sleep(); await openConfig(f);
   select(f,'target','side'); select(f,'content','community'); await sleep();

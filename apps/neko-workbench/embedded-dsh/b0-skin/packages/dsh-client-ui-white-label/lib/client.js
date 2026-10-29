@@ -1488,6 +1488,11 @@ function installUnifiedLayout(options = {}) {
   title.id = 'neko-unified-config-title'; explanation.id = 'neko-unified-config-help';
   const summary = el('p', 'summary'); summary.dataset.nekoUnifiedSummary = ''; summary.setAttribute('role', 'status'); summary.setAttribute('aria-live', 'polite');
   const toggle = button('启用自定义布局', 'toggle', () => update({ ...layout, enabled: !layout.enabled }));
+  const restore = button('恢复上次多栏布局', 'toggle', () => {
+    if (!startupSaved) return;
+    const previous = startupSaved; startupSaved = null; applySaved(previous);
+  });
+  restore.hidden = true;
   const targets = el('div', 'choices'), contents = el('div', 'choices'); targets.setAttribute('role', 'group'); targets.setAttribute('aria-label', '显示区域');
   contents.setAttribute('role', 'group'); contents.setAttribute('aria-label', '显示内容');
   let target = 'left';
@@ -1506,7 +1511,7 @@ function installUnifiedLayout(options = {}) {
   const hint = el('p', 'hint');
   const swap = button('⇄ 交换左右面板', 'toggle', () => update({ ...layout, left: layout.right, right: layout.left }));
   const info = el('p', 'message'); info.setAttribute('role', 'status'); info.setAttribute('aria-live', 'polite');
-  config.append(close, title, explanation, summary, toggle, el('strong', '', '显示区域'), targets, el('strong', '', '显示内容'), contents, hint, swap, info);
+  config.append(close, title, explanation, summary, toggle, restore, el('strong', '', '显示区域'), targets, el('strong', '', '显示内容'), contents, hint, swap, info);
   doc.body.appendChild(config);
   // Escape closes the dialog from anywhere, but only returns focus to ▤ when
   // focus was inside the dialog (or nowhere); a focused DSH input keeps it.
@@ -1545,7 +1550,8 @@ function installUnifiedLayout(options = {}) {
     });
     doc.body.appendChild(zone); drops[slot] = { zone, current };
   }
-  let layout = { enabled: false, side: 'workspace', left: 'coding', right: null, ratio: 0.5 };
+  let layout = { enabled: false, side: 'workspace', left: null, right: 'coding', ratio: 0.5 };
+  let startupSaved = null;
   let disposed = false, frame = 0, revision = 0, requestId = 0, codingNode = null, codingInert = false, suspended = false, drag = null, draggedContent = null;
   let scheduled = false, placements = new Map(), unsubscribe = null, unsubscribeAccount = null, lastRects = {}, openTickets = {}, recoveryTimer = null;
   let accountPending = false, accountRevision = 0;
@@ -1562,7 +1568,12 @@ function installUnifiedLayout(options = {}) {
     const share = button('分享', '', () => action(slot, 'copy-video-link'));
     const account = button('连接桌面身份', 'neko-unified-account', () => accountAction(slot));
     account.title = '复用本机 N.E.K.O. 社区账号；未登录时在系统浏览器完成官方授权';
-    const leave = button('返回工作区', '', () => chooseFor(slot, 'coding'));
+    const leave = button('返回工作区', '', () => {
+      // If the other main pane already holds coding, close this optional
+      // content instead of swapping it into that pane.
+      const other = slot === 'left' ? 'right' : 'left';
+      chooseFor(slot, slot !== 'side' && layout[other] === 'coding' ? null : 'coding');
+    });
     back.setAttribute('aria-label', '返回上一页'); reload.setAttribute('aria-label', '刷新当前页面');
     play.hidden = share.hidden = account.hidden = true; header.append(name, back, reload, play, share, account, leave);
     const status = el('p', 'status'); status.setAttribute('role', 'status'); node.append(header, status); doc.body.appendChild(node);
@@ -1628,7 +1639,7 @@ function installUnifiedLayout(options = {}) {
     noticeTimer = null; notice.hidden = true; notice.textContent = '';
   }
   function summaryText() {
-    if (!layout.enabled) return '自定义布局未启用：显示 DSH 原生单栏工作区。选择任一内容即可启用。';
+    if (!layout.enabled) return '默认显示侧栏与工作区；可选择内容打开中间区域。' + (startupSaved ? ' 上次多栏布局可恢复。' : '');
     const parts = ['side', 'left', 'right'].map(slot => `${SLOT_NAMES[slot]}：${describe(slot, layout[slot])}`);
     const two = layout.left && layout.right, left = Math.round(clampRatio(layout.ratio) * 100);
     return '当前 ' + parts.join(' · ') + (two ? `（宽度 ${left}% / ${100 - left}%）` : '');
@@ -1637,6 +1648,7 @@ function installUnifiedLayout(options = {}) {
     trigger.setAttribute('aria-expanded', String(!config.hidden));
     toggle.textContent = layout.enabled ? '关闭自定义布局（恢复单栏）' : '启用自定义布局';
     toggle.setAttribute('aria-pressed', String(layout.enabled));
+    restore.hidden = !startupSaved;
     summary.textContent = summaryText(); config.dataset.enabled = String(layout.enabled);
     for (const key of Object.keys(targetButtons)) {
       const shown = describe(key, layout[key]);
@@ -1682,7 +1694,7 @@ function installUnifiedLayout(options = {}) {
     try {
       const saved = await bridge.workspace({ action: 'set-pane-layout', layout: clean(next) });
       if (disposed || ticket !== revision) { if (raise) throw Error('界面配置已变化，请重试'); return; }
-      info.textContent = ''; applySaved(saved);
+      startupSaved = null; info.textContent = ''; applySaved(saved);
     } catch (error) {
       if (!disposed && ticket === revision) {
         // A previous write can have reached disk before its acknowledgement.
@@ -1702,6 +1714,12 @@ function installUnifiedLayout(options = {}) {
     // temporary chatroom preview and reveal that side pane.
     if (target === 'side' && doc.body.hasAttribute('data-neko-chatroom-active')) doc.dispatchEvent(new win.Event('neko-chatroom-show-workspace'));
     const next = { ...layout, enabled: true }, requested = target === 'side' && value === 'coding' ? 'workspace' : value;
+    // Opening a social page in the sole coding pane creates an adjacent pane,
+    // rather than replacing the user's work surface.
+    if (target !== 'side' && next[target] === 'coding' && (requested === 'community' || requested === 'bilibili')) {
+      const other = target === 'left' ? 'right' : 'left';
+      if (!next[other]) next[other] = 'coding';
+    }
     if (requested !== 'workspace' && requested !== null) {
       for (const other of ['side', 'left', 'right']) if (other !== target && next[other] === requested) {
         const previous = next[target];
@@ -1921,10 +1939,10 @@ function installUnifiedLayout(options = {}) {
     void update({ ...layout, ratio: next });
   });
   function shortcut(event) {
-    if (!layout.enabled) return;
     const item = event.target.closest?.('.neko-community-yui, .neko-side-rail__bilibili'); if (!item) return;
     event.preventDefault(); event.stopImmediatePropagation();
-    target = activeMain; choose(item.classList.contains('neko-side-rail__bilibili') ? 'bilibili' : 'community');
+    target = !layout.enabled && layout.right === 'coding' ? 'left' : !layout.enabled && layout.left === 'coding' ? 'right' : activeMain;
+    choose(item.classList.contains('neko-side-rail__bilibili') ? 'bilibili' : 'community');
   }
   doc.addEventListener('click', shortcut, true);
   // A companion's community visit must not invoke the legacy single-pane
@@ -1933,7 +1951,7 @@ function installUnifiedLayout(options = {}) {
   // remote loading resumes so no menu/native-view z-order deadlock occurs.
   function visitCommunity(event) {
     const detail = event.detail;
-    if (disposed || !layout.enabled || !detail || typeof detail !== 'object') return;
+    if (disposed || !detail || typeof detail !== 'object') return;
     detail.handled = true;
     const existing = ['side', 'left', 'right'].find(slot => layout[slot] === 'community');
     if (existing) {
@@ -1973,8 +1991,12 @@ function installUnifiedLayout(options = {}) {
   if (typeof bridge.subscribeCommunityAccount === 'function') unsubscribeAccount = bridge.subscribeCommunityAccount(paintAccount);
   Promise.resolve(bridge.workspace({ action:'pane-layout' })).then(saved => {
     if (disposed || revision) return;
-    layout = confirmed = clean(saved); renderConfig();
-    if (layout.enabled) { options.hideLegacy?.(); doc.body.setAttribute('data-neko-unified-enabled',''); }
+    // Keep the durable layout intact. Each newly opened workbench starts with
+    // the chatroom sidebar and one coding area; restoration is a user action.
+    const previous = clean(saved);
+    startupSaved = previous.enabled ? previous : null;
+    layout = confirmed = { enabled:false, side:'workspace', left:null, right:'coding', ratio:previous.ratio };
+    renderConfig();
     observe(); schedule();
   }).catch(() => { if (!disposed) showNotice('布局暂不可用，请更新工作台后重试'); });
   renderConfig();
