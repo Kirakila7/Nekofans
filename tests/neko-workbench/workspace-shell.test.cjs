@@ -21,7 +21,7 @@ test('DSH catalog lists native roots and disposes observations with bounded conc
 });
 test('merged catalog reports partial failures and scopes only to known projects',async t=>{
  const s=createWorkspaceLayout(path.join(temp(t),'layout.json'));let count=0;
- const c=createWorkspaceController({layout:s,codex:{list:async()=>{count++;return {status:'ready',sessions:[{id:'c',provider:'codex',cwd:'/p',updatedAt:1}]};}},readDsh:async()=>{throw Error('private diagnostic');}});
+ const c=createWorkspaceController({layout:s,codexAvailable:true,codex:{list:async()=>{count++;return {status:'ready',sessions:[{id:'c',provider:'codex',cwd:'/p',updatedAt:1}]};}},readDsh:async()=>{throw Error('private diagnostic');}});
  const r=await c.catalog();assert.equal(r.providers.dsh,'unavailable');assert.equal(r.providers.codex,'ready');assert.equal(r.sessions.length,1);assert.equal(r.projects[0].cwd,'/p');await c.catalog();assert.equal(count,1);assert(!JSON.stringify(r).includes('diagnostic'));
  c.updateSeat('seat-1',{projectRoot:'/p'});assert.throws(()=>c.updateSeat('seat-1',{projectRoot:'/unknown'}));
 });
@@ -34,13 +34,17 @@ function nativeFixture(t,mode='normal'){
  const out=m=>process.stdout.write(JSON.stringify(m)+'\\n');const row=id=>({id,cwd:${JSON.stringify(dir)},name:'Native '+id,status:{type:'idle'},updatedAt:1});let approval;
  rl.on('line',line=>{const m=JSON.parse(line);fs.appendFileSync(${JSON.stringify(log)},JSON.stringify(m)+'\\n');if(!m.method){approval=m;return;}if(m.id==null)return;
  let result={};if(m.method==='thread/list')result={data:[row('one'),row('two'),{...row('child'),parentThreadId:'one'}],nextCursor:null};
+ if(m.method==='model/list'){
+  if(${JSON.stringify(mode)}==='models-error'){out({id:m.id,error:{message:'private upstream token'}});return;}
+  result=m.params.cursor?{data:[{model:'fixture-fast',displayName:'Fixture Fast',defaultReasoningEffort:'low',supportedReasoningEfforts:[{reasoningEffort:'low',description:'Quick'}]}],nextCursor:null}:{data:[{model:'fixture-deep',displayName:'Fixture Deep',isDefault:true,defaultReasoningEffort:'medium',supportedReasoningEfforts:[{reasoningEffort:'medium',description:'Balanced'},{reasoningEffort:'high',description:'Thorough'}]},{model:'hidden-model',hidden:true},{displayName:'malformed'}],nextCursor:'page-2'};
+ }
  if(m.method==='thread/read')result={thread:row(m.params.threadId)};
  if(m.method==='thread/turns/list')result={data:[{id:'old-turn',items:[{id:'user',type:'userMessage',content:[{type:'text',text:'hello'}]},{id:'a',type:'agentMessage',text:'native reply'}]}]};
  if(m.method==='thread/start')result={thread:row('new')};if(m.method==='thread/resume')result={thread:row(m.params.threadId)};
  if(m.method==='turn/start'){result={turn:{id:'turn',status:'inProgress',items:[]}};out({method:'turn/started',params:{threadId:m.params.threadId,turn:result.turn}});
  ${mode==='fast' ? "out({method:'turn/completed',params:{threadId:m.params.threadId,turn:{id:'turn',status:'completed',items:[]}}});" : "setTimeout(()=>out({id:900,method:'item/commandExecution/requestApproval',params:{threadId:m.params.threadId,turnId:'turn',command:'echo test',cwd:"+JSON.stringify(dir)+"}}),5);"}
  }out({id:m.id,result});});`);
- const c=createCodexWorkspace({defaultCwd:dir,resolveExecutable:()=>'/native/codex',spawnProcess:(exe,args,opts)=>{assert.equal(exe,'/native/codex');assert.deepEqual(args,['app-server','--listen','stdio://']);assert.equal(opts.shell,false);return spawn(process.execPath,[file],opts);},timeoutMs:1000});t.after(()=>c.dispose());return {c,dir,messages:()=>fs.existsSync(log)?fs.readFileSync(log,'utf8').trim().split('\n').map(JSON.parse):[]};
+ const c=createCodexWorkspace({defaultCwd:dir,resolveExecutable:()=>'/native/codex',spawnProcess:(exe,args,opts)=>{assert.equal(exe,'/native/codex');assert.deepEqual(args,['app-server','--listen','stdio://']);assert.equal(opts.shell,false);return spawn(process.execPath,[file],opts);},timeoutMs:5000});t.after(()=>c.dispose());return {c,dir,messages:()=>fs.existsSync(log)?fs.readFileSync(log,'utf8').trim().split('\n').map(JSON.parse):[]};
 }
 test('Codex browsing is read-only; explicit send retains native defaults and requires per-operation approval',async t=>{
  const f=nativeFixture(t);assert.equal((await f.c.list()).sessions.length,2);await f.c.read('one');assert.equal(f.c.snapshot().items[1].text,'native reply');assert(!f.messages().some(m=>/resume|start/.test(m.method)));
@@ -53,15 +57,63 @@ test('Codex browsing is read-only; explicit send retains native defaults and req
 test('a turn completing before the start reply never leaves a phantom working task',async t=>{
  const f=nativeFixture(t,'fast');await f.c.list();await f.c.read('one');await f.c.send({id:'one',cwd:f.dir,message:'quick'});assert.equal(f.c.snapshot().status,'idle');await assert.rejects(f.c.stop(),/没有/);
 });
+test('Codex model selection discovers all visible pages and applies model and effort to both new and existing tasks',async t=>{
+ const f=nativeFixture(t,'fast');
+ const catalog=await f.c.models();assert.deepEqual(catalog.models.map(m=>m.model),['fixture-deep','fixture-fast']);
+ catalog.models[0].displayName='tampered';assert.equal((await f.c.models()).models[0].displayName,'Fixture Deep');
+ assert.equal(f.messages().filter(m=>m.method==='model/list').length,2,'concurrent UI and send use the cached native catalog');
+ assert(!f.messages().some(m=>/thread\/(start|resume)|turn\/start/.test(m.method)),'listing models never starts a task');
+ await f.c.list();await f.c.read('one');
+ await f.c.send({id:'one',cwd:f.dir,message:'existing',model:'fixture-deep',effort:'high'});
+ let turns=f.messages().filter(m=>m.method==='turn/start');assert.equal(turns[0].params.model,'fixture-deep');assert.equal(turns[0].params.effort,'high');
+ assert.equal(f.c.snapshot().thread.model,'fixture-deep');assert.equal(f.c.snapshot().thread.reasoningEffort,'high');
+ await f.c.send({cwd:f.dir,message:'new',model:'fixture-fast'});
+ const start=f.messages().find(m=>m.method==='thread/start');assert.equal(start.params.model,'fixture-fast');
+ turns=f.messages().filter(m=>m.method==='turn/start');assert.equal(turns[1].params.effort,'low','a model switch uses that model default rather than inheriting an incompatible effort');
+ assert(!f.messages().some(m=>/config\//.test(m.method)),'model choice does not rewrite native global configuration');
+ await f.c.models({force:true});assert.equal(f.messages().filter(m=>m.method==='model/list').length,4);
+});
+test('unsupported model/effort combinations are rejected before creating or resuming any task',async t=>{
+ const f=nativeFixture(t,'fast');
+ for(const choice of [{model:'hidden-model'},{model:'missing'},{model:'fixture-fast',effort:'high'},{effort:'high'},{model:42},{model:'fixture-deep',effort:{}}]) await assert.rejects(f.c.send({cwd:f.dir,message:'do not start',...choice}));
+ assert(!f.messages().some(m=>/thread\/(start|resume)|turn\/start/.test(m.method)));
+});
+test('native catalog errors stay sanitized and native-default tasks can still run',async t=>{
+ const f=nativeFixture(t,'models-error');await assert.rejects(f.c.models(),e=>!e.message.includes('private upstream token'));
+ await f.c.send({cwd:f.dir,message:'use native config'});const turn=f.messages().find(m=>m.method==='turn/start');assert(!('model'in turn.params));assert(!('effort'in turn.params));
+});
 let JSDOM;try{({JSDOM}=require(path.join(process.env.NEKO_DOM_DEPS||'/private/tmp/neko-sidebar-dom-20261026','node_modules/jsdom')));}catch{}
+test('chatroom opens in sidebar by default and workspace switch preserves footer and drafts',{skip:!JSDOM},async t=>{
+ const dom=new JSDOM('<body><aside data-neko-side-rail><div class="neko-side-rail__theme"></div><div class="neko-side-rail__space"></div></aside><div id="frame"><div id="track"><aside data-slot="sidebar"><div data-neko-seat-mount></div><div data-slot="sidebar.workspaces"></div><div id="footer"><div data-slot="settings.launcher"></div></div></aside></div><div class="dsh_centerCol_x"><textarea>工作草稿</textarea></div></div></body>',{runScripts:'outside-only',pretendToBeVisual:true});t.after(()=>dom.window.close());
+ const w=dom.window,d=w.document,sidebar=d.querySelector('[data-slot="sidebar"]'), footer=d.querySelector('#footer');
+ sidebar.getBoundingClientRect=()=>({left:64,top:0,right:304,bottom:800,width:240,height:800});
+ footer.getBoundingClientRect=()=>({left:64,top:640,right:304,bottom:800,width:240,height:160});
+ const store=createWorkspaceLayout(path.join(temp(t),'layout.json')),events=[];
+ const bridge={action:async()=>({}),getState:async()=>({workspaceRoot:'/p',workspaceRevision:0,companion:{ready:true,messages:[]}}),companion:async()=>({}),workspace:async r=>{if(r.action==='state')return store.get();if(r.action==='codex-state')return {items:[],approvals:[]};if(r.action==='catalog')return {sessions:[],projects:[],providers:{}};return null;}};
+ d.addEventListener('neko-chatroom-mode-change',()=>events.push(d.body.hasAttribute('data-neko-chatroom-active')));
+ w.eval(fs.readFileSync(path.join(base,'embedded-dsh/chatroom-preview-source.js'),'utf8')+'\n'+fs.readFileSync(path.join(base,'embedded-dsh/workspace-shell-source.js'),'utf8')+'\nwindow.install=installWorkspaceShell');
+ const stop=w.install({window:w,document:d,bridge,avatar:()=>'',cssText:fs.readFileSync(path.join(base,'embedded-dsh/workspace-shell-source.css'),'utf8'),locateSidebar:()=>({root:sidebar,slot:sidebar})});await tick();
+ const preview=d.querySelector('[data-neko-chatroom-preview]'),dock=d.querySelector('.neko-companion-dock');
+ assert(preview&&!preview.hidden);assert.equal(preview.style.left,'64px');assert.equal(preview.style.height,'640px');assert.match(preview.textContent,/聊天功能尚未开放/);
+ assert(d.querySelector('[data-slot="sidebar.workspaces"]').hasAttribute('inert'));assert(!dock.hasAttribute('inert'));assert(!footer.hasAttribute('inert'));
+ d.querySelector('.neko-room-workspace').click();await tick();assert(preview.hidden);assert(!d.querySelector('[data-slot="sidebar.workspaces"]').hasAttribute('inert'));assert.equal(d.querySelector('.dsh_centerCol_x textarea').value,'工作草稿');assert.deepEqual(events,[false]);
+ d.querySelector('.neko-room-entry').click();await tick();assert(!preview.hidden);assert.deepEqual(events,[false,true]);
+ stop();assert(!d.body.hasAttribute('data-neko-chatroom-active'));assert(!d.querySelector('[data-slot="sidebar.workspaces"]').hasAttribute('inert'));assert(!d.querySelector('[data-neko-chatroom-preview]'));
+});
 test('workspace DOM keeps three configurable filters, all sessions reset, collapsible private chat and native UI restoration',{skip:!JSDOM},async t=>{
- const dom=new JSDOM('<body><aside data-neko-side-rail><div class="neko-side-rail__theme" aria-hidden="true"></div></aside><div data-slot="sidebar"><button data-neko-new-session="plus">+</button><div data-neko-seat-mount></div><div data-slot="sidebar.workspaces">native sessions</div><div data-slot="settings.launcher"></div></div><main><textarea>native draft</textarea></main></body>',{runScripts:'outside-only'});t.after(()=>dom.window.close());
+ const dom=new JSDOM('<body><aside data-neko-side-rail><div class="neko-side-rail__theme" aria-hidden="true"></div></aside><div data-slot="sidebar"><button data-neko-new-session="plus">+</button><div class="neko-mode-switch">工作区 休闲区</div><div data-neko-seat-mount></div><div data-slot="sidebar.workspaces">native sessions</div><div data-slot="settings.launcher"></div></div><main><textarea>native draft</textarea></main></body>',{runScripts:'outside-only'});t.after(()=>dom.window.close());
  const {window:w}=dom,doc=w.document; const boundsRoot=doc.querySelector('[data-slot="sidebar"]'); boundsRoot.getBoundingClientRect=()=>({right:300}); const store=createWorkspaceLayout(path.join(temp(t),'layout.json'));const calls=[];let subscriber,releaseAction;const state={workspaceRoot:'/p',workspaceRevision:0,companion:{name:'主agent',ready:true,messages:[{role:'assistant',text:'实际历史'}]}};
  const bridge={action:async action=>{calls.push({action});if(action==='task-notes')await new Promise(r=>releaseAction=r);if(action==='open-neko')throw Error('本机服务未启动');return {ok:true};},getState:async()=>state,subscribe:fn=>{subscriber=fn;return ()=>{};},companion:async x=>{calls.push(x);return {};},workspace:async r=>{calls.push(r);if(r.action==='state')return store.get();if(r.action==='update')return store.update(r.patch);if(r.action==='update-seat')return store.updateSeat(r.id,r.patch);if(r.action==='codex-state')return {items:[],approvals:[]};if(r.action==='catalog')return {sessions:[{id:'c',provider:'codex',cwd:'/p',title:'Codex任务'},{id:'d',provider:'dsh',cwd:'/p',title:'DSH任务'}],projects:[{cwd:'/p'}],providers:{dsh:'ready',codex:'ready'}};}};
  w.eval(fs.readFileSync(path.join(base,'embedded-dsh/workspace-shell-source.js'),'utf8')+'\nwindow.install=installWorkspaceShell');
- const cleanup=w.install({window:w,document:doc,bridge,avatar:()=>'',companionPosterSrc:'data:image/png;base64,iVBORw0KGgo=',settingsActions:[['open-neko','打开 N.E.K.O.'],['task-notes','任务备注'],['connect-neko','连接 N.E.K.O.'],['reconnect-workbench','重新连接工作台'],['connection-status','连接详情']],cssText:fs.readFileSync(path.join(base,'embedded-dsh/workspace-shell-source.css'),'utf8'),locateSidebar:()=>({root:boundsRoot,slot:doc.createElement('div')})});await tick();
+ const cleanup=w.install({window:w,document:doc,bridge,avatar:()=>'',openDshNew:root=>calls.push({action:'dsh-new',root}),companionPosterSrc:'data:image/png;base64,iVBORw0KGgo=',settingsActions:[['open-neko','打开 N.E.K.O.'],['task-notes','任务备注'],['connect-neko','连接 N.E.K.O.'],['reconnect-workbench','重新连接工作台'],['connection-status','连接详情']],cssText:fs.readFileSync(path.join(base,'embedded-dsh/workspace-shell-source.css'),'utf8'),locateSidebar:()=>({root:boundsRoot,slot:doc.createElement('div')})});await tick();
  assert.equal(doc.querySelectorAll('.neko-custom-seat').length,3);assert.equal(doc.querySelectorAll('.neko-workspace-session').length,2);assert.equal(doc.querySelector('.neko-companion-history').textContent,'回复：实际历史');assert(doc.querySelector('.neko-companion-history').hidden);assert.equal(doc.querySelector('.neko-companion-header'),null);assert.equal(doc.querySelector('.neko-companion-connect'),null);assert(doc.querySelector('.neko-companion-status').hidden);
- const dock=doc.querySelector('.neko-companion-dock'),sprite=doc.querySelector('.neko-companion-character');let dockWidth=260;Object.defineProperty(dock,'clientWidth',{get:()=>dockWidth});Object.defineProperty(sprite,'offsetWidth',{value:76});
+ assert.equal(w.getComputedStyle(doc.querySelector('.neko-mode-switch')).display,'none');assert.equal(w.getComputedStyle(doc.querySelector('[data-neko-new-session]')).visibility,'hidden');
+ assert.equal(doc.querySelectorAll('.neko-custom-seat__new').length,3);assert([...doc.querySelectorAll('.neko-custom-seat__new')].every(b=>b.nextElementSibling.classList.contains('neko-custom-seat__provider')));
+ doc.querySelectorAll('.neko-custom-seat__new')[1].click();await tick();assert.equal(store.get().officeMode,'codex');assert.equal(store.get().activeSeatId,'seat-2');assert(!doc.querySelector('.neko-office-panel').hidden);
+ doc.querySelectorAll('.neko-custom-seat__new')[0].click();await tick();assert.equal(store.get().officeMode,'dsh');assert.equal(store.get().activeSeatId,'seat-1');assert.equal(calls.filter(r=>r.action==='dsh-new').length,1);
+ doc.querySelectorAll('.neko-custom-seat__new')[2].click();assert(!doc.querySelector('.neko-workspace-modal').hidden);assert(doc.querySelector('.neko-seat-editor'));assert.equal(store.get().activeSeatId,'seat-1');doc.querySelector('.neko-workspace-modal__close').click();
+ await bridge.workspace({action:'update',patch:{activeSeatId:null}});subscriber({...state,workspaceRevision:99});await tick();
+ const dock=doc.querySelector('.neko-companion-dock'),sprite=doc.querySelector('.neko-companion-character');let dockWidth=260;Object.defineProperty(dock,'clientWidth',{get:()=>dockWidth});Object.defineProperty(sprite,'offsetWidth',{value:76});dock.getBoundingClientRect=()=>({left:64,right:324,top:400,bottom:520,width:260,height:120});w.dispatchEvent(new w.Event('resize'));await tick();
  const pointer=(type,x,y=0)=>{const event=new w.MouseEvent(type,{bubbles:true,button:0,clientX:x,clientY:y});Object.defineProperty(event,'pointerId',{value:1});sprite.dispatchEvent(event);};
  sprite.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Home'}));assert.equal(sprite.getAttribute('aria-valuenow'),'0');
  pointer('pointerdown',100);pointer('pointermove',1000,1000);assert.equal(sprite.getAttribute('aria-valuenow'),'48','right drag clamps in the small bottom region');pointer('pointermove',-1000,-1000);assert.equal(sprite.getAttribute('aria-valuenow'),'-48','vertical pointer movement never escapes the horizontal track');pointer('pointerup',-1000);assert(!sprite.hasAttribute('data-dragging'));

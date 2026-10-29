@@ -222,7 +222,7 @@ function installNekoAccountHabitat(ctx, options) {
   function effectiveSignedIn(snap) { return nativeSignedIn === true && snap.signedIn !== false; }
   function dshLoginLabel(snap) { return nativeSignedIn === null ? '检测中' : effectiveSignedIn(snap) ? '已登录' : '未登录'; }
   function codexLoginLabel() {
-    return ({ 'signed-in': '已登录', 'signed-out': '未登录', external: '外部模型', 'not-installed': '未安装', loading: '检测中', unavailable: '暂不可读取' })[codexSnapshot.status] || '暂不可读取';
+    return ({ 'signed-in': '已登录', 'signed-out': '未登录', external: '外部模型', 'not-installed': '未安装', loading: '检测中', testing: '测试中', unavailable: '暂不可读取' })[codexSnapshot.status] || '暂不可读取';
   }
   function refreshCodex(includeQuota = false, force = false) {
     if (!accountsBridge || stopped) return Promise.resolve();
@@ -297,7 +297,7 @@ function installNekoAccountHabitat(ctx, options) {
         }
       }
     } else {
-      const note = codexSnapshot.status === 'signed-out' ? '在本机 Codex 登录后刷新' : codexSnapshot.status === 'not-installed' ? '未找到本机 Codex' : quota?.status === 'not-applicable' ? '此登录方式不提供 ChatGPT 订阅额度' : quota?.status === 'idle' ? '正在读取额度…' : '额度暂不可读取，可稍后刷新';
+      const note = codexSnapshot.status === 'testing' ? 'Codex 功能测试中，暂不读取账号与额度' : codexSnapshot.status === 'signed-out' ? '在本机 Codex 登录后刷新' : codexSnapshot.status === 'not-installed' ? '未找到本机 Codex' : quota?.status === 'not-applicable' ? '此登录方式不提供 ChatGPT 订阅额度' : quota?.status === 'idle' ? '正在读取额度…' : '额度暂不可读取，可稍后刷新';
       codex.append(element('p', 'neh-quota-note', note));
     }
     menuRecord.owned.append(heading, dsh, codex, element('p', 'neh-menu-help', '下方设置与登录/退出操作属于 DSH；Codex 沿用本机登录。'));

@@ -1,11 +1,24 @@
-# Unified daily workbench 0.28.0
+# Local test workbench 0.28.7
 
 The daily artifact is built from this repository. `config/daily-release.json` is the version authority; every app includes `Contents/Resources/WORKBENCH_BUILD.json` with the source commit and SHA-256 of every shipped source file. Historical QA checkouts and profiles are not release inputs.
 
 ## Included local workbench changes
 
+- The left rail opens a static chatroom preview by default in the existing sidebar. A separate rail control returns to workspace navigation; companion and account controls remain mounted. Any configured native community or Bilibili sidebar view is temporarily hidden and restored when returning to workspace, without changing the saved layout or the main panels. The preview does not connect to a chat service or show real members or messages.
+- Interaction and accessibility refinements, with layout, regions, characters and the light-blue palette unchanged. Enabled controls show hover and press states; disabled controls (including Codex, which stays 测试中 and unavailable) show none. Keyboard focus rings are 2px. Async saves expose `aria-busy` and cannot be submitted twice. The session list announces loading and errors. Low-contrast text and buttons now use darker shades of the same hues.
+- Unified layout configuration is easier to understand. The ▤ dialog shows what each region currently holds, labels the sidebar choice 工作区导航, and offers 不显示 to return two panes to one (at least one main pane always remains). Escape closes the dialog. The divider supports arrow keys, Home/End and double-click reset, and reports its value to assistive technology. Drop zones highlight the target region. Panel headers show refresh, copy and error states that the native site view previously covered. A failed save reverts to the last saved layout. The persisted layout format is unchanged. Synthetic JSDOM tests cover these controls. Real community login, Bilibili playback and production DSH layout were not verified in this change.
+
+- When its original workspace position is hidden, the main companion moves into the persistent rail's empty area, where it can roam or be dragged; it returns when the original position is visible. The existing character, interaction menu and chat draft are retained, and reduced-motion settings stop automatic movement.
+- Channel startup protects newer start/pause actions from stale status responses.
+- Optional unified layout allows the sidebar and two main slots to place the native DSH workspace, existing community view and Bilibili view; one real view per external site is reused when moved. The companion community action respects this layout, and the original single-pane behavior remains when it is disabled. Synthetic isolated Electron tests cover geometry and view isolation; production DSH layout, real community login and Bilibili playback still need runtime verification.
+- Clicking the main companion opens its interaction menu: community visiting reuses the existing embedded native community, while chat returns focus to the existing input. Dragging does not trigger the menu. The same menu is available from the companion in the collapsed rail; it does not start an autonomous visit, send a message, or invent a social memory.
+- Workbench PR #13 (`c673090888176de81d10e72693fbd90c934720b1`) session shortcuts are included in the 0.28.4 local build. Each assistant row has a new-session button; the duplicate top-level plus and work/leisure switch are hidden. Unbound entries open their existing configuration. The Codex shortcut stays disabled while Codex testing is paused.
+- Codex is temporarily unavailable and marked as testing. New Codex sessions, sends, model selection and account reads are disabled; saved sessions, seat bindings, credentials and choices remain intact. An already running turn retains stop and approval controls until it settles. DSH remains available. Re-enablement requires changing the explicit availability flag and verifying the native integration.
+- Workbench PR #10 (`d5ff80619f23fa279c670e0355f954503ad23e27`) sidebar hide/expand ported onto the 0.28.1 Codex model-picker source (`4567f2e`). Collapse removes the sidebar grid track completely; a native-expand action appears above Bilibili in the persistent rail. Dragging the sidebar divider past the left threshold invokes native collapse. Only the side-rail source and its generated block were taken from the older trial branch. This is a local test build, separate from the published 0.28.1 release.
 - Shared native DSH accounts, plugins and sessions; Codex app-server workspace and read-only account/quota entry.
 - Existing switch positions preserved. Picking a bound assistant updates its sidebar selection and right-hand engine together; DSH and Codex drafts stay separate.
+- Codex model and reasoning selectors read the native `model/list` catalog and send explicit choices with `turn/start`. Only advertised reasoning options are shown. Native-default mode preserves existing Codex configuration. Per-conversation choices are stored in a private local workbench file, independent of the DSH port; they do not rewrite native Codex configuration. Listing a model does not prove permission to execute it.
+- New Codex tasks retain the created thread ID for follow-up messages. Failed sends preserve drafts and error feedback; missing catalog choices require explicit correction instead of silently switching models.
 - Compact companion chat, background-integrated draggable character, role appearances and the 0.27.4 child-session/helper animation rules.
 - Workbench PR #5 native N.E.K.O. memory, including in-flight sync draining and canonical macOS recovery paths.
 - Workbench PR #6 QQ/Bilibili coordination and routing, plus the local DeepSeek API preset and error-handling fixes.
@@ -36,7 +49,7 @@ The GitHub PR list was inspected on 2026-10-28. It contains 14 PRs: 12 merged, 1
 | #14 | Screen sharing and companion text feedback | Integrated with explicit destination confirmation and optional private-context consent; real screen and provider use remain unverified |
 | #15 | Fountain spawning and DBSCAN | Integrated with bounded return expiry; real desktop motion and performance remain unverified |
 
-The user explicitly requested intake of #14 and #15 after fixing their known issues. This work does not merge or close source PRs in the Bigfish repository. Workbench #7 remains a separate, unmerged change.
+The private Workbench main already contains the #14 and #15 integration above; merging that main into this branch preserves those existing changes without newly applying the Bigfish patches. This does not merge or close source PRs in the Bigfish repository. Workbench #7 remains a separate, unmerged change. The previously installed 0.28.7 local build predates this main-branch merge and requires a separate rebuild and runtime verification to include it.
 
 ## Build and install
 

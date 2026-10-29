@@ -1,13 +1,14 @@
 'use strict';
 const { projectGroups } = require('./workspace-layout.cjs');
-function createWorkspaceController({ layout, codex, readDsh, now = Date.now } = {}) {
+const { CODEX_AVAILABLE, CODEX_TESTING_MESSAGE } = require('./codex-availability.cjs');
+function createWorkspaceController({ layout, codex, readDsh, now = Date.now, codexAvailable = CODEX_AVAILABLE } = {}) {
   let cached = null, fetchedAt = 0, pending = null;
   async function catalog({ force = false, dshOffset = 0 } = {}) {
     if (!Number.isSafeInteger(dshOffset) || dshOffset < 0 || dshOffset > 100000) throw Error('会话分页无效');
     if (!force && !dshOffset && cached && now() - fetchedAt < 20000) return structuredClone(cached);
     if (pending) { await pending; if (!dshOffset && cached) return structuredClone(cached); }
     pending = (async () => {
-      const results = await Promise.allSettled([readDsh({ offset: dshOffset, limit: 80 }), codex.list()]);
+      const results = await Promise.allSettled([readDsh({ offset: dshOffset, limit: 80 }), codexAvailable ? codex.list() : Promise.resolve({ sessions: [], status: 'testing', more: false })]);
       const native = results[0].status === 'fulfilled' ? results[0].value : { sessions: [], status: 'unavailable', nextOffset: null };
       const cx = results[1].status === 'fulfilled' ? results[1].value : { sessions: [], status: 'unavailable', more: false };
       const oldDsh = dshOffset ? cached?.sessions.filter(s => s.provider === 'dsh') || [] : [];
@@ -19,11 +20,34 @@ function createWorkspaceController({ layout, codex, readDsh, now = Date.now } = 
     return structuredClone(cached);
   }
   function knownProject(root) { return root === null || cached?.projects.some(p => p.cwd === root); }
+  function state() {
+    const result = layout.get();
+    result.codexAvailable = codexAvailable;
+    const current = codex.snapshot?.();
+    const hasActiveCodex = current?.status === 'working' || !!current?.approvals?.length;
+    // Preserve the saved seat and mode on disk so enabling Codex later can restore them.
+    // A task already running retains its panel, approvals, and stop control until it settles.
+    if (!codexAvailable && !hasActiveCodex && (result.officeMode === 'codex' || result.seats.some(s => s.id === result.activeSeatId && s.provider === 'codex'))) {
+      result.officeMode = 'dsh';
+      result.activeSeatId = result.seats.find(s => s.provider === 'dsh')?.id || null;
+    }
+    return result;
+  }
   return {
     catalog,
-    state: () => layout.get(),
-    update: patch => layout.update(patch),
-    updateSeat(id, patch) { if (patch?.projectRoot && !knownProject(patch.projectRoot)) throw Error('请从已有项目选择工作范围'); return layout.updateSeat(id, patch); },
+    state,
+    update(patch) {
+      if (!codexAvailable && (patch?.officeMode === 'codex' || layout.get().seats.some(s => s.id === patch?.activeSeatId && s.provider === 'codex'))) throw Error(CODEX_TESTING_MESSAGE);
+      return layout.update(patch);
+    },
+    updateSeat(id, patch) {
+      const previous = layout.get().seats.find(s => s.id === id);
+      if (!codexAvailable && patch?.provider === 'codex' && previous?.provider !== 'codex') throw Error(CODEX_TESTING_MESSAGE);
+      // Editing a disabled seat must not lose its existing project, which may be
+      // absent from the DSH-only catalog while Codex is temporarily hidden.
+      if (patch?.projectRoot && patch.projectRoot !== previous?.projectRoot && !knownProject(patch.projectRoot)) throw Error('请从已有项目选择工作范围');
+      return layout.updateSeat(id, patch);
+    },
     uploadSeat: (id, image) => layout.uploadSeat(id, image),
     codex,
   };

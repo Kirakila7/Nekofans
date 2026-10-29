@@ -3,9 +3,14 @@ body[data-neko-workspace-shell] .neko-avatar-anchor,
 body[data-neko-workspace-shell] .neko-avatar-portal,
 body[data-neko-workspace-shell] .neko-role-host .neko-roles,
 body[data-neko-workspace-shell] .neko-role-host .neko-community,
+body[data-neko-workspace-shell] .neko-mode-switch,
 body[data-neko-workspace-shell] [data-neko-session-browser-original],
 body[data-neko-workspace-shell] .neko-hero-pick__name { display:none !important; }
+body[data-neko-workspace-shell] button[data-neko-new-session="plus"] { position:absolute !important; visibility:hidden !important; pointer-events:none !important; }
 .neko-workspace-rail-controls { display:flex; flex-direction:column; gap:10px; padding-top:14px; }
+.neko-room-entry, .neko-room-workspace { font-size:21px; line-height:1; }
+.neko-room-entry[aria-pressed="true"], .neko-room-workspace[aria-pressed="true"] { background:var(--nws-hover); color:#396c9f; }
+body[data-neko-workspace-shell] .neko-chatroom-preview { position:fixed; z-index:35; box-sizing:border-box; overflow:auto; background:var(--dsw-specific-sidebar-fill,#e5edf8); }
 .neko-workspace-settings { font-size:24px; line-height:1; }
 .neko-office-switch { border:1px solid var(--nws-border); background:var(--nws-hover); }
 .neko-custom-seats { display:grid; gap:3px; margin:10px 0 6px; }
@@ -16,9 +21,12 @@ body[data-neko-workspace-shell] .neko-hero-pick__name { display:none !important;
 .neko-custom-seat button:focus-visible,.neko-session-browser button:focus-visible { outline:2px solid #4c89ad; outline-offset:-2px; }
 .neko-custom-seat img { width:27px; height:27px; object-fit:contain; flex:none; }
 .neko-custom-seat__name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; }
-.neko-custom-seat__provider { font-size:10px; color:var(--nws-muted); border:1px solid var(--nws-border); border-radius:4px; padding:1px 4px; }
+.neko-custom-seat__new { flex:none; width:26px; height:28px; padding:0; color:var(--nws-muted) !important; font-size:20px !important; line-height:1; }
+.neko-custom-seat__provider { flex:none; font-size:10px; color:var(--nws-muted); border:1px solid var(--nws-border); border-radius:4px; padding:1px 4px; }
+.neko-custom-seat__pick:disabled { cursor:not-allowed; opacity:1; color:#66788c; }
+.neko-custom-seat__pick:disabled .neko-custom-seat__provider { color:#526a82; border-color:#b7c8d9; background:#edf3f9; }
 .neko-custom-seat__settings { width:28px; height:30px; font-size:20px !important; }
-.neko-custom-seat button:hover,.neko-session-browser button:hover { background:var(--nws-hover); border-radius:7px; }
+.neko-custom-seat button:hover:not(:disabled),.neko-session-browser button:hover:not(:disabled) { background:var(--nws-hover); border-radius:7px; }
 .neko-session-browser { display:flex; flex-direction:column; flex:1; min-height:80px; overflow:hidden; padding:0 12px; color:var(--nws-text); font:12px/1.5 system-ui,sans-serif; }
 .neko-session-browser__header { display:flex; align-items:center; justify-content:space-between; margin:3px 0 7px; }
 .neko-session-all { text-align:left; font-weight:600 !important; padding:4px; }
@@ -37,7 +45,21 @@ body[data-neko-workspace-shell] .neko-hero-pick__name { display:none !important;
 .neko-companion-dock { position:relative; display:grid; grid-template-columns:minmax(0,1fr); flex:none; min-width:0; width:auto; box-sizing:border-box; margin:0 12px 7px; padding:0; border:0; color:var(--nws-text); background:transparent; font:12px/1.5 system-ui,sans-serif; }
 .neko-companion-character { justify-self:center; width:76px; height:90px; position:relative; transform:translateX(var(--neko-companion-offset,0px)); cursor:grab; touch-action:none; user-select:none; -webkit-user-select:none; }
 .neko-companion-character[data-dragging="true"] { cursor:grabbing; }
-.neko-companion-character:focus-visible { outline:1px dashed var(--nws-border); outline-offset:-3px; border-radius:12px; }
+.neko-companion-menu { position:fixed; z-index:60; display:grid; gap:3px; min-width:160px; max-width:240px; box-sizing:border-box; padding:6px; color:var(--nws-text); background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:12px; box-shadow:0 8px 28px #17303d20; font:13px/1.5 system-ui; }
+.neko-companion-menu[hidden] { display:none !important; }
+.neko-companion-menu button { border:0; border-radius:7px; background:transparent; color:inherit; font:inherit; padding:9px 12px; cursor:pointer; text-align:left; }
+.neko-companion-menu button:hover,.neko-companion-menu button:focus-visible { background:var(--nws-hover); outline:none; }
+.neko-companion-menu button:disabled { opacity:.5; cursor:wait; }
+.neko-companion-menu__status { max-width:220px; margin:3px 8px; color:var(--nws-muted); font-size:11px; overflow-wrap:anywhere; }
+.neko-companion-menu__status:empty { display:none; }
+.neko-side-rail__space { position:relative; width:calc(100% + 24px); overflow:hidden; }
+.neko-rail-companion { flex:none; width:44px; height:52px; padding:0; cursor:pointer; }
+.neko-rail-companion[data-neko-rail-roam] { position:absolute; left:0; top:0; z-index:1; max-width:100%; max-height:100%; touch-action:none; cursor:grab; }
+.neko-rail-companion[data-dragging="true"] { cursor:grabbing; }
+.neko-rail-companion .neko-companion-character { width:min(40px, 100%); height:min(50px, 100%); transform:none; cursor:inherit; }
+.neko-rail-companion img.neko-companion-poster,.neko-rail-companion video.neko-companion-video { width:100%; height:100%; border-radius:0; object-fit:contain; }
+.neko-rail-companion [hidden] { display:none !important; }
+.neko-companion-character:focus-visible { outline:2px dashed #4c89ad; outline-offset:-3px; border-radius:12px; }
 .neko-companion-poster,.neko-companion-video { display:block; position:absolute; inset:0; width:100%; height:100%; background:transparent; object-position:center; object-fit:cover; pointer-events:none; }
 .neko-companion-history { position:absolute; z-index:4; bottom:calc(100% + 6px); left:0; right:0; box-sizing:border-box; height:96px; overflow:auto; margin:0; padding:10px; border:1px solid color-mix(in srgb,var(--nws-muted) 18%,transparent); border-radius:10px; background:var(--dsw-specific-sidebar-fill,var(--nws-bg)); box-shadow:0 4px 16px #17303d0a; line-height:18px; white-space:pre-wrap; overflow-wrap:anywhere; }
 .neko-companion-message,.neko-companion-empty { margin:0; font-size:12px; line-height:18px; }
@@ -47,7 +69,7 @@ body[data-neko-workspace-shell] .neko-hero-pick__name { display:none !important;
 .neko-companion-form textarea { flex:1; min-width:0; resize:none; height:34px; padding:7px; box-sizing:border-box; border:1px solid color-mix(in srgb,var(--nws-muted) 22%,transparent); border-radius:8px; color:inherit; background:transparent; font:12px/18px system-ui; }
 .neko-companion-form button { display:grid; place-items:center; flex:none; width:26px; height:30px; padding:3px; border:0; border-radius:6px; background:transparent; color:var(--nws-muted); cursor:pointer; }
 .neko-companion-form button:hover,.neko-companion-history-toggle[aria-expanded="true"] { background:color-mix(in srgb,var(--nws-muted) 9%,transparent); color:var(--nws-text); }
-.neko-companion-form button:focus-visible { outline:1px solid var(--nws-muted); outline-offset:1px; }
+.neko-companion-form button:focus-visible { outline:2px solid #4c89ad; outline-offset:1px; }
 .neko-companion-history-toggle svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round; }
 .neko-office-panel { position:fixed; z-index:28; display:flex; flex-direction:column; box-sizing:border-box; padding:22px clamp(18px,5vw,75px) 24px; color:var(--nws-text); background:var(--dsw-alias-bg-base,#edf6fa); font:14px/1.65 system-ui,sans-serif; }
 .neko-office-panel[hidden],.neko-workspace-modal[hidden],.neko-companion-dock [hidden] { display:none !important; }
@@ -69,6 +91,14 @@ body[data-neko-workspace-shell] .neko-hero-pick__name { display:none !important;
 .neko-office-welcome p { font-size:13px; }
 .neko-office-form { flex:none; background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:18px; padding:12px 15px; box-shadow:0 5px 24px #13304808; }
 .neko-office-form textarea { width:100%; resize:vertical; max-height:180px; min-height:65px; color:inherit; background:transparent; border:0; font:14px/1.65 system-ui; outline:none; box-sizing:border-box; }
+.neko-office-controls { display:flex; align-items:center; flex-wrap:wrap; gap:8px 14px; padding:8px 0; border-top:1px solid var(--nws-border); }
+.neko-office-control { display:flex; align-items:center; gap:6px; min-width:0; font-size:11px; color:var(--nws-muted); }
+.neko-office-control select { box-sizing:border-box; max-width:min(240px,48vw); min-height:32px; padding:4px 8px; border:1px solid var(--nws-border); border-radius:8px; color:var(--nws-text); background:var(--nws-bg); font:12px/1.5 system-ui; }
+.neko-office-control select:focus-visible,.neko-office-panel button:focus-visible { outline:2px solid #4c89ad; outline-offset:2px; }
+.neko-office-control select:disabled { opacity:.6; }
+.neko-office-model-status { margin:0 0 6px; color:var(--nws-muted); font-size:11px; }
+.neko-office-model-status[hidden] { display:none; }
+.neko-office-form-footer { flex-wrap:wrap; }
 .neko-office-form-footer { display:flex; align-items:center; gap:8px; }
 .neko-office-form-footer span { flex:1; color:var(--nws-muted); font-size:10px; }
 .neko-office-error { font-size:12px; color:var(--nws-muted); margin:4px 0 8px; }
@@ -94,10 +124,24 @@ body[data-neko-workspace-shell] .neko-hero-pick__name { display:none !important;
 .neko-seat-editor { display:grid; gap:12px; padding-top:18px; }
 .neko-seat-editor label { display:grid; gap:5px; }
 .neko-seat-editor input,.neko-seat-editor select { width:100%; box-sizing:border-box; background:var(--nws-bg); color:inherit; border:1px solid var(--nws-border); border-radius:7px; padding:7px 9px; font:13px system-ui; }
-.neko-workspace-form-error { color:#bd5c4e; margin:0; }
+.neko-workspace-form-error { color:#b05042; margin:0; }
 .neko-workspace-form-error:empty { display:none; }
 @media(max-height:700px) { .neko-companion-character { height:76px; } .neko-custom-seat__pick { padding-top:4px; padding-bottom:4px; } }
 
 .neko-workspace-connections { margin:0 0 8px; font-size:12px; color:var(--nws-muted); }
 
 body[data-neko-workspace-shell] [data-neko-companion-footer] { display:block !important; width:100%; min-width:0; align-self:stretch; box-sizing:border-box; }
+
+/* Interaction states: hover/press cues on enabled controls only, visible focus
+   rings, and busy/disabled cues. Disabled (e.g. Codex 测试中) never gets hover. */
+.neko-session-browser button:disabled,.neko-custom-seat button:disabled { cursor:not-allowed; }
+.neko-workspace-session:disabled { color:var(--nws-muted); }
+.neko-office-panel button:hover:not(:disabled),.neko-workspace-modal button:hover:not(:disabled) { background:var(--nws-hover); }
+.neko-office-panel button:disabled,.neko-workspace-modal button:disabled { cursor:not-allowed; }
+.neko-custom-seat button:active:not(:disabled),.neko-session-browser button:active:not(:disabled),.neko-office-panel button:active:not(:disabled),.neko-workspace-modal button:active:not(:disabled),.neko-companion-form button:active:not(:disabled),.neko-companion-menu button:active:not(:disabled) { background:var(--dsw-alias-interactive-bg-active,#d0e5ef); }
+.neko-workspace-modal button:focus-visible,.neko-workspace-modal input:focus-visible,.neko-workspace-modal select:focus-visible,.neko-session-search:focus-visible,.neko-companion-form textarea:focus-visible { outline:2px solid #4c89ad; outline-offset:2px; }
+.neko-companion-menu button:focus-visible { box-shadow:inset 0 0 0 2px #4c89ad; }
+.neko-session-refresh[aria-busy="true"],.neko-office-panel button[aria-busy="true"],.neko-workspace-modal button[aria-busy="true"],.neko-companion-menu button[aria-busy="true"] { cursor:progress; }
+.neko-session-refresh[aria-busy="true"] { opacity:.55; }
+.neko-project-list[aria-busy="true"] { opacity:.6; transition:opacity .15s ease; }
+.neko-workspace-form-error:not(:empty) { padding:6px 9px; border-radius:7px; background:#fbeeeb; }

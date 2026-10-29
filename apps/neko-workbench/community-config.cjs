@@ -155,10 +155,11 @@ function installCommunityNavigation(target, { communityUrl, parent, openExternal
 
 function validateCommunityRequest(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)
-      || Object.keys(value).some(key => !['action', 'bounds', 'site', 'requestId', 'home'].includes(key))
+      || Object.keys(value).some(key => !['action', 'bounds', 'site', 'slot', 'requestId', 'home'].includes(key))
       || !['open', 'layout', 'hide', 'reload', 'back', 'copy-video-link', 'play-official'].includes(value.action)
       || (value.requestId !== undefined && (!['open', 'hide'].includes(value.action) || !Number.isSafeInteger(value.requestId) || value.requestId < 1))
       || (value.site !== undefined && (value.action !== 'open' || !['community', 'bilibili'].includes(value.site)))
+      || (value.slot !== undefined && !['side', 'left', 'right'].includes(value.slot))
       || (value.home !== undefined && (value.home !== true || value.action !== 'open' || value.site !== 'bilibili'))) throw new Error('未知社区操作');
   if (value.action === 'open' || value.action === 'layout' || value.bounds !== undefined) {
     const bounds = value.bounds;
@@ -167,7 +168,7 @@ function validateCommunityRequest(value) {
           Object.hasOwn(bounds, key) && Number.isFinite(bounds[key]) && Math.abs(bounds[key]) <= 1000000)
         || bounds.width <= 0 || bounds.height <= 0) throw new Error('社区布局无效');
   }
-  return { action: value.action, ...(value.site ? { site: value.site } : {}), ...(value.home === true ? { home: true } : {}), ...(value.requestId !== undefined ? { requestId: value.requestId } : {}), ...(value.bounds ? { bounds: { ...value.bounds } } : {}) };
+  return { action: value.action, ...(value.site ? { site: value.site } : {}), ...(value.slot ? { slot: value.slot } : {}), ...(value.home === true ? { home: true } : {}), ...(value.requestId !== undefined ? { requestId: value.requestId } : {}), ...(value.bounds ? { bounds: { ...value.bounds } } : {}) };
 }
 
 function communityBounds(host, bounds) {
@@ -425,7 +426,14 @@ function createCommunityController({ WebContentsView, openExternal, copyText, en
       if (request.action !== 'open') throw new Error('请先打开社区');
       record = create(host, request.bounds, request.requestId);
     }
-    if (request.action === 'open') record.requestId = request.requestId;
+    if (request.action === 'open') {
+      record.requestId = request.requestId;
+      // In split layout an open may finish long after the user resumed typing
+      // in DSH. Keep focus on the user's current surface; pointer/keyboard
+      // interaction can still focus the child view in the usual way. Store
+      // this on the view so a coalesced older legacy open cannot steal focus.
+      record.managedBySlot = !!request.slot;
+    }
     if (request.bounds) record.bounds = request.bounds;
     record.wanted = true;
     const epoch = record.epoch;
@@ -439,7 +447,7 @@ function createCommunityController({ WebContentsView, openExternal, copyText, en
     } else if (record.loading) await record.loading;
     else if (!record.loaded) await load(record, record.communityUrl);
     if (current !== record || !record.wanted || epoch !== record.epoch) throw new Error(CANCEL_ERROR);
-    if (place(record) && host.isFocused()) record.webContents.focus();
+    if (place(record) && !record.managedBySlot && host.isFocused()) record.webContents.focus();
     state(record, 'ready');
     return { ok: true };
   }
@@ -458,43 +466,128 @@ function createCommunityController({ WebContentsView, openExternal, copyText, en
     get isOpen() { return !!current?.wanted; }, get view() { return current?.view || null; } });
 }
 
-// Independent sessions preserve each site's history while only one view is
-// attached to the workbench at a time. The renderer can switch back and forth
-// without creating tabs or sharing community cookies with Bilibili.
+// Each provider owns a single persistent view. Slot routing allows the two
+// different providers to coexist while moving a view never reloads it.
+// Calls without a slot keep the original single-active-view behaviour.
 function createSocialController(options = {}) {
   const publish = options.onState || (() => {});
+  const slots = new Map(), slotVersion = new Map(), siteVersion = new Map();
+  const bump = slot => { const v = (slotVersion.get(slot) || 0) + 1; slotVersion.set(slot, v); return v; };
+  const bumpSite = site => { const v = (siteVersion.get(site) || 0) + 1; siteVersion.set(site, v); return v; };
+  const slotOf = site => [...slots].find(([, entry]) => entry.site === site)?.[0];
   const controllers = Object.fromEntries(['community', 'bilibili'].map(site => [site,
-    createCommunityController({ ...options, site, onHide: site === 'community' ? options.onHide : undefined,
-      onState: (host, value) => publish(host, { ...value, site }) })]));
-  let active = 'community', generation = 0, activeRequestId;
+    createCommunityController({ ...options, site, onHide: site === 'community' ? options.onHide : undefined, onState: (host, value) => {
+      const slot = slotOf(site);
+      publish(host, { ...value, site, ...(slot ? { slot } : {}) });
+    } })]));
+  let active = 'community', generation = 0, activeRequestId, legacyVisible = false;
+  async function clearSlots(host, exceptSite, version) {
+    for (const [slot, entry] of [...slots]) {
+      // Another slot operation supersedes this single-pane transition. Do
+      // not hide a view which may already have moved to the new layout.
+      if (generation !== version) return false;
+      if (slots.get(slot) !== entry) continue;
+      bump(slot);
+      if (entry.site !== exceptSite) await controllers[entry.site].action(host, { action: 'hide' });
+      if (generation !== version) return false;
+      if (slots.get(slot) === entry) slots.delete(slot);
+    }
+    return generation === version;
+  }
+  async function slotAction(host, request) {
+    const slot = request.slot;
+    if (request.action === 'open') {
+      // A new explicit slot assignment supersedes an older legacy transition.
+      // Other slot actions do not invalidate it, so delayed resize/hide events
+      // from the previous layout cannot cancel the user's new navigation.
+      ++generation;
+      const next = request.site || 'community';
+      const version = bump(slot);
+      const siteTicket = bumpSite(next);
+      // Invalidate an old single-pane open before transitioning into slots.
+      if (legacyVisible) {
+        legacyVisible = false;
+        if (active !== next) await controllers[active].action(host, { action: 'hide' });
+        if (slotVersion.get(slot) !== version || siteVersion.get(next) !== siteTicket) throw new Error(CANCEL_ERROR);
+      }
+      const occupied = slots.get(slot);
+      if (occupied && occupied.site !== next) {
+        await controllers[occupied.site].action(host, { action: 'hide' });
+        if (slotVersion.get(slot) !== version || siteVersion.get(next) !== siteTicket) throw new Error(CANCEL_ERROR);
+        if (slots.get(slot) === occupied) slots.delete(slot);
+      }
+      // One WebContentsView cannot be in two places: moving reuses it and
+      // invalidates the old slot rather than creating another web session.
+      const oldSlot = slotOf(next);
+      if (oldSlot && oldSlot !== slot) { bump(oldSlot); slots.delete(oldSlot); }
+      const entry = { site: next, requestId: request.requestId };
+      slots.set(slot, entry); active = next;
+      const result = await controllers[next].action(host, { action: 'open', site: next, slot, bounds: request.bounds,
+        ...(request.home === true ? { home: true } : {}), ...(request.requestId !== undefined ? { requestId: request.requestId } : {}) });
+      if (slotVersion.get(slot) !== version || siteVersion.get(next) !== siteTicket || slots.get(slot) !== entry) throw new Error(CANCEL_ERROR);
+      return result;
+    }
+    const entry = slots.get(slot);
+    if (!entry) return request.action === 'hide' || request.action === 'layout' ? { ok: true } : Promise.reject(new Error('请先打开内容'));
+    if (request.action === 'hide' && request.requestId !== undefined && request.requestId !== entry.requestId) return { ok: true, stale: true };
+    active = entry.site;
+    const { slot: _slot, ...single } = request;
+    if (request.action === 'hide') {
+      bump(slot); bumpSite(entry.site);
+      const result = controllers[entry.site].action(host, single);
+      if (slots.get(slot) === entry) slots.delete(slot);
+      return result;
+    }
+    return controllers[entry.site].action(host, single);
+  }
   async function action(host, value) {
     const request = validateCommunityRequest(value);
+    if (request.slot) return slotAction(host, request);
+    if (request.action === 'hide' && request.requestId !== undefined &&
+        (!legacyVisible || request.requestId !== activeRequestId)) return { ok: true, stale: true };
+    let version;
+    if (slots.size) {
+      // A delayed legacy hide must not erase freshly assigned slots.
+      if (request.action === 'hide' && request.requestId !== undefined) return { ok: true, stale: true };
+      // Delayed actions from the old single-pane toolbar cannot operate on
+      // whichever multi-pane view happened to become active most recently.
+      if (request.action !== 'open' && request.action !== 'hide') return { ok: true, stale: true };
+    }
+    if (request.action === 'open' || request.action === 'hide') {
+      version = ++generation;
+      if (slots.size && !await clearSlots(host, request.action === 'open' ? (request.site || 'community') : undefined, version)) {
+        if (request.action === 'open') throw new Error(CANCEL_ERROR);
+        return { ok: true, stale: true };
+      }
+    }
     if (request.action === 'open') {
       const next = request.site || 'community';
       const previous = active;
-      const version = ++generation;
       active = next;
       activeRequestId = request.requestId;
+      legacyVisible = true;
       if (previous !== next) await controllers[previous].action(host, { action: 'hide' });
       if (version !== generation) throw new Error(CANCEL_ERROR);
       return controllers[next].action(host, { action: 'open', site: next, bounds: request.bounds, ...(request.home === true ? { home: true } : {}), ...(request.requestId !== undefined ? { requestId: request.requestId } : {}) });
     }
     if (request.action === 'hide') {
       if (request.requestId !== undefined && request.requestId !== activeRequestId) return { ok: true, stale: true };
-      ++generation;
+      legacyVisible = false;
     }
     return controllers[active].action(host, request);
   }
   return Object.freeze({ action,
     async handoff(host, url) {
-      if (active !== 'community' || !controllers.community.isOpen) throw new Error(CANCEL_ERROR);
-      const version = generation;
+      if (!controllers.community.isOpen) throw new Error(CANCEL_ERROR);
+      // A Bilibili operation in another slot must not invalidate the community
+      // handoff; only a change to the community view itself can do so.
+      const ticket = siteVersion.get('community') || 0;
       await controllers.community.handoff(host, url);
-      if (version !== generation || active !== 'community') throw new Error(CANCEL_ERROR);
+      if ((siteVersion.get('community') || 0) !== ticket || !controllers.community.isOpen) throw new Error(CANCEL_ERROR);
     },
     bindHost(host) { Object.values(controllers).forEach(controller => controller.bindHost(host)); },
-    dispose() { ++generation; Object.values(controllers).forEach(controller => controller.dispose()); },
-    get isOpen() { return active === 'community' && controllers.community.isOpen; },
+    dispose() { ++generation; for (const slot of slots.keys()) bump(slot); slots.clear(); legacyVisible = false; Object.values(controllers).forEach(controller => controller.dispose()); },
+    get isOpen() { return controllers.community.isOpen; },
     get view() { return controllers[active].view; } });
 }
 
