@@ -7,6 +7,8 @@ const {createCommunityAccount}=require('./community-account.cjs');
 const {createSubagentMotion,motionOptions}=require('./subagent-motion.cjs');
 const {createScreenShare}=require('./screen-share-controller.cjs');
 const {WorkbenchMainChat,trustedLocalCaller}=require('./main-chat-runtime.cjs');
+const {createTtsController}=require('./tts-runtime.cjs');
+const {authorizeSpeak,authorizeStop}=require('./tts-guard.cjs');
 const {pathToFileURL}=require('node:url');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -88,6 +90,11 @@ communityAccount=createCommunityAccount({getBaseUrl:()=>state.neko.baseUrl,
   openExternal:url=>shell.openExternal(url),handoff:url=>communityController.handoff(dshWindow,url),
   onState:value=>{if(dshWindow&&!dshWindow.isDestroyed()&&isWorkbenchOrigin(dshWindow.webContents.getURL()))dshWindow.webContents.send('workbench:community-account-state',value);}});
 const pending=new Map(), petWindows=new Map(),renameWindows=new Map();
+let pendingTtsText=null;
+function emitTts(value){const w=petWindows.get('main');if(w&&!w.isDestroyed()&&localWindows.has(w))w.webContents.send('pet:tts',value);}
+const tts=createTtsController({repositoryRoot:path.resolve(base,'../..'),onEvent:event=>{emitTts(event);if(event.type==='error'&&!quitting){notice(state.actors[0],'N.E.K.O. 免费语音暂不可用，请检查网络与语音环境');update();}}});
+function stopTts(){pendingTtsText=null;tts.stop();emitTts({type:'cancel'});}
+function speakReply(text){if(state.preferences.ttsEnabled!==true||typeof text!=='string'||!text.trim()||text.length>8000)return;stopTts();pendingTtsText=text;emitTts({type:'reply',text});}
 const draggingPets=new Set(),petGeometry=new Map();
 const motionInputs=new Set();
 const catMotion=createSubagentMotion({
@@ -215,7 +222,7 @@ function applyMainChat(snapshot){
   if(quitting)return;
   const a=state.actors[0],oldBackend=a.chatBackend,previous=state.mainChat?.chat;
   if(oldBackend!==snapshot.backend)screenShare.interrupt();
-  state.mainChat=snapshot;
+  state.mainChat={...snapshot,voiceStatus:state.preferences.ttsEnabled===true?'已启用':'已关闭'};
   if(oldBackend!==snapshot.backend){
     if(oldBackend==='neko')state.neko.history=a.messages;
     a.messages=snapshot.backend==='neko'?(state.neko.history||[]):[];
@@ -254,12 +261,14 @@ function startApiPrompt(text){
   if(typeof text!=='string'||!text.trim()||text.length>8000)throw new Error('请输入 1～8000 字的消息');
   screenShare.interrupt();
   if(activeApiRequest||busy(state.actors[0]))throw new Error('我还在回复，等我一下。');
+  stopTts();
   const request={id:randomUUID(),opened:mainChatRuntime.opened},a=state.actors[0];activeApiRequest=request;a.notice=null;
   mainChatRuntime.send(text).then(async result=>{
     if(quitting||activeApiRequest!==request)return;activeApiRequest=null;
     if(mainChatRuntime.backend!=='chat-api'||mainChatRuntime.opened!==request.opened)return;
     if(result.status==='cancelled'){a.chatReply=null;notice(a,'已停止回复');}
     else if(result.status==='error')notice(a,result.message);
+    else if(result.status==='completed')speakReply(result.text);
     await refreshApiHistory();update();
   },()=>{if(!quitting&&activeApiRequest===request){activeApiRequest=null;a.active=false;a.status='error';setWork(a,null);notice(a,'聊天暂不可用，请重试');update();}});
   return {requestId:request.id,backend:'chat-api'};
@@ -538,13 +547,13 @@ async function connectNeko(){clearTimeout(nekoRetry);if(!state.neko.enabled||mai
 nekoChat.on('connection',info=>{if(quitting||mainChatRuntime?.backend!=='neko')return;Object.assign(state.neko,info);if(info.connection==='disconnected'&&state.neko.enabled){clearTimeout(nekoRetry);nekoRetry=setTimeout(connectNeko,10000);}update();});
 nekoChat.on('characters',({names,character})=>{if(quitting||mainChatRuntime?.backend!=='neko')return;state.neko.characters=names;state.neko.character=character;state.actors[0].nekoCharacter=character;update();});
 nekoChat.on('profile-created',info=>{if(quitting||mainChatRuntime?.backend!=='neko')return;state.neko.profileCreated={...info,at:new Date().toISOString()};update();});
-nekoChat.on('start',()=>{if(quitting||mainChatRuntime?.backend!=='neko')return;const a=state.actors[0];a.active=true;a.status='working';a.currentActivity='正在聊天';setWork(a,'thinking',null);update();});
+nekoChat.on('start',()=>{if(quitting||mainChatRuntime?.backend!=='neko')return;stopTts();const a=state.actors[0];a.active=true;a.status='working';a.currentActivity='正在聊天';setWork(a,'thinking',null);update();});
 nekoChat.on('reply',({requestId,text})=>{
   if(quitting||mainChatRuntime?.backend!=='neko')return;
   const a=state.actors[0];let reply=a.messages.find(m=>m.requestId===requestId&&m.role==='assistant');
   if(!reply){reply={role:'assistant',requestId,text:'',time:Date.now()};a.messages.push(reply);}reply.text=text;a.chatReply={id:requestId,text,streaming:true};update();
 });
-nekoChat.on('complete',({requestId,text})=>{if(quitting||mainChatRuntime?.backend!=='neko')return;const a=state.actors[0];state.neko.history=a.messages;a.status='idle';a.active=false;a.currentActivity='';a.chatReply={id:requestId,text,streaming:false};setWork(a,null);update();});
+nekoChat.on('complete',({requestId,text})=>{if(quitting||mainChatRuntime?.backend!=='neko')return;const a=state.actors[0];state.neko.history=a.messages;a.status='idle';a.active=false;a.currentActivity='';a.chatReply={id:requestId,text,streaming:false};setWork(a,null);speakReply(text);update();});
 nekoChat.on('failure',error=>{if(quitting||mainChatRuntime?.backend!=='neko')return;const a=state.actors[0];a.status='error';a.active=false;a.currentActivity='';if(a.chatReply)a.chatReply.streaming=false;notice(a,error.message);setWork(a,null);update();});
 function setHelperLimit(value){const n=normalizeLimit(value);if(n<pinnedCount())return false;state.preferences.helperLimit=n;update();return true;}
 function pinHelper(a,pinned){
@@ -774,6 +783,20 @@ ipcMain.handle('pet:call',async(event,method,p={})=>{
   if(!senderId&&!renameId&&sender!==memoryWindow&&sender!==settingsWindow&&sender!==nekoSettingsWindow&&sender!==chatSettingsWindow&&sender!==chatMemoryWindow)throw new Error('未知窗口');
   assertLocalCaller(event,sender);
   if(method==='state')return state;
+  if(method==='tts-settings'){
+    if(sender!==chatSettingsWindow)throw new Error('请从聊天设置操作');
+    if(typeof p.enabled!=='boolean')throw new Error('语音设置无效');
+    const old=state.preferences.ttsEnabled;state.preferences.ttsEnabled=p.enabled;try{save();}catch(error){state.preferences.ttsEnabled=old;throw error;}if(!p.enabled)stopTts();broadcast();return {enabled:p.enabled};
+  }
+  if(method==='tts-speak'){
+    authorizeSpeak({senderId,enabled:state.preferences.ttsEnabled===true,expected:pendingTtsText,input:p});
+    pendingTtsText=null;return tts.speak(p.text,p.requestId);
+  }
+  if(method==='tts-stop'){
+    authorizeStop({senderId,isSettings:sender===chatSettingsWindow,input:p});
+    if(sender===chatSettingsWindow){stopTts();return true;}
+    tts.stop(p.requestId);return true;
+  }
   if(method==='chat-settings-read'){if(sender!==chatSettingsWindow)throw new Error('请从聊天设置操作');return mainChatRuntime?.read({checkSecureStorage:true})||state.mainChat;}
   if(method==='chat-open-neko-settings'){if(sender!==chatSettingsWindow)throw new Error('请从聊天设置操作');editNekoSettings();return true;}
   if(method==='chat-open-memory'){if(sender!==chatSettingsWindow)throw new Error('请从聊天设置操作');editChatMemory();return true;}
@@ -845,7 +868,7 @@ app.on('before-quit',event=>{
   if(shutdownStarted)return;
   shutdownStarted=true;quitting=true;communityController.dispose();communityAccount.cancel();screenShare.dispose();catMotion.dispose();clearTimeout(nekoRetry);clearTimeout(rosterTimer);for(const timer of terminalTimers.values())clearTimeout(timer);terminalTimers.clear();nekoChat.close();save();
   const current=childLifecycle;
-  Promise.allSettled([mainChatRuntime?.close(),current?.stop(),codexAccount.dispose(),codexWorkspace.dispose()]).finally(()=>{shutdownComplete=true;app.quit();});
+  stopTts();tts.close();Promise.allSettled([mainChatRuntime?.close(),current?.stop(),codexAccount.dispose(),codexWorkspace.dispose()]).finally(()=>{shutdownComplete=true;app.quit();});
 });
 process.on('SIGTERM',()=>app.quit());
 process.on('SIGINT',()=>app.quit());
