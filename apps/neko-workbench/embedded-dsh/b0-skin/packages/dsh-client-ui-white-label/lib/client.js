@@ -2999,7 +2999,20 @@ function installWorkspaceShell(options = {}) {
     positionCompanionMenu();
   }
   function schedule() { if (!disposed && !queued) { queued = true; Promise.resolve().then(() => { queued = false; place(); positionCompanionMenu(); }); } }
-  function nativeNew(event) { if (!event.target.closest?.('[data-neko-new-session="plus"]')) return; event.preventDefault(); event.stopImmediatePropagation(); if (layout?.officeMode === 'codex') newOffice(); else showStartup(); }
+  function nativeNew(event) {
+    const target = event.target?.closest?.('button');
+    if (!target) return;
+    const marked = target.getAttribute('data-neko-new-session') === 'plus';
+    // The DSH React node is not always decorated by the optional sidebar
+    // adapter. Match only its sidebar button, not the composer attachment +.
+    const sidebar = target.closest('[data-slot="sidebar"]');
+    const label = (target.getAttribute('aria-label') || '').trim().replace(/\s+/g, ' ');
+    const native = sidebar && !target.closest('[data-neko-workspace-owned]') &&
+      (/(?:^|\s)[^\s]*_newSession(?:\s|$)/.test(target.className) || /^(?:新建会话|新会话|新建对话|new (?:chat|session|conversation))$/i.test(label));
+    if (!marked && !native) return;
+    event.preventDefault(); event.stopImmediatePropagation();
+    if (layout?.officeMode === 'codex') newOffice(); else showStartup();
+  }
   function escape(event) { if (event.key !== 'Escape') return; if (!companionMenu.hidden) { event.preventDefault(); event.stopPropagation(); closeCompanionMenu(); } else if (!modal.hidden) { event.stopPropagation(); closeSettings(); } else if ((layout?.companionHistoryOpen || historyPeek) && dock.contains(doc.activeElement)) { event.preventDefault(); historyPeek = false; saveLayout({ companionHistoryOpen: false }); historyToggle.focus(); } }
   const observer = new win.MutationObserver(records => { if (records.some(record => record.type !== 'attributes' || record.attributeName !== 'style' || record.target.matches?.('[data-neko-unified-coding]'))) schedule(); }); observer.observe(doc.body, { childList: true, subtree: true, attributes:true, attributeFilter:['data-neko-unified-enabled', 'data-neko-unified-coding', 'data-neko-side-social-active', 'data-neko-tools', 'style'] });
   // Observe only the dock's ancestors for inline style changes: watching every

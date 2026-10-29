@@ -1,4 +1,4 @@
-# Local test workbench 0.28.16 (source, pending installation)
+# Local test workbench 0.28.17 (source, pending installation)
 
 The daily artifact is built from this repository. `config/daily-release.json` is the version authority; every app includes `Contents/Resources/WORKBENCH_BUILD.json` with the source commit and SHA-256 of every shipped source file. Historical QA checkouts and profiles are not release inputs.
 
