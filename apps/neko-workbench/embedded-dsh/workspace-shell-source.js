@@ -33,14 +33,14 @@ function installWorkspaceShell(options = {}) {
   const officeImage = image(avatar('bigfish')); officeButton.appendChild(officeImage);
   const settingsButton = button('⚙', 'neko-side-rail__button neko-workspace-settings', () => openSettings('general'));
   settingsButton.setAttribute('aria-label', '工作台设置'); settingsButton.title = '工作台设置';
-  const communityButton = button('', 'neko-side-rail__button neko-community neko-community-yui', () => { closeStartup(); closeSettings(); Promise.resolve(options.openCommunity?.()).catch(showError); });
+  const communityButton = button('', 'neko-side-rail__button neko-community neko-community-yui', () => { closeSettings(); Promise.resolve(options.openCommunity?.()).catch(showError); });
   communityButton.setAttribute('aria-label', 'Yui · N.E.K.O. 社区'); communityButton.title = 'N.E.K.O. 原生社区'; communityButton.appendChild(image(avatar('yui')));
   railTop.append(settingsButton, communityButton);
   // The room is a local visual preview. It never touches the work session or
   // the saved multi-pane layout. The original sidebar stays mounted behind it.
   const previewFactory = options.createChatroomPreview || (typeof createChatroomPreview === 'function' ? createChatroomPreview : null);
   const roomPreview = previewFactory ? own(previewFactory(doc, avatar)) : null;
-  let roomActive = !!roomPreview, initialRoomResolved = false;
+  let roomActive = !!roomPreview, roomSelection = !!roomPreview, sideSocial = false, initialRoomResolved = false;
   const roomInert = new Set();
   const roomButton = roomPreview && button('', 'neko-side-rail__button neko-room-entry', () => setRoomActive(true));
   const workButton = roomPreview && button('', 'neko-side-rail__button neko-room-workspace', () => setRoomActive(false));
@@ -74,8 +74,10 @@ function installWorkspaceShell(options = {}) {
     }
     for (const child of sidebar.children) visit(child);
   }
-  function setRoomActive(active) {
+  function setRoomActive(active, { closeSocial = true } = {}) {
     if (!roomPreview || disposed) return;
+    if (closeSocial && sideSocial) doc.dispatchEvent(new win.Event('neko-side-surface-close'));
+    if (closeSocial) { sideSocial = false; roomSelection = !!active; }
     roomActive = !!active;
     if (roomActive) { doc.body.setAttribute('data-neko-chatroom-active', ''); doc.querySelector('.neko-side-rail__expand:not([hidden])')?.click(); }
     else { doc.body.removeAttribute('data-neko-chatroom-active'); roomPreview.hidden = true; releaseRoomInert(); }
@@ -83,6 +85,18 @@ function installWorkspaceShell(options = {}) {
     doc.dispatchEvent(new win.Event('neko-chatroom-mode-change'));
     schedule();
   }
+  function sideSurfaceChanged(event) {
+    const surface = event.detail?.surface;
+    if (surface === 'community' || surface === 'bilibili') {
+      sideSocial = true;
+      setRoomActive(false, { closeSocial: false });
+      roomButton?.setAttribute('aria-pressed', 'false'); workButton?.setAttribute('aria-pressed', 'false');
+    } else if (surface === 'hidden' && sideSocial) {
+      sideSocial = false;
+      setRoomActive(roomSelection, { closeSocial: false });
+    }
+  }
+  doc.addEventListener('neko-side-surface-change', sideSurfaceChanged);
   function showWorkspaceFromLayout() { setRoomActive(false); }
   if (roomPreview) { roomButton.setAttribute('aria-pressed', 'true'); workButton.setAttribute('aria-pressed', 'false'); doc.addEventListener('neko-chatroom-show-workspace', showWorkspaceFromLayout); }
   const seats = own(el('div', 'neko-custom-seats')); seats.setAttribute('role', 'group'); seats.setAttribute('aria-label', '自定义工作 agent');
@@ -684,7 +698,7 @@ function installWorkspaceShell(options = {}) {
         modalBody.appendChild(palette);
         modalBody.append(el('h3', '', '常用设置'));
         const common = el('div', 'neko-workspace-common');
-        common.append(button('界面布局', 'neko-workspace-setting-link neko-workspace-layout-setting', () => { closeSettings(); doc.dispatchEvent(new win.Event('neko-unified-open-config')); }), button('主 agent 聊天设置', 'neko-workspace-setting-link', () => { closeSettings(); Promise.resolve(bridge.action('chat-settings')).catch(showError); }), button('账号、隐私 / 高级设置', 'neko-workspace-setting-link', () => { closeSettings(); options.openNativeSettings?.(); }));
+        common.append(button('主 agent 聊天设置', 'neko-workspace-setting-link', () => { closeSettings(); Promise.resolve(bridge.action('chat-settings')).catch(showError); }), button('账号、隐私 / 高级设置', 'neko-workspace-setting-link', () => { closeSettings(); options.openNativeSettings?.(); }));
         modalBody.appendChild(common);
         const more = el('details', 'neko-workspace-more-settings'); const summary = el('summary', '', '更多工具与连接'); more.appendChild(summary);
         const connections = el('p', 'neko-workspace-connections', connectionSummary());
@@ -751,7 +765,7 @@ function installWorkspaceShell(options = {}) {
     const account = doc.querySelector('[data-slot="settings.launcher"]');
     if (account?.parentElement) markNative(account.parentElement, 'data-neko-companion-footer');
     if (account && (dock.parentNode !== account.parentNode || dock.nextSibling !== account)) account.before(dock);
-    if (roomPreview && roomActive) {
+    if (roomPreview && (roomActive || sideSocial)) {
       const sidebar = doc.querySelector('[data-slot="sidebar"]');
       if (sidebar && !initialRoomResolved) {
         const collapsed = !!sidebar.closest('[data-sidebar-collapsed="true"]');
@@ -777,7 +791,8 @@ function installWorkspaceShell(options = {}) {
         for (const [key, value] of Object.entries(values)) if (roomPreview.style[key] !== value) roomPreview.style[key] = value;
         protectRoomFooter(sidebar, account);
       } else releaseRoomInert();
-      if (roomPreview.hidden === visible) roomPreview.hidden = !visible;
+      const showRoom = visible && roomActive && !sideSocial;
+      if (roomPreview.hidden === showRoom) roomPreview.hidden = !showRoom;
     }
     watchDockAncestors();
     syncCompanionPlacement(rail);
@@ -789,7 +804,7 @@ function installWorkspaceShell(options = {}) {
       // The native sidebar's inner navigation can be narrower than its grid
       // track. Anchor overlays to the actual center column during the chat
       // split so they never cover the enlarged room at startup or while dragging.
-      const chatCenter = doc.body.hasAttribute('data-neko-chatroom-active') ? doc.querySelector('[data-neko-chat-center]') : null;
+      const chatCenter = (doc.body.hasAttribute('data-neko-chatroom-active') || doc.body.hasAttribute('data-neko-side-social-active')) ? doc.querySelector('[data-neko-chat-center]') : null;
       const centerRect = chatCenter?.getBoundingClientRect();
       const x = Math.ceil(centerRect && centerRect.width > 0 ? centerRect.left : r.right), bottom = strip?.top > 0 ? strip.top : win.innerHeight;
       panel.toggleAttribute('data-neko-compact', win.innerWidth - x <= 400);
@@ -836,6 +851,7 @@ function installWorkspaceShell(options = {}) {
     win.removeEventListener('resize', place); doc.removeEventListener('scroll', schedule, true); doc.removeEventListener('click', nativeNew, true); doc.removeEventListener('keydown', escape, true);
     doc.removeEventListener('pointerdown', dismissCompanionMenu, true);
     doc.removeEventListener('neko-native-tools-navigate', showNativeToolsPage);
+    doc.removeEventListener('neko-side-surface-change', sideSurfaceChanged);
     if (roomPreview) { doc.removeEventListener('neko-chatroom-show-workspace', showWorkspaceFromLayout); doc.body.removeAttribute('data-neko-chatroom-active'); releaseRoomInert(); doc.dispatchEvent(new win.Event('neko-chatroom-mode-change')); }
     for (const release of releases) if (typeof release === 'function') release();
     for (const [node, attrs] of nativeMarks) for (const [name, before] of attrs) { if (node.getAttribute(name) === '') { if (before === null) node.removeAttribute(name); else node.setAttribute(name, before); } }

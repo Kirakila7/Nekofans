@@ -65,17 +65,61 @@ test('startup uses two areas without overwriting saved multi-pane layout and can
   assert.equal(f.calls.filter(x=>x.action==='open').length,2,'resizing updates existing views without reloading them');
   f.cleanup();
 });
-test('rail shortcuts open an optional middle panel while preserving coding and can close it', {skip:!JSDOM}, async t=>{
+test('rail shortcuts switch the existing sidebar without changing the coding area or saved layout', {skip:!JSDOM}, async t=>{
   for (const [selector,site] of [['.neko-side-rail__bilibili','bilibili'],['.neko-community-yui','community']]) {
-    const f=fixture(t); await sleep(); f.d.querySelector(selector).click();
-    await waitFor(()=>f.calls.some(x=>x.action==='open'&&x.slot==='left'&&x.site===site),'shortcut opens adjacent pane');
-    assert.equal(f.saved.left,site); assert.equal(f.saved.right,'coding'); assert.equal(f.d.querySelector('#draft').value,'coding draft');
-    const panel=f.d.querySelector('[data-neko-unified-slot="left"]');
-    const back=[...panel.querySelectorAll('button')].find(b=>b.textContent==='返回工作区');
+    const initial={enabled:true,side:'workspace',left:'community',right:'bilibili',ratio:.4};
+    const f=fixture(t,{savedLayout:initial}); await sleep(); f.d.querySelector(selector).click();
+    await waitFor(()=>f.calls.some(x=>x.action==='open'&&x.slot==='side'&&x.site===site),'shortcut opens sidebar');
+    assert.deepEqual(f.saved,initial); assert.equal(f.calls.filter(x=>x.action==='set-pane-layout').length,0);
+    assert.equal(f.d.querySelector('#draft').value,'coding draft');
+    assert.equal(f.d.querySelector('.some_centerCol_HASH_42').hasAttribute('data-neko-unified-coding'),false);
+    assert.equal(f.d.body.hasAttribute('data-neko-side-social-active'),true);
+    if(site==='bilibili') assert.equal(f.calls.find(x=>x.action==='open'&&x.site===site).home,true);
+    const panel=f.d.querySelector('[data-neko-unified-slot="side"]');
+    const back=[...panel.querySelectorAll('button')].find(b=>b.textContent==='返回聊天室');
     assert(back && !back.disabled); back.click();
-    await waitFor(()=>f.calls.some(x=>x.action==='hide'&&x.slot==='left'),'optional pane closes');
-    assert.equal(f.saved.left,null); assert.equal(f.saved.right,'coding');
-    assert.equal(f.calls.filter(x=>x.action==='open'&&x.slot==='right'&&x.site===site).length,0,'site does not move into coding pane');
+    await waitFor(()=>f.calls.some(x=>x.action==='hide'&&x.slot==='side'),'sidebar view closes');
+    assert.equal(f.d.body.hasAttribute('data-neko-side-social-active'),false);
+    assert.equal(f.calls.filter(x=>x.action==='open'&&x.slot!=='side').length,0,'no new content pane');
+    f.cleanup();
+  }
+});
+test('sidebar switches between social views and yields to chat or a settings dialog', {skip:!JSDOM}, async t=>{
+  const f=fixture(t); await sleep();
+  const changes=[]; f.d.addEventListener('neko-side-surface-change', e=>changes.push(e.detail.surface));
+  f.d.querySelector('.neko-community-yui').click();
+  await waitFor(()=>f.calls.some(x=>x.action==='open'&&x.slot==='side'&&x.site==='community'),'community sidebar');
+  const dialog=f.d.createElement('div'); dialog.setAttribute('role','dialog'); f.d.body.appendChild(dialog);
+  await waitFor(()=>f.calls.some(x=>x.action==='hide'&&x.slot==='side'),'dialog hides view');
+  dialog.hidden=true;
+  await waitFor(()=>f.calls.filter(x=>x.action==='open'&&x.slot==='side'&&x.site==='community').length===2,'dialog restores view');
+  f.d.querySelector('.neko-side-rail__bilibili').click();
+  await waitFor(()=>f.calls.some(x=>x.action==='open'&&x.slot==='side'&&x.site==='bilibili'),'bilibili replaces community');
+  f.d.dispatchEvent(new f.w.Event('neko-side-surface-close'));
+  await waitFor(()=>f.d.querySelector('[data-neko-unified-slot="side"]').hidden,'sidebar close');
+  assert.deepEqual(changes,['community','bilibili','hidden']);
+  assert.equal(f.d.querySelector('#draft').value,'coding draft');
+  assert.equal(f.d.querySelector('.neko-companion-dock textarea').value,'personal draft');
+  assert.equal(f.calls.filter(x=>x.action==='set-pane-layout').length,0);
+  f.cleanup();
+});
+test('opening community or B station expands a collapsed sidebar before placing the native view', {skip:!JSDOM}, async t=>{
+  for (const [selector, site] of [['.neko-community-yui','community'],['.neko-side-rail__bilibili','bilibili']]) {
+    const f=fixture(t); await sleep();
+    const frame=f.d.querySelector('#frame'), sidebar=f.d.querySelector('[data-slot="sidebar"]');
+    frame.style.gridTemplateColumns='0px 1020px 0px';
+    sidebar.getBoundingClientRect=()=>({left:64,top:0,right:64,bottom:780,width:0,height:780});
+    let expanded=0;
+    const expand=f.d.createElement('button'); expand.className='neko-side-rail__expand';
+    expand.addEventListener('click',()=>{
+      expanded++; expand.hidden=true; frame.style.gridTemplateColumns='220px 800px 0px';
+      sidebar.getBoundingClientRect=()=>({left:64,top:0,right:284,bottom:780,width:220,height:780});
+    });
+    f.d.querySelector('[data-neko-side-rail]').appendChild(expand);
+    f.d.querySelector(selector).click();
+    await waitFor(()=>f.calls.some(x=>x.action==='open'&&x.slot==='side'&&x.site===site),'expanded sidebar view');
+    assert.equal(expanded,1); assert.equal(f.d.querySelector('#draft').value,'coding draft');
+    assert.equal(f.calls.filter(x=>x.action==='set-pane-layout').length,0);
     f.cleanup();
   }
 });

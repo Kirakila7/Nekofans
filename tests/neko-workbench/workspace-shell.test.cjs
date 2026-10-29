@@ -119,11 +119,17 @@ test('chatroom opens in sidebar by default and workspace switch preserves footer
  const bridge={action:async()=>({}),getState:async()=>({workspaceRoot:'/p',workspaceRevision:0,companion:{ready:true,messages:[]}}),companion:async()=>({}),workspace:async r=>{if(r.action==='state')return store.get();if(r.action==='codex-state')return {items:[],approvals:[]};if(r.action==='catalog')return {sessions:[],projects:[],providers:{}};return null;}};
  d.addEventListener('neko-chatroom-mode-change',()=>events.push(d.body.hasAttribute('data-neko-chatroom-active')));
  w.eval(fs.readFileSync(path.join(base,'embedded-dsh/chatroom-preview-source.js'),'utf8')+'\n'+fs.readFileSync(path.join(base,'embedded-dsh/workspace-shell-source.js'),'utf8')+'\nwindow.install=installWorkspaceShell');
- const stop=w.install({window:w,document:d,bridge,avatar:()=>'',cssText:fs.readFileSync(path.join(base,'embedded-dsh/workspace-shell-source.css'),'utf8'),locateSidebar:()=>({root:sidebar,slot:sidebar})});await tick();
+ let communityCalls=0;const stop=w.install({window:w,document:d,bridge,avatar:()=>'',openCommunity:async()=>{communityCalls++;},cssText:fs.readFileSync(path.join(base,'embedded-dsh/workspace-shell-source.css'),'utf8'),locateSidebar:()=>({root:sidebar,slot:sidebar})});await tick();
  const preview=d.querySelector('[data-neko-chatroom-preview]'),dock=d.querySelector('.neko-companion-dock');
  assert(preview&&!preview.hidden);assert.equal(preview.style.left,'64px');assert.equal(preview.style.height,'640px');assert.match(preview.textContent,/聊天功能尚未开放/);
  assert(d.querySelector('[data-slot="sidebar.workspaces"]').hasAttribute('inert'));assert(!dock.hasAttribute('inert'));assert(!footer.hasAttribute('inert'));
  const nav=d.querySelector('nav[data-neko-tools]'),group=d.querySelector('#native-group'),picker=d.querySelector('.neko-startup');assert(group.hasAttribute('inert'));assert(!picker.hidden);
+ d.querySelector('.neko-community-yui').click();await tick();assert.equal(communityCalls,1);assert(!picker.hidden,'community selection leaves the right-hand picker intact');
+ let socialClosed=0;d.addEventListener('neko-side-surface-close',()=>{socialClosed++;d.body.removeAttribute('data-neko-side-social-active');d.dispatchEvent(new w.CustomEvent('neko-side-surface-change',{detail:{surface:'hidden'}}));});
+ d.body.setAttribute('data-neko-side-social-active','');d.dispatchEvent(new w.CustomEvent('neko-side-surface-change',{detail:{surface:'community'}}));await tick();
+ assert(preview.hidden,'community replaces the room preview');assert(!picker.hidden,'opening community leaves the right-hand work picker intact');assert(group.hasAttribute('inert'),'covered sidebar controls remain inert');assert(!dock.hasAttribute('inert'),'companion remains accessible');assert.equal(d.querySelector('.neko-room-entry').getAttribute('aria-pressed'),'false');
+ d.querySelector('.neko-room-entry').click();await tick();assert.equal(socialClosed,1);assert(!preview.hidden,'room returns after leaving community');assert(!picker.hidden);assert.equal(d.querySelector('.dsh_centerCol_x textarea').value,'工作草稿');
+ events.length=0;
  nav.setAttribute('data-neko-tools','open');await tick();assert(!nav.closest('[inert]'),'the visible original menu and its ancestors are interactive');assert(d.querySelector('#unrelated').hasAttribute('inert'),'other controls behind the preview remain inert');assert(d.querySelector('[data-slot="sidebar.workspaces"]').hasAttribute('inert'));
  d.querySelector('#native-plugin').addEventListener('click',()=>d.dispatchEvent(new w.Event('neko-native-tools-navigate')));d.querySelector('#native-plugin').click();assert(picker.hidden,'opening a native tool yields the work area');
  nav.setAttribute('data-neko-tools','folded');await tick();assert(group.hasAttribute('inert'),'folded native tools become inert behind the preview again');
@@ -176,7 +182,7 @@ test('workspace DOM keeps three configurable filters, all sessions reset, collap
  const settingsTrigger=doc.querySelector('.neko-workspace-settings');settingsTrigger.focus();settingsTrigger.click();
  const moreSettings=doc.querySelector('.neko-workspace-more-settings');assert(moreSettings&&!moreSettings.open,'additional tools are collapsed initially');assert.match(moreSettings.querySelector('summary').textContent,/更多工具/);
  assert.match(doc.querySelector('.neko-workspace-common').textContent,/账号、隐私 \/ 高级设置/,'privacy and advanced settings remain accessible');
- let layoutRequests=0;doc.addEventListener('neko-unified-open-config',()=>layoutRequests++);doc.querySelector('.neko-workspace-layout-setting').click();assert.equal(layoutRequests,1);assert(doc.querySelector('.neko-workspace-modal').hidden);assert.equal(doc.activeElement,settingsTrigger,'close returns focus to its opener');
+ assert.equal(doc.querySelector('.neko-workspace-layout-setting'),null,'unwanted multi-column layout configuration is removed');doc.querySelector('.neko-workspace-modal__card > header button').click();assert(doc.querySelector('.neko-workspace-modal').hidden);assert.equal(doc.activeElement,settingsTrigger,'close returns focus to its opener');
  settingsTrigger.click();doc.querySelector('.neko-workspace-more-settings').open=true;
  assert.equal(doc.querySelectorAll('[data-workbench-action]').length,5,'all bottom options move to the top-left settings');
  doc.querySelector('[data-workbench-action="open-neko"]').click();await tick();assert.match(doc.querySelector('.neko-workspace-modal').textContent,/本机服务未启动/);

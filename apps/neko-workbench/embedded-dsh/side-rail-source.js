@@ -42,10 +42,10 @@ function installWorkbenchSideRail(options = {}) {
   const notice = doc.createElement('p'); notice.className = 'neko-side-rail__notice'; notice.hidden = true; notice.setAttribute('role', 'status');
   bottom.append(expand, bili, fish, account); rail.append(theme, space, bottom, notice);
   // The upstream DSH sidebar handle clamps its width like a navigation rail.
-  // The chatroom is a primary surface, so give it its own live grid divider.
+  // The left content area is a primary surface, so give it a live grid divider.
   const chatDivider = doc.createElement('div'); chatDivider.className = 'neko-chat-sidebar-divider'; chatDivider.hidden = true;
   chatDivider.tabIndex = 0; chatDivider.setAttribute('role', 'separator'); chatDivider.setAttribute('aria-orientation', 'vertical');
-  chatDivider.setAttribute('aria-label', '调整聊天室和工作区宽度');
+  chatDivider.setAttribute('aria-label', '调整左侧内容和工作区宽度');
   chatDivider.title = '拖动调整宽度 · 双击恢复 3:1 · 方向键调整';
   let preferredRatio = .75, chatFrame = null, chatCenter = null, oldChatGrid = null, chatDrag = null, lastChatGeometry = null;
   let nativeDividerKey = '';
@@ -121,7 +121,7 @@ function installWorkbenchSideRail(options = {}) {
   }
   function syncChatGrid(sidebar) {
     const found = sidebar && findChatFrame(sidebar);
-    const active = doc.body.hasAttribute('data-neko-chatroom-active') && found && !sidebar.closest('[data-sidebar-collapsed="true"]');
+    const active = (doc.body.hasAttribute('data-neko-chatroom-active') || doc.body.hasAttribute('data-neko-side-social-active')) && found && !sidebar.closest('[data-sidebar-collapsed="true"]');
     const rawColumns = found?.frame.style.gridTemplateColumns || '';
     const rest = rawColumns.match(/^\s*\S+\s+([\s\S]+)$/)?.[1];
     const geometry = active && rest ? chatGeometry(found) : null;
@@ -147,7 +147,7 @@ function installWorkbenchSideRail(options = {}) {
     chatDivider.setAttribute('aria-valuemin', String(Math.round(geometry.min / geometry.width * 100)));
     chatDivider.setAttribute('aria-valuemax', String(Math.round(geometry.max / geometry.width * 100)));
     chatDivider.setAttribute('aria-valuenow', String(Math.round(width / geometry.width * 100)));
-    chatDivider.setAttribute('aria-valuetext', `聊天室 ${Math.round(width / geometry.width * 100)}%，工作区 ${100 - Math.round(width / geometry.width * 100)}%`);
+    chatDivider.setAttribute('aria-valuetext', `左侧内容 ${Math.round(width / geometry.width * 100)}%，工作区 ${100 - Math.round(width / geometry.width * 100)}%`);
     // Existing workspace/preview and native social view code already reacts to
     // resize; the parent grid's own outer size stays fixed during divider drag.
     if (changed) win.dispatchEvent(new win.Event('resize'));
@@ -270,7 +270,7 @@ function installWorkbenchSideRail(options = {}) {
   doc.addEventListener('pointerdown', onDragStart, true); doc.addEventListener('pointerup', onDragEnd); doc.addEventListener('pointercancel', onDragEnd);
   doc.head.appendChild(style); doc.body.prepend(rail); doc.body.appendChild(chatDivider); doc.body.setAttribute('data-neko-side-rail-layout', '');
   const observer = new win.MutationObserver(schedule);
-  observer.observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-label', 'aria-expanded', 'data-sidebar-collapsed', 'data-neko-chatroom-active', 'style'] });
+  observer.observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-label', 'aria-expanded', 'data-sidebar-collapsed', 'data-neko-chatroom-active', 'data-neko-side-social-active', 'style'] });
   sync();
   return () => {
     if (stopped) return; stopped = true; observer.disconnect();

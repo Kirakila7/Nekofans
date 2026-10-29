@@ -58,3 +58,20 @@ test('width adapts on resize, keyboard and reset, and cancelled drags do not per
   f.frame.removeAttribute('data-sidebar-collapsed'); await tick(f.w); assert(!h.hidden);
   f.cleanup();
 });
+
+test('community and B站 retain the left width when replacing the chatroom', {skip:!JSDOM}, async t => {
+  const f=fixture(t); f.d.body.setAttribute('data-neko-chatroom-active',''); await tick(f.w);
+  const h=f.d.querySelector('.neko-chat-sidebar-divider');
+  pointer(f.w,h,'pointerdown',814); pointer(f.w,h,'pointermove',564); pointer(f.w,h,'pointerup',564); await tick(f.w);
+  assert.equal(f.frame.style.getPropertyValue('--neko-chat-sidebar-grid'),'500px minmax(0px, 1fr) 0px');
+  f.d.body.setAttribute('data-neko-side-social-active','community'); f.d.body.removeAttribute('data-neko-chatroom-active'); await tick(f.w);
+  assert(!h.hidden); assert.equal(f.frame.style.getPropertyValue('--neko-chat-sidebar-grid'),'500px minmax(0px, 1fr) 0px');
+  assert.match(h.getAttribute('aria-valuetext'), /左侧内容 50%.*工作区 50%/);
+  f.d.body.setAttribute('data-neko-side-social-active','bilibili'); await tick(f.w);
+  assert.equal(f.frame.style.getPropertyValue('--neko-chat-sidebar-grid'),'500px minmax(0px, 1fr) 0px');
+  f.d.body.setAttribute('data-neko-chatroom-active',''); f.d.body.removeAttribute('data-neko-side-social-active'); await tick(f.w);
+  assert(!h.hidden); assert.equal(h.getAttribute('aria-valuenow'),'50');
+  f.d.body.removeAttribute('data-neko-chatroom-active'); await tick(f.w);
+  assert(h.hidden); assert(!f.frame.hasAttribute('data-neko-chat-sidebar-grid'));
+  assert.equal(f.d.querySelector('textarea').value,'unsent draft'); f.cleanup();
+});
