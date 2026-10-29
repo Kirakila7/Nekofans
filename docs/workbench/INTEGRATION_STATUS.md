@@ -4,6 +4,8 @@ The daily artifact is built from this repository. `config/daily-release.json` is
 
 ## Pending source changes
 
+- Friend text visits from Workbench PR #7 are integrated into the native application and workbench options menus. The model settings are shared with main chat, but community OAuth must currently be configured separately using the public values documented in `docs/TEXT_VISITS.md`; the ordinary launcher does not supply them. Isolated tests pass (83 cases, plus the Electron main-entry smoke). Real two-account sessions and TRTC remain unverified.
+
 - On opening the workbench, the right-hand coding area offers a search and selection surface for known local work sessions and their projects. Opening a DSH session or starting a session for a known DSH project uses the existing native navigation; Codex remains disabled while its integration is testing. The project catalog is derived from known sessions and does not discover empty projects. A user-selected custom split dismisses the selector without replacing the saved layout. Synthetic DOM tests verify navigation and draft preservation; real-session and installed-app verification are pending.
 - A workbench-styled control in the DSH coding area exposes the existing native Plugins, Automation and More navigation, preserving native handlers and plugin contributions. DOM checks verify the adapter; real-window positioning and native service behavior still need verification.
 
@@ -55,7 +57,7 @@ The GitHub PR list was inspected on 2026-10-28. It contains 14 PRs: 12 merged, 1
 | #14 | Screen sharing and companion text feedback | Integrated with explicit destination confirmation and optional private-context consent; real screen and provider use remain unverified |
 | #15 | Fountain spawning and DBSCAN | Integrated with bounded return expiry; real desktop motion and performance remain unverified |
 
-The private Workbench main already contains the #14 and #15 integration above; this branch preserves those existing changes without newly applying the Bigfish patches. This does not merge or close source PRs in the Bigfish repository. Workbench #7 remains a separate, unmerged change.
+The private Workbench main already contains the #14 and #15 integration above; this branch preserves those existing changes without newly applying the Bigfish patches. This does not merge or close source PRs in the Bigfish repository. Workbench #7 is integrated in the present source tree.
 
 ## Build and install
 
