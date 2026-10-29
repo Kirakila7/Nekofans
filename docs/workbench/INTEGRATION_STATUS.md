@@ -1,10 +1,10 @@
-# Local test workbench 0.28.10 (source, pending installation)
+# Local test workbench 0.28.11 (source, pending installation)
 
 The daily artifact is built from this repository. `config/daily-release.json` is the version authority; every app includes `Contents/Resources/WORKBENCH_BUILD.json` with the source commit and SHA-256 of every shipped source file. Historical QA checkouts and profiles are not release inputs.
 
 ## Pending source changes
 
-- In the default chatroom view the sidebar and coding area start at a 3:1 proportion excluding the rail, subject to minimum usable widths. Dragging resizes the grid continuously; keyboard arrows, Home/End and double-click are available. The adjusted width is session-only and resets on reopening. Isolated DOM and Electron fixtures exercise responsive geometry, but actual DSH narrow layouts and native-view pointer routing still need production verification.
+- In the default chatroom view the sidebar and coding area start at a 3:1 proportion excluding the rail, subject to minimum usable widths. Dragging resizes the grid continuously; keyboard arrows, Home/End and double-click are available. The adjusted width is session-only and resets on reopening. Isolated DOM and Electron fixtures exercise responsive geometry, actual DSH compact controls were visually checked, but native-view pointer routing still needs production verification. The startup picker is anchored to the coding pane rather than the narrower native navigation; this correction still needs production verification.
 - Companion chat now distinguishes connection checks, an unconfigured provider and failures, retains unsent text and lets the user restore failed input without replacing an existing draft. Provider replies have not been tested with real credentials.
 - Startup detects conflicting native DSH profile use and offers retry or exit without terminating the other process; a second daily-workbench launch focuses the existing instance. Conflict and single-instance behavior were tested in isolated fixtures, not against a live user session.
 

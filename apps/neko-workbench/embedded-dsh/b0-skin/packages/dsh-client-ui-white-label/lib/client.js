@@ -2850,7 +2850,12 @@ function installWorkspaceShell(options = {}) {
     if (!companionInRail) setCompanionOffset(companionOffset);
     if (root) {
       const r = root.getBoundingClientRect(), strip = doc.querySelector('.neko-strip')?.getBoundingClientRect();
-      const x = Math.ceil(r.right), bottom = strip?.top > 0 ? strip.top : win.innerHeight;
+      // The native sidebar's inner navigation can be narrower than its grid
+      // track. Anchor overlays to the actual center column during the chat
+      // split so they never cover the enlarged room at startup or while dragging.
+      const chatCenter = doc.body.hasAttribute('data-neko-chatroom-active') ? doc.querySelector('[data-neko-chat-center]') : null;
+      const centerRect = chatCenter?.getBoundingClientRect();
+      const x = Math.ceil(centerRect && centerRect.width > 0 ? centerRect.left : r.right), bottom = strip?.top > 0 ? strip.top : win.innerHeight;
       Object.assign(panel.style, { left: x + 'px', top: '0px', width: Math.max(0, win.innerWidth - x) + 'px', height: Math.max(0, bottom) + 'px' });
       Object.assign(startup.style, { left: x + 'px', top: '56px', width: Math.max(0, win.innerWidth - x) + 'px', height: Math.max(0, bottom - 56) + 'px' });
     }

@@ -1,6 +1,6 @@
 {
-  "version": "0.28.10",
-  "build": "46",
+  "version": "0.28.11",
+  "build": "47",
   "appName": "N.E.K.O.工作台试用.app",
   "bundleIdentifier": "cn.neko.workbench.trial",
   "repository": "Kirakila7/neko-workbench",
