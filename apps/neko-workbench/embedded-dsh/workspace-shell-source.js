@@ -35,6 +35,48 @@ function installWorkspaceShell(options = {}) {
   const communityButton = button('', 'neko-side-rail__button neko-community neko-community-yui', () => { closeSettings(); Promise.resolve(options.openCommunity?.()).catch(showError); });
   communityButton.setAttribute('aria-label', 'Yui · N.E.K.O. 社区'); communityButton.title = 'N.E.K.O. 原生社区'; communityButton.appendChild(image(avatar('yui')));
   railTop.append(settingsButton, communityButton);
+  // The room is a local visual preview. It never touches the work session or
+  // the saved multi-pane layout. The original sidebar stays mounted behind it.
+  const previewFactory = options.createChatroomPreview || (typeof createChatroomPreview === 'function' ? createChatroomPreview : null);
+  const roomPreview = previewFactory ? own(previewFactory(doc, avatar)) : null;
+  let roomActive = !!roomPreview, initialRoomResolved = false;
+  const roomInert = new Set();
+  const roomButton = roomPreview && button('', 'neko-side-rail__button neko-room-entry', () => setRoomActive(true));
+  const workButton = roomPreview && button('', 'neko-side-rail__button neko-room-workspace', () => setRoomActive(false));
+  if (roomPreview) {
+    roomPreview.hidden = true;
+    for (const [control, label] of [[roomButton, '聊天室'], [workButton, '工作区']]) { control.title = label; control.setAttribute('aria-label', label); }
+    for (const [control, path] of [[roomButton, 'M4 5.5h16v11H9l-4 3v-3H4z M8 9h8 M8 12h5'], [workButton, 'M4 6h6l2 2h8v11H4z M4 6V4.5h6l2 1.5']]) {
+      const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg'), shape = doc.createElementNS('http://www.w3.org/2000/svg', 'path');
+      svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true');
+      for (const [key, value] of Object.entries({ d:path, fill:'none', stroke:'currentColor', 'stroke-width':'1.7', 'stroke-linecap':'round', 'stroke-linejoin':'round' })) shape.setAttribute(key, value);
+      svg.appendChild(shape); control.appendChild(svg);
+    }
+    railTop.prepend(roomButton, workButton); doc.body.appendChild(roomPreview);
+    doc.body.setAttribute('data-neko-chatroom-active', '');
+  }
+  function releaseRoomInert() { for (const node of roomInert) if (node.hasAttribute('inert')) node.removeAttribute('inert'); roomInert.clear(); }
+  function protectRoomFooter(sidebar, account) {
+    // Never inert the original main companion/account footer. Mark only the
+    // branches that are wholly behind the preview and restore our marks later.
+    function visit(node) {
+      if (node === dock || node === account || node.hasAttribute('data-neko-companion-footer')) return;
+      if (node.contains(dock) || account && node.contains(account)) { for (const child of node.children) visit(child); return; }
+      if (!node.hasAttribute('inert')) { node.setAttribute('inert', ''); roomInert.add(node); }
+    }
+    for (const child of sidebar.children) visit(child);
+  }
+  function setRoomActive(active) {
+    if (!roomPreview || disposed) return;
+    roomActive = !!active;
+    if (roomActive) { doc.body.setAttribute('data-neko-chatroom-active', ''); doc.querySelector('.neko-side-rail__expand:not([hidden])')?.click(); }
+    else { doc.body.removeAttribute('data-neko-chatroom-active'); roomPreview.hidden = true; releaseRoomInert(); }
+    roomButton.setAttribute('aria-pressed', String(roomActive)); workButton.setAttribute('aria-pressed', String(!roomActive));
+    doc.dispatchEvent(new win.Event('neko-chatroom-mode-change'));
+    schedule();
+  }
+  function showWorkspaceFromLayout() { setRoomActive(false); }
+  if (roomPreview) { roomButton.setAttribute('aria-pressed', 'true'); workButton.setAttribute('aria-pressed', 'false'); doc.addEventListener('neko-chatroom-show-workspace', showWorkspaceFromLayout); }
   const seats = own(el('div', 'neko-custom-seats')); seats.setAttribute('role', 'group'); seats.setAttribute('aria-label', '自定义工作 agent');
   const sessionBrowser = own(el('section', 'neko-session-browser')); sessionBrowser.setAttribute('aria-label', '全部工作会话');
   const listHeader = el('div', 'neko-session-browser__header');
@@ -572,6 +614,34 @@ function installWorkspaceShell(options = {}) {
     const account = doc.querySelector('[data-slot="settings.launcher"]');
     if (account?.parentElement) markNative(account.parentElement, 'data-neko-companion-footer');
     if (account && (dock.parentNode !== account.parentNode || dock.nextSibling !== account)) account.before(dock);
+    if (roomPreview && roomActive) {
+      const sidebar = doc.querySelector('[data-slot="sidebar"]');
+      if (sidebar && !initialRoomResolved) {
+        const collapsed = !!sidebar.closest('[data-sidebar-collapsed="true"]');
+        const expand = doc.querySelector('.neko-side-rail__expand:not([hidden])');
+        if (!collapsed || expand) { initialRoomResolved = true; if (collapsed) expand.click(); }
+      }
+      let track = sidebar;
+      while (track?.parentElement && track.parentElement !== doc.body) {
+        const next = track.nextElementSibling;
+        if (next && typeof next.className === 'string' && /(?:^|\s)[^\s]*_centerCol(?:[_-][^\s]+)?(?:\s|$)/.test(next.className)) break;
+        track = track.parentElement;
+      }
+      const slotRect = sidebar?.getBoundingClientRect();
+      const side = slotRect?.width > 0 && slotRect?.height > 0 ? slotRect : track?.getBoundingClientRect();
+      let bottom = side?.bottom;
+      for (const node of [account?.parentElement, dock, account]) {
+        const r = node?.getBoundingClientRect();
+        if (r && r.height > 0 && r.top > (side?.top || 0) + 60) bottom = Math.min(bottom, r.top);
+      }
+      const visible = !!side && side.width >= 80 && bottom - side.top >= 80 && !sidebar?.closest('[data-sidebar-collapsed="true"]');
+      if (visible) {
+        const values = { left: `${Math.round(side.left)}px`, top: `${Math.round(side.top)}px`, width: `${Math.round(side.width)}px`, height: `${Math.round(bottom - side.top)}px` };
+        for (const [key, value] of Object.entries(values)) if (roomPreview.style[key] !== value) roomPreview.style[key] = value;
+        protectRoomFooter(sidebar, account);
+      } else releaseRoomInert();
+      if (roomPreview.hidden === visible) roomPreview.hidden = !visible;
+    }
     watchDockAncestors();
     syncCompanionPlacement(rail);
     const bounds = companionInRail ? railBounds() : null, size = bounds ? `${bounds.space.width}:${bounds.space.height}` : '';
@@ -621,6 +691,7 @@ function installWorkspaceShell(options = {}) {
     if (disposed) return; disposed = true; motion?.removeEventListener?.('change', syncCharacter); motion?.removeEventListener?.('change', syncRailWalking); doc.removeEventListener('visibilitychange', syncCharacter); doc.removeEventListener('visibilitychange', syncRailWalking); stopRailWalking(); if (railClickTimer !== null) win.clearTimeout(railClickTimer); if (railSpace) { if (railSpaceBeforeAria === null) railSpace.removeAttribute('aria-hidden'); else railSpace.setAttribute('aria-hidden', railSpaceBeforeAria); } if (characterVideo) { characterVideo.pause(); characterVideo.removeAttribute('src'); characterVideo.load(); } observer.disconnect(); ancestorObserver.disconnect(); intersection?.disconnect(); resize?.disconnect(); win.clearInterval(interval);
     win.removeEventListener('resize', place); doc.removeEventListener('scroll', schedule, true); doc.removeEventListener('click', nativeNew, true); doc.removeEventListener('keydown', escape, true);
     doc.removeEventListener('pointerdown', dismissCompanionMenu, true);
+    if (roomPreview) { doc.removeEventListener('neko-chatroom-show-workspace', showWorkspaceFromLayout); doc.body.removeAttribute('data-neko-chatroom-active'); releaseRoomInert(); doc.dispatchEvent(new win.Event('neko-chatroom-mode-change')); }
     for (const release of releases) if (typeof release === 'function') release();
     for (const [node, attrs] of nativeMarks) for (const [name, before] of attrs) { if (node.getAttribute(name) === '') { if (before === null) node.removeAttribute(name); else node.setAttribute(name, before); } }
     doc.body.removeAttribute('data-neko-workspace-shell'); doc.body.removeAttribute('data-neko-office-mode');

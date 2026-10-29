@@ -40,6 +40,19 @@ function fixture(t) {
 }
 async function openConfig(f) { f.d.querySelector('.neko-layout-entry').click(); await sleep(); }
 function select(f, type, value) { f.d.querySelector(`[data-${type}="${value}"]`).click(); }
+test('chatroom temporarily hides only side native view and restores saved placement', {skip:!JSDOM}, async t=>{
+  const f=fixture(t); await sleep(); await openConfig(f); select(f,'target','side'); select(f,'content','community'); await sleep();
+  select(f,'target','right'); select(f,'content','bilibili'); await sleep(); f.d.querySelector('.neko-unified-config .close').click();
+  await waitFor(()=>f.calls.some(x=>x.action==='open'&&x.slot==='side')&&f.calls.some(x=>x.action==='open'&&x.slot==='right'),'native side and right views');
+  const before={...f.saved}, rightHides=()=>f.calls.filter(x=>x.action==='hide'&&x.slot==='right').length;
+  const beforeRightHides=rightHides(); f.d.body.setAttribute('data-neko-chatroom-active',''); f.d.dispatchEvent(new f.w.Event('neko-chatroom-mode-change'));
+  await waitFor(()=>f.calls.some(x=>x.action==='hide'&&x.slot==='side'),'chatroom hides side view');
+  assert.equal(rightHides(),beforeRightHides); assert.deepEqual(f.saved,before,'preview does not alter persisted layout');
+  const opens=f.calls.filter(x=>x.action==='open'&&x.slot==='side').length;
+  f.d.body.removeAttribute('data-neko-chatroom-active'); f.d.dispatchEvent(new f.w.Event('neko-chatroom-mode-change'));
+  await waitFor(()=>f.calls.filter(x=>x.action==='open'&&x.slot==='side').length>opens,'side view restored');
+  assert.equal(rightHides(),beforeRightHides); assert.deepEqual(f.saved,before); f.cleanup();
+});
 test('disabled-by-default layout preserves native DSH draft and configures real isolated slots', {skip:!JSDOM}, async t=>{
   const f=fixture(t);await sleep();assert.equal(f.saved.enabled,false);assert.equal(f.calls.filter(x=>x.action==='open').length,0);
   await openConfig(f); select(f,'target','side');select(f,'content','community');await sleep();

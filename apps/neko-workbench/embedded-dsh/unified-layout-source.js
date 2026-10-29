@@ -210,6 +210,9 @@ function installUnifiedLayout(options = {}) {
   }
   function chooseFor(slot, value, raise = false) { target = slot; return choose(value, raise); }
   function choose(value, raise = false) {
+    // Choosing a side-pane destination is an explicit request to leave the
+    // temporary chatroom preview and reveal that side pane.
+    if (target === 'side' && doc.body.hasAttribute('data-neko-chatroom-active')) doc.dispatchEvent(new win.Event('neko-chatroom-show-workspace'));
     const next = { ...layout, enabled: true }, requested = target === 'side' && value === 'coding' ? 'workspace' : value;
     if (requested !== 'workspace' && requested !== null) {
       for (const other of ['side', 'left', 'right']) if (other !== target && next[other] === requested) {
@@ -354,7 +357,7 @@ function installUnifiedLayout(options = {}) {
     for (const slot of ['side', 'left', 'right']) {
       const value = layout[slot];
       const site = value === 'community' || value === 'bilibili' ? value : null;
-      if (suspended) { panels[slot].node.hidden = true; closeView(slot); }
+      if (suspended || slot === 'side' && doc.body.hasAttribute('data-neko-chatroom-active')) { panels[slot].node.hidden = true; closeView(slot); }
       else placePanel(slot, rects[slot], site);
     }
   }
@@ -451,6 +454,11 @@ function installUnifiedLayout(options = {}) {
     detail.promise = chooseFor(destination, 'community', true);
   }
   doc.addEventListener('neko-unified-open-community', visitCommunity);
+  function roomModeChanged() {
+    if (doc.body.hasAttribute('data-neko-chatroom-active')) { panels.side.node.hidden = true; closeView('side'); }
+    schedule();
+  }
+  doc.addEventListener('neko-chatroom-mode-change', roomModeChanged);
   if (typeof bridge.subscribeCommunity === 'function') unsubscribe = bridge.subscribeCommunity(state => {
     if (!state?.slot || !panels[state.slot] || placements.get(state.slot) !== state.site) return;
     if (state.status === 'hidden') {
@@ -480,6 +488,7 @@ function installUnifiedLayout(options = {}) {
   return () => {
     disposed = true; revision++; hideAll(); clearCoding(); doc.body.removeAttribute('data-neko-unified-enabled');
     observer.disconnect(); overlayObserver.disconnect(); resize?.disconnect(); win.removeEventListener('resize', schedule); doc.removeEventListener('scroll', schedule, true); doc.removeEventListener('click', shortcut, true); doc.removeEventListener('neko-unified-open-community', visitCommunity); doc.removeEventListener('keydown', escapeConfig);
+    doc.removeEventListener('neko-chatroom-mode-change', roomModeChanged);
     doc.removeEventListener('visibilitychange', visibilityChanged); win.removeEventListener('focus', visibilityChanged); if (recoveryTimer) win.clearTimeout(recoveryTimer); if (noticeTimer) win.clearTimeout(noticeTimer);
     for (const p of Object.values(panels)) if (p.noteTimer) win.clearTimeout(p.noteTimer);
     if (frame) (win.cancelAnimationFrame || win.clearTimeout)(frame); if (typeof unsubscribe === 'function') unsubscribe();

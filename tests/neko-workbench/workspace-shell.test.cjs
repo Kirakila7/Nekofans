@@ -83,6 +83,23 @@ test('native catalog errors stay sanitized and native-default tasks can still ru
  await f.c.send({cwd:f.dir,message:'use native config'});const turn=f.messages().find(m=>m.method==='turn/start');assert(!('model'in turn.params));assert(!('effort'in turn.params));
 });
 let JSDOM;try{({JSDOM}=require(path.join(process.env.NEKO_DOM_DEPS||'/private/tmp/neko-sidebar-dom-20261026','node_modules/jsdom')));}catch{}
+test('chatroom opens in sidebar by default and workspace switch preserves footer and drafts',{skip:!JSDOM},async t=>{
+ const dom=new JSDOM('<body><aside data-neko-side-rail><div class="neko-side-rail__theme"></div><div class="neko-side-rail__space"></div></aside><div id="frame"><div id="track"><aside data-slot="sidebar"><div data-neko-seat-mount></div><div data-slot="sidebar.workspaces"></div><div id="footer"><div data-slot="settings.launcher"></div></div></aside></div><div class="dsh_centerCol_x"><textarea>工作草稿</textarea></div></div></body>',{runScripts:'outside-only',pretendToBeVisual:true});t.after(()=>dom.window.close());
+ const w=dom.window,d=w.document,sidebar=d.querySelector('[data-slot="sidebar"]'), footer=d.querySelector('#footer');
+ sidebar.getBoundingClientRect=()=>({left:64,top:0,right:304,bottom:800,width:240,height:800});
+ footer.getBoundingClientRect=()=>({left:64,top:640,right:304,bottom:800,width:240,height:160});
+ const store=createWorkspaceLayout(path.join(temp(t),'layout.json')),events=[];
+ const bridge={action:async()=>({}),getState:async()=>({workspaceRoot:'/p',workspaceRevision:0,companion:{ready:true,messages:[]}}),companion:async()=>({}),workspace:async r=>{if(r.action==='state')return store.get();if(r.action==='codex-state')return {items:[],approvals:[]};if(r.action==='catalog')return {sessions:[],projects:[],providers:{}};return null;}};
+ d.addEventListener('neko-chatroom-mode-change',()=>events.push(d.body.hasAttribute('data-neko-chatroom-active')));
+ w.eval(fs.readFileSync(path.join(base,'embedded-dsh/chatroom-preview-source.js'),'utf8')+'\n'+fs.readFileSync(path.join(base,'embedded-dsh/workspace-shell-source.js'),'utf8')+'\nwindow.install=installWorkspaceShell');
+ const stop=w.install({window:w,document:d,bridge,avatar:()=>'',cssText:fs.readFileSync(path.join(base,'embedded-dsh/workspace-shell-source.css'),'utf8'),locateSidebar:()=>({root:sidebar,slot:sidebar})});await tick();
+ const preview=d.querySelector('[data-neko-chatroom-preview]'),dock=d.querySelector('.neko-companion-dock');
+ assert(preview&&!preview.hidden);assert.equal(preview.style.left,'64px');assert.equal(preview.style.height,'640px');assert.match(preview.textContent,/聊天功能尚未开放/);
+ assert(d.querySelector('[data-slot="sidebar.workspaces"]').hasAttribute('inert'));assert(!dock.hasAttribute('inert'));assert(!footer.hasAttribute('inert'));
+ d.querySelector('.neko-room-workspace').click();await tick();assert(preview.hidden);assert(!d.querySelector('[data-slot="sidebar.workspaces"]').hasAttribute('inert'));assert.equal(d.querySelector('.dsh_centerCol_x textarea').value,'工作草稿');assert.deepEqual(events,[false]);
+ d.querySelector('.neko-room-entry').click();await tick();assert(!preview.hidden);assert.deepEqual(events,[false,true]);
+ stop();assert(!d.body.hasAttribute('data-neko-chatroom-active'));assert(!d.querySelector('[data-slot="sidebar.workspaces"]').hasAttribute('inert'));assert(!d.querySelector('[data-neko-chatroom-preview]'));
+});
 test('workspace DOM keeps three configurable filters, all sessions reset, collapsible private chat and native UI restoration',{skip:!JSDOM},async t=>{
  const dom=new JSDOM('<body><aside data-neko-side-rail><div class="neko-side-rail__theme" aria-hidden="true"></div></aside><div data-slot="sidebar"><button data-neko-new-session="plus">+</button><div class="neko-mode-switch">工作区 休闲区</div><div data-neko-seat-mount></div><div data-slot="sidebar.workspaces">native sessions</div><div data-slot="settings.launcher"></div></div><main><textarea>native draft</textarea></main></body>',{runScripts:'outside-only'});t.after(()=>dom.window.close());
  const {window:w}=dom,doc=w.document; const boundsRoot=doc.querySelector('[data-slot="sidebar"]'); boundsRoot.getBoundingClientRect=()=>({right:300}); const store=createWorkspaceLayout(path.join(temp(t),'layout.json'));const calls=[];let subscriber,releaseAction;const state={workspaceRoot:'/p',workspaceRevision:0,companion:{name:'主agent',ready:true,messages:[{role:'assistant',text:'实际历史'}]}};

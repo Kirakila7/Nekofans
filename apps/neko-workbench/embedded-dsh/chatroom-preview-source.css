@@ -1,0 +1,24 @@
+.neko-chatroom-preview { min-width:0; padding:14px 12px 18px; color:var(--nws-text,#263750); font:13px/1.45 system-ui,sans-serif; }
+.neko-chatroom-preview[hidden] { display:none !important; }
+.neko-chatroom-preview__heading { display:flex; align-items:center; gap:8px; }
+.neko-chatroom-preview__heading h2 { margin:0; font-size:18px; line-height:1.3; letter-spacing:.02em; }
+.neko-chatroom-preview__badge { padding:2px 7px; color:#6486a8; background:#eaf2fb; border:1px solid #d2e3f2; border-radius:999px; font-size:10px; white-space:nowrap; }
+.neko-chatroom-preview__intro { margin:5px 0 14px; color:var(--nws-muted,#71879d); font-size:12px; }
+.neko-chatroom-preview__search { width:100%; box-sizing:border-box; padding:8px 10px; border:1px solid var(--nws-border,#cbdbee); border-radius:8px; background:#f6f9fd99; color:var(--nws-muted,#71879d); font:inherit; opacity:.78; cursor:not-allowed; }
+.neko-chatroom-preview__search::placeholder { color:#93a5b9; }
+.neko-chatroom-preview__label { display:flex; align-items:center; justify-content:space-between; margin:20px 2px 8px; color:#536b84; font-size:12px; font-weight:600; }
+.neko-chatroom-preview__label span { color:#96a8ba; font-size:10px; font-weight:400; }
+.neko-chatroom-preview__rooms { display:grid; gap:4px; }
+.neko-chatroom-preview__room { display:flex; align-items:center; gap:10px; padding:9px 8px; border:1px solid transparent; border-radius:10px; }
+.neko-chatroom-preview__room:first-child { background:#ffffff80; border-color:#dce7f3; }
+.neko-chatroom-preview__room-icon { width:34px; height:34px; flex:none; display:grid; place-items:center; border-radius:11px; color:#6d9bc5; background:#e3f1fc; font-size:19px; }
+.neko-chatroom-preview__room-icon.is-home { color:#a183be; background:#f0eafb; }
+.neko-chatroom-preview__room-copy { min-width:0; display:grid; gap:2px; }
+.neko-chatroom-preview__room-copy strong { font-size:13px; font-weight:600; }
+.neko-chatroom-preview__room-copy small { color:#91a3b7; font-size:11px; }
+.neko-chatroom-preview__empty { display:grid; justify-items:center; text-align:center; margin:20px 0 0; padding:16px 12px; border:1px dashed #cbddef; border-radius:13px; background:#f5faff91; }
+.neko-chatroom-preview__illustration { position:relative; display:grid; place-items:center; width:64px; height:58px; margin-bottom:7px; }
+.neko-chatroom-preview__illustration img { display:block; width:60px; height:58px; object-fit:contain; }
+.neko-chatroom-preview__illustration span { position:absolute; right:0; top:2px; color:#90bfe3; font-size:18px; }
+.neko-chatroom-preview__empty strong { color:#647e98; font-size:12px; }
+.neko-chatroom-preview__empty p { max-width:190px; margin:5px 0 0; color:#96a7b8; font-size:11px; line-height:1.6; }
