@@ -79,6 +79,7 @@ window.__ModuleLoader__.load({
 
     /** Native actions (allowlist shared with the preload bridge). */
     const ACTION_NAMES = Object.freeze([
+      'screen-share',
       'neko-settings',
       'open-neko',
       'task-notes',
@@ -90,6 +91,7 @@ window.__ModuleLoader__.load({
     ])
     const ACTION_GROUPS = Object.freeze([
       Object.freeze([
+        ['screen-share', '屏幕陪伴'],
         ['neko-settings', 'N.E.K.O. 聊天设置'],
         ['open-neko', '打开 N.E.K.O.'],
         ['task-notes', '任务备注'],
@@ -440,6 +442,7 @@ window.__ModuleLoader__.load({
         }
         setPending({ action: name })
         try {
+          if (name === 'screen-share') currentCommunityPane?.hide()
           // The community stays in our coding pane. Older native bridges must
           // never silently fall back to opening a separate window.
           const result = isSocial
@@ -1544,7 +1547,8 @@ function installUnifiedLayout(options = {}) {
   }
   let layout = { enabled: false, side: 'workspace', left: 'coding', right: null, ratio: 0.5 };
   let disposed = false, frame = 0, revision = 0, requestId = 0, codingNode = null, codingInert = false, suspended = false, drag = null, draggedContent = null;
-  let scheduled = false, placements = new Map(), unsubscribe = null, lastRects = {}, openTickets = {}, recoveryTimer = null;
+  let scheduled = false, placements = new Map(), unsubscribe = null, unsubscribeAccount = null, lastRects = {}, openTickets = {}, recoveryTimer = null;
+  let accountPending = false, accountRevision = 0;
   const panels = {};
   function makePanel(slot) {
     const node = el('section', 'neko-unified-panel'); node.hidden = true; node.dataset.nekoUnifiedSlot = slot;
@@ -1556,11 +1560,13 @@ function installUnifiedLayout(options = {}) {
     const reload = button('刷新', '', () => action(slot, 'reload'));
     const play = button('官方播放', '', () => action(slot, 'play-official'));
     const share = button('分享', '', () => action(slot, 'copy-video-link'));
+    const account = button('连接桌面身份', 'neko-unified-account', () => accountAction(slot));
+    account.title = '复用本机 N.E.K.O. 社区账号；未登录时在系统浏览器完成官方授权';
     const leave = button('返回工作区', '', () => chooseFor(slot, 'coding'));
     back.setAttribute('aria-label', '返回上一页'); reload.setAttribute('aria-label', '刷新当前页面');
-    play.hidden = share.hidden = true; header.append(name, back, reload, play, share, leave);
+    play.hidden = share.hidden = account.hidden = true; header.append(name, back, reload, play, share, account, leave);
     const status = el('p', 'status'); status.setAttribute('role', 'status'); node.append(header, status); doc.body.appendChild(node);
-    panels[slot] = { node, header, name, titleText, note, back, reload, play, share, leave, status, site: null, noteTimer: null };
+    panels[slot] = { node, header, name, titleText, note, back, reload, play, share, account, leave, status, site: null, noteTimer: null };
   }
   for (const slot of ['side', 'left', 'right']) makePanel(slot);
   // kind: 'loading' | 'error' | 'ok'. 'ok' notes clear themselves; load and
@@ -1581,6 +1587,32 @@ function installUnifiedLayout(options = {}) {
       if (actionName === 'copy-video-link') panelNote(slot, result?.ok ? '链接已复制' : '复制失败，请重试', result?.ok ? 'ok' : 'error');
       else if (actionName === 'reload' && panels[slot].node.dataset.state === 'loading') panelNote(slot, '');
     }).catch(() => { if (!disposed) panelNote(slot, actionName === 'copy-video-link' ? '复制失败，请重试' : '操作未完成，请重试', 'error'); });
+  }
+  function paintAccount(state) {
+    if (disposed || !state || typeof state.message !== 'string') return;
+    accountPending = ['checking', 'connecting', 'authorizing'].includes(state.status);
+    for (const slot of ['side', 'left', 'right']) {
+      const p = panels[slot];
+      if (placements.get(slot) !== 'community' || p.node.hidden) continue;
+      p.account.textContent = accountPending ? '取消连接' : '连接桌面身份';
+      p.account.disabled = false;
+      panelNote(slot, state.message, state.status === 'error' ? 'error' : accountPending ? 'loading' : 'ok');
+    }
+  }
+  function accountAction(slot) {
+    if (disposed || placements.get(slot) !== 'community' || panels[slot].node.hidden || typeof bridge.communityAccount !== 'function') return;
+    const ticket = ++accountRevision;
+    if (accountPending) {
+      accountPending = false;
+      void Promise.resolve(bridge.communityAccount('cancel')).then(state => {
+        if (!disposed && ticket === accountRevision) paintAccount(state);
+      }).catch(() => { if (!disposed && ticket === accountRevision) panelNote(slot, '取消连接未完成，请重试', 'error'); });
+      return;
+    }
+    paintAccount({ status:'checking', message:'正在检查桌面社区连接…' });
+    void Promise.resolve(bridge.communityAccount('connect')).then(state => {
+      if (!disposed && ticket === accountRevision && placements.get(slot) === 'community') paintAccount(state);
+    }).catch(() => { if (!disposed && ticket === accountRevision && placements.get(slot) === 'community') paintAccount({ status:'error', message:'桌面身份连接未完成，请重试；仍可直接浏览社区。' }); });
   }
   function showNotice(text) {
     if (disposed) return;
@@ -1726,11 +1758,13 @@ function installUnifiedLayout(options = {}) {
     if (!visible && !node.hasAttribute('inert')) node.setAttribute('inert', ''); else if (visible && !codingInert && node.hasAttribute('inert')) node.removeAttribute('inert');
   }
   function hideAll() {
+    if ([...placements.values()].includes('community')) { ++accountRevision; accountPending = false; }
     for (const [slot] of placements) void Promise.resolve(bridge.community({ action: 'hide', slot })).catch(() => {});
     placements.clear(); lastRects = {}; openTickets = {};
   }
   function closeView(slot) {
     if (!placements.has(slot)) return;
+    if (placements.get(slot) === 'community') { ++accountRevision; accountPending = false; panels[slot].account.textContent = '连接桌面身份'; }
     placements.delete(slot); delete lastRects[slot]; delete openTickets[slot];
     void Promise.resolve(bridge.community({ action: 'hide', slot })).catch(() => {});
   }
@@ -1740,6 +1774,7 @@ function installUnifiedLayout(options = {}) {
     const title = site === 'community' ? 'N.E.K.O. 社区' : 'B站视频';
     if (p.titleText.textContent !== title) { p.titleText.textContent = title; p.node.setAttribute('aria-label', `${SLOT_NAMES[slot]}：${title}`); }
     p.play.hidden = p.share.hidden = site !== 'bilibili';
+    p.account.hidden = site !== 'community' || typeof bridge.communityAccount !== 'function';
     const boundsStyle = { left: `${Math.round(rect.x)}px`, top: `${Math.round(rect.y)}px`, width: `${Math.round(rect.width)}px`, height: `${Math.round(rect.height)}px` };
     for (const [key, value] of Object.entries(boundsStyle)) if (p.node.style[key] !== value) p.node.style[key] = value;
     const bar = Math.max(42, Math.ceil(p.header.getBoundingClientRect().height));
@@ -1749,6 +1784,7 @@ function installUnifiedLayout(options = {}) {
     if (current !== site) {
       closeView(slot); placements.set(slot, site); panelNote(slot, `正在加载${title}…`, 'loading');
       p.play.disabled = p.share.disabled = true; p.site = site;
+      p.account.textContent = '连接桌面身份'; p.account.disabled = site === 'community';
       const ticket = ++requestId; openTickets[slot] = ticket;
       void Promise.resolve(bridge.community({ action: 'open', site, slot, bounds: targetBounds, requestId: ticket })).catch(() => {
         if (!disposed && placements.get(slot) === site && openTickets[slot] === ticket) panelNote(slot, '页面未能打开，请检查网络后点「刷新」', 'error');
@@ -1928,12 +1964,13 @@ function installUnifiedLayout(options = {}) {
     }
     const p = panels[state.slot];
     if (state.status === 'loading') panelNote(state.slot, '正在加载…', 'loading');
-    if (state.status === 'ready') panelNote(state.slot, '');
+    if (state.status === 'ready') { panelNote(state.slot, ''); if (state.site === 'community') p.account.disabled = false; }
     if (state.status === 'error') panelNote(state.slot, '页面未能打开，请检查网络后点「刷新」', 'error');
     if (typeof state.canGoBack === 'boolean') p.back.disabled = !state.canGoBack;
     if (typeof state.canShare === 'boolean') p.share.disabled = !state.canShare;
     if (typeof state.canPlayOfficial === 'boolean') p.play.disabled = !state.canPlayOfficial || !!state.isOfficialPlayer;
   });
+  if (typeof bridge.subscribeCommunityAccount === 'function') unsubscribeAccount = bridge.subscribeCommunityAccount(paintAccount);
   Promise.resolve(bridge.workspace({ action:'pane-layout' })).then(saved => {
     if (disposed || revision) return;
     layout = confirmed = clean(saved); renderConfig();
@@ -1947,7 +1984,7 @@ function installUnifiedLayout(options = {}) {
     doc.removeEventListener('neko-chatroom-mode-change', roomModeChanged);
     doc.removeEventListener('visibilitychange', visibilityChanged); win.removeEventListener('focus', visibilityChanged); if (recoveryTimer) win.clearTimeout(recoveryTimer); if (noticeTimer) win.clearTimeout(noticeTimer);
     for (const p of Object.values(panels)) if (p.noteTimer) win.clearTimeout(p.noteTimer);
-    if (frame) (win.cancelAnimationFrame || win.clearTimeout)(frame); if (typeof unsubscribe === 'function') unsubscribe();
+    if (frame) (win.cancelAnimationFrame || win.clearTimeout)(frame); if (typeof unsubscribe === 'function') unsubscribe(); if (typeof unsubscribeAccount === 'function') unsubscribeAccount();
     trigger.remove(); config.remove(); mobile.remove(); divider.remove(); notice.remove(); for (const p of Object.values(panels)) p.node.remove(); for (const { zone } of Object.values(drops)) zone.remove(); style.remove();
   };
 }
@@ -3791,7 +3828,17 @@ function installNekoAccountHabitat(ctx, options) {
       shareFeedback.setAttribute('aria-live', 'polite')
       const officialPlayer = doc.createElement('button')
       officialPlayer.type = 'button'; officialPlayer.textContent = '官方播放'; officialPlayer.hidden = true; officialPlayer.disabled = true
-      toolbar.append(back, pageBack, heading, reload, immersion, shareFeedback, share, officialPlayer)
+      const accountBar = doc.createElement('div')
+      accountBar.className = 'neko-community-pane__account'
+      const accountMessage = doc.createElement('span')
+      accountMessage.setAttribute('role', 'status')
+      accountMessage.textContent = '社区网页可独立登录；连接桌面身份可复用本体角色。'
+      const accountButton = doc.createElement('button')
+      accountButton.type = 'button'; accountButton.textContent = '连接桌面身份'
+      accountButton.title = '复用本机 N.E.K.O. 社区账号；未登录时在系统浏览器完成官方授权'
+      accountBar.append(accountMessage, accountButton)
+      accountBar.hidden = true
+      toolbar.append(back, pageBack, heading, reload, immersion, shareFeedback, share, officialPlayer, accountBar)
       const status = doc.createElement('p')
       status.className = 'neko-community-pane__status'
       status.setAttribute('role', 'status')
@@ -3806,6 +3853,31 @@ function installNekoAccountHabitat(ctx, options) {
       const sizes = typeof win.ResizeObserver === 'function' ? new win.ResizeObserver(schedule) : null
       const call = (request) => Promise.resolve().then(() => bridge.community(request))
       const hideNative = (requestId) => { void call({ action: 'hide', requestId }).catch(() => {}) }
+      let accountPending = false, accountRevision = 0
+      function paintAccount(state) {
+        if (!active || disposed || currentSite !== 'community' || !state || typeof state.message !== 'string') return
+        accountMessage.textContent = state.message
+        accountMessage.title = state.message
+        accountPending = ['checking', 'connecting', 'authorizing'].includes(state.status)
+        accountButton.textContent = accountPending ? '取消连接' : '连接桌面身份'
+        schedule()
+      }
+      function cancelAccount() {
+        accountRevision++; accountPending = false; accountButton.textContent = '连接桌面身份'
+        accountMessage.textContent = '社区网页可独立登录；连接桌面身份可复用本体角色。'
+        if (typeof bridge.communityAccount === 'function') void Promise.resolve(bridge.communityAccount('cancel')).catch(() => {})
+      }
+      const onAccount = () => {
+        if (!active || disposed || currentSite !== 'community' || accountButton.disabled) return
+        if (accountPending) { cancelAccount(); return }
+        const ticket = ++accountRevision
+        paintAccount({ status: 'checking', message: '正在检查桌面社区连接…' })
+        void Promise.resolve(bridge.communityAccount('connect')).then(state => {
+          if (active && !disposed && currentSite === 'community' && ticket === accountRevision) paintAccount(state)
+        }).catch(() => {
+          if (active && !disposed && currentSite === 'community' && ticket === accountRevision) paintAccount({ status: 'error', message: '桌面身份连接未完成，请重试；仍可直接浏览社区。' })
+        })
+      }
       function refreshShare() {
         share.hidden = currentSite !== 'bilibili'
         share.disabled = !active || currentSite !== 'bilibili' || !canShare || sharePending
@@ -3904,6 +3976,7 @@ function installNekoAccountHabitat(ctx, options) {
       }
       async function show(action = 'open', site = currentSite, { home = false } = {}) {
         if (disposed) throw new Error('社区内容区已关闭')
+        if (active && currentSite === 'community' && (action === 'reload' || (action === 'open' && site === 'bilibili'))) cancelAccount()
         if (action === 'open' && site !== 'bilibili') setImmersive(false)
         const bounds = place()
         if (!bounds) throw new Error('工作台内容区尚未就绪，请稍后重试')
@@ -3917,6 +3990,8 @@ function installNekoAccountHabitat(ctx, options) {
           openRequestId = openRequestId >= Number.MAX_SAFE_INTEGER ? 1 : openRequestId + 1
         }
         immersion.hidden = currentSite !== 'bilibili'
+        accountBar.hidden = currentSite !== 'community' || typeof bridge.communityAccount !== 'function'
+        accountButton.disabled = !accountPending
         resetShare()
         resetOfficialPlayer()
         const name = currentSite === 'bilibili' ? 'B站' : 'N.E.K.O. 社区'
@@ -3944,11 +4019,12 @@ function installNekoAccountHabitat(ctx, options) {
           throw error
         } finally {
           if (cancelWaiting === releaseWait) cancelWaiting = null
-          if (ticket === revision) reload.disabled = false
+          if (ticket === revision) { reload.disabled = false; accountButton.disabled = false }
         }
       }
       function hide({ focus = false } = {}) {
         if (!active || disposed) return
+        if (currentSite === 'community') cancelAccount()
         setImmersive(false)
         active = false; revision++; panel.hidden = true; reload.disabled = false; mark(false)
         resetShare(); resetOfficialPlayer()
@@ -4014,7 +4090,7 @@ function installNekoAccountHabitat(ctx, options) {
         if (state?.requestId !== undefined && state.requestId !== openRequestId) return
         const name = currentSite === 'bilibili' ? 'B站' : 'N.E.K.O. 社区'
         if (typeof state?.canGoBack === 'boolean') pageBack.disabled = !state.canGoBack
-        if (state?.status === 'loading') { resetShare(); canPlayOfficial = false; refreshOfficialPlayer(); status.textContent = `正在加载 ${name}…`; reload.disabled = true }
+        if (state?.status === 'loading') { resetShare(); canPlayOfficial = false; refreshOfficialPlayer(); status.textContent = `正在加载 ${name}…`; reload.disabled = true; if (currentSite === 'community') accountButton.disabled = !accountPending }
         if (state?.status !== 'loading' && typeof state?.canShare === 'boolean') {
           canShare = state.canShare
           if (!canShare) shareFeedback.textContent = ''
@@ -4025,10 +4101,11 @@ function installNekoAccountHabitat(ctx, options) {
           if (typeof state?.isOfficialPlayer === 'boolean') isOfficialPlayer = state.isOfficialPlayer
           refreshOfficialPlayer()
         }
-        if (state?.status === 'ready') { status.textContent = ''; reload.disabled = false }
+        if (state?.status === 'ready') { status.textContent = ''; reload.disabled = false; accountButton.disabled = false }
         if (state?.status === 'error') { status.textContent = `${name}未能加载，请点击“刷新”重试，或返回工作台。`; reload.disabled = false }
         if (state?.status === 'hidden') hide()
       }) : null
+      const unsubscribeAccount = typeof bridge.subscribeCommunityAccount === 'function' ? bridge.subscribeCommunityAccount(paintAccount) : null
       // Opening fish settings hides the native child view from the host. Keep
       // this renderer's overlay, focus guard and mode in sync as well.
       let fishRevision = 0
@@ -4050,6 +4127,7 @@ function installNekoAccountHabitat(ctx, options) {
       const observer = new win.MutationObserver(schedule)
       observer.observe(doc.body, { subtree: true, childList: true })
       back.addEventListener('click', onBack); pageBack.addEventListener('click', onPageBack); reload.addEventListener('click', onReload); immersion.addEventListener('click', onImmersion); share.addEventListener('click', onShare); officialPlayer.addEventListener('click', onOfficialPlayer)
+      accountButton.addEventListener('click', onAccount)
       doc.addEventListener('click', onClick, true)
       // Native child views paint above DOM popovers. Return before opening
       // local menus so tools/account panels can use the full content area.
@@ -4065,8 +4143,10 @@ function installNekoAccountHabitat(ctx, options) {
           if (frame) win.cancelAnimationFrame(frame)
           observer.disconnect(); sizes?.disconnect()
           if (typeof unsubscribe === 'function') unsubscribe()
+          if (typeof unsubscribeAccount === 'function') unsubscribeAccount()
           if (typeof unsubscribeWorkbench === 'function') unsubscribeWorkbench()
           back.removeEventListener('click', onBack); pageBack.removeEventListener('click', onPageBack); reload.removeEventListener('click', onReload); immersion.removeEventListener('click', onImmersion); share.removeEventListener('click', onShare); officialPlayer.removeEventListener('click', onOfficialPlayer)
+          accountButton.removeEventListener('click', onAccount)
           doc.removeEventListener('click', onClick, true); win.removeEventListener('resize', schedule)
           doc.removeEventListener('pointerdown', onClick, true); doc.removeEventListener('contextmenu', onClick, true)
           doc.removeEventListener('focusin', onFocus, true)
@@ -4428,6 +4508,8 @@ button[data-neko-new-session="plus"]:focus-visible { outline: 2px solid var(--ds
 }
 .neko-community-pane__toolbar strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .neko-community-pane__feedback { flex: none; white-space: nowrap; font-size: 12px; }
+.neko-community-pane__account { display: flex; flex: none; align-items: center; gap: 8px; white-space: nowrap; font-size: 12px; }
+.neko-community-pane__account[hidden] { display: none; }
 .neko-community-pane__toolbar button { flex: none; padding: 7px 10px; border: 1px solid var(--dsw-alias-border-l1, #CDD6EA); border-radius: 8px; background: var(--dsw-alias-bg-layer-1, #FDFEFF); color: inherit; cursor: pointer; }
 .neko-community-pane__toolbar button:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary, #3F5F9E); outline-offset: 2px; }
 .neko-community-pane__toolbar button:disabled { opacity: .55; cursor: default; }

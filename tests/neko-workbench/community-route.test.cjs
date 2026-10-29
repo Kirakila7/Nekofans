@@ -10,7 +10,7 @@ const { DEFAULT_COMMUNITY_URL, COMMUNITY_PARTITION, resolveCommunityUrl,
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const bounds = { x: 300, y: 80, width: 800, height: 650 };
 function deferred() { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; }
-function fixture(env = {}, useSocial = false) {
+function fixture(env = {}, useSocial = false, extra = {}) {
   const views = [], external = [], states = [], errors = [], copied = [];
   let copyError = null;
   class Contents extends EventEmitter {
@@ -59,7 +59,7 @@ function fixture(env = {}, useSocial = false) {
     isDestroyed() { return this.destroyed; }
     destroy() { this.destroyed = true; this.webContents.close(); this.emit('closed'); }
   }
-  const controller = (useSocial ? createSocialController : createCommunityController)({ WebContentsView: MockView, env,
+  const controller = (useSocial ? createSocialController : createCommunityController)({ WebContentsView: MockView, env, ...extra,
     openExternal: async url => external.push(url), copyText: text => { if (copyError) throw copyError; copied.push(text); },
     onState: (host, value) => states.push({ host, ...value }), onExternalError: error => errors.push(error) });
   const host = new MockHost();
@@ -67,6 +67,99 @@ function fixture(env = {}, useSocial = false) {
   const open = (value = bounds) => action({ action: 'open', bounds: value });
   return { controller, views, external, states, errors, copied, failCopy: () => { copyError = new Error('private clipboard failure'); }, MockHost, Popup, host, action, open };
 }
+
+test('identity handoff is confined to active official community and switches cancel it', async () => {
+  let cancellations = 0;
+  const f = fixture({}, true, { onHide: () => { cancellations++; } });
+  const url = DEFAULT_COMMUNITY_URL + '#native_sync=' + 's'.repeat(43) + '&native_delegate=' + 'd'.repeat(43);
+  await f.action({ action: 'open', site: 'community', bounds });
+  assert.equal(f.controller.isOpen, true);
+  await f.controller.handoff(f.host, url);
+  const community = f.views[0];
+  assert.equal(community.webContents.loads.at(-1), url);
+  secure(community.options);
+  for (const invalid of [
+    'https://evil.invalid/feed',
+    'https://user:password@community.project-neko.cn/feed',
+    'http://community.project-neko.cn/feed',
+    'https://community.project-neko.cn/other',
+  ]) await assert.rejects(f.controller.handoff(f.host, invalid), /地址无效/);
+  await f.action({ action: 'open', site: 'bilibili', bounds });
+  assert.equal(cancellations, 1);
+  assert.equal(f.controller.isOpen, false);
+  await assert.rejects(f.controller.handoff(f.host, url), /隐藏/);
+  assert.equal(f.views[1].webContents.loads.at(-1), BILIBILI_URL);
+  await f.action({ action: 'hide' });
+  assert.equal(cancellations, 1, 'hiding Bilibili must not cancel a community transfer twice');
+  f.controller.dispose();
+});
+
+test('identity handoff cannot target an alternate configured community', async () => {
+  const f = fixture({ NEKO_WORKBENCH_COMMUNITY_URL: 'https://custom.example/feed' }, true);
+  await f.action({ action: 'open', site: 'community', bounds });
+  await assert.rejects(f.controller.handoff(f.host, DEFAULT_COMMUNITY_URL + '#native_sync=proof'), /地址无效/);
+  assert.equal(f.views[0].webContents.loads.at(-1), 'https://custom.example/feed');
+  f.controller.dispose();
+});
+
+test('switch to Bilibili during identity handoff fences the late navigation', async () => {
+  let cancellations = 0;
+  const f = fixture({}, true, { onHide: () => { cancellations++; } });
+  await f.action({ action: 'open', site: 'community', bounds });
+  const gate = deferred();
+  f.views[0].webContents.behavior = () => gate.promise;
+  const url = DEFAULT_COMMUNITY_URL + '#native_sync=' + 's'.repeat(43) + '&native_delegate=' + 'd'.repeat(43);
+  const pending = f.controller.handoff(f.host, url);
+  const canceled = assert.rejects(pending, /隐藏|未能打开/);
+  await tick();
+  await f.action({ action: 'open', site: 'bilibili', bounds });
+  gate.resolve();
+  await canceled;
+  assert.equal(cancellations, 1);
+  assert.equal(f.host.children.has(f.views[0]), false);
+  assert.equal(f.host.children.has(f.views[1]), true);
+  f.controller.dispose();
+});
+
+test('community account handoff remains available alongside Bilibili and is cancelled only when community closes', async () => {
+  let cancellations = 0;
+  const f = fixture({}, true, { onHide: () => { cancellations++; } });
+  const url = DEFAULT_COMMUNITY_URL + '#native_sync=' + 's'.repeat(43) + '&native_delegate=' + 'd'.repeat(43);
+  await f.action({ action: 'open', site: 'community', slot: 'left', requestId: 1, bounds });
+  await f.action({ action: 'open', site: 'bilibili', slot: 'right', requestId: 2, bounds });
+  assert.equal(f.controller.isOpen, true, 'Bilibili is active but community is still open');
+  await f.controller.handoff(f.host, url);
+  assert.equal(f.views[0].webContents.loads.at(-1), url);
+  await f.action({ action: 'hide', slot: 'right', requestId: 2 });
+  assert.equal(cancellations, 0, 'hiding Bilibili must not cancel community identity');
+  assert.equal(f.controller.isOpen, true);
+  const gate = deferred();
+  f.views[0].webContents.behavior = () => gate.promise;
+  const pending = f.controller.handoff(f.host, url);
+  const cancelled = assert.rejects(pending, /隐藏|未能打开/);
+  await tick();
+  await f.action({ action: 'hide', slot: 'left', requestId: 1 });
+  gate.resolve(); await cancelled;
+  assert.equal(cancellations, 1);
+  assert.equal(f.controller.isOpen, false);
+  f.controller.dispose();
+});
+
+test('opening Bilibili in another slot does not cancel an in-flight community handoff', async () => {
+  const f = fixture({}, true);
+  const url = DEFAULT_COMMUNITY_URL + '#native_sync=' + 's'.repeat(43) + '&native_delegate=' + 'd'.repeat(43);
+  await f.action({ action: 'open', site: 'community', slot: 'left', bounds });
+  const gate = deferred();
+  f.views[0].webContents.behavior = () => gate.promise;
+  const pending = f.controller.handoff(f.host, url);
+  await tick();
+  await f.action({ action: 'open', site: 'bilibili', slot: 'right', bounds });
+  gate.resolve(); await pending;
+  assert.equal(f.controller.isOpen, true);
+  assert(f.host.children.has(f.views[0]));
+  assert(f.host.children.has(f.views[1]));
+  f.controller.dispose();
+});
 function navigate(contents, type, url) {
   let prevented = false;
   contents.emit(type, { preventDefault() { prevented = true; } }, url);

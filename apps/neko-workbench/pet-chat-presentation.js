@@ -5,7 +5,7 @@
     function reset(){const changed=active;active=false;shownReply=shownNotice=undefined;if(changed)feedback.showLocal('');return changed;}
     function render(actor){
       active=true;
-      const reply=actor.chatReply,text=typeof reply?.text==='string'?reply.text:'';
+      const reply=actor.screenReply||actor.chatReply,text=typeof reply?.text==='string'?reply.text:'';
       const key=reply?JSON.stringify([reply.id,text,reply.streaming]):null;
       const notice=actor.notice,noticeId=notice?.id;
       const changed=key!==shownReply,noticeChanged=noticeId!==shownNotice;

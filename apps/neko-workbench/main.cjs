@@ -1,9 +1,11 @@
-const {app,BrowserWindow,WebContentsView,ipcMain,screen,shell,Menu,Tray,nativeImage,dialog,nativeTheme,safeStorage,clipboard} = require('electron');
+const {app,BrowserWindow,WebContentsView,ipcMain,screen,shell,Menu,Tray,nativeImage,dialog,nativeTheme,safeStorage,clipboard,desktopCapturer,systemPreferences} = require('electron');
 const {spawn} = require('node:child_process');
 const {resolveRuntimePaths,prepareRuntimeDirectories,assertDshRuntime,buildDshPatch,buildDshLaunch}=require('./runtime-config.cjs');
 const {createDshLifecycle}=require('./dsh-lifecycle.cjs');
 const {createSocialController}=require('./community-config.cjs');
+const {createCommunityAccount}=require('./community-account.cjs');
 const {createSubagentMotion,motionOptions}=require('./subagent-motion.cjs');
+const {createScreenShare}=require('./screen-share-controller.cjs');
 const {WorkbenchMainChat,trustedLocalCaller}=require('./main-chat-runtime.cjs');
 const {pathToFileURL}=require('node:url');
 const fs = require('node:fs');
@@ -11,7 +13,7 @@ const path = require('node:path');
 const {randomUUID} = require('node:crypto');
 const readline = require('node:readline');
 const originalWork = require('./original/work-status.cjs');
-const {normalizeLimit,orderedHelpers,displayName,nickname,actorKind,orderedDesktopPets,orderedTaskPets,selectDesktopPets,nextDesktopRefreshAt}=require('./pet-roster.cjs');
+const {normalizeLimit,orderedHelpers,displayName,nickname,actorKind,orderedDesktopPets,orderedTaskPets,selectDesktopPets,nextDesktopRefreshAt,beginReturnHome,expireReturnHomes}=require('./pet-roster.cjs');
 const {readOriginalSize,petLayout,petPlacement}=require('./pet-layout.cjs');
 const {migrateChatRouting,actorBySession:findDshActor}=require('./chat-routing.cjs');
 const petAppearance=require('./pet-appearance.js');
@@ -67,7 +69,7 @@ state.actors=state.actors.filter(a=>a.id==='main'||a.sessionId).map(a=>{
     a=restoreDesktopActor(a,state.positions);a.name=displayName(a);
   }else a.present=true;
   if(['working','stopping'].includes(a.status))a.status='stopped';
-  return {...a,active:false,teamWork:undefined,displayWork:undefined,notice:null,stopRequested:false,work:{state:null,task:null,tick:0},workFlags:{goalRound:false,closing:null}};
+  return {...a,screenReply:undefined,active:false,teamWork:undefined,displayWork:undefined,notice:null,stopRequested:false,work:{state:null,task:null,tick:0},workFlags:{goalRound:false,closing:null}};
 });
 migrateChatRouting(state);
 state.connection='starting';state.error='';
@@ -76,14 +78,20 @@ state.qqbot={enabled:false,phase:'paused',reason:'QQ 机器人已暂停。',boun
 let memoryWindow,settingsWindow,nekoSettingsWindow,chatSettingsWindow,chatMemoryWindow,nekoWindow,dshWindow,dshLaunchUrl,tray,child,childLifecycle,quitting=false,rpcId=0,startPromise,stderr='',rosterTimer,nekoRetry,mainChatRuntime,activeApiRequest,workbenchNavigation=null;
 const localWindows=new WeakMap();
 const nekoChat=new NekoChat();
+let communityAccount;
 const communityController=createSocialController({WebContentsView,openExternal:url=>shell.openExternal(url),copyText:text=>clipboard.writeText(text),
+  onHide:()=>communityAccount?.cancel(),
   onState:(host,value)=>{if(host===dshWindow&&!host.isDestroyed()&&isWorkbenchOrigin(host.webContents.getURL()))host.webContents.send('workbench:community-state',value);},
   onExternalError:()=>dialog.showErrorBox('链接未打开','系统浏览器未能打开这个链接，请稍后重试。')});
+communityAccount=createCommunityAccount({getBaseUrl:()=>state.neko.baseUrl,
+  getCommunityUrl:()=>process.env.NEKO_WORKBENCH_COMMUNITY_URL,
+  openExternal:url=>shell.openExternal(url),handoff:url=>communityController.handoff(dshWindow,url),
+  onState:value=>{if(dshWindow&&!dshWindow.isDestroyed()&&isWorkbenchOrigin(dshWindow.webContents.getURL()))dshWindow.webContents.send('workbench:community-account-state',value);}});
 const pending=new Map(), petWindows=new Map(),renameWindows=new Map();
 const draggingPets=new Set(),petGeometry=new Map();
 const motionInputs=new Set();
 const catMotion=createSubagentMotion({
-  getHome:()=>{const w=petWindows.get('main');if(!w||w.isDestroyed())return null;const bounds=windowBounds(w);return {...bounds,body:motionBody(state.actors[0],w,bounds)};},
+  getHome:()=>{const w=petWindows.get('main');if(!w||w.isDestroyed())return null;const bounds=windowBounds(w);return {...bounds,body:motionBody(state.actors.find(a=>a.id==='main'),w,bounds)};},
   getArea:bounds=>screen.getDisplayMatching?.(bounds)?.workArea||screen.getPrimaryDisplay().workArea,
   getCursor:()=>screen.getCursorScreenPoint?.(),reducedMotion:()=>nativeTheme.shouldUseReducedMotion===true,
   isPaused:id=>draggingPets.has(id)||motionInputs.has(id),
@@ -94,6 +102,10 @@ const catMotion=createSubagentMotion({
 const earlyFrames=new Map();
 const terminalTimers=new Map();
 const busy=a=>['working','stopping'].includes(a.status);
+const screenShare=createScreenShare({WebContentsView,desktopCapturer,systemPreferences,dataDir:data,repositoryRoot:path.resolve(base,'../..'),safeStorage,
+  getChat:()=>mainChatRuntime,getHost:()=>dshWindow,isChatBusy:()=>!!activeApiRequest||busy(state.actors[0]),
+  onReply:reply=>{if(quitting)return;state.actors[0].screenReply=reply;if(reply)state.actors[0].notice=null;broadcast();},
+  onOpen:async()=>{await communityController.action(dshWindow,{action:'hide'});}});
 const channelRevisions={fish:0,qqbot:0};
 const channelIntents={fish:0,qqbot:0};
 const fishQqCoordinator=createCoordinator({
@@ -103,7 +115,7 @@ const fishQqCoordinator=createCoordinator({
   saveSelection:selection=>{const previous=state.preferences.fishQqSelection;state.preferences.fishQqSelection=selection;try{save();}catch(error){state.preferences.fishQqSelection=previous;throw error;}},
   notify:()=>broadcast()
 });
-function save(){const f=path.join(data,'state.json');const actors=state.actors.map(a=>a.id==='main'&&a.chatBackend==='chat-api'?{...a,messages:[],chatReply:undefined,lastUserMessage:undefined}:a).map(a=>({...a,returningHome:undefined}));fs.writeFileSync(f+'.tmp',JSON.stringify({...state,actors,mainChat:undefined,connection:undefined},null,2));fs.renameSync(f+'.tmp',f);}
+function save(){const f=path.join(data,'state.json');const actors=state.actors.map(a=>a.id==='main'&&a.chatBackend==='chat-api'?{...a,messages:[],chatReply:undefined,lastUserMessage:undefined}:a).map(a=>({...a,screenReply:undefined,returningHome:undefined}));fs.writeFileSync(f+'.tmp',JSON.stringify({...state,actors,mainChat:undefined,connection:undefined},null,2));fs.renameSync(f+'.tmp',f);}
 function broadcast(){for(const w of [...petWindows.values(),...renameWindows.values(),memoryWindow,settingsWindow,nekoSettingsWindow,chatSettingsWindow,chatMemoryWindow])if(w&&!w.isDestroyed()&&localWindows.has(w))w.webContents.send('pet:state',state);if(dshWindow&&!dshWindow.isDestroyed()&&isWorkbenchOrigin(dshWindow.webContents.getURL()))dshWindow.webContents.send('workbench:state',workbenchState());}
 function loadLocalFile(window,query){const url=pathToFileURL(path.join(base,'index.html'));for(const [key,value] of Object.entries(query))url.searchParams.set(key,value);localWindows.set(window,url.href);window.webContents.on('will-navigate',(event,target)=>{if(target!==url.href)event.preventDefault();});window.webContents.setWindowOpenHandler(()=>({action:'deny'}));return window.loadURL(url.href);}
 function assertLocalCaller(event,window){if(!trustedLocalCaller(event,window,localWindows.get(window)))throw new Error('请从本应用的原始窗口操作');}
@@ -121,7 +133,7 @@ async function chooseAvatar(title='上传工作台头像'){
   return 'data:image/png;base64,'+png.toString('base64');
 }
 function workbenchState(){return {avatar:workbenchAppearance.get(),workspaceRoot:workspace,workspaceRevision,companion:companionSnapshot(state),navigation:workbenchNavigation,fish:state.fish,qqbot:state.qqbot,fishQq:fishQqCoordinator.snapshot(),neko:{enabled:state.neko.enabled===true,connection:state.neko.connection,character:state.neko.character,error:String(state.neko.error||'').slice(0,300)},workbench:{connection:state.connection,error:String(state.error||'').slice(0,300)}};}
-async function openFishSettings(){workbenchNavigation={...workbenchNavigation,fishSettingsRevision:(workbenchNavigation?.fishSettingsRevision||0)+1};await openDsh();await communityController.action(dshWindow,{action:'hide'});broadcast();}
+async function openFishSettings(){screenShare.hide();workbenchNavigation={...workbenchNavigation,fishSettingsRevision:(workbenchNavigation?.fishSettingsRevision||0)+1};await openDsh();await communityController.action(dshWindow,{action:'hide'});broadcast();}
 function projectChannelState(name,value){
   const phases=['paused','checking','starting','login-required','model-login-required','scope-required','bound','connecting','running','error'];
   const next={enabled:value?.enabled===true,phase:phases.includes(value?.phase)?value.phase:'error',reason:String(value?.reason||'服务状态无法确认，请重试。').slice(0,300)};
@@ -172,6 +184,7 @@ function showConnectionStatus(){return dialog.showMessageBox(dshWindow&&!dshWind
 async function workbenchAction(name){
   switch(name){
     case 'fish-settings':await openFishSettings();break;
+    case 'screen-share':await openDsh();await screenShare.open();break;
     case 'chat-settings':editChatSettings();break;
     case 'open-community':throw new Error('请使用工作台社区入口打开内嵌社区');
     case 'neko-settings':editChatSettings();break;
@@ -185,6 +198,7 @@ async function workbenchAction(name){
   return {ok:true};
 }
 function workbenchOptions(){return [
+  {label:'屏幕陪伴…',click:()=>workbenchAction('screen-share').catch(error=>{notice(state.actors[0],error.message);broadcast();})},
   {label:'养鱼设置…',click:()=>openFishSettings().catch(engineError)},
   {label:'聊天 API 设置…',click:editChatSettings},
   {label:'聊天记忆…',click:editChatMemory},
@@ -200,6 +214,7 @@ function workbenchOptions(){return [
 function applyMainChat(snapshot){
   if(quitting)return;
   const a=state.actors[0],oldBackend=a.chatBackend,previous=state.mainChat?.chat;
+  if(oldBackend!==snapshot.backend)screenShare.interrupt();
   state.mainChat=snapshot;
   if(oldBackend!==snapshot.backend){
     if(oldBackend==='neko')state.neko.history=a.messages;
@@ -237,6 +252,7 @@ function mainChatFailure(){state.mainChat={ready:false,backend:'chat-api',error:
 function startApiPrompt(text){
   if(!mainChatRuntime||!state.mainChat?.ready)throw new Error(state.mainChat?.error||'聊天服务尚未就绪');
   if(typeof text!=='string'||!text.trim()||text.length>8000)throw new Error('请输入 1～8000 字的消息');
+  screenShare.interrupt();
   if(activeApiRequest||busy(state.actors[0]))throw new Error('我还在回复，等我一下。');
   const request={id:randomUUID(),opened:mainChatRuntime.opened},a=state.actors[0];activeApiRequest=request;a.notice=null;
   mainChatRuntime.send(text).then(async result=>{
@@ -279,6 +295,7 @@ function windowBounds(w){if(w.getBounds)return w.getBounds();const [x,y]=w.getPo
 function reconcilePets(){
   clearTimeout(rosterTimer);
   const now=Date.now(),orders={taskOrder:state.taskOrder,catalogOrder:state.catalogOrder};
+  expireReturnHomes(state.actors,now);
   for(const a of state.actors)if(a.returningHome&&(a.active||!gathersHome(a))){a.returningHome=false;if(!a.active)a.displayUntil=now+10000;}
   const selected=state.preferences.helpersVisible?selectDesktopPets(state.actors,orders,state.preferences.helperLimit,now):[];
   const ids=new Set(selected.map(a=>a.id));
@@ -311,7 +328,7 @@ function reconcilePets(){
 }
 function desktopGeometry(a,index,layouts){const layout=petLayout(actorKind(a),state.originalPet,petAppearance.layoutOptions(state,a)),area=screen.getPrimaryDisplay().workArea;const placed=petPlacement({area,layout,saved:state.positions[a.id],index,layouts});return {stageWidth:layout.stageWidth,scale:placed.scale,bounds:{x:placed.x,y:placed.y,width:placed.width,height:placed.height}};}
 function update(){reconcilePets();save();broadcast();}
-function finishAppearance(a){if(a.kind==='task'&&a.backgroundJobs>0){a.active=true;a.status='working';a.displayUntil=0;setWork(a,'working',a.task);return;}a.active=false;a.returningHome=gathersHome(a);if(a.id!=='main')a.displayUntil=a.returningHome?0:(['success','error'].includes(a.work.state)||a.kind==='task')?Date.now()+10000:0;}
+function finishAppearance(a){if(a.kind==='task'&&a.backgroundJobs>0){a.active=true;a.status='working';a.displayUntil=0;setWork(a,'working',a.task);return;}a.active=false;if(a.id!=='main'){if(gathersHome(a)){if(!a.returningHome)beginReturnHome(a);}else{a.returningHome=false;a.displayUntil=(['success','error'].includes(a.work.state)||a.kind==='task')?Date.now()+10000:0;}}}
 function notice(a,text){a.notice={id:randomUUID(),text};}
 function setWork(a,next,task=a.work.task){
   if(!next)task=null;
@@ -475,12 +492,13 @@ function restart(){
 }
 function options(){return {show:false,webPreferences:{preload:path.join(base,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}};}
 function showInput(id='main'){const a=state.actors.find(a=>a.id===id);if(!a)return;if(id!=='main'&&a.kind!=='task'){openDsh().catch(engineError);return;}if(id!=='main'&&!a.present){openDsh().catch(engineError);return;}const w=createPetWindow(a);w.show();w.webContents.send('pet:input');setTimeout(()=>{app.focus({steal:true});w.focus();w.webContents.focus();},0);}
-async function openTaskSession(a){if(a.kind!=='task'||!a.metadataReady)throw new Error('这个任务会话尚未就绪');workbenchNavigation={sessionId:a.sessionId,revision:(workbenchNavigation?.revision||0)+1};await openDsh();broadcast();}
+async function openTaskSession(a){if(a.kind!=='task'||!a.metadataReady)throw new Error('这个任务会话尚未就绪');screenShare.hide();workbenchNavigation={sessionId:a.sessionId,revision:(workbenchNavigation?.revision||0)+1};await openDsh();broadcast();}
 function popupMainMenu(){const w=petWindows.get('main');if(w){w.show();setTimeout(()=>{app.focus({steal:true});w.focus();mainMenu().popup({window:w});},0);}}
 async function openDsh(){
   if(dshWindow&&!dshWindow.isDestroyed()){dshWindow.show();app.focus({steal:true});dshWindow.focus();return;}
   dshWindow=new BrowserWindow({width:1100,height:780,minWidth:800,minHeight:560,title:'N.E.K.O. 工作台',backgroundColor:nativeTheme.shouldUseDarkColors?'#131C27':'#EDF3F8',show:false,webPreferences:{preload:path.join(base,'workbench-preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,partition:'persist:pet-dsh'}});
   communityController.bindHost(dshWindow);
+  dshWindow.webContents.on('did-finish-load',()=>{if(isWorkbenchOrigin(dshWindow.webContents.getURL())&&typeof dshWindow.webContents.executeJavaScript==='function')void dshWindow.webContents.executeJavaScript(fs.readFileSync(path.join(base,'screen-share-host.js'),'utf8')).catch(()=>{});});
   dshWindow.on('close',event=>{if(!quitting){event.preventDefault();dshWindow.hide();}});
   dshWindow.webContents.on('will-navigate',(event,url)=>{if(!/^https?:/.test(url))event.preventDefault();});
   dshWindow.webContents.setWindowOpenHandler(({url})=>/^https?:/.test(url)?{action:'allow',overrideBrowserWindowOptions:{webPreferences:{nodeIntegration:false,contextIsolation:true,sandbox:true,partition:'persist:pet-dsh'}}}:{action:'deny'});
@@ -664,15 +682,23 @@ function createWindows(){
   tray=new Tray(nativeImage.createEmpty());tray.setTitle('🐾');tray.setToolTip('N.E.K.O. 桌宠');
   tray.on('right-click',()=>tray.popUpContextMenu(mainMenu()));tray.on('click',()=>showInput());
 }
+ipcMain.handle('screen-share:call',(event,method,value)=>screenShare.action(event,method,value));
+ipcMain.handle('workbench:screen-share',async(event,method)=>{assertWorkbenchCaller(event);if(method==='hide'){screenShare.hide();return {ok:true};}throw new Error('未知屏幕操作');});
 ipcMain.handle('workbench:community',async(event,request)=>{
   assertWorkbenchCaller(event);
+  if(request?.action==='open')screenShare.hide();
   return communityController.action(dshWindow,request);
+});
+ipcMain.handle('workbench:community-account',async(event,action)=>{
+  assertWorkbenchCaller(event);
+  if(action!=='cancel'&&!communityController.isOpen)throw new Error('请先打开社区');
+  return communityAccount.action(action);
 });
 ipcMain.handle('workbench:roles',async(event,method,p={})=>{
   assertWorkbenchCaller(event);
   if(method==='state')return rolesState();
   if(method==='update'){workbenchRoles.update(p.id,p.patch);publishRoles();return rolesState();}
-  if(method==='select'){workbenchRoles.select(p.id);publishRoles();return rolesState();}
+  if(method==='select'){screenShare.hide();workbenchRoles.select(p.id);publishRoles();return rolesState();}
   if(method==='upload'){
     const role=workbenchRoles.get().roles.find(item=>item.id===p.id);if(!role)throw new Error('未知角色');
     const image=await chooseAvatar('上传'+role.name+'头像');if(!image)return null;
@@ -753,6 +779,7 @@ ipcMain.handle('pet:call',async(event,method,p={})=>{
   if(method==='chat-open-memory'){if(sender!==chatSettingsWindow)throw new Error('请从聊天设置操作');editChatMemory();return true;}
   if(method==='chat-settings-save'){
     if(sender!==chatSettingsWindow||!mainChatRuntime)throw new Error('聊天设置尚未就绪');
+    screenShare.interrupt();
     const result=await mainChatRuntime.saveApi(p);activeApiRequest=null;await refreshApiHistory();return result;
   }
   if(method==='chat-memory-read'){if(sender!==chatMemoryWindow||!mainChatRuntime)throw new Error('请从聊天记忆窗口操作');return mainChatRuntime.memories();}
@@ -781,6 +808,7 @@ ipcMain.handle('pet:call',async(event,method,p={})=>{
     const a=state.actors.find(x=>x.id===senderId),text=String(p.text||'').trim();
     if(!a||p.id!==a.id||!text||text.length>30000)throw new Error('请输入消息。');
     if(a.id==='main'){
+      screenShare.interrupt();
       if(mainChatRuntime?.backend==='chat-api')return startApiPrompt(text);
       if(!state.neko.enabled)throw new Error('请从右键菜单打开聊天 API 设置。');
       if(busy(a))throw new Error('我还在回复，等我一下。');
@@ -815,7 +843,7 @@ app.on('before-quit',event=>{
   if(shutdownComplete)return;
   event.preventDefault();
   if(shutdownStarted)return;
-  shutdownStarted=true;quitting=true;communityController.dispose();catMotion.dispose();clearTimeout(nekoRetry);clearTimeout(rosterTimer);for(const timer of terminalTimers.values())clearTimeout(timer);terminalTimers.clear();nekoChat.close();save();
+  shutdownStarted=true;quitting=true;communityController.dispose();communityAccount.cancel();screenShare.dispose();catMotion.dispose();clearTimeout(nekoRetry);clearTimeout(rosterTimer);for(const timer of terminalTimers.values())clearTimeout(timer);terminalTimers.clear();nekoChat.close();save();
   const current=childLifecycle;
   Promise.allSettled([mainChatRuntime?.close(),current?.stop(),codexAccount.dispose(),codexWorkspace.dispose()]).finally(()=>{shutdownComplete=true;app.quit();});
 });

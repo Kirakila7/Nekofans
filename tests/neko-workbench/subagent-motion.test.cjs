@@ -1,7 +1,15 @@
 'use strict';
 const test = require('node:test'), assert = require('node:assert/strict');
 const { createSubagentMotion, motionOptions, homeTarget, exploreTarget, HOME_REST_MS } = require('../../apps/neko-workbench/subagent-motion.cjs');
+const appearance = require('../../apps/neko-workbench/pet-appearance.js');
 const area = { x: 0, y: 24, width: 1440, height: 850 };
+test('native cat media follows desktop movement, while drag and reduced motion keep priority',()=>{
+  const actor={active:true,work:{state:'working'}};
+  assert.equal(appearance.sourceFor(appearance.CAT,actor,{desktopMotion:{phase:'exploring',moving:true}}),appearance.assets.running);
+  assert.equal(appearance.sourceFor(appearance.CAT,actor,{desktopMotion:{phase:'exploring',moving:false}}),appearance.assets.idle);
+  assert.equal(appearance.sourceFor(appearance.CAT,actor,{dragging:true,desktopMotion:{phase:'exploring',moving:true}}),appearance.assets.drag);
+  assert.equal(appearance.sourceFor(appearance.CAT,actor,{reduced:true,desktopMotion:{phase:'exploring',moving:true}}),appearance.assets.still);
+});
 class Window {
   constructor(x=300,y=300) { this.bounds={x,y,width:200,height:169};this.visible=true;this.focused=false;this.moves=[]; }
   getBounds(){return {...this.bounds};} isDestroyed(){return !!this.destroyed;} isVisible(){return this.visible;} isFocused(){return this.focused;}

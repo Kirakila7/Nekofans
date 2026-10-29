@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src blob:; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<title>屏幕陪伴</title><link rel="stylesheet" href="screen-share.css"></head>
+<body><header><button id="back" type="button">← 返回工作台</button><strong>屏幕陪伴</strong><span class="badge">仅文字</span></header>
+<main><section class="intro"><h1>一起看看你的屏幕</h1><p>选择一个窗口或屏幕，我会留意画面变化，用文字陪你聊。</p></section>
+<section class="card"><div class="source-row"><label for="sources">共享来源</label><button id="refresh" type="button">刷新列表</button></div><select id="sources" aria-label="共享窗口或屏幕"><option value="">请选择一个窗口或屏幕</option></select>
+<p class="hint">点击开始后，所选画面会发给下方视觉 API。只获取画面，不获取声音；最多 120 次请求后自动暂停。</p>
+<p class="hint">接收方：<strong id="recipient">尚未配置视觉服务</strong></p>
+<label class="check"><input id="share-context" type="checkbox">同时向上述服务发送主角色设定、聊天 API 中已确认的旧版聊天记忆、最近 8 条聊天及本轮画面反馈（默认关闭；不包含 N.E.K.O. 原生记忆）</label>
+<div class="controls"><button id="start" class="primary" type="button">开始共享</button><button id="pause" type="button" disabled>暂停</button><button id="stop" type="button" disabled>停止</button></div>
+<p id="status" role="status" aria-live="polite">尚未共享</p><video id="preview" muted playsinline autoplay hidden aria-label="当前共享画面预览"></video></section>
+<details class="card" id="vision-settings"><summary>视觉 API <span id="model"></span></summary><form id="settings-form">
+<label>连接方式<select name="mode"><option value="chat">沿用主角色聊天 API</option><option value="custom">单独配置视觉 API</option></select></label>
+<div id="custom-settings" hidden><label>协议<select name="protocol"><option value="openai-compatible">OpenAI 兼容</option><option value="anthropic">Anthropic</option></select></label><label>API 基础地址<input name="baseUrl" type="url" maxlength="2048" placeholder="https://example.com/v1"></label><label>支持图片的模型<input name="model" maxlength="200" autocomplete="off"></label><label>新密钥<input name="key" type="password" maxlength="16384" autocomplete="new-password" placeholder="留空保留已存密钥"></label><label class="check"><input name="clearKey" type="checkbox">清除已保存的视觉密钥</label></div>
+<p class="hint">收到文字回复不代表模型已理解图片；请结合画面内容自行核对。</p><button type="submit">保存视觉设置</button></form></details>
+<section class="card conversation"><h2>主 agent 的文字反馈</h2><div id="records" role="log" aria-live="polite"><p class="hint">开始共享后，反馈会出现在这里和主角色气泡中。</p></div><p id="streaming" hidden></p><form id="question-form"><label for="question">问问当前画面</label><div class="question-row"><input id="question" maxlength="2000" placeholder="这段画面在讲什么？" autocomplete="off"><button id="send" type="submit" disabled>发送</button></div></form></section>
+<p class="hint footer">只根据采样到的画面回应；没有声音。切回 coding 或隐藏工作台会暂停，截图不保存到聊天记录或长期记忆。</p>
+</main><script src="screen-share-ui.js"></script></body></html>

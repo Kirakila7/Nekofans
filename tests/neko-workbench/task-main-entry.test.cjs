@@ -54,6 +54,12 @@ if(!process.argv.includes('--harness')){
    for(let step=0;step<200;step++){now+=40;motion.tick();}s=await read();assert.equal(s.actors.find(x=>x.sessionId==='child').present,true,'explicitly pinned helper gathers and stays');assert.equal(s.actors.find(x=>x.sessionId==='child').returningHome,false);
    await invoke(childWindow,'menu');menus.at(-1).find(item=>item.label==='常驻桌面').click({checked:false});
    emit('subagent-activity',{sessionId:'child',local:false,phase:'start'});await wait(async()=>(await read()).actors.find(x=>x.sessionId==='child').active===true);
+   emit('subagent-activity',{sessionId:'child',local:false,phase:'end',stopReason:'completed'});await wait(async()=>(await read()).actors.find(x=>x.sessionId==='child').returningHome===true);
+   await invoke(windows[0],'menu');menus.at(-1).find(item=>item.label==='设置').submenu.find(item=>item.label==='显示任务与小帮手').click({checked:false});
+   now+=61000;await invoke(windows[0],'menu');menus.at(-1).find(item=>item.label==='设置').submenu.find(item=>item.label==='显示任务与小帮手').click({checked:true});
+   assert.equal((await read()).actors.find(x=>x.sessionId==='child').returningHome,false);
+   assert.equal((await read()).actors.find(x=>x.sessionId==='child').present,false,'hidden helper return expires without reappearing');
+   emit('subagent-activity',{sessionId:'child',local:false,phase:'start'});await wait(async()=>(await read()).actors.find(x=>x.sessionId==='child').active===true);
    await invoke(taskWindow,'menu');menus.at(-1).find(item=>item.label==='形象').submenu.find(item=>item.label==='大肥鱼 · 原有角色').click();
    const persisted=JSON.parse(fs.readFileSync(path.join(data,'state.json'),'utf8'));assert.equal(persisted.preferences.taskAppearance,'neko-cat');assert.equal(persisted.actors.find(x=>x.sessionId==='child').appearanceId,'neko-cat');assert.equal(persisted.actors.find(x=>x.kind==='task').appearanceId,'dsh-original');
    await invoke(windows[0],'menu');menus.at(-1).find(item=>item.label==='形象').submenu.find(item=>item.label==='Claude 娘').click();

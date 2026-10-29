@@ -25,21 +25,43 @@ async function nextFrame(w) {
   }
 }
 const source = fs.readFileSync(path.join(__dirname, '../../apps/neko-workbench/embedded-dsh/unified-layout-source.js'), 'utf8');
-function fixture(t) {
+function fixture(t, { accountBridge = false } = {}) {
   const dom = new JSDOM('<body><aside data-neko-side-rail><div class="neko-workspace-rail-controls"></div></aside><div id="frame" style="display:grid;grid-template-columns:220px 800px 0px"><div id="track"><aside data-slot="sidebar"><section class="neko-companion-dock"><textarea>personal draft</textarea></section><div data-slot="settings.launcher"></div></aside></div><div class="some_centerCol_HASH_42"><textarea id="draft">coding draft</textarea></div><div></div></div></body>', { runScripts:'outside-only', pretendToBeVisual:true });
   t.after(() => dom.window.close()); const w=dom.window, d=w.document;
   d.querySelector('#frame').getBoundingClientRect=()=>({left:64,top:0,right:1084,bottom:780,width:1020,height:780});
   d.querySelector('[data-slot="sidebar"]').getBoundingClientRect=()=>({left:64,top:0,right:284,bottom:780,width:220,height:780});
   d.querySelector('.neko-companion-dock').getBoundingClientRect=()=>({left:64,top:640,right:284,bottom:730,width:220,height:90});
-  let saved={enabled:false,side:'workspace',left:'coding',right:null,ratio:.5}, listener=null, legacyClosed=0;
+  let saved={enabled:false,side:'workspace',left:'coding',right:null,ratio:.5}, listener=null, accountListener=null, legacyClosed=0, releaseAccount;
   const calls=[];
   const bridge={ workspace: async r => { calls.push(r); if(r.action==='pane-layout')return {...saved}; if(r.action==='set-pane-layout'){saved={...r.layout};return {...saved};} throw Error('bad request'); }, community: async r=>{calls.push(r);return {ok:true};}, subscribeCommunity:fn=>{listener=fn;return()=>{listener=null;};} };
+  if (accountBridge) {
+    bridge.communityAccount = action => { calls.push({action:'account-'+action}); if (action==='connect') return new Promise(resolve=>{releaseAccount=resolve;}); return Promise.resolve({status:'idle',message:'已取消连接'}); };
+    bridge.subscribeCommunityAccount = fn => { accountListener=fn; return()=>{accountListener=null;}; };
+  }
   w.eval(source+'\nwindow.startUnified=installUnifiedLayout;');
   const cleanup=w.startUnified({document:d,window:w,bridge,hideLegacy:()=>legacyClosed++,cssText:''});
-  return {w,d,bridge,calls,cleanup,get saved(){return saved},get listener(){return listener},get legacyClosed(){return legacyClosed}};
+  return {w,d,bridge,calls,cleanup,get saved(){return saved},get listener(){return listener},get accountListener(){return accountListener},get releaseAccount(){return releaseAccount},get legacyClosed(){return legacyClosed}};
 }
 async function openConfig(f) { f.d.querySelector('.neko-layout-entry').click(); await sleep(); }
 function select(f, type, value) { f.d.querySelector(`[data-${type}="${value}"]`).click(); }
+test('community identity entry works in a multi-pane layout without affecting Bilibili', {skip:!JSDOM}, async t=>{
+  const f=fixture(t,{accountBridge:true}); await sleep(); await openConfig(f);
+  select(f,'target','side'); select(f,'content','community'); await sleep();
+  select(f,'target','right'); select(f,'content','bilibili'); await sleep(); f.d.querySelector('.neko-unified-config .close').click();
+  await waitFor(()=>f.calls.some(x=>x.action==='open'&&x.slot==='side')&&f.calls.some(x=>x.action==='open'&&x.slot==='right'),'both site views');
+  const account=f.d.querySelector('[data-neko-unified-slot="side"] .neko-unified-account');
+  const biliAccount=f.d.querySelector('[data-neko-unified-slot="right"] .neko-unified-account');
+  assert.equal(account.hidden,false); assert.equal(account.disabled,true); assert.equal(biliAccount.hidden,true);
+  f.listener({slot:'side',site:'community',status:'ready'}); assert.equal(account.disabled,false);
+  account.click(); assert.equal(account.textContent,'取消连接'); assert(f.calls.some(x=>x.action==='account-connect'));
+  f.accountListener({status:'authorizing',message:'请在系统浏览器完成官方授权'});
+  assert.match(f.d.querySelector('[data-neko-unified-slot="side"] .note').textContent,/官方授权/);
+  account.click(); await sleep(); assert(f.calls.some(x=>x.action==='account-cancel')); assert.equal(account.textContent,'连接桌面身份');
+  f.releaseAccount({status:'handed-off',message:'过期响应'}); await sleep();
+  assert.doesNotMatch(f.d.querySelector('[data-neko-unified-slot="side"] .note').textContent,/过期响应/);
+  assert.equal(f.calls.filter(x=>x.action==='hide'&&x.slot==='right').length,0);
+  f.cleanup(); assert.equal(f.accountListener,null,'identity subscription is released');
+});
 test('chatroom temporarily hides only side native view and restores saved placement', {skip:!JSDOM}, async t=>{
   const f=fixture(t); await sleep(); await openConfig(f); select(f,'target','side'); select(f,'content','community'); await sleep();
   select(f,'target','right'); select(f,'content','bilibili'); await sleep(); f.d.querySelector('.neko-unified-config .close').click();

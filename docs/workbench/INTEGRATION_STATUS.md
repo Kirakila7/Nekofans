@@ -22,8 +22,11 @@ The daily artifact is built from this repository. `config/daily-release.json` is
 - Compact companion chat, background-integrated draggable character, role appearances and the 0.27.4 child-session/helper animation rules.
 - Workbench PR #5 native N.E.K.O. memory, including in-flight sync draining and canonical macOS recovery paths.
 - Workbench PR #6 QQ/Bilibili coordination and routing, plus the local DeepSeek API preset and error-handling fixes.
+- Native community identity handoff, screen companion and Bigfish pet-motion intake, with independent credentials and explicit screen-sharing consent.
 
 Claude integration remains a proposal. Real supplier credentials, QQ/Bilibili binding and community identity sync are not established by synthetic test success.
+
+Screen companion's optional private context uses confirmed legacy Chat API memories and recent Chat API messages; it does not yet recall the native N.E.K.O. memory added in Workbench PR #5.
 
 ## bigfish-pet intake
 
@@ -41,12 +44,12 @@ The GitHub PR list was inspected on 2026-10-28. It contains 14 PRs: 12 merged, 1
 | #9 | Claude proportions and compact corner names | Existing integrated baseline |
 | #10 | Pixel Claude/Gemini choices | Existing integrated baseline |
 | #11 | Fish-care entry and embedded settings | Existing baseline plus workbench #6 coordination |
-| #12 | Native community identity flow | Existing code baseline; real binding/sync still requires account verification |
-| #13 | Subagent exploration and return | Existing baseline with later 0.27.4 role-specific behavior |
-| #14 | Screen sharing and companion text feedback | **Pending. Draft; no patch applied in this consolidation.** |
-| #15 | Fountain spawning and DBSCAN | **Pending. No additional patch applied.** Some related local animation work already exists and is preserved; that does not mark the whole source PR integrated. |
+| #12 | Native community identity flow | Integrated; real account binding and synchronization still require verification |
+| #13 | Subagent exploration and return | Integrated with later 0.27.4 role-specific behavior and bounded return expiry |
+| #14 | Screen sharing and companion text feedback | Integrated with explicit destination confirmation and optional private-context consent; real screen and provider use remain unverified |
+| #15 | Fountain spawning and DBSCAN | Integrated with bounded return expiry; real desktop motion and performance remain unverified |
 
-This local test build retains its 0.28.2 source baseline. Bigfish PRs #14 and #15 were separately integrated into the private Workbench GitHub main branch; this local build does not yet contain that integration. This work does not merge or close PRs in the Bigfish repository.
+The private Workbench main already contains the #14 and #15 integration above; merging that main into this branch preserves those existing changes without newly applying the Bigfish patches. This does not merge or close source PRs in the Bigfish repository. Workbench #7 remains a separate, unmerged change. The previously installed 0.28.7 local build predates this main-branch merge and requires a separate rebuild and runtime verification to include it.
 
 ## Build and install
 

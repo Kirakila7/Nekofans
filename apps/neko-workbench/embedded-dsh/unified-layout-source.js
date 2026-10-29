@@ -88,7 +88,8 @@ function installUnifiedLayout(options = {}) {
   }
   let layout = { enabled: false, side: 'workspace', left: 'coding', right: null, ratio: 0.5 };
   let disposed = false, frame = 0, revision = 0, requestId = 0, codingNode = null, codingInert = false, suspended = false, drag = null, draggedContent = null;
-  let scheduled = false, placements = new Map(), unsubscribe = null, lastRects = {}, openTickets = {}, recoveryTimer = null;
+  let scheduled = false, placements = new Map(), unsubscribe = null, unsubscribeAccount = null, lastRects = {}, openTickets = {}, recoveryTimer = null;
+  let accountPending = false, accountRevision = 0;
   const panels = {};
   function makePanel(slot) {
     const node = el('section', 'neko-unified-panel'); node.hidden = true; node.dataset.nekoUnifiedSlot = slot;
@@ -100,11 +101,13 @@ function installUnifiedLayout(options = {}) {
     const reload = button('刷新', '', () => action(slot, 'reload'));
     const play = button('官方播放', '', () => action(slot, 'play-official'));
     const share = button('分享', '', () => action(slot, 'copy-video-link'));
+    const account = button('连接桌面身份', 'neko-unified-account', () => accountAction(slot));
+    account.title = '复用本机 N.E.K.O. 社区账号；未登录时在系统浏览器完成官方授权';
     const leave = button('返回工作区', '', () => chooseFor(slot, 'coding'));
     back.setAttribute('aria-label', '返回上一页'); reload.setAttribute('aria-label', '刷新当前页面');
-    play.hidden = share.hidden = true; header.append(name, back, reload, play, share, leave);
+    play.hidden = share.hidden = account.hidden = true; header.append(name, back, reload, play, share, account, leave);
     const status = el('p', 'status'); status.setAttribute('role', 'status'); node.append(header, status); doc.body.appendChild(node);
-    panels[slot] = { node, header, name, titleText, note, back, reload, play, share, leave, status, site: null, noteTimer: null };
+    panels[slot] = { node, header, name, titleText, note, back, reload, play, share, account, leave, status, site: null, noteTimer: null };
   }
   for (const slot of ['side', 'left', 'right']) makePanel(slot);
   // kind: 'loading' | 'error' | 'ok'. 'ok' notes clear themselves; load and
@@ -125,6 +128,32 @@ function installUnifiedLayout(options = {}) {
       if (actionName === 'copy-video-link') panelNote(slot, result?.ok ? '链接已复制' : '复制失败，请重试', result?.ok ? 'ok' : 'error');
       else if (actionName === 'reload' && panels[slot].node.dataset.state === 'loading') panelNote(slot, '');
     }).catch(() => { if (!disposed) panelNote(slot, actionName === 'copy-video-link' ? '复制失败，请重试' : '操作未完成，请重试', 'error'); });
+  }
+  function paintAccount(state) {
+    if (disposed || !state || typeof state.message !== 'string') return;
+    accountPending = ['checking', 'connecting', 'authorizing'].includes(state.status);
+    for (const slot of ['side', 'left', 'right']) {
+      const p = panels[slot];
+      if (placements.get(slot) !== 'community' || p.node.hidden) continue;
+      p.account.textContent = accountPending ? '取消连接' : '连接桌面身份';
+      p.account.disabled = false;
+      panelNote(slot, state.message, state.status === 'error' ? 'error' : accountPending ? 'loading' : 'ok');
+    }
+  }
+  function accountAction(slot) {
+    if (disposed || placements.get(slot) !== 'community' || panels[slot].node.hidden || typeof bridge.communityAccount !== 'function') return;
+    const ticket = ++accountRevision;
+    if (accountPending) {
+      accountPending = false;
+      void Promise.resolve(bridge.communityAccount('cancel')).then(state => {
+        if (!disposed && ticket === accountRevision) paintAccount(state);
+      }).catch(() => { if (!disposed && ticket === accountRevision) panelNote(slot, '取消连接未完成，请重试', 'error'); });
+      return;
+    }
+    paintAccount({ status:'checking', message:'正在检查桌面社区连接…' });
+    void Promise.resolve(bridge.communityAccount('connect')).then(state => {
+      if (!disposed && ticket === accountRevision && placements.get(slot) === 'community') paintAccount(state);
+    }).catch(() => { if (!disposed && ticket === accountRevision && placements.get(slot) === 'community') paintAccount({ status:'error', message:'桌面身份连接未完成，请重试；仍可直接浏览社区。' }); });
   }
   function showNotice(text) {
     if (disposed) return;
@@ -270,11 +299,13 @@ function installUnifiedLayout(options = {}) {
     if (!visible && !node.hasAttribute('inert')) node.setAttribute('inert', ''); else if (visible && !codingInert && node.hasAttribute('inert')) node.removeAttribute('inert');
   }
   function hideAll() {
+    if ([...placements.values()].includes('community')) { ++accountRevision; accountPending = false; }
     for (const [slot] of placements) void Promise.resolve(bridge.community({ action: 'hide', slot })).catch(() => {});
     placements.clear(); lastRects = {}; openTickets = {};
   }
   function closeView(slot) {
     if (!placements.has(slot)) return;
+    if (placements.get(slot) === 'community') { ++accountRevision; accountPending = false; panels[slot].account.textContent = '连接桌面身份'; }
     placements.delete(slot); delete lastRects[slot]; delete openTickets[slot];
     void Promise.resolve(bridge.community({ action: 'hide', slot })).catch(() => {});
   }
@@ -284,6 +315,7 @@ function installUnifiedLayout(options = {}) {
     const title = site === 'community' ? 'N.E.K.O. 社区' : 'B站视频';
     if (p.titleText.textContent !== title) { p.titleText.textContent = title; p.node.setAttribute('aria-label', `${SLOT_NAMES[slot]}：${title}`); }
     p.play.hidden = p.share.hidden = site !== 'bilibili';
+    p.account.hidden = site !== 'community' || typeof bridge.communityAccount !== 'function';
     const boundsStyle = { left: `${Math.round(rect.x)}px`, top: `${Math.round(rect.y)}px`, width: `${Math.round(rect.width)}px`, height: `${Math.round(rect.height)}px` };
     for (const [key, value] of Object.entries(boundsStyle)) if (p.node.style[key] !== value) p.node.style[key] = value;
     const bar = Math.max(42, Math.ceil(p.header.getBoundingClientRect().height));
@@ -293,6 +325,7 @@ function installUnifiedLayout(options = {}) {
     if (current !== site) {
       closeView(slot); placements.set(slot, site); panelNote(slot, `正在加载${title}…`, 'loading');
       p.play.disabled = p.share.disabled = true; p.site = site;
+      p.account.textContent = '连接桌面身份'; p.account.disabled = site === 'community';
       const ticket = ++requestId; openTickets[slot] = ticket;
       void Promise.resolve(bridge.community({ action: 'open', site, slot, bounds: targetBounds, requestId: ticket })).catch(() => {
         if (!disposed && placements.get(slot) === site && openTickets[slot] === ticket) panelNote(slot, '页面未能打开，请检查网络后点「刷新」', 'error');
@@ -472,12 +505,13 @@ function installUnifiedLayout(options = {}) {
     }
     const p = panels[state.slot];
     if (state.status === 'loading') panelNote(state.slot, '正在加载…', 'loading');
-    if (state.status === 'ready') panelNote(state.slot, '');
+    if (state.status === 'ready') { panelNote(state.slot, ''); if (state.site === 'community') p.account.disabled = false; }
     if (state.status === 'error') panelNote(state.slot, '页面未能打开，请检查网络后点「刷新」', 'error');
     if (typeof state.canGoBack === 'boolean') p.back.disabled = !state.canGoBack;
     if (typeof state.canShare === 'boolean') p.share.disabled = !state.canShare;
     if (typeof state.canPlayOfficial === 'boolean') p.play.disabled = !state.canPlayOfficial || !!state.isOfficialPlayer;
   });
+  if (typeof bridge.subscribeCommunityAccount === 'function') unsubscribeAccount = bridge.subscribeCommunityAccount(paintAccount);
   Promise.resolve(bridge.workspace({ action:'pane-layout' })).then(saved => {
     if (disposed || revision) return;
     layout = confirmed = clean(saved); renderConfig();
@@ -491,7 +525,7 @@ function installUnifiedLayout(options = {}) {
     doc.removeEventListener('neko-chatroom-mode-change', roomModeChanged);
     doc.removeEventListener('visibilitychange', visibilityChanged); win.removeEventListener('focus', visibilityChanged); if (recoveryTimer) win.clearTimeout(recoveryTimer); if (noticeTimer) win.clearTimeout(noticeTimer);
     for (const p of Object.values(panels)) if (p.noteTimer) win.clearTimeout(p.noteTimer);
-    if (frame) (win.cancelAnimationFrame || win.clearTimeout)(frame); if (typeof unsubscribe === 'function') unsubscribe();
+    if (frame) (win.cancelAnimationFrame || win.clearTimeout)(frame); if (typeof unsubscribe === 'function') unsubscribe(); if (typeof unsubscribeAccount === 'function') unsubscribeAccount();
     trigger.remove(); config.remove(); mobile.remove(); divider.remove(); notice.remove(); for (const p of Object.values(panels)) p.node.remove(); for (const { zone } of Object.values(drops)) zone.remove(); style.remove();
   };
 }

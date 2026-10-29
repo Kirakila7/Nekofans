@@ -33,6 +33,14 @@ function bridge(getState = async () => ({ workbench: { connection: 'starting' } 
     action: async name => { actions.push(name); return { ok: true }; } };
 }
 
+test('screen companion is a distinct native action in the workbench options', async () => {
+  const api = bundle(), native = bridge(), store = api.createStore(native);
+  await tick();
+  assert.equal(await store.runAction('screen-share'), true);
+  assert.deepEqual(native.actions, ['screen-share']);
+  store.dispose();
+});
+
 test('community button is disabled until a real native handshake; failed handshake remains disabled', async () => {
   const api = bundle();
   const native = bridge();
