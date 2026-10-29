@@ -2014,7 +2014,7 @@ function installUnifiedLayout(options = {}) {
 // @neko-unified-layout:end
 
 // @neko-workspace-shell:start
-const WORKSPACE_SHELL_CSS = "body[data-neko-workspace-shell] { --nws-bg:var(--dsw-alias-bg-layer-1,#fbfeff); --nws-border:var(--dsw-alias-border-l1,#c4dbe6); --nws-text:var(--dsw-alias-label-primary,#17303d); --nws-muted:var(--dsw-alias-label-secondary,#637d8c); --nws-hover:var(--dsw-alias-interactive-bg-hover,#ddedf4); }\nbody[data-neko-workspace-shell] .neko-avatar-anchor,\nbody[data-neko-workspace-shell] .neko-avatar-portal,\nbody[data-neko-workspace-shell] .neko-role-host .neko-roles,\nbody[data-neko-workspace-shell] .neko-role-host .neko-community,\nbody[data-neko-workspace-shell] .neko-mode-switch,\nbody[data-neko-workspace-shell] [data-neko-session-browser-original],\nbody[data-neko-workspace-shell] .neko-hero-pick__name { display:none !important; }\nbody[data-neko-workspace-shell] button[data-neko-new-session=\"plus\"] { position:absolute !important; visibility:hidden !important; pointer-events:none !important; }\n.neko-workspace-rail-controls { display:flex; flex-direction:column; gap:10px; padding-top:14px; }\n.neko-room-entry, .neko-room-workspace { font-size:21px; line-height:1; }\n.neko-room-entry[aria-pressed=\"true\"], .neko-room-workspace[aria-pressed=\"true\"] { background:var(--nws-hover); color:#396c9f; }\nbody[data-neko-workspace-shell] .neko-chatroom-preview { position:fixed; z-index:35; box-sizing:border-box; overflow:auto; background:var(--dsw-specific-sidebar-fill,#e5edf8); }\n.neko-workspace-settings { font-size:24px; line-height:1; }\n.neko-office-switch { border:1px solid var(--nws-border); background:var(--nws-hover); }\n.neko-custom-seats { display:grid; gap:3px; margin:10px 0 6px; }\n.neko-custom-seat { display:flex; align-items:center; border-radius:9px; min-width:0; }\n.neko-custom-seat[data-active=\"true\"] { background:var(--nws-hover); }\n.neko-custom-seat__pick { display:flex; align-items:center; gap:9px; flex:1; min-width:0; padding:7px 8px; text-align:left; }\n.neko-custom-seat button,.neko-session-browser button { border:0; color:inherit; background:transparent; font:inherit; cursor:pointer; }\n.neko-custom-seat button:focus-visible,.neko-session-browser button:focus-visible { outline:2px solid #4c89ad; outline-offset:-2px; }\n.neko-custom-seat img { width:27px; height:27px; object-fit:contain; flex:none; }\n.neko-custom-seat__name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; }\n.neko-custom-seat__new { flex:none; width:26px; height:28px; padding:0; color:var(--nws-muted) !important; font-size:20px !important; line-height:1; }\n.neko-custom-seat__provider { flex:none; font-size:10px; color:var(--nws-muted); border:1px solid var(--nws-border); border-radius:4px; padding:1px 4px; }\n.neko-custom-seat__pick:disabled { cursor:not-allowed; opacity:1; color:#66788c; }\n.neko-custom-seat__pick:disabled .neko-custom-seat__provider { color:#526a82; border-color:#b7c8d9; background:#edf3f9; }\n.neko-custom-seat__settings { width:28px; height:30px; font-size:20px !important; }\n.neko-custom-seat button:hover:not(:disabled),.neko-session-browser button:hover:not(:disabled) { background:var(--nws-hover); border-radius:7px; }\n.neko-session-browser { display:flex; flex-direction:column; flex:1; min-height:80px; overflow:hidden; padding:0 12px; color:var(--nws-text); font:12px/1.5 system-ui,sans-serif; }\n.neko-session-browser__header { display:flex; align-items:center; justify-content:space-between; margin:3px 0 7px; }\n.neko-session-all { text-align:left; font-weight:600 !important; padding:4px; }\n.neko-session-refresh { width:26px; height:26px; font-size:19px !important; }\n.neko-session-search { width:100%; min-height:31px; border:1px solid var(--nws-border); border-radius:8px; background:transparent; color:inherit; padding:5px 9px; outline-offset:2px; }\n.neko-session-status { font-size:11px; color:var(--nws-muted); margin:4px 0; }\n.neko-session-status:empty { display:none; }\n.neko-project-list { overflow:auto; flex:1; min-height:0; padding-bottom:8px; }\n.neko-workspace-project { margin-top:9px; }\n.neko-workspace-project__heading { display:flex; align-items:center; min-width:0; gap:4px; }\n.neko-workspace-project__name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; flex:1; text-align:left; padding:4px 3px; font-weight:600 !important; }\n.neko-workspace-project__provider { color:var(--nws-muted); font-size:9px; padding-right:3px; }\n.neko-workspace-session { display:block; width:100%; text-align:left; padding:6px 8px 6px 15px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }\n.neko-workspace-session[data-selected=\"true\"] { background:var(--nws-hover); border-radius:6px; }\n.neko-workspace-more { width:100%; padding:8px; }\n.neko-companion-dock { position:relative; display:grid; grid-template-columns:minmax(0,1fr); flex:none; min-width:0; width:auto; box-sizing:border-box; margin:0 12px 7px; padding:0; border:0; color:var(--nws-text); background:transparent; font:12px/1.5 system-ui,sans-serif; }\n.neko-companion-character { justify-self:center; width:76px; height:90px; position:relative; transform:translateX(var(--neko-companion-offset,0px)); cursor:grab; touch-action:none; user-select:none; -webkit-user-select:none; }\n.neko-companion-character[data-dragging=\"true\"] { cursor:grabbing; }\n.neko-companion-menu { position:fixed; z-index:60; display:grid; gap:3px; min-width:160px; max-width:240px; box-sizing:border-box; padding:6px; color:var(--nws-text); background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:12px; box-shadow:0 8px 28px #17303d20; font:13px/1.5 system-ui; }\n.neko-companion-menu[hidden] { display:none !important; }\n.neko-companion-menu button { border:0; border-radius:7px; background:transparent; color:inherit; font:inherit; padding:9px 12px; cursor:pointer; text-align:left; }\n.neko-companion-menu button:hover,.neko-companion-menu button:focus-visible { background:var(--nws-hover); outline:none; }\n.neko-companion-menu button:disabled { opacity:.5; cursor:wait; }\n.neko-companion-menu__status { max-width:220px; margin:3px 8px; color:var(--nws-muted); font-size:11px; overflow-wrap:anywhere; }\n.neko-companion-menu__status:empty { display:none; }\n.neko-side-rail__space { position:relative; width:calc(100% + 24px); overflow:hidden; }\n.neko-rail-companion { flex:none; width:44px; height:52px; padding:0; cursor:pointer; }\n.neko-rail-companion[data-neko-rail-roam] { position:absolute; left:0; top:0; z-index:1; max-width:100%; max-height:100%; touch-action:none; cursor:grab; }\n.neko-rail-companion[data-dragging=\"true\"] { cursor:grabbing; }\n.neko-rail-companion .neko-companion-character { width:min(40px, 100%); height:min(50px, 100%); transform:none; cursor:inherit; }\n.neko-rail-companion img.neko-companion-poster,.neko-rail-companion video.neko-companion-video { width:100%; height:100%; border-radius:0; object-fit:contain; }\n.neko-rail-companion [hidden] { display:none !important; }\n.neko-companion-character:focus-visible { outline:2px dashed #4c89ad; outline-offset:-3px; border-radius:12px; }\n.neko-companion-poster,.neko-companion-video { display:block; position:absolute; inset:0; width:100%; height:100%; background:transparent; object-position:center; object-fit:cover; pointer-events:none; }\n.neko-companion-history { position:absolute; z-index:4; bottom:calc(100% + 6px); left:0; right:0; box-sizing:border-box; height:96px; overflow:auto; margin:0; padding:10px; border:1px solid color-mix(in srgb,var(--nws-muted) 18%,transparent); border-radius:10px; background:var(--dsw-specific-sidebar-fill,var(--nws-bg)); box-shadow:0 4px 16px #17303d0a; line-height:18px; white-space:pre-wrap; overflow-wrap:anywhere; }\n.neko-companion-message,.neko-companion-empty { margin:0; font-size:12px; line-height:18px; }\n.neko-companion-empty { color:var(--nws-muted); }\n.neko-companion-status { margin:4px 0 0; color:var(--nws-muted); font-size:10px; }\n.neko-companion-form { display:flex; align-items:center; gap:4px; min-width:0; }\n.neko-companion-form textarea { flex:1; min-width:0; resize:none; height:34px; padding:7px; box-sizing:border-box; border:1px solid color-mix(in srgb,var(--nws-muted) 22%,transparent); border-radius:8px; color:inherit; background:transparent; font:12px/18px system-ui; }\n.neko-companion-form button { display:grid; place-items:center; flex:none; width:26px; height:30px; padding:3px; border:0; border-radius:6px; background:transparent; color:var(--nws-muted); cursor:pointer; }\n.neko-companion-form button:hover,.neko-companion-history-toggle[aria-expanded=\"true\"] { background:color-mix(in srgb,var(--nws-muted) 9%,transparent); color:var(--nws-text); }\n.neko-companion-form button:focus-visible { outline:2px solid #4c89ad; outline-offset:1px; }\n.neko-companion-history-toggle svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round; }\n.neko-office-panel { position:fixed; z-index:28; display:flex; flex-direction:column; box-sizing:border-box; padding:22px clamp(18px,5vw,75px) 24px; color:var(--nws-text); background:var(--dsw-alias-bg-base,#edf6fa); font:14px/1.65 system-ui,sans-serif; }\n.neko-office-panel[hidden],.neko-workspace-modal[hidden],.neko-companion-dock [hidden] { display:none !important; }\n.neko-office-header { display:flex; align-items:center; gap:10px; min-height:42px; flex:none; }\n.neko-office-brand { width:32px; height:32px; object-fit:contain; }\n.neko-office-header strong { max-width:45%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }\n.neko-office-model { font-size:11px; color:var(--nws-muted); margin-right:auto; }\n.neko-office-panel button,.neko-workspace-modal button { color:inherit; background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:8px; padding:6px 11px; font:12px/1.5 system-ui; cursor:pointer; }\n.neko-office-panel button:disabled,.neko-workspace-modal button:disabled,.neko-companion-form button:disabled { opacity:.45; cursor:default; }\n.neko-office-history { flex:1; min-height:80px; overflow:auto; padding:22px 0; }\n.neko-office-item { margin:0 0 18px; white-space:pre-wrap; overflow-wrap:anywhere; }\n.neko-office-item[data-kind=\"user\"] { margin-left:15%; padding:12px 16px; background:var(--nws-bg); border-radius:16px; }\n.neko-office-item[data-kind=\"activity\"] { color:var(--nws-muted); font-size:12px; border-left:2px solid var(--nws-border); padding-left:12px; }\n.neko-office-item summary { cursor:pointer; }\n.neko-office-item__text { max-height:650px; overflow:auto; }\n.neko-office-welcome { text-align:center; display:grid; justify-items:center; padding-top:12vh; color:var(--nws-muted); }\n.neko-office-welcome img { width:100px; height:100px; object-fit:contain; }\n.neko-office-welcome h2 { font-size:20px; margin:12px 0 0; color:var(--nws-text); }\n.neko-office-welcome p { font-size:13px; }\n.neko-office-form { flex:none; background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:18px; padding:12px 15px; box-shadow:0 5px 24px #13304808; }\n.neko-office-form textarea { width:100%; resize:vertical; max-height:180px; min-height:65px; color:inherit; background:transparent; border:0; font:14px/1.65 system-ui; outline:none; box-sizing:border-box; }\n.neko-office-controls { display:flex; align-items:center; flex-wrap:wrap; gap:8px 14px; padding:8px 0; border-top:1px solid var(--nws-border); }\n.neko-office-control { display:flex; align-items:center; gap:6px; min-width:0; font-size:11px; color:var(--nws-muted); }\n.neko-office-control select { box-sizing:border-box; max-width:min(240px,48vw); min-height:32px; padding:4px 8px; border:1px solid var(--nws-border); border-radius:8px; color:var(--nws-text); background:var(--nws-bg); font:12px/1.5 system-ui; }\n.neko-office-control select:focus-visible,.neko-office-panel button:focus-visible { outline:2px solid #4c89ad; outline-offset:2px; }\n.neko-office-control select:disabled { opacity:.6; }\n.neko-office-model-status { margin:0 0 6px; color:var(--nws-muted); font-size:11px; }\n.neko-office-model-status[hidden] { display:none; }\n.neko-office-form-footer { flex-wrap:wrap; }\n.neko-office-form-footer { display:flex; align-items:center; gap:8px; }\n.neko-office-form-footer span { flex:1; color:var(--nws-muted); font-size:10px; }\n.neko-office-error { font-size:12px; color:var(--nws-muted); margin:4px 0 8px; }\n.neko-office-error:empty { display:none; }\n.neko-office-approvals { max-height:28vh; overflow:auto; }\n.neko-office-approval { border:1px solid var(--nws-border); background:var(--nws-bg); border-radius:10px; padding:12px; margin:8px 0; }\n.neko-office-approval pre { white-space:pre-wrap; overflow-wrap:anywhere; font-size:11px; }\n.neko-office-approval button { margin-right:8px; }\n.neko-workspace-modal { position:fixed; inset:0; z-index:220; display:grid; place-items:center; padding:24px; background:#0c24394d; color:var(--nws-text); font:13px/1.6 system-ui,sans-serif; }\n.neko-workspace-modal__card { width:min(460px,90vw); max-height:85vh; overflow:auto; background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:18px; box-shadow:0 24px 80px #17303d30; padding:20px; }\n.neko-workspace-modal__card > header { display:flex; align-items:center; justify-content:space-between; }\n.neko-workspace-modal h2 { font-size:18px; margin:0; }\n.neko-workspace-modal h3 { font-size:13px; margin:20px 0 9px; }\n.neko-office-choices { display:flex; gap:8px; }\n.neko-office-choice { flex:1; display:grid; justify-items:center; gap:7px; padding:14px 8px !important; }\n.neko-office-choice img { width:45px; height:45px; object-fit:contain; }\n.neko-office-choice[aria-pressed=\"true\"] { outline:2px solid #4c89ad; outline-offset:-2px; }\n.neko-workspace-palettes { display:flex; gap:10px; margin-bottom:18px; }\n.neko-workspace-palettes button { padding:4px; }\n.neko-workspace-palettes img { width:35px; height:35px; object-fit:contain; }\n.neko-workspace-setting-link { display:block; width:100%; text-align:left; margin-top:8px; }\n.neko-workspace-note { font-size:11px; color:var(--nws-muted); margin-top:17px; }\n.neko-seat-editor { display:grid; gap:12px; padding-top:18px; }\n.neko-seat-editor label { display:grid; gap:5px; }\n.neko-seat-editor input,.neko-seat-editor select { width:100%; box-sizing:border-box; background:var(--nws-bg); color:inherit; border:1px solid var(--nws-border); border-radius:7px; padding:7px 9px; font:13px system-ui; }\n.neko-workspace-form-error { color:#b05042; margin:0; }\n.neko-workspace-form-error:empty { display:none; }\n@media(max-height:700px) { .neko-companion-character { height:76px; } .neko-custom-seat__pick { padding-top:4px; padding-bottom:4px; } }\n\n.neko-workspace-connections { margin:0 0 8px; font-size:12px; color:var(--nws-muted); }\n\nbody[data-neko-workspace-shell] [data-neko-companion-footer] { display:block !important; width:100%; min-width:0; align-self:stretch; box-sizing:border-box; }\n\n/* Interaction states: hover/press cues on enabled controls only, visible focus\n   rings, and busy/disabled cues. Disabled (e.g. Codex 测试中) never gets hover. */\n.neko-session-browser button:disabled,.neko-custom-seat button:disabled { cursor:not-allowed; }\n.neko-workspace-session:disabled { color:var(--nws-muted); }\n.neko-office-panel button:hover:not(:disabled),.neko-workspace-modal button:hover:not(:disabled) { background:var(--nws-hover); }\n.neko-office-panel button:disabled,.neko-workspace-modal button:disabled { cursor:not-allowed; }\n.neko-custom-seat button:active:not(:disabled),.neko-session-browser button:active:not(:disabled),.neko-office-panel button:active:not(:disabled),.neko-workspace-modal button:active:not(:disabled),.neko-companion-form button:active:not(:disabled),.neko-companion-menu button:active:not(:disabled) { background:var(--dsw-alias-interactive-bg-active,#d0e5ef); }\n.neko-workspace-modal button:focus-visible,.neko-workspace-modal input:focus-visible,.neko-workspace-modal select:focus-visible,.neko-session-search:focus-visible,.neko-companion-form textarea:focus-visible { outline:2px solid #4c89ad; outline-offset:2px; }\n.neko-companion-menu button:focus-visible { box-shadow:inset 0 0 0 2px #4c89ad; }\n.neko-session-refresh[aria-busy=\"true\"],.neko-office-panel button[aria-busy=\"true\"],.neko-workspace-modal button[aria-busy=\"true\"],.neko-companion-menu button[aria-busy=\"true\"] { cursor:progress; }\n.neko-session-refresh[aria-busy=\"true\"] { opacity:.55; }\n.neko-project-list[aria-busy=\"true\"] { opacity:.6; transition:opacity .15s ease; }\n.neko-workspace-form-error:not(:empty) { padding:6px 9px; border-radius:7px; background:#fbeeeb; }\n" + ".neko-chatroom-preview { min-width:0; padding:14px 12px 18px; color:var(--nws-text,#263750); font:13px/1.45 system-ui,sans-serif; }\n.neko-chatroom-preview[hidden] { display:none !important; }\n.neko-chatroom-preview__heading { display:flex; align-items:center; gap:8px; }\n.neko-chatroom-preview__heading h2 { margin:0; font-size:18px; line-height:1.3; letter-spacing:.02em; }\n.neko-chatroom-preview__badge { padding:2px 7px; color:#6486a8; background:#eaf2fb; border:1px solid #d2e3f2; border-radius:999px; font-size:10px; white-space:nowrap; }\n.neko-chatroom-preview__intro { margin:5px 0 14px; color:var(--nws-muted,#71879d); font-size:12px; }\n.neko-chatroom-preview__search { width:100%; box-sizing:border-box; padding:8px 10px; border:1px solid var(--nws-border,#cbdbee); border-radius:8px; background:#f6f9fd99; color:var(--nws-muted,#71879d); font:inherit; opacity:.78; cursor:not-allowed; }\n.neko-chatroom-preview__search::placeholder { color:#93a5b9; }\n.neko-chatroom-preview__label { display:flex; align-items:center; justify-content:space-between; margin:20px 2px 8px; color:#536b84; font-size:12px; font-weight:600; }\n.neko-chatroom-preview__label span { color:#96a8ba; font-size:10px; font-weight:400; }\n.neko-chatroom-preview__rooms { display:grid; gap:4px; }\n.neko-chatroom-preview__room { display:flex; align-items:center; gap:10px; padding:9px 8px; border:1px solid transparent; border-radius:10px; }\n.neko-chatroom-preview__room:first-child { background:#ffffff80; border-color:#dce7f3; }\n.neko-chatroom-preview__room-icon { width:34px; height:34px; flex:none; display:grid; place-items:center; border-radius:11px; color:#6d9bc5; background:#e3f1fc; font-size:19px; }\n.neko-chatroom-preview__room-icon.is-home { color:#a183be; background:#f0eafb; }\n.neko-chatroom-preview__room-copy { min-width:0; display:grid; gap:2px; }\n.neko-chatroom-preview__room-copy strong { font-size:13px; font-weight:600; }\n.neko-chatroom-preview__room-copy small { color:#91a3b7; font-size:11px; }\n.neko-chatroom-preview__empty { display:grid; justify-items:center; text-align:center; margin:20px 0 0; padding:16px 12px; border:1px dashed #cbddef; border-radius:13px; background:#f5faff91; }\n.neko-chatroom-preview__illustration { position:relative; display:grid; place-items:center; width:64px; height:58px; margin-bottom:7px; }\n.neko-chatroom-preview__illustration img { display:block; width:60px; height:58px; object-fit:contain; }\n.neko-chatroom-preview__illustration span { position:absolute; right:0; top:2px; color:#90bfe3; font-size:18px; }\n.neko-chatroom-preview__empty strong { color:#647e98; font-size:12px; }\n.neko-chatroom-preview__empty p { max-width:190px; margin:5px 0 0; color:#96a7b8; font-size:11px; line-height:1.6; }\n";
+const WORKSPACE_SHELL_CSS = "body[data-neko-workspace-shell] { --nws-bg:var(--dsw-alias-bg-layer-1,#fbfeff); --nws-border:var(--dsw-alias-border-l1,#c4dbe6); --nws-text:var(--dsw-alias-label-primary,#17303d); --nws-muted:var(--dsw-alias-label-secondary,#637d8c); --nws-hover:var(--dsw-alias-interactive-bg-hover,#ddedf4); }\nbody[data-neko-workspace-shell] .neko-avatar-anchor,\nbody[data-neko-workspace-shell] .neko-avatar-portal,\nbody[data-neko-workspace-shell] .neko-role-host .neko-roles,\nbody[data-neko-workspace-shell] .neko-role-host .neko-community,\nbody[data-neko-workspace-shell] .neko-mode-switch,\nbody[data-neko-workspace-shell] [data-neko-session-browser-original],\nbody[data-neko-workspace-shell] .neko-hero-pick__name { display:none !important; }\nbody[data-neko-workspace-shell] button[data-neko-new-session=\"plus\"] { position:absolute !important; visibility:hidden !important; pointer-events:none !important; }\n.neko-workspace-rail-controls { display:flex; flex-direction:column; gap:10px; padding-top:14px; }\n.neko-room-entry, .neko-room-workspace { font-size:21px; line-height:1; }\n.neko-room-entry[aria-pressed=\"true\"], .neko-room-workspace[aria-pressed=\"true\"] { background:var(--nws-hover); color:#396c9f; }\nbody[data-neko-workspace-shell] .neko-chatroom-preview { position:fixed; z-index:35; box-sizing:border-box; overflow:auto; background:var(--dsw-specific-sidebar-fill,#e5edf8); }\n.neko-workspace-settings { font-size:24px; line-height:1; }\n.neko-office-switch { border:1px solid var(--nws-border); background:var(--nws-hover); }\n.neko-custom-seats { display:grid; gap:3px; margin:10px 0 6px; }\n.neko-custom-seat { display:flex; align-items:center; border-radius:9px; min-width:0; }\n.neko-custom-seat[data-active=\"true\"] { background:var(--nws-hover); }\n.neko-custom-seat__pick { display:flex; align-items:center; gap:9px; flex:1; min-width:0; padding:7px 8px; text-align:left; }\n.neko-custom-seat button,.neko-session-browser button { border:0; color:inherit; background:transparent; font:inherit; cursor:pointer; }\n.neko-custom-seat button:focus-visible,.neko-session-browser button:focus-visible { outline:2px solid #4c89ad; outline-offset:-2px; }\n.neko-custom-seat img { width:27px; height:27px; object-fit:contain; flex:none; }\n.neko-custom-seat__name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; }\n.neko-custom-seat__new { flex:none; width:26px; height:28px; padding:0; color:var(--nws-muted) !important; font-size:20px !important; line-height:1; }\n.neko-custom-seat__provider { flex:none; font-size:10px; color:var(--nws-muted); border:1px solid var(--nws-border); border-radius:4px; padding:1px 4px; }\n.neko-custom-seat__pick:disabled { cursor:not-allowed; opacity:1; color:#66788c; }\n.neko-custom-seat__pick:disabled .neko-custom-seat__provider { color:#526a82; border-color:#b7c8d9; background:#edf3f9; }\n.neko-custom-seat__settings { width:28px; height:30px; font-size:20px !important; }\n.neko-custom-seat button:hover:not(:disabled),.neko-session-browser button:hover:not(:disabled) { background:var(--nws-hover); border-radius:7px; }\n.neko-session-browser { display:flex; flex-direction:column; flex:1; min-height:80px; overflow:hidden; padding:0 12px; color:var(--nws-text); font:12px/1.5 system-ui,sans-serif; }\n.neko-session-browser__header { display:flex; align-items:center; justify-content:space-between; margin:3px 0 7px; }\n.neko-session-all { text-align:left; font-weight:600 !important; padding:4px; }\n.neko-session-refresh { width:26px; height:26px; font-size:19px !important; }\n.neko-session-search { width:100%; min-height:31px; border:1px solid var(--nws-border); border-radius:8px; background:transparent; color:inherit; padding:5px 9px; outline-offset:2px; }\n.neko-session-status { font-size:11px; color:var(--nws-muted); margin:4px 0; }\n.neko-session-status:empty { display:none; }\n.neko-project-list { overflow:auto; flex:1; min-height:0; padding-bottom:8px; }\n.neko-workspace-project { margin-top:9px; }\n.neko-workspace-project__heading { display:flex; align-items:center; min-width:0; gap:4px; }\n.neko-workspace-project__name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; flex:1; text-align:left; padding:4px 3px; font-weight:600 !important; }\n.neko-workspace-project__provider { color:var(--nws-muted); font-size:9px; padding-right:3px; }\n.neko-workspace-session { display:block; width:100%; text-align:left; padding:6px 8px 6px 15px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }\n.neko-workspace-session[data-selected=\"true\"] { background:var(--nws-hover); border-radius:6px; }\n.neko-workspace-more { width:100%; padding:8px; }\n.neko-companion-dock { position:relative; display:grid; grid-template-columns:minmax(0,1fr); flex:none; min-width:0; width:auto; box-sizing:border-box; margin:0 12px 7px; padding:0; border:0; color:var(--nws-text); background:transparent; font:12px/1.5 system-ui,sans-serif; }\n.neko-companion-character { justify-self:center; width:76px; height:90px; position:relative; transform:translateX(var(--neko-companion-offset,0px)); cursor:grab; touch-action:none; user-select:none; -webkit-user-select:none; }\n.neko-companion-character[data-dragging=\"true\"] { cursor:grabbing; }\n.neko-companion-menu { position:fixed; z-index:60; display:grid; gap:3px; min-width:160px; max-width:240px; box-sizing:border-box; padding:6px; color:var(--nws-text); background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:12px; box-shadow:0 8px 28px #17303d20; font:13px/1.5 system-ui; }\n.neko-companion-menu[hidden] { display:none !important; }\n.neko-companion-menu button { border:0; border-radius:7px; background:transparent; color:inherit; font:inherit; padding:9px 12px; cursor:pointer; text-align:left; }\n.neko-companion-menu button:hover,.neko-companion-menu button:focus-visible { background:var(--nws-hover); outline:none; }\n.neko-companion-menu button:disabled { opacity:.5; cursor:wait; }\n.neko-companion-menu__status { max-width:220px; margin:3px 8px; color:var(--nws-muted); font-size:11px; overflow-wrap:anywhere; }\n.neko-companion-menu__status:empty { display:none; }\n.neko-side-rail__space { position:relative; width:calc(100% + 24px); overflow:hidden; }\n.neko-rail-companion { flex:none; width:44px; height:52px; padding:0; cursor:pointer; }\n.neko-rail-companion[data-neko-rail-roam] { position:absolute; left:0; top:0; z-index:1; max-width:100%; max-height:100%; touch-action:none; cursor:grab; }\n.neko-rail-companion[data-dragging=\"true\"] { cursor:grabbing; }\n.neko-rail-companion .neko-companion-character { width:min(40px, 100%); height:min(50px, 100%); transform:none; cursor:inherit; }\n.neko-rail-companion img.neko-companion-poster,.neko-rail-companion video.neko-companion-video { width:100%; height:100%; border-radius:0; object-fit:contain; }\n.neko-rail-companion [hidden] { display:none !important; }\n.neko-companion-character:focus-visible { outline:2px dashed #4c89ad; outline-offset:-3px; border-radius:12px; }\n.neko-companion-poster,.neko-companion-video { display:block; position:absolute; inset:0; width:100%; height:100%; background:transparent; object-position:center; object-fit:cover; pointer-events:none; }\n.neko-companion-history { position:absolute; z-index:4; bottom:calc(100% + 6px); left:0; right:0; box-sizing:border-box; height:96px; overflow:auto; margin:0; padding:10px; border:1px solid color-mix(in srgb,var(--nws-muted) 18%,transparent); border-radius:10px; background:var(--dsw-specific-sidebar-fill,var(--nws-bg)); box-shadow:0 4px 16px #17303d0a; line-height:18px; white-space:pre-wrap; overflow-wrap:anywhere; }\n.neko-companion-message,.neko-companion-empty { margin:0; font-size:12px; line-height:18px; }\n.neko-companion-empty { color:var(--nws-muted); }\n.neko-companion-status { margin:4px 0 0; color:var(--nws-muted); font-size:10px; }\n.neko-companion-form { display:flex; align-items:center; gap:4px; min-width:0; }\n.neko-companion-form textarea { flex:1; min-width:0; resize:none; height:34px; padding:7px; box-sizing:border-box; border:1px solid color-mix(in srgb,var(--nws-muted) 22%,transparent); border-radius:8px; color:inherit; background:transparent; font:12px/18px system-ui; }\n.neko-companion-form button { display:grid; place-items:center; flex:none; width:26px; height:30px; padding:3px; border:0; border-radius:6px; background:transparent; color:var(--nws-muted); cursor:pointer; }\n.neko-companion-form button:hover,.neko-companion-history-toggle[aria-expanded=\"true\"] { background:color-mix(in srgb,var(--nws-muted) 9%,transparent); color:var(--nws-text); }\n.neko-companion-form button:focus-visible { outline:2px solid #4c89ad; outline-offset:1px; }\n.neko-companion-history-toggle svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round; }\n.neko-office-panel { position:fixed; z-index:28; display:flex; flex-direction:column; box-sizing:border-box; padding:22px clamp(18px,5vw,75px) 24px; color:var(--nws-text); background:var(--dsw-alias-bg-base,#edf6fa); font:14px/1.65 system-ui,sans-serif; }\n.neko-office-panel[hidden],.neko-workspace-modal[hidden],.neko-companion-dock [hidden] { display:none !important; }\n.neko-office-header { display:flex; align-items:center; gap:10px; min-height:42px; flex:none; }\n.neko-office-brand { width:32px; height:32px; object-fit:contain; }\n.neko-office-header strong { max-width:45%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }\n.neko-office-model { font-size:11px; color:var(--nws-muted); margin-right:auto; }\n.neko-office-panel button,.neko-workspace-modal button { color:inherit; background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:8px; padding:6px 11px; font:12px/1.5 system-ui; cursor:pointer; }\n.neko-office-panel button:disabled,.neko-workspace-modal button:disabled,.neko-companion-form button:disabled { opacity:.45; cursor:default; }\n.neko-office-history { flex:1; min-height:80px; overflow:auto; padding:22px 0; }\n.neko-office-item { margin:0 0 18px; white-space:pre-wrap; overflow-wrap:anywhere; }\n.neko-office-item[data-kind=\"user\"] { margin-left:15%; padding:12px 16px; background:var(--nws-bg); border-radius:16px; }\n.neko-office-item[data-kind=\"activity\"] { color:var(--nws-muted); font-size:12px; border-left:2px solid var(--nws-border); padding-left:12px; }\n.neko-office-item summary { cursor:pointer; }\n.neko-office-item__text { max-height:650px; overflow:auto; }\n.neko-office-welcome { text-align:center; display:grid; justify-items:center; padding-top:12vh; color:var(--nws-muted); }\n.neko-office-welcome img { width:100px; height:100px; object-fit:contain; }\n.neko-office-welcome h2 { font-size:20px; margin:12px 0 0; color:var(--nws-text); }\n.neko-office-welcome p { font-size:13px; }\n.neko-office-form { flex:none; background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:18px; padding:12px 15px; box-shadow:0 5px 24px #13304808; }\n.neko-office-form textarea { width:100%; resize:vertical; max-height:180px; min-height:65px; color:inherit; background:transparent; border:0; font:14px/1.65 system-ui; outline:none; box-sizing:border-box; }\n.neko-office-controls { display:flex; align-items:center; flex-wrap:wrap; gap:8px 14px; padding:8px 0; border-top:1px solid var(--nws-border); }\n.neko-office-control { display:flex; align-items:center; gap:6px; min-width:0; font-size:11px; color:var(--nws-muted); }\n.neko-office-control select { box-sizing:border-box; max-width:min(240px,48vw); min-height:32px; padding:4px 8px; border:1px solid var(--nws-border); border-radius:8px; color:var(--nws-text); background:var(--nws-bg); font:12px/1.5 system-ui; }\n.neko-office-control select:focus-visible,.neko-office-panel button:focus-visible { outline:2px solid #4c89ad; outline-offset:2px; }\n.neko-office-control select:disabled { opacity:.6; }\n.neko-office-model-status { margin:0 0 6px; color:var(--nws-muted); font-size:11px; }\n.neko-office-model-status[hidden] { display:none; }\n.neko-office-form-footer { flex-wrap:wrap; }\n.neko-office-form-footer { display:flex; align-items:center; gap:8px; }\n.neko-office-form-footer span { flex:1; color:var(--nws-muted); font-size:10px; }\n.neko-office-error { font-size:12px; color:var(--nws-muted); margin:4px 0 8px; }\n.neko-office-error:empty { display:none; }\n.neko-office-approvals { max-height:28vh; overflow:auto; }\n.neko-office-approval { border:1px solid var(--nws-border); background:var(--nws-bg); border-radius:10px; padding:12px; margin:8px 0; }\n.neko-office-approval pre { white-space:pre-wrap; overflow-wrap:anywhere; font-size:11px; }\n.neko-office-approval button { margin-right:8px; }\n.neko-workspace-modal { position:fixed; inset:0; z-index:220; display:grid; place-items:center; padding:24px; background:#0c24394d; color:var(--nws-text); font:13px/1.6 system-ui,sans-serif; }\n.neko-workspace-modal__card { width:min(460px,90vw); max-height:85vh; overflow:auto; background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:18px; box-shadow:0 24px 80px #17303d30; padding:20px; }\n.neko-workspace-modal__card > header { display:flex; align-items:center; justify-content:space-between; }\n.neko-workspace-modal h2 { font-size:18px; margin:0; }\n.neko-workspace-modal h3 { font-size:13px; margin:20px 0 9px; }\n.neko-office-choices { display:flex; gap:8px; }\n.neko-office-choice { flex:1; display:grid; justify-items:center; gap:7px; padding:14px 8px !important; }\n.neko-office-choice img { width:45px; height:45px; object-fit:contain; }\n.neko-office-choice[aria-pressed=\"true\"] { outline:2px solid #4c89ad; outline-offset:-2px; }\n.neko-workspace-palettes { display:flex; gap:10px; margin-bottom:18px; }\n.neko-workspace-palettes button { padding:4px; }\n.neko-workspace-palettes img { width:35px; height:35px; object-fit:contain; }\n.neko-workspace-setting-link { display:block; width:100%; text-align:left; margin-top:8px; }\n.neko-workspace-note { font-size:11px; color:var(--nws-muted); margin-top:17px; }\n.neko-seat-editor { display:grid; gap:12px; padding-top:18px; }\n.neko-seat-editor label { display:grid; gap:5px; }\n.neko-seat-editor input,.neko-seat-editor select { width:100%; box-sizing:border-box; background:var(--nws-bg); color:inherit; border:1px solid var(--nws-border); border-radius:7px; padding:7px 9px; font:13px system-ui; }\n.neko-workspace-form-error { color:#b05042; margin:0; }\n.neko-workspace-form-error:empty { display:none; }\n@media(max-height:700px) { .neko-companion-character { height:76px; } .neko-custom-seat__pick { padding-top:4px; padding-bottom:4px; } }\n\n.neko-workspace-connections { margin:0 0 8px; font-size:12px; color:var(--nws-muted); }\n\nbody[data-neko-workspace-shell] [data-neko-companion-footer] { display:block !important; width:100%; min-width:0; align-self:stretch; box-sizing:border-box; }\n\n/* Interaction states: hover/press cues on enabled controls only, visible focus\n   rings, and busy/disabled cues. Disabled (e.g. Codex 测试中) never gets hover. */\n.neko-session-browser button:disabled,.neko-custom-seat button:disabled { cursor:not-allowed; }\n.neko-workspace-session:disabled { color:var(--nws-muted); }\n.neko-office-panel button:hover:not(:disabled),.neko-workspace-modal button:hover:not(:disabled) { background:var(--nws-hover); }\n.neko-office-panel button:disabled,.neko-workspace-modal button:disabled { cursor:not-allowed; }\n.neko-custom-seat button:active:not(:disabled),.neko-session-browser button:active:not(:disabled),.neko-office-panel button:active:not(:disabled),.neko-workspace-modal button:active:not(:disabled),.neko-companion-form button:active:not(:disabled),.neko-companion-menu button:active:not(:disabled) { background:var(--dsw-alias-interactive-bg-active,#d0e5ef); }\n.neko-workspace-modal button:focus-visible,.neko-workspace-modal input:focus-visible,.neko-workspace-modal select:focus-visible,.neko-session-search:focus-visible,.neko-companion-form textarea:focus-visible { outline:2px solid #4c89ad; outline-offset:2px; }\n.neko-companion-menu button:focus-visible { box-shadow:inset 0 0 0 2px #4c89ad; }\n.neko-session-refresh[aria-busy=\"true\"],.neko-office-panel button[aria-busy=\"true\"],.neko-workspace-modal button[aria-busy=\"true\"],.neko-companion-menu button[aria-busy=\"true\"] { cursor:progress; }\n.neko-session-refresh[aria-busy=\"true\"] { opacity:.55; }\n.neko-project-list[aria-busy=\"true\"] { opacity:.6; transition:opacity .15s ease; }\n.neko-workspace-form-error:not(:empty) { padding:6px 9px; border-radius:7px; background:#fbeeeb; }\n\n/* Startup is a temporary view over the existing work area, not a new session. */\n.neko-startup { position:fixed; z-index:40; box-sizing:border-box; overflow:auto; color:var(--nws-text); background:var(--dsw-alias-bg-base,#edf4fb); font:14px/1.5 system-ui,sans-serif; }\n.neko-startup[hidden],body[data-neko-unified-enabled] .neko-startup { display:none !important; }\n.neko-startup__inner { width:min(760px,100%); margin:0 auto; box-sizing:border-box; padding:clamp(22px,5vw,54px); }\n.neko-startup__header { display:flex; align-items:start; justify-content:space-between; gap:16px; margin-bottom:24px; }\n.neko-startup__header h1 { font-size:24px; line-height:1.3; margin:0; }\n.neko-startup__header p { color:var(--nws-muted); font-size:13px; margin:7px 0 0; }\n.neko-startup button { color:inherit; font:inherit; cursor:pointer; }\n.neko-startup__continue,.neko-startup__refresh,.neko-startup__more { background:transparent; border:1px solid var(--nws-border); border-radius:9px; padding:7px 12px; }\n.neko-startup__search { width:100%; box-sizing:border-box; border:1px solid var(--nws-border); border-radius:10px; background:color-mix(in srgb,var(--nws-bg) 68%,transparent); color:inherit; padding:10px 13px; font:inherit; }\n.neko-startup__toolbar { display:flex; justify-content:space-between; align-items:center; gap:12px; margin:24px 0 8px; }\n.neko-startup__toolbar strong { font-size:13px; }\n.neko-startup__refresh { font-size:12px !important; padding:5px 10px; }\n.neko-startup__status { min-height:1.5em; color:var(--nws-muted); font-size:12px; margin:0 0 10px; }\n.neko-startup__projects { display:grid; gap:12px; }\n.neko-startup__project { border:1px solid var(--nws-border); border-radius:12px; background:color-mix(in srgb,var(--nws-bg) 72%,transparent); overflow:hidden; }\n.neko-startup__project-row { display:flex; align-items:center; }\n.neko-startup__project-header { display:flex; flex:1; min-width:0; justify-content:space-between; gap:12px; border:0; background:transparent; text-align:left; padding:11px 15px; }\n.neko-startup__project-header strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }\n.neko-startup__provider { color:var(--nws-muted); font-size:11px; }\n.neko-startup__project-new { flex:none; border:1px solid var(--nws-border); border-radius:7px; background:transparent; margin:0 10px; padding:5px 8px; font-size:12px !important; }\n.neko-startup__session { display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%; border:0; border-top:1px solid color-mix(in srgb,var(--nws-border) 70%,transparent); background:transparent; text-align:left; padding:10px 15px; }\n.neko-startup__session span:first-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }\n.neko-startup__arrow { color:var(--nws-muted); font-size:20px; line-height:1; }\n.neko-startup button:hover:not(:disabled) { background:var(--nws-hover); }\n.neko-startup button:disabled { opacity:.5; cursor:not-allowed; }\n.neko-startup button:focus-visible,.neko-startup input:focus-visible { outline:2px solid #4c89ad; outline-offset:2px; }\n.neko-startup__more { justify-self:start; font-size:12px !important; }\n@media(max-width:620px) { .neko-startup__header { flex-wrap:wrap; } .neko-startup__inner { padding:20px; } }\n" + ".neko-chatroom-preview { min-width:0; padding:14px 12px 18px; color:var(--nws-text,#263750); font:13px/1.45 system-ui,sans-serif; }\n.neko-chatroom-preview[hidden] { display:none !important; }\n.neko-chatroom-preview__heading { display:flex; align-items:center; gap:8px; }\n.neko-chatroom-preview__heading h2 { margin:0; font-size:18px; line-height:1.3; letter-spacing:.02em; }\n.neko-chatroom-preview__badge { padding:2px 7px; color:#6486a8; background:#eaf2fb; border:1px solid #d2e3f2; border-radius:999px; font-size:10px; white-space:nowrap; }\n.neko-chatroom-preview__intro { margin:5px 0 14px; color:var(--nws-muted,#71879d); font-size:12px; }\n.neko-chatroom-preview__search { width:100%; box-sizing:border-box; padding:8px 10px; border:1px solid var(--nws-border,#cbdbee); border-radius:8px; background:#f6f9fd99; color:var(--nws-muted,#71879d); font:inherit; opacity:.78; cursor:not-allowed; }\n.neko-chatroom-preview__search::placeholder { color:#93a5b9; }\n.neko-chatroom-preview__label { display:flex; align-items:center; justify-content:space-between; margin:20px 2px 8px; color:#536b84; font-size:12px; font-weight:600; }\n.neko-chatroom-preview__label span { color:#96a8ba; font-size:10px; font-weight:400; }\n.neko-chatroom-preview__rooms { display:grid; gap:4px; }\n.neko-chatroom-preview__room { display:flex; align-items:center; gap:10px; padding:9px 8px; border:1px solid transparent; border-radius:10px; }\n.neko-chatroom-preview__room:first-child { background:#ffffff80; border-color:#dce7f3; }\n.neko-chatroom-preview__room-icon { width:34px; height:34px; flex:none; display:grid; place-items:center; border-radius:11px; color:#6d9bc5; background:#e3f1fc; font-size:19px; }\n.neko-chatroom-preview__room-icon.is-home { color:#a183be; background:#f0eafb; }\n.neko-chatroom-preview__room-copy { min-width:0; display:grid; gap:2px; }\n.neko-chatroom-preview__room-copy strong { font-size:13px; font-weight:600; }\n.neko-chatroom-preview__room-copy small { color:#91a3b7; font-size:11px; }\n.neko-chatroom-preview__empty { display:grid; justify-items:center; text-align:center; margin:20px 0 0; padding:16px 12px; border:1px dashed #cbddef; border-radius:13px; background:#f5faff91; }\n.neko-chatroom-preview__illustration { position:relative; display:grid; place-items:center; width:64px; height:58px; margin-bottom:7px; }\n.neko-chatroom-preview__illustration img { display:block; width:60px; height:58px; object-fit:contain; }\n.neko-chatroom-preview__illustration span { position:absolute; right:0; top:2px; color:#90bfe3; font-size:18px; }\n.neko-chatroom-preview__empty strong { color:#647e98; font-size:12px; }\n.neko-chatroom-preview__empty p { max-width:190px; margin:5px 0 0; color:#96a7b8; font-size:11px; line-height:1.6; }\n";
 // A visual placeholder only: this component does not connect to a service or
 // create a conversation. Navigation and lifetime are owned by workspace shell.
 function createChatroomPreview(doc, avatar = () => '') {
@@ -2079,8 +2079,9 @@ function installWorkspaceShell(options = {}) {
   const avatar = id => options.avatar?.(id) || '';
   const style = el('style'); style.dataset.nekoWorkspaceShell = ''; style.textContent = options.cssText || ''; doc.head.appendChild(style);
   let disposed = false, queued = false, layout = null, state = null, catalog = null, selectedProject = '', selectedId = null, searchText = '', layoutVersion = -1, listLoading = false, sending = false, socialOpen = false;
+  let startupOpen = true, startupSearchText = '', catalogError = '', startupError = '', startupOpening = false;
   let office = { status: 'idle', thread: null, items: [], approvals: [], error: '' };
-  const nativeMarks = new Map(), nodes = [], releases = [], drafts = new Map(), groupOpen = new Set();
+  const nativeMarks = new Map(), nodes = [], releases = [], drafts = new Map(), groupOpen = new Set(), startupCollapsed = new Set();
   const modelChoices = new Map();
   const currentModelChoice = () => modelChoices.get(selectedId || 'new') || { model: null, effort: null };
   function rememberModelChoice(key, choice) {
@@ -2102,7 +2103,7 @@ function installWorkspaceShell(options = {}) {
   const officeImage = image(avatar('bigfish')); officeButton.appendChild(officeImage);
   const settingsButton = button('⚙', 'neko-side-rail__button neko-workspace-settings', () => openSettings('general'));
   settingsButton.setAttribute('aria-label', '工作台设置'); settingsButton.title = '工作台设置';
-  const communityButton = button('', 'neko-side-rail__button neko-community neko-community-yui', () => { closeSettings(); Promise.resolve(options.openCommunity?.()).catch(showError); });
+  const communityButton = button('', 'neko-side-rail__button neko-community neko-community-yui', () => { closeStartup(); closeSettings(); Promise.resolve(options.openCommunity?.()).catch(showError); });
   communityButton.setAttribute('aria-label', 'Yui · N.E.K.O. 社区'); communityButton.title = 'N.E.K.O. 原生社区'; communityButton.appendChild(image(avatar('yui')));
   railTop.append(settingsButton, communityButton);
   // The room is a local visual preview. It never touches the work session or
@@ -2129,9 +2130,16 @@ function installWorkspaceShell(options = {}) {
   function protectRoomFooter(sidebar, account) {
     // Never inert the original main companion/account footer. Mark only the
     // branches that are wholly behind the preview and restore our marks later.
+    // The original native tools nav remains in the sidebar DOM even when its
+    // overlay is positioned elsewhere. Exempt only its path while it is open.
+    const tools = sidebar.querySelector('nav[data-neko-tools="open"]');
     function visit(node) {
       if (node === dock || node === account || node.hasAttribute('data-neko-companion-footer')) return;
-      if (node.contains(dock) || account && node.contains(account)) { for (const child of node.children) visit(child); return; }
+      if (tools && node === tools) { if (roomInert.delete(node)) node.removeAttribute('inert'); return; }
+      if (node.contains(dock) || account && node.contains(account) || tools && node.contains(tools)) {
+        if (roomInert.delete(node)) node.removeAttribute('inert');
+        for (const child of node.children) visit(child); return;
+      }
       if (!node.hasAttribute('inert')) { node.setAttribute('inert', ''); roomInert.add(node); }
     }
     for (const child of sidebar.children) visit(child);
@@ -2157,6 +2165,80 @@ function installWorkspaceShell(options = {}) {
   const listStatus = el('p', 'neko-session-status'), projectList = el('div', 'neko-project-list');
   listStatus.setAttribute('role', 'status'); listStatus.setAttribute('aria-live', 'polite');
   sessionBrowser.append(listHeader, search, listStatus, projectList);
+  // This is an ephemeral navigation surface over the existing work view. It
+  // never starts a task, modifies drafts or changes the persisted pane layout.
+  const startup = own(el('section', 'neko-startup')); startup.setAttribute('aria-label', '选择工作项目或会话');
+  const startupInner = el('div', 'neko-startup__inner');
+  const startupHead = el('header', 'neko-startup__header');
+  const startupHeading = el('div'); startupHeading.append(el('h1', '', '选择工作内容'), el('p', '', '打开已有项目中的工作会话'));
+  const startupContinue = button('继续当前工作', 'neko-startup__continue', () => closeStartup());
+  startupHead.append(startupHeading, startupContinue);
+  const startupSearch = el('input', 'neko-startup__search'); startupSearch.type = 'search'; startupSearch.placeholder = '搜索项目或会话'; startupSearch.setAttribute('aria-label', '搜索项目或会话');
+  startupSearch.addEventListener('input', () => { startupSearchText = startupSearch.value.toLowerCase(); renderStartup(); });
+  const startupToolbar = el('div', 'neko-startup__toolbar'), startupTitle = el('strong', '', '本地工作项目');
+  const startupRefresh = button('刷新', 'neko-startup__refresh', () => refreshCatalog(true));
+  startupToolbar.append(startupTitle, startupRefresh);
+  const startupStatus = el('p', 'neko-startup__status', '正在读取本地工作会话…'); startupStatus.setAttribute('role', 'status'); startupStatus.setAttribute('aria-live', 'polite');
+  const startupProjects = el('div', 'neko-startup__projects');
+  startupInner.append(startupHead, startupSearch, startupToolbar, startupStatus, startupProjects); startup.appendChild(startupInner); doc.body.appendChild(startup);
+  function closeStartup() { startupOpen = false; startup.hidden = true; }
+  function showNativeToolsPage() { closeStartup(); }
+  doc.addEventListener('neko-native-tools-navigate', showNativeToolsPage);
+  function renderStartup() {
+    if (!startupOpen || disposed) return;
+    startupRefresh.disabled = listLoading || startupOpening; startupContinue.disabled = startupOpening;
+    startupProjects.setAttribute('aria-busy', String(listLoading || startupOpening));
+    const rows = (catalog?.sessions || []).filter(row => (row.title + ' ' + row.cwd + ' ' + row.provider).toLowerCase().includes(startupSearchText));
+    const groups = new Map();
+    for (const row of rows) {
+      const key = row.provider + ':' + row.cwd;
+      if (!groups.has(key)) groups.set(key, { cwd: row.cwd, provider: row.provider, sessions: [] });
+      groups.get(key).sessions.push(row);
+    }
+    startupProjects.replaceChildren(...[...groups.entries()].map(([key, group]) => {
+      const section = el('section', 'neko-startup__project'), projectRow = el('div', 'neko-startup__project-row');
+      const header = button('', 'neko-startup__project-header', () => { if (startupCollapsed.has(key)) startupCollapsed.delete(key); else startupCollapsed.add(key); renderStartup(); });
+      const expanded = !startupCollapsed.has(key); header.setAttribute('aria-expanded', String(expanded));
+      const label = group.cwd?.split(/[\\\\/]/).filter(Boolean).at(-1) || '未指定项目';
+      const title = el('strong', '', label); title.title = group.cwd || '未指定项目';
+      header.append(title, el('span', 'neko-startup__provider', group.provider.toUpperCase())); projectRow.appendChild(header);
+      const projectNew = button('新会话', 'neko-startup__project-new', async () => {
+        if (startupOpening) return;
+        startupOpening = true; startupError = ''; renderStartup();
+        try { await openProject(group); }
+        catch (error) { startupError = error?.message || '项目未能打开，请重试'; }
+        finally { startupOpening = false; renderStartup(); }
+      });
+      projectNew.setAttribute('aria-label', '在 ' + label + ' 新建工作会话');
+      projectNew.disabled = !group.cwd || startupOpening || group.provider === 'codex' && (codexPaused() || catalog?.providers?.codex === 'testing');
+      if (!group.cwd) projectNew.title = '该会话未关联项目';
+      else if (group.provider === 'codex' && projectNew.disabled) projectNew.title = 'Codex 测试中，暂不可用';
+      projectRow.appendChild(projectNew); section.appendChild(projectRow);
+      for (const row of expanded ? group.sessions : []) {
+        const item = button('', 'neko-startup__session', async () => {
+          if (startupOpening) return;
+          startupOpening = true; startupError = ''; renderStartup();
+          try { if (await openSession(row)) closeStartup(); }
+          catch (error) { startupError = error?.message || '会话未能打开，请重试'; }
+          finally { startupOpening = false; renderStartup(); }
+        });
+        item.append(el('span', '', row.title), el('span', 'neko-startup__arrow', '›')); item.title = row.title;
+        if (row.provider === 'codex' && (codexPaused() || catalog?.providers?.codex === 'testing')) { item.disabled = true; item.title = 'Codex 测试中，暂不可用'; item.firstChild.textContent += ' · 测试中'; }
+        if (startupOpening) item.disabled = true;
+        section.appendChild(item);
+      }
+      return section;
+    }));
+    if (catalog?.nextDshOffset != null) startupProjects.appendChild(button('加载更多 DSH 会话', 'neko-startup__more', () => refreshCatalog(true, catalog.nextDshOffset)));
+    const unavailable = Object.entries(catalog?.providers || {}).filter(([, status]) => status !== 'ready' && status !== 'testing').map(([name]) => name.toUpperCase());
+    const notices = [];
+    if (startupError || catalogError) notices.push(startupError || catalogError);
+    else if (listLoading) notices.push('正在读取本地工作会话…');
+    else if (!rows.length) notices.push(startupSearchText ? '没有匹配的项目或会话' : '暂无可显示的工作会话');
+    if (unavailable.length) notices.push(unavailable.join('、') + ' 会话暂不可读取');
+    if (catalog?.providers?.codex === 'testing' || codexPaused()) notices.push('Codex 测试中，暂不可用');
+    startupStatus.textContent = notices.join(' · ');
+  }
   const dock = own(el('section', 'neko-companion-dock')); dock.setAttribute('aria-label', '主 agent 聊天');
   const character = el('div', 'neko-companion-character');
   character.setAttribute('role', 'slider'); character.tabIndex = 0; character.setAttribute('aria-label', '大肥鱼，点击打开互动菜单，左右方向键移动'); character.setAttribute('aria-orientation', 'horizontal'); character.title = '点击互动 · 左右拖动 · Home 回到中间';
@@ -2465,7 +2547,7 @@ function installWorkspaceShell(options = {}) {
     if (seat.provider === 'codex') { selectedProject = seat.projectRoot || state?.workspaceRoot || ''; newOffice(); return; }
     try {
       if (typeof options.openDshNew !== 'function') throw Error('无法打开 DSH 工作界面，请重试');
-      await options.openDshNew(seat.projectRoot);
+      await options.openDshNew(seat.projectRoot); closeStartup();
     } catch (error) { showError(error); }
   }
   function renderLayout() {
@@ -2495,7 +2577,7 @@ function installWorkspaceShell(options = {}) {
     renderCatalog(); renderCompanion(); renderOffice(); place();
   }
   function renderCatalog() {
-    if (!layout) return;
+    if (!layout) { renderStartup(); return; }
     const seat = layout.seats.find(s => s.id === layout.activeSeatId);
     allButton.textContent = seat ? seat.name + ' 的工作项目' : '全部工作会话'; allButton.setAttribute('aria-pressed', String(!seat));
     const rows = (catalog?.sessions || []).filter(s => (!seat || s.provider === seat.provider && (!seat.projectRoot || s.cwd === seat.projectRoot)) && (!searchText || (s.title + ' ' + s.cwd + ' ' + s.provider).toLowerCase().includes(searchText)));
@@ -2508,7 +2590,7 @@ function installWorkspaceShell(options = {}) {
       folder.title = group.cwd || '未指定项目';
       heading.append(folder, el('span', 'neko-workspace-project__provider', group.provider.toUpperCase())); section.appendChild(heading);
       if (!groupOpen.has(key)) for (const row of group.sessions) {
-        const link = button(row.title, 'neko-workspace-session', () => openSession(row));
+        const link = button(row.title, 'neko-workspace-session', () => openSession(row).catch(showError));
         link.title = row.title; link.dataset.selected = String(row.provider === 'codex' && row.id === selectedId);
         if (row.provider === 'codex' && codexPaused()) { link.disabled = true; link.title = 'Codex 测试中，暂不可用'; link.textContent += ' · 测试中'; }
         section.appendChild(link);
@@ -2519,27 +2601,53 @@ function installWorkspaceShell(options = {}) {
     const unavailable = Object.entries(catalog?.providers || {}).filter(([, status]) => status !== 'ready' && status !== 'testing').map(([name]) => name.toUpperCase());
     refreshButton.setAttribute('aria-busy', String(listLoading)); projectList.setAttribute('aria-busy', String(listLoading));
     listStatus.textContent = listLoading ? '正在读取本地工作会话…' : unavailable.length ? unavailable.join('、') + ' 会话暂不可读取，可刷新重试' : codexPaused() ? 'Codex 测试中，暂不可用' : rows.length ? '' : seat && !seat.provider ? '请配置这个工作 agent' : '暂无匹配的工作会话';
+    renderStartup();
   }
   async function refreshCatalog(force = false, dshOffset = 0) {
     if (disposed || listLoading) return;
-    listLoading = true; renderCatalog();
+    listLoading = true; catalogError = ''; renderCatalog();
     try { const next = await call({ action: 'catalog', force, dshOffset }); if (!disposed) catalog = next; }
-    catch (error) { showError(error); }
+    catch (error) { catalogError = '工作会话读取失败，请刷新重试'; showError(error); }
     finally { listLoading = false; if (!disposed) renderCatalog(); }
   }
-  async function openSession(row) {
-    if (row.provider === 'codex' && codexPaused()) { showError(Error('Codex 测试中，暂不可用')); return; }
+  function sessionPatch(row) {
+    // Keep the selected sidebar agent compatible with the chosen session.
+    // Prefer the current compatible seat, then a project-specific or general
+    // seat. If none is bound, show all sessions instead of a misleading filter.
+    const seatsForProvider = (layout?.seats || []).filter(seat => seat.provider === row.provider && (!seat.projectRoot || seat.projectRoot === row.cwd));
+    const selectedSeat = seatsForProvider.find(seat => seat.id === layout?.activeSeatId) || seatsForProvider.find(seat => seat.projectRoot === row.cwd) || seatsForProvider.find(seat => !seat.projectRoot);
+    return { officeMode: row.provider, activeSeatId: selectedSeat?.id || null };
+  }
+  async function openProject(group) {
+    if (!group.cwd) throw Error('该项目没有可用目录');
+    if (group.provider === 'codex' && codexPaused()) throw Error('Codex 测试中，暂不可用');
     hideSocial(); closeSettings();
-    if (row.provider === 'dsh') { await saveLayout({ officeMode: 'dsh' }); options.openDshSession?.(row.id); }
+    if (!await saveLayout(sessionPatch(group))) throw Error('无法切换工作界面，请重试');
+    if (group.provider === 'dsh') {
+      if (typeof options.openDshNew !== 'function') throw Error('无法打开 DSH 工作项目，请重试');
+      await options.openDshNew(group.cwd); closeStartup();
+    } else if (group.provider === 'codex') { selectedProject = group.cwd; newOffice(); }
+    else throw Error('不支持的工作平台');
+  }
+  async function openSession(row) {
+    if (row.provider === 'codex' && codexPaused()) { showError(Error('Codex 测试中，暂不可用')); return false; }
+    hideSocial(); closeSettings();
+    const patch = sessionPatch(row);
+    if (row.provider === 'dsh') {
+      if (!await saveLayout(patch)) throw Error('无法切换 DSH 工作界面，请重试');
+      if (typeof options.openDshSession !== 'function') throw Error('无法打开 DSH 工作会话，请重试');
+      await options.openDshSession(row.id); closeStartup(); return true;
+    }
     else {
       const version = ++readVersion; selectedId = row.id; selectedProject = row.cwd; officeInput.value = drafts.get(row.id) || ''; officeReading = true; officeErrorText = '';
-      await saveLayout({ officeMode: 'codex' }); officeError.textContent = '正在读取原生 Codex 会话…';
+      if (!await saveLayout(patch)) throw Error('无法切换 Codex 工作界面，请重试'); officeError.textContent = '正在读取原生 Codex 会话…';
       try { const next = await call({ action: 'codex-read', id: row.id }); if (!disposed && version === readVersion) office = next; }
-      catch (error) { if (!disposed && version === readVersion) showOfficeError(error); }
+      catch (error) { if (!disposed && version === readVersion) showOfficeError(error); throw error; }
       finally { if (!disposed && version === readVersion) { officeReading = false; renderOffice(); } }
+      closeStartup(); return true;
     }
   }
-  function newOffice() { ++readVersion; hideSocial(); selectedId = null; officeReading = false; officeErrorText = ''; office = { status: 'idle', thread: null, items: [], approvals: office.approvals || [], error: '' }; officeInput.value = drafts.get('new') || ''; officeRenderKey = ''; renderOffice(); officeInput.focus(); }
+  function newOffice() { ++readVersion; hideSocial(); selectedId = null; officeReading = false; officeErrorText = ''; office = { status: 'idle', thread: null, items: [], approvals: office.approvals || [], error: '' }; officeInput.value = drafts.get('new') || ''; officeRenderKey = ''; renderOffice(); closeStartup(); officeInput.focus(); }
   function renderCompanion() {
     const c = state?.companion || {}, open = !!layout?.companionHistoryOpen, wasHidden = history.hidden;
     history.hidden = !open; historyToggle.setAttribute('aria-expanded', String(open)); historyToggle.setAttribute('aria-label', open ? '收起聊天记录' : '展开聊天记录'); historyToggle.title = open ? '收起聊天记录' : '展开聊天记录';
@@ -2659,6 +2767,10 @@ function installWorkspaceShell(options = {}) {
   }
   function place() {
     if (disposed) return;
+    // Native embedded pages render in separate views. Once the user chooses a
+    // custom multi-pane layout, remove this temporary surface altogether so it
+    // cannot overlap any pane or sit behind an Electron child view.
+    if (startupOpen && doc.body.hasAttribute('data-neko-unified-enabled')) closeStartup();
     const found = options.locateSidebar?.(); const root = found?.root || found?.slot || doc.querySelector('[data-slot="sidebar"]');
     const rail = doc.querySelector('[data-neko-side-rail]'), theme = rail?.querySelector('.neko-side-rail__theme');
     const space = rail?.querySelector('.neko-side-rail__space') || null;
@@ -2721,13 +2833,14 @@ function installWorkspaceShell(options = {}) {
       const r = root.getBoundingClientRect(), strip = doc.querySelector('.neko-strip')?.getBoundingClientRect();
       const x = Math.ceil(r.right), bottom = strip?.top > 0 ? strip.top : win.innerHeight;
       Object.assign(panel.style, { left: x + 'px', top: '0px', width: Math.max(0, win.innerWidth - x) + 'px', height: Math.max(0, bottom) + 'px' });
+      Object.assign(startup.style, { left: x + 'px', top: '56px', width: Math.max(0, win.innerWidth - x) + 'px', height: Math.max(0, bottom - 56) + 'px' });
     }
     positionCompanionMenu();
   }
   function schedule() { if (!disposed && !queued) { queued = true; Promise.resolve().then(() => { queued = false; place(); positionCompanionMenu(); }); } }
   function nativeNew(event) { if (layout?.officeMode !== 'codex' || !event.target.closest?.('[data-neko-new-session="plus"]')) return; event.preventDefault(); event.stopImmediatePropagation(); newOffice(); }
   function escape(event) { if (event.key !== 'Escape') return; if (!companionMenu.hidden) { event.preventDefault(); event.stopPropagation(); closeCompanionMenu(); } else if (!modal.hidden) { event.stopPropagation(); closeSettings(); } else if (layout?.companionHistoryOpen && dock.contains(doc.activeElement)) { event.preventDefault(); saveLayout({ companionHistoryOpen: false }); historyToggle.focus(); } }
-  const observer = new win.MutationObserver(schedule); observer.observe(doc.body, { childList: true, subtree: true });
+  const observer = new win.MutationObserver(schedule); observer.observe(doc.body, { childList: true, subtree: true, attributes:true, attributeFilter:['data-neko-unified-enabled', 'data-neko-tools'] });
   // Observe only the dock's ancestors for inline style changes: watching every
   // style mutation would also watch our own drag/position updates.
   const ancestorObserver = new win.MutationObserver(schedule);
@@ -2753,7 +2866,7 @@ function installWorkspaceShell(options = {}) {
   }));
   if (typeof bridge.subscribeOffice === 'function') releases.push(bridge.subscribeOffice(next => { if (disposed) return; if (next.thread?.id === selectedId || sendContext?.version === readVersion && sendContext.id === null) { office = next; } else { office.approvals = next.approvals || []; } renderOffice(); }));
   if (typeof bridge.subscribeCommunity === 'function') releases.push(bridge.subscribeCommunity(next => { if (disposed || next?.slot) return; socialOpen = next.status !== 'hidden'; renderOffice(); }));
-  Promise.all([bridge.getState(), call({ action: 'state' }), call({ action: 'codex-state' }), call({ action: 'codex-model-choices' }).catch(() => null)]).then(([s, l, c, choices]) => { if (!disposed) { for (const [id, choice] of Object.entries(choices || {})) modelChoices.set(id, choice); state = s; layout = l; office = c; selectedId = c.thread?.id || null; selectedProject ||= s.workspaceRoot || ''; renderLayout(); refreshCatalog(); } }).catch(showError);
+  Promise.all([bridge.getState(), call({ action: 'state' }), call({ action: 'codex-state' }), call({ action: 'codex-model-choices' }).catch(() => null)]).then(([s, l, c, choices]) => { if (!disposed) { for (const [id, choice] of Object.entries(choices || {})) modelChoices.set(id, choice); state = s; layout = l; office = c; selectedId = c.thread?.id || null; selectedProject ||= s.workspaceRoot || ''; renderLayout(); refreshCatalog(); } }).catch(error => { catalogError = '工作会话读取失败，请刷新重试'; renderStartup(); showError(error); });
   syncCharacter();
   const interval = win.setInterval(() => { if (doc.visibilityState !== 'hidden') refreshCatalog(true); }, 60000);
   place();
@@ -2761,6 +2874,7 @@ function installWorkspaceShell(options = {}) {
     if (disposed) return; disposed = true; motion?.removeEventListener?.('change', syncCharacter); motion?.removeEventListener?.('change', syncRailWalking); doc.removeEventListener('visibilitychange', syncCharacter); doc.removeEventListener('visibilitychange', syncRailWalking); stopRailWalking(); if (railClickTimer !== null) win.clearTimeout(railClickTimer); if (railSpace) { if (railSpaceBeforeAria === null) railSpace.removeAttribute('aria-hidden'); else railSpace.setAttribute('aria-hidden', railSpaceBeforeAria); } if (characterVideo) { characterVideo.pause(); characterVideo.removeAttribute('src'); characterVideo.load(); } observer.disconnect(); ancestorObserver.disconnect(); intersection?.disconnect(); resize?.disconnect(); win.clearInterval(interval);
     win.removeEventListener('resize', place); doc.removeEventListener('scroll', schedule, true); doc.removeEventListener('click', nativeNew, true); doc.removeEventListener('keydown', escape, true);
     doc.removeEventListener('pointerdown', dismissCompanionMenu, true);
+    doc.removeEventListener('neko-native-tools-navigate', showNativeToolsPage);
     if (roomPreview) { doc.removeEventListener('neko-chatroom-show-workspace', showWorkspaceFromLayout); doc.body.removeAttribute('data-neko-chatroom-active'); releaseRoomInert(); doc.dispatchEvent(new win.Event('neko-chatroom-mode-change')); }
     for (const release of releases) if (typeof release === 'function') release();
     for (const [node, attrs] of nativeMarks) for (const [name, before] of attrs) { if (node.getAttribute(name) === '') { if (before === null) node.removeAttribute(name); else node.setAttribute(name, before); } }
@@ -3616,6 +3730,8 @@ function installNekoAccountHabitat(ctx, options) {
       const [mount, setMount] = useState(null) // { host, nav, releaseNav }
       const [toolsOpen, setToolsOpen] = useState(false)
       const triggerRef = useRef(null)
+      const topTriggerRef = useRef(null)
+      const activeTriggerRef = useRef(null)
 
       useEffect(() => {
         if (!store || !ReactDOM || typeof ReactDOM.createPortal !== 'function' || typeof MutationObserver === 'undefined') return undefined
@@ -3714,19 +3830,20 @@ function installNekoAccountHabitat(ctx, options) {
         nav.setAttribute(TOOLS_ATTR, 'open')
         const inside = (node) =>
           node && node.nodeType === 1 &&
-          (nav.contains(node) || (triggerRef.current && triggerRef.current.contains(node)) || node.closest(MORE_PORTAL))
+          (nav.contains(node) || (activeTriggerRef.current && activeTriggerRef.current.contains(node)) || node.closest(MORE_PORTAL))
         const close = (returnFocus) => {
           setToolsOpen(false)
-          if (returnFocus && triggerRef.current) triggerRef.current.focus()
+          if (returnFocus && activeTriggerRef.current) activeTriggerRef.current.focus()
         }
         const place = () => {
-          const t = triggerRef.current
+          const t = activeTriggerRef.current
           if (!t) return
           const row = t.closest('.neko-role') || t
           const r = row.getBoundingClientRect()
           const vw = window.innerWidth || 1100
           const width = Math.max(184, Math.round(r.width))
-          nav.style.setProperty('--neko-tools-left', `${Math.round(Math.max(8, Math.min(r.left, vw - width - 8)))}px`)
+          const left = t === topTriggerRef.current ? r.right - width : r.left
+          nav.style.setProperty('--neko-tools-left', `${Math.round(Math.max(8, Math.min(left, vw - width - 8)))}px`)
           nav.style.setProperty('--neko-tools-top', `${Math.round(r.bottom + 4)}px`)
           nav.style.setProperty('--neko-tools-width', `${width}px`)
         }
@@ -3745,8 +3862,9 @@ function installNekoAccountHabitat(ctx, options) {
           if (!target || target.nodeType !== 1) return
           if (nav.contains(target)) {
             const button = target.closest('button')
-            if (button && !button.matches('[aria-haspopup="menu"]')) later(() => close(false))
+            if (button && !button.matches('[aria-haspopup="menu"]')) { document.dispatchEvent(new window.Event('neko-native-tools-navigate')); later(() => close(false)) }
           } else if (target.closest(MORE_PORTAL) && target.closest('button, a, [role^="menuitem"]')) {
+            document.dispatchEvent(new window.Event('neko-native-tools-navigate'))
             later(() => close(false))
           }
         }
@@ -3778,6 +3896,35 @@ function installNekoAccountHabitat(ctx, options) {
         }
       }, [toolsOpen, mount])
 
+      // The trigger follows the actual DSH coding pane when the workbench is
+      // split. It is not shown over Codex or a hidden native coding pane.
+      useEffect(() => {
+        const button = topTriggerRef.current
+        if (!mount || !button) return undefined
+        let frame = 0, stopped = false, observed = null
+        const resize = typeof ResizeObserver === 'function' ? new ResizeObserver(schedule) : null
+        function schedule() {
+          if (!frame && !stopped) frame = (window.requestAnimationFrame || setTimeout)(place)
+        }
+        function place() {
+          frame = 0
+          const coding = document.querySelector('[data-neko-unified-coding]') || document.querySelector('[class*="_centerCol"]') || document.querySelector('main')
+          if (coding !== observed) { resize?.disconnect(); if (coding) resize?.observe(coding); observed = coding }
+          const rect = coding?.getBoundingClientRect()
+          const visible = !!rect && rect.width >= 260 && rect.height >= 80 && coding.getAttribute('data-neko-unified-coding') !== 'hidden' && document.body.getAttribute('data-neko-office-mode') !== 'codex'
+          button.hidden = !visible
+          if (!visible) { if (activeTriggerRef.current === button) setToolsOpen(false); return }
+          button.style.left = `${Math.round(Math.max(rect.left + 8, rect.right - 224))}px`
+          button.style.top = `${Math.round(rect.top + 10)}px`
+        }
+        const observer = new MutationObserver(schedule)
+        observer.observe(document.body, { attributes:true, childList:true, subtree:true, attributeFilter:['data-neko-office-mode', 'data-neko-unified-coding'] })
+        window.addEventListener('resize', schedule)
+        window.addEventListener('scroll', schedule, true)
+        place()
+        return () => { stopped = true; if (frame) (window.cancelAnimationFrame || clearTimeout)(frame); resize?.disconnect(); observer.disconnect(); window.removeEventListener('resize', schedule); window.removeEventListener('scroll', schedule, true) }
+      }, [mount])
+
       // When the roles store disposes, release the last claimed nav: the
       // adapter itself stays mounted but mount is set to null.
       useEffect(() => {
@@ -3791,9 +3938,18 @@ function installNekoAccountHabitat(ctx, options) {
         open: toolsOpen,
         navId: mount.nav.id,
         triggerRef,
-        toggle: () => setToolsOpen((v) => !v),
+        toggle: () => { activeTriggerRef.current = triggerRef.current; setToolsOpen((v) => !v) },
       }
-      return ReactDOM.createPortal(h(RoleSeats, { store, tools }), mount.host)
+      return h(React.Fragment, null,
+        ReactDOM.createPortal(h(RoleSeats, { store, tools }), mount.host),
+        ReactDOM.createPortal(h('button', {
+          type: 'button', className: 'neko-native-tools-entry', ref: topTriggerRef,
+          'aria-label': 'DSH 工具：插件、自动化任务、更多', 'aria-haspopup': 'menu',
+          'aria-controls': mount.nav.id, 'aria-expanded': toolsOpen && activeTriggerRef.current === topTriggerRef.current ? 'true' : 'false',
+          title: 'DSH 原生工具',
+          onClick: () => { activeTriggerRef.current = topTriggerRef.current; setToolsOpen((v) => !v) },
+        }, h(Glyph, { d: TOOLS_D })), document.body),
+      )
     }
 
     // --- community in the coding pane ---------------------------------------
@@ -4621,6 +4777,11 @@ button[data-neko-new-session="plus"]:focus-visible { outline: 2px solid var(--ds
 .neko-avatar-portal > .neko-pop { pointer-events:auto; }
 
 /* Native global nav (插件 / 自动化任务 / More): folded in place, shown as an overlay. */
+.neko-native-tools-entry { position:fixed; z-index:100; display:grid; place-items:center; width:32px; height:32px; padding:6px; border:1px solid var(--dsw-alias-border-l1,#c4dbe6); border-radius:8px; background:var(--dsw-alias-bg-layer-1,#fbfeff); color:var(--dsw-alias-label-primary,#17303d); cursor:pointer; -webkit-app-region:no-drag; }
+.neko-native-tools-entry[hidden] { display:none !important; }
+.neko-native-tools-entry svg { width:18px; height:18px; fill:currentColor; }
+.neko-native-tools-entry:hover,.neko-native-tools-entry[aria-expanded="true"] { background:var(--dsw-alias-interactive-bg-hover,#ddedf4); }
+.neko-native-tools-entry:focus-visible { outline:2px solid var(--dsw-alias-brand-primary,#4c89ad); outline-offset:2px; }
 nav[data-neko-tools="folded"] { display: none !important; }
 nav[data-neko-tools="open"] {
   position: fixed !important; z-index: 2147482000; box-sizing: border-box;

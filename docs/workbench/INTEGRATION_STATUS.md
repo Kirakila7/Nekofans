@@ -1,6 +1,11 @@
-# Local test workbench 0.28.8
+# Local test workbench 0.28.9 (source, pending installation)
 
 The daily artifact is built from this repository. `config/daily-release.json` is the version authority; every app includes `Contents/Resources/WORKBENCH_BUILD.json` with the source commit and SHA-256 of every shipped source file. Historical QA checkouts and profiles are not release inputs.
+
+## Pending source changes
+
+- On opening the workbench, the right-hand coding area offers a search and selection surface for known local work sessions and their projects. Opening a DSH session or starting a session for a known DSH project uses the existing native navigation; Codex remains disabled while its integration is testing. The project catalog is derived from known sessions and does not discover empty projects. A user-selected custom split dismisses the selector without replacing the saved layout. Synthetic DOM tests verify navigation and draft preservation; real-session and installed-app verification are pending.
+- A workbench-styled control in the DSH coding area exposes the existing native Plugins, Automation and More navigation, preserving native handlers and plugin contributions. DOM checks verify the adapter; real-window positioning and native service behavior still need verification.
 
 ## Included local workbench changes
 
