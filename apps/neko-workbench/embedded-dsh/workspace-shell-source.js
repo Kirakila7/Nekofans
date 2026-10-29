@@ -9,8 +9,9 @@ function installWorkspaceShell(options = {}) {
   const avatar = id => options.avatar?.(id) || '';
   const style = el('style'); style.dataset.nekoWorkspaceShell = ''; style.textContent = options.cssText || ''; doc.head.appendChild(style);
   let disposed = false, queued = false, layout = null, state = null, catalog = null, selectedProject = '', selectedId = null, searchText = '', layoutVersion = -1, listLoading = false, sending = false, socialOpen = false;
+  let startupOpen = true, startupSearchText = '', catalogError = '', startupError = '', startupOpening = false;
   let office = { status: 'idle', thread: null, items: [], approvals: [], error: '' };
-  const nativeMarks = new Map(), nodes = [], releases = [], drafts = new Map(), groupOpen = new Set();
+  const nativeMarks = new Map(), nodes = [], releases = [], drafts = new Map(), groupOpen = new Set(), startupCollapsed = new Set();
   const modelChoices = new Map();
   const currentModelChoice = () => modelChoices.get(selectedId || 'new') || { model: null, effort: null };
   function rememberModelChoice(key, choice) {
@@ -32,7 +33,7 @@ function installWorkspaceShell(options = {}) {
   const officeImage = image(avatar('bigfish')); officeButton.appendChild(officeImage);
   const settingsButton = button('⚙', 'neko-side-rail__button neko-workspace-settings', () => openSettings('general'));
   settingsButton.setAttribute('aria-label', '工作台设置'); settingsButton.title = '工作台设置';
-  const communityButton = button('', 'neko-side-rail__button neko-community neko-community-yui', () => { closeSettings(); Promise.resolve(options.openCommunity?.()).catch(showError); });
+  const communityButton = button('', 'neko-side-rail__button neko-community neko-community-yui', () => { closeStartup(); closeSettings(); Promise.resolve(options.openCommunity?.()).catch(showError); });
   communityButton.setAttribute('aria-label', 'Yui · N.E.K.O. 社区'); communityButton.title = 'N.E.K.O. 原生社区'; communityButton.appendChild(image(avatar('yui')));
   railTop.append(settingsButton, communityButton);
   // The room is a local visual preview. It never touches the work session or
@@ -59,9 +60,16 @@ function installWorkspaceShell(options = {}) {
   function protectRoomFooter(sidebar, account) {
     // Never inert the original main companion/account footer. Mark only the
     // branches that are wholly behind the preview and restore our marks later.
+    // The original native tools nav remains in the sidebar DOM even when its
+    // overlay is positioned elsewhere. Exempt only its path while it is open.
+    const tools = sidebar.querySelector('nav[data-neko-tools="open"]');
     function visit(node) {
       if (node === dock || node === account || node.hasAttribute('data-neko-companion-footer')) return;
-      if (node.contains(dock) || account && node.contains(account)) { for (const child of node.children) visit(child); return; }
+      if (tools && node === tools) { if (roomInert.delete(node)) node.removeAttribute('inert'); return; }
+      if (node.contains(dock) || account && node.contains(account) || tools && node.contains(tools)) {
+        if (roomInert.delete(node)) node.removeAttribute('inert');
+        for (const child of node.children) visit(child); return;
+      }
       if (!node.hasAttribute('inert')) { node.setAttribute('inert', ''); roomInert.add(node); }
     }
     for (const child of sidebar.children) visit(child);
@@ -87,6 +95,80 @@ function installWorkspaceShell(options = {}) {
   const listStatus = el('p', 'neko-session-status'), projectList = el('div', 'neko-project-list');
   listStatus.setAttribute('role', 'status'); listStatus.setAttribute('aria-live', 'polite');
   sessionBrowser.append(listHeader, search, listStatus, projectList);
+  // This is an ephemeral navigation surface over the existing work view. It
+  // never starts a task, modifies drafts or changes the persisted pane layout.
+  const startup = own(el('section', 'neko-startup')); startup.setAttribute('aria-label', '选择工作项目或会话');
+  const startupInner = el('div', 'neko-startup__inner');
+  const startupHead = el('header', 'neko-startup__header');
+  const startupHeading = el('div'); startupHeading.append(el('h1', '', '选择工作内容'), el('p', '', '打开已有项目中的工作会话'));
+  const startupContinue = button('继续当前工作', 'neko-startup__continue', () => closeStartup());
+  startupHead.append(startupHeading, startupContinue);
+  const startupSearch = el('input', 'neko-startup__search'); startupSearch.type = 'search'; startupSearch.placeholder = '搜索项目或会话'; startupSearch.setAttribute('aria-label', '搜索项目或会话');
+  startupSearch.addEventListener('input', () => { startupSearchText = startupSearch.value.toLowerCase(); renderStartup(); });
+  const startupToolbar = el('div', 'neko-startup__toolbar'), startupTitle = el('strong', '', '本地工作项目');
+  const startupRefresh = button('刷新', 'neko-startup__refresh', () => refreshCatalog(true));
+  startupToolbar.append(startupTitle, startupRefresh);
+  const startupStatus = el('p', 'neko-startup__status', '正在读取本地工作会话…'); startupStatus.setAttribute('role', 'status'); startupStatus.setAttribute('aria-live', 'polite');
+  const startupProjects = el('div', 'neko-startup__projects');
+  startupInner.append(startupHead, startupSearch, startupToolbar, startupStatus, startupProjects); startup.appendChild(startupInner); doc.body.appendChild(startup);
+  function closeStartup() { startupOpen = false; startup.hidden = true; }
+  function showNativeToolsPage() { closeStartup(); }
+  doc.addEventListener('neko-native-tools-navigate', showNativeToolsPage);
+  function renderStartup() {
+    if (!startupOpen || disposed) return;
+    startupRefresh.disabled = listLoading || startupOpening; startupContinue.disabled = startupOpening;
+    startupProjects.setAttribute('aria-busy', String(listLoading || startupOpening));
+    const rows = (catalog?.sessions || []).filter(row => (row.title + ' ' + row.cwd + ' ' + row.provider).toLowerCase().includes(startupSearchText));
+    const groups = new Map();
+    for (const row of rows) {
+      const key = row.provider + ':' + row.cwd;
+      if (!groups.has(key)) groups.set(key, { cwd: row.cwd, provider: row.provider, sessions: [] });
+      groups.get(key).sessions.push(row);
+    }
+    startupProjects.replaceChildren(...[...groups.entries()].map(([key, group]) => {
+      const section = el('section', 'neko-startup__project'), projectRow = el('div', 'neko-startup__project-row');
+      const header = button('', 'neko-startup__project-header', () => { if (startupCollapsed.has(key)) startupCollapsed.delete(key); else startupCollapsed.add(key); renderStartup(); });
+      const expanded = !startupCollapsed.has(key); header.setAttribute('aria-expanded', String(expanded));
+      const label = group.cwd?.split(/[\\\\/]/).filter(Boolean).at(-1) || '未指定项目';
+      const title = el('strong', '', label); title.title = group.cwd || '未指定项目';
+      header.append(title, el('span', 'neko-startup__provider', group.provider.toUpperCase())); projectRow.appendChild(header);
+      const projectNew = button('新会话', 'neko-startup__project-new', async () => {
+        if (startupOpening) return;
+        startupOpening = true; startupError = ''; renderStartup();
+        try { await openProject(group); }
+        catch (error) { startupError = error?.message || '项目未能打开，请重试'; }
+        finally { startupOpening = false; renderStartup(); }
+      });
+      projectNew.setAttribute('aria-label', '在 ' + label + ' 新建工作会话');
+      projectNew.disabled = !group.cwd || startupOpening || group.provider === 'codex' && (codexPaused() || catalog?.providers?.codex === 'testing');
+      if (!group.cwd) projectNew.title = '该会话未关联项目';
+      else if (group.provider === 'codex' && projectNew.disabled) projectNew.title = 'Codex 测试中，暂不可用';
+      projectRow.appendChild(projectNew); section.appendChild(projectRow);
+      for (const row of expanded ? group.sessions : []) {
+        const item = button('', 'neko-startup__session', async () => {
+          if (startupOpening) return;
+          startupOpening = true; startupError = ''; renderStartup();
+          try { if (await openSession(row)) closeStartup(); }
+          catch (error) { startupError = error?.message || '会话未能打开，请重试'; }
+          finally { startupOpening = false; renderStartup(); }
+        });
+        item.append(el('span', '', row.title), el('span', 'neko-startup__arrow', '›')); item.title = row.title;
+        if (row.provider === 'codex' && (codexPaused() || catalog?.providers?.codex === 'testing')) { item.disabled = true; item.title = 'Codex 测试中，暂不可用'; item.firstChild.textContent += ' · 测试中'; }
+        if (startupOpening) item.disabled = true;
+        section.appendChild(item);
+      }
+      return section;
+    }));
+    if (catalog?.nextDshOffset != null) startupProjects.appendChild(button('加载更多 DSH 会话', 'neko-startup__more', () => refreshCatalog(true, catalog.nextDshOffset)));
+    const unavailable = Object.entries(catalog?.providers || {}).filter(([, status]) => status !== 'ready' && status !== 'testing').map(([name]) => name.toUpperCase());
+    const notices = [];
+    if (startupError || catalogError) notices.push(startupError || catalogError);
+    else if (listLoading) notices.push('正在读取本地工作会话…');
+    else if (!rows.length) notices.push(startupSearchText ? '没有匹配的项目或会话' : '暂无可显示的工作会话');
+    if (unavailable.length) notices.push(unavailable.join('、') + ' 会话暂不可读取');
+    if (catalog?.providers?.codex === 'testing' || codexPaused()) notices.push('Codex 测试中，暂不可用');
+    startupStatus.textContent = notices.join(' · ');
+  }
   const dock = own(el('section', 'neko-companion-dock')); dock.setAttribute('aria-label', '主 agent 聊天');
   const character = el('div', 'neko-companion-character');
   character.setAttribute('role', 'slider'); character.tabIndex = 0; character.setAttribute('aria-label', '大肥鱼，点击打开互动菜单，左右方向键移动'); character.setAttribute('aria-orientation', 'horizontal'); character.title = '点击互动 · 左右拖动 · Home 回到中间';
@@ -395,7 +477,7 @@ function installWorkspaceShell(options = {}) {
     if (seat.provider === 'codex') { selectedProject = seat.projectRoot || state?.workspaceRoot || ''; newOffice(); return; }
     try {
       if (typeof options.openDshNew !== 'function') throw Error('无法打开 DSH 工作界面，请重试');
-      await options.openDshNew(seat.projectRoot);
+      await options.openDshNew(seat.projectRoot); closeStartup();
     } catch (error) { showError(error); }
   }
   function renderLayout() {
@@ -425,7 +507,7 @@ function installWorkspaceShell(options = {}) {
     renderCatalog(); renderCompanion(); renderOffice(); place();
   }
   function renderCatalog() {
-    if (!layout) return;
+    if (!layout) { renderStartup(); return; }
     const seat = layout.seats.find(s => s.id === layout.activeSeatId);
     allButton.textContent = seat ? seat.name + ' 的工作项目' : '全部工作会话'; allButton.setAttribute('aria-pressed', String(!seat));
     const rows = (catalog?.sessions || []).filter(s => (!seat || s.provider === seat.provider && (!seat.projectRoot || s.cwd === seat.projectRoot)) && (!searchText || (s.title + ' ' + s.cwd + ' ' + s.provider).toLowerCase().includes(searchText)));
@@ -438,7 +520,7 @@ function installWorkspaceShell(options = {}) {
       folder.title = group.cwd || '未指定项目';
       heading.append(folder, el('span', 'neko-workspace-project__provider', group.provider.toUpperCase())); section.appendChild(heading);
       if (!groupOpen.has(key)) for (const row of group.sessions) {
-        const link = button(row.title, 'neko-workspace-session', () => openSession(row));
+        const link = button(row.title, 'neko-workspace-session', () => openSession(row).catch(showError));
         link.title = row.title; link.dataset.selected = String(row.provider === 'codex' && row.id === selectedId);
         if (row.provider === 'codex' && codexPaused()) { link.disabled = true; link.title = 'Codex 测试中，暂不可用'; link.textContent += ' · 测试中'; }
         section.appendChild(link);
@@ -449,27 +531,53 @@ function installWorkspaceShell(options = {}) {
     const unavailable = Object.entries(catalog?.providers || {}).filter(([, status]) => status !== 'ready' && status !== 'testing').map(([name]) => name.toUpperCase());
     refreshButton.setAttribute('aria-busy', String(listLoading)); projectList.setAttribute('aria-busy', String(listLoading));
     listStatus.textContent = listLoading ? '正在读取本地工作会话…' : unavailable.length ? unavailable.join('、') + ' 会话暂不可读取，可刷新重试' : codexPaused() ? 'Codex 测试中，暂不可用' : rows.length ? '' : seat && !seat.provider ? '请配置这个工作 agent' : '暂无匹配的工作会话';
+    renderStartup();
   }
   async function refreshCatalog(force = false, dshOffset = 0) {
     if (disposed || listLoading) return;
-    listLoading = true; renderCatalog();
+    listLoading = true; catalogError = ''; renderCatalog();
     try { const next = await call({ action: 'catalog', force, dshOffset }); if (!disposed) catalog = next; }
-    catch (error) { showError(error); }
+    catch (error) { catalogError = '工作会话读取失败，请刷新重试'; showError(error); }
     finally { listLoading = false; if (!disposed) renderCatalog(); }
   }
-  async function openSession(row) {
-    if (row.provider === 'codex' && codexPaused()) { showError(Error('Codex 测试中，暂不可用')); return; }
+  function sessionPatch(row) {
+    // Keep the selected sidebar agent compatible with the chosen session.
+    // Prefer the current compatible seat, then a project-specific or general
+    // seat. If none is bound, show all sessions instead of a misleading filter.
+    const seatsForProvider = (layout?.seats || []).filter(seat => seat.provider === row.provider && (!seat.projectRoot || seat.projectRoot === row.cwd));
+    const selectedSeat = seatsForProvider.find(seat => seat.id === layout?.activeSeatId) || seatsForProvider.find(seat => seat.projectRoot === row.cwd) || seatsForProvider.find(seat => !seat.projectRoot);
+    return { officeMode: row.provider, activeSeatId: selectedSeat?.id || null };
+  }
+  async function openProject(group) {
+    if (!group.cwd) throw Error('该项目没有可用目录');
+    if (group.provider === 'codex' && codexPaused()) throw Error('Codex 测试中，暂不可用');
     hideSocial(); closeSettings();
-    if (row.provider === 'dsh') { await saveLayout({ officeMode: 'dsh' }); options.openDshSession?.(row.id); }
+    if (!await saveLayout(sessionPatch(group))) throw Error('无法切换工作界面，请重试');
+    if (group.provider === 'dsh') {
+      if (typeof options.openDshNew !== 'function') throw Error('无法打开 DSH 工作项目，请重试');
+      await options.openDshNew(group.cwd); closeStartup();
+    } else if (group.provider === 'codex') { selectedProject = group.cwd; newOffice(); }
+    else throw Error('不支持的工作平台');
+  }
+  async function openSession(row) {
+    if (row.provider === 'codex' && codexPaused()) { showError(Error('Codex 测试中，暂不可用')); return false; }
+    hideSocial(); closeSettings();
+    const patch = sessionPatch(row);
+    if (row.provider === 'dsh') {
+      if (!await saveLayout(patch)) throw Error('无法切换 DSH 工作界面，请重试');
+      if (typeof options.openDshSession !== 'function') throw Error('无法打开 DSH 工作会话，请重试');
+      await options.openDshSession(row.id); closeStartup(); return true;
+    }
     else {
       const version = ++readVersion; selectedId = row.id; selectedProject = row.cwd; officeInput.value = drafts.get(row.id) || ''; officeReading = true; officeErrorText = '';
-      await saveLayout({ officeMode: 'codex' }); officeError.textContent = '正在读取原生 Codex 会话…';
+      if (!await saveLayout(patch)) throw Error('无法切换 Codex 工作界面，请重试'); officeError.textContent = '正在读取原生 Codex 会话…';
       try { const next = await call({ action: 'codex-read', id: row.id }); if (!disposed && version === readVersion) office = next; }
-      catch (error) { if (!disposed && version === readVersion) showOfficeError(error); }
+      catch (error) { if (!disposed && version === readVersion) showOfficeError(error); throw error; }
       finally { if (!disposed && version === readVersion) { officeReading = false; renderOffice(); } }
+      closeStartup(); return true;
     }
   }
-  function newOffice() { ++readVersion; hideSocial(); selectedId = null; officeReading = false; officeErrorText = ''; office = { status: 'idle', thread: null, items: [], approvals: office.approvals || [], error: '' }; officeInput.value = drafts.get('new') || ''; officeRenderKey = ''; renderOffice(); officeInput.focus(); }
+  function newOffice() { ++readVersion; hideSocial(); selectedId = null; officeReading = false; officeErrorText = ''; office = { status: 'idle', thread: null, items: [], approvals: office.approvals || [], error: '' }; officeInput.value = drafts.get('new') || ''; officeRenderKey = ''; renderOffice(); closeStartup(); officeInput.focus(); }
   function renderCompanion() {
     const c = state?.companion || {}, open = !!layout?.companionHistoryOpen, wasHidden = history.hidden;
     history.hidden = !open; historyToggle.setAttribute('aria-expanded', String(open)); historyToggle.setAttribute('aria-label', open ? '收起聊天记录' : '展开聊天记录'); historyToggle.title = open ? '收起聊天记录' : '展开聊天记录';
@@ -589,6 +697,10 @@ function installWorkspaceShell(options = {}) {
   }
   function place() {
     if (disposed) return;
+    // Native embedded pages render in separate views. Once the user chooses a
+    // custom multi-pane layout, remove this temporary surface altogether so it
+    // cannot overlap any pane or sit behind an Electron child view.
+    if (startupOpen && doc.body.hasAttribute('data-neko-unified-enabled')) closeStartup();
     const found = options.locateSidebar?.(); const root = found?.root || found?.slot || doc.querySelector('[data-slot="sidebar"]');
     const rail = doc.querySelector('[data-neko-side-rail]'), theme = rail?.querySelector('.neko-side-rail__theme');
     const space = rail?.querySelector('.neko-side-rail__space') || null;
@@ -651,13 +763,14 @@ function installWorkspaceShell(options = {}) {
       const r = root.getBoundingClientRect(), strip = doc.querySelector('.neko-strip')?.getBoundingClientRect();
       const x = Math.ceil(r.right), bottom = strip?.top > 0 ? strip.top : win.innerHeight;
       Object.assign(panel.style, { left: x + 'px', top: '0px', width: Math.max(0, win.innerWidth - x) + 'px', height: Math.max(0, bottom) + 'px' });
+      Object.assign(startup.style, { left: x + 'px', top: '56px', width: Math.max(0, win.innerWidth - x) + 'px', height: Math.max(0, bottom - 56) + 'px' });
     }
     positionCompanionMenu();
   }
   function schedule() { if (!disposed && !queued) { queued = true; Promise.resolve().then(() => { queued = false; place(); positionCompanionMenu(); }); } }
   function nativeNew(event) { if (layout?.officeMode !== 'codex' || !event.target.closest?.('[data-neko-new-session="plus"]')) return; event.preventDefault(); event.stopImmediatePropagation(); newOffice(); }
   function escape(event) { if (event.key !== 'Escape') return; if (!companionMenu.hidden) { event.preventDefault(); event.stopPropagation(); closeCompanionMenu(); } else if (!modal.hidden) { event.stopPropagation(); closeSettings(); } else if (layout?.companionHistoryOpen && dock.contains(doc.activeElement)) { event.preventDefault(); saveLayout({ companionHistoryOpen: false }); historyToggle.focus(); } }
-  const observer = new win.MutationObserver(schedule); observer.observe(doc.body, { childList: true, subtree: true });
+  const observer = new win.MutationObserver(schedule); observer.observe(doc.body, { childList: true, subtree: true, attributes:true, attributeFilter:['data-neko-unified-enabled', 'data-neko-tools'] });
   // Observe only the dock's ancestors for inline style changes: watching every
   // style mutation would also watch our own drag/position updates.
   const ancestorObserver = new win.MutationObserver(schedule);
@@ -683,7 +796,7 @@ function installWorkspaceShell(options = {}) {
   }));
   if (typeof bridge.subscribeOffice === 'function') releases.push(bridge.subscribeOffice(next => { if (disposed) return; if (next.thread?.id === selectedId || sendContext?.version === readVersion && sendContext.id === null) { office = next; } else { office.approvals = next.approvals || []; } renderOffice(); }));
   if (typeof bridge.subscribeCommunity === 'function') releases.push(bridge.subscribeCommunity(next => { if (disposed || next?.slot) return; socialOpen = next.status !== 'hidden'; renderOffice(); }));
-  Promise.all([bridge.getState(), call({ action: 'state' }), call({ action: 'codex-state' }), call({ action: 'codex-model-choices' }).catch(() => null)]).then(([s, l, c, choices]) => { if (!disposed) { for (const [id, choice] of Object.entries(choices || {})) modelChoices.set(id, choice); state = s; layout = l; office = c; selectedId = c.thread?.id || null; selectedProject ||= s.workspaceRoot || ''; renderLayout(); refreshCatalog(); } }).catch(showError);
+  Promise.all([bridge.getState(), call({ action: 'state' }), call({ action: 'codex-state' }), call({ action: 'codex-model-choices' }).catch(() => null)]).then(([s, l, c, choices]) => { if (!disposed) { for (const [id, choice] of Object.entries(choices || {})) modelChoices.set(id, choice); state = s; layout = l; office = c; selectedId = c.thread?.id || null; selectedProject ||= s.workspaceRoot || ''; renderLayout(); refreshCatalog(); } }).catch(error => { catalogError = '工作会话读取失败，请刷新重试'; renderStartup(); showError(error); });
   syncCharacter();
   const interval = win.setInterval(() => { if (doc.visibilityState !== 'hidden') refreshCatalog(true); }, 60000);
   place();
@@ -691,6 +804,7 @@ function installWorkspaceShell(options = {}) {
     if (disposed) return; disposed = true; motion?.removeEventListener?.('change', syncCharacter); motion?.removeEventListener?.('change', syncRailWalking); doc.removeEventListener('visibilitychange', syncCharacter); doc.removeEventListener('visibilitychange', syncRailWalking); stopRailWalking(); if (railClickTimer !== null) win.clearTimeout(railClickTimer); if (railSpace) { if (railSpaceBeforeAria === null) railSpace.removeAttribute('aria-hidden'); else railSpace.setAttribute('aria-hidden', railSpaceBeforeAria); } if (characterVideo) { characterVideo.pause(); characterVideo.removeAttribute('src'); characterVideo.load(); } observer.disconnect(); ancestorObserver.disconnect(); intersection?.disconnect(); resize?.disconnect(); win.clearInterval(interval);
     win.removeEventListener('resize', place); doc.removeEventListener('scroll', schedule, true); doc.removeEventListener('click', nativeNew, true); doc.removeEventListener('keydown', escape, true);
     doc.removeEventListener('pointerdown', dismissCompanionMenu, true);
+    doc.removeEventListener('neko-native-tools-navigate', showNativeToolsPage);
     if (roomPreview) { doc.removeEventListener('neko-chatroom-show-workspace', showWorkspaceFromLayout); doc.body.removeAttribute('data-neko-chatroom-active'); releaseRoomInert(); doc.dispatchEvent(new win.Event('neko-chatroom-mode-change')); }
     for (const release of releases) if (typeof release === 'function') release();
     for (const [node, attrs] of nativeMarks) for (const [name, before] of attrs) { if (node.getAttribute(name) === '') { if (before === null) node.removeAttribute(name); else node.setAttribute(name, before); } }

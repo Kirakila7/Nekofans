@@ -64,6 +64,8 @@ let sidebarWidth = 216
 const originalRect = window.HTMLElement.prototype.getBoundingClientRect
 window.HTMLElement.prototype.getBoundingClientRect = function () {
   if (this.id === 'sb-root' || this.id === 'react-sidebar') return { left:0, right:sidebarWidth+32, top:0, bottom:752, width:sidebarWidth+32, height:752 }
+  if (this.tagName === 'MAIN') return { left:248, right:1100, top:0, bottom:752, width:852, height:752 }
+  if (this.classList.contains('neko-native-tools-entry')) return { left:876, right:908, top:10, bottom:42, width:32, height:32 }
   if (this.classList.contains('neko-strip')) return { left:0, right:1100, top:752, bottom:780, width:1100, height:28 }
   if (this.classList.contains('neko-community-pane__toolbar')) return { top:0, height:48 }
   const isNew = this.id === 'new-session' || this.id === 'new-session-2'
@@ -335,6 +337,8 @@ const nativeNav = $('#native-nav')
 const nativeButtons = [...nativeNav.querySelectorAll('button')]
 let pluginClicks = 0
 $('#nav-plugins').addEventListener('click', () => { pluginClicks++ })
+let scheduleClicks = 0
+$('#nav-schedules').addEventListener('click', () => { scheduleClicks++ })
 // Native More: local menu portalled to body, like the real sidebar.
 $('#nav-more').addEventListener('click', () => {
   const btn = $('#nav-more')
@@ -505,6 +509,48 @@ await act(async () => {
 })
 
 // Tools overlay = the ORIGINAL nav, shown in place.
+const topTools = $('.neko-native-tools-entry')
+let nativeNavigations = 0
+const countNativeNavigation = () => { nativeNavigations++ }
+document.addEventListener('neko-native-tools-navigate', countNativeNavigation)
+assert.ok(topTools && !topTools.hidden, 'native tools trigger sits on the visible DSH work area')
+assert.equal(topTools.getAttribute('aria-controls'), 'native-nav')
+assert.equal(topTools.style.left, '876px')
+await click(topTools)
+await flush()
+assert.equal(topTools.getAttribute('aria-expanded'), 'true')
+assert.equal(nativeNav.getAttribute('data-neko-tools'), 'open')
+assert.equal(nativeNav.style.getPropertyValue('--neko-tools-left'), '724px', 'menu aligns to the right-hand trigger')
+await click($('#nav-schedules'))
+await flush()
+assert.equal(scheduleClicks, 1, 'native schedules handler ran')
+assert.equal(nativeNavigations, 1, 'native navigation yields the work area')
+assert.equal(nativeNav.getAttribute('data-neko-tools'), 'folded')
+await click(topTools)
+await flush()
+await click($('#nav-more'))
+await flush()
+assert.equal(nativeNavigations, 1, 'opening More alone does not dismiss the work chooser')
+assert.ok($('#more-future'), 'native More extensions remain available from the right-hand trigger')
+await click($('#more-browse'))
+await flush()
+assert.equal(nativeNavigations, 2, 'a native More action yields the work area')
+assert.equal(nativeNav.getAttribute('data-neko-tools'), 'folded')
+await click(topTools)
+await flush()
+await key(document.activeElement, 'Escape')
+await flush()
+assert.equal(document.activeElement, topTools, 'right-hand trigger regains focus')
+await click(topTools)
+await flush()
+await act(async () => { document.body.setAttribute('data-neko-office-mode', 'codex') })
+await act(async () => { await new Promise((r) => setTimeout(r, 40)) })
+assert.ok(topTools.hidden, 'DSH tools are not shown over Codex')
+assert.equal(nativeNav.getAttribute('data-neko-tools'), 'folded', 'changing engines closes the DSH menu')
+await act(async () => { document.body.removeAttribute('data-neko-office-mode') })
+await act(async () => { await new Promise((r) => setTimeout(r, 40)) })
+assert.ok(!topTools.hidden)
+document.removeEventListener('neko-native-tools-navigate', countNativeNavigation)
 const toolsBtn = $('.neko-role__tools')
 assert.equal(toolsBtn.getAttribute('aria-controls'), 'native-nav')
 await click(toolsBtn)
