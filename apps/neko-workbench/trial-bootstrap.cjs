@@ -18,7 +18,17 @@ Object.assign(process.env,{
 delete process.env.ELECTRON_RUN_AS_NODE;
 const {execFileSync}=require('node:child_process');
 const sharedProfile=path.join(app.getPath('home'),'.dsh/profiles/desktop');
-const processes=execFileSync('/bin/ps',['-axo','pid=,command='],{encoding:'utf8'}).split('\n');
-const busy=processes.some(line=>line.includes('dsh-desktop-host/lib/index.js')&&line.includes(sharedProfile)||line.includes('dsh-desktop-host/lib/cli.js --profile desktop')||line.includes('/dsh-shared-desktop-host.cjs'));
-if(busy){app.whenReady().then(async()=>{await require('electron').dialog.showMessageBox({type:'info',message:'请先退出原版 DSH 或另一个共享配置的工作台',detail:'此版本直接共用你的账号、插件和会话。正常退出原版后，再打开本应用。',buttons:['好']});app.quit();});}
-else require(path.join(process.resourcesPath,'workbench/apps/neko-workbench/main.cjs'));
+const {sharedProfileStatus,waitForSharedProfile,claimWorkbenchInstance,queueEarlyInstanceNotifications}=require(path.join(process.resourcesPath,'workbench/apps/neko-workbench/startup-conflict.cjs'));
+const readProcesses=()=>execFileSync('/bin/ps',['-axo','pid=,command='],{encoding:'utf8'});
+const locked=claimWorkbenchInstance(app,process.env.NEKO_WORKBENCH_ELECTRON_USER_DATA);
+if(!locked)app.quit();
+else {
+  globalThis.__nekoTrialInstanceLocked=true;
+  const early=queueEarlyInstanceNotifications(app);
+  const start=()=>{require(path.join(process.resourcesPath,'workbench/apps/neko-workbench/main.cjs'));early.forward();};
+  if(sharedProfileStatus(readProcesses,sharedProfile)==='free')start();
+  else app.whenReady().then(async()=>{
+    if(await waitForSharedProfile({readProcesses,sharedProfile,showMessageBox:options=>require('electron').dialog.showMessageBox(options)}))start();
+    else { early.discard(); app.releaseSingleInstanceLock(); app.quit(); }
+  }).catch(()=>{early.discard();app.releaseSingleInstanceLock();app.quit();});
+}

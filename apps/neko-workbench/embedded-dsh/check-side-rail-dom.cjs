@@ -30,7 +30,7 @@ let active;
   assert(app.hasAttribute('data-neko-rail-app'));
   const rail = doc.querySelector('[data-neko-side-rail]');
   const bottom = rail.querySelector('nav');
-  assert.deepEqual([...bottom.children].map(n => n.getAttribute('aria-label')), ['展开侧边栏', '哔哩哔哩主页', '养鱼界面', '账号与额度：DSH 已登录，Codex 已登录']);
+  assert.deepEqual([...bottom.children].map(n => n.getAttribute('aria-label')), ['展开侧边栏', '哔哩哔哩主页', '养鱼设置', '账号与额度：DSH 已登录，Codex 已登录']);
   const fish = rail.querySelector('.neko-side-rail__fish'), bili = rail.querySelector('.neko-side-rail__bilibili'), account = rail.querySelector('.neko-side-rail__account');
   const expand = rail.querySelector('.neko-side-rail__expand'), toggle = doc.querySelector('#sidebar-toggle'), frame = doc.querySelector('#frame');
   assert(expand.hidden, 'expand entry is hidden while sidebar is open');

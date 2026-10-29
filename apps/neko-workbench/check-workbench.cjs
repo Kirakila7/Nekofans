@@ -26,7 +26,7 @@ try{
   }});
   assert.deepEqual([...bridges.keys()].sort(),['nekoRoles','nekoWorkbench']);
   const bridge=bridges.get('nekoWorkbench'),roles=bridges.get('nekoRoles');
-  assert.deepEqual(Object.keys(bridge).sort(),['action','community','communityAccount','companion','fish','fishQq','getAccounts','getState','qqbot','screenShare','setAvatar','subscribe','subscribeCommunity','subscribeCommunityAccount','subscribeOffice','uploadAvatar','workspace']);assert(Object.isFrozen(bridge));
+  assert.deepEqual(Object.keys(bridge).sort(),['action','community','communityAccount','companion','divider','fish','fishQq','getAccounts','getState','qqbot','screenShare','setAvatar','subscribe','subscribeCommunity','subscribeCommunityAccount','subscribeDivider','subscribeOffice','uploadAvatar','workspace']);assert(Object.isFrozen(bridge));
   assert.deepEqual(Object.keys(roles).sort(),['getState','selectRole','subscribe','updateRole','uploadAvatar']);assert(Object.isFrozen(roles));
 
   bridge.getState();bridge.setAvatar('yui');bridge.uploadAvatar();bridge.action('neko-settings');
@@ -75,6 +75,12 @@ try{
   assert.equal(calls.length,9,'community uses its dedicated channel rather than a generic action');
   bridge.communityAccount('connect');assert.deepEqual(calls.at(-1),['workbench:community-account','connect']);
   bridge.communityAccount('cancel');assert.deepEqual(calls.at(-1),['workbench:community-account','cancel']);
+  const dividerRequest={action:'place',id:'chat',rect:{x:300,y:0,width:12,height:600}};
+  bridge.divider(dividerRequest);assert.deepEqual(calls.at(-1),['workbench:divider',dividerRequest]);
+  const dividerEvents=[];const stopDivider=bridge.subscribeDivider(value=>dividerEvents.push(value));
+  const dividerEvent={id:'chat',type:'move',x:300};emit('workbench:divider-event',dividerEvent);assert.deepEqual(dividerEvents,[dividerEvent]);
+  stopDivider();stopDivider();assert(!listeners.has('workbench:divider-event'));emit('workbench:divider-event',dividerEvent);assert.equal(dividerEvents.length,1);
+  assert.throws(()=>bridge.subscribeDivider(null));
   const communityAccounts=[];const stopCommunityAccount=bridge.subscribeCommunityAccount(value=>communityAccounts.push(value));
   const communityAccountState={status:'checking',message:'正在检查桌面社区连接…'};
   emit('workbench:community-account-state',communityAccountState);assert.deepEqual(communityAccounts,[communityAccountState]);

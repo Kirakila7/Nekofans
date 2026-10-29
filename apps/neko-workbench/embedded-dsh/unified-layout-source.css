@@ -1,4 +1,7 @@
 .neko-layout-entry { font-size:21px; }
+/* The workbench settings expose this same dialog; keep the rail trigger as a
+   fallback when the workspace shell is absent. */
+body[data-neko-workspace-shell] .neko-layout-entry { display:none !important; }
 .neko-unified-config { position:fixed; z-index:210; top:64px; left:70px; width:300px; max-width:calc(100vw - 82px); max-height:calc(100vh - 80px); overflow:auto; box-sizing:border-box; padding:15px; border:1px solid var(--dsw-alias-border-l1,#c4dbe6); border-radius:13px; background:var(--dsw-alias-bg-layer-1,#fbfeff); color:var(--dsw-alias-label-primary,#17303d); box-shadow:0 12px 40px #17303d33; font:13px/1.5 system-ui,sans-serif; }
 .neko-unified-config[hidden],.neko-unified-panel[hidden],.neko-unified-mobile[hidden],.neko-unified-notice[hidden] { display:none !important; }
 .neko-unified-config h2 { margin:0 0 4px; font-size:15px; }.neko-unified-config p { margin:4px 0 10px; font-size:11px; opacity:.75; }
@@ -19,10 +22,11 @@
 .neko-unified-config button[aria-pressed="true"]:hover,.neko-unified-mobile button[aria-pressed="true"]:hover { background:#d2e4f8; }
 .neko-unified-config button:focus-visible,.neko-unified-panel button:focus-visible,.neko-unified-mobile button:focus-visible,.neko-layout-entry:focus-visible { outline:2px solid #4c89ad; outline-offset:1px; }
 .neko-unified-config .close { position:absolute; right:10px; top:10px; border:0; background:transparent; font-size:16px; }.neko-unified-config .toggle { width:100%; }
-.neko-unified-panel { position:fixed; z-index:50; box-sizing:border-box; display:flex; flex-direction:column; background:var(--dsw-alias-bg-base,#edf6fa); color:var(--dsw-alias-label-primary,#17303d); font:12px system-ui,sans-serif; }
-.neko-unified-panel header { flex:none; display:flex; flex-wrap:wrap; align-items:center; gap:4px; min-height:42px; box-sizing:border-box; padding:4px 5px; background:var(--dsw-alias-bg-layer-1,#fbfeff); border-bottom:1px solid var(--dsw-alias-border-l1,#c4dbe6); }
+.neko-unified-panel { position:fixed; z-index:50; box-sizing:border-box; display:flex; flex-direction:column; container-type:inline-size; background:var(--dsw-alias-bg-base,#edf6fa); color:var(--dsw-alias-label-primary,#17303d); font:12px system-ui,sans-serif; }
+.neko-unified-panel header { flex:none; display:flex; flex-wrap:wrap; align-items:center; gap:4px; min-height:42px; min-width:0; box-sizing:border-box; padding:4px 5px; background:var(--dsw-alias-bg-layer-1,#fbfeff); border-bottom:1px solid var(--dsw-alias-border-l1,#c4dbe6); }
 .neko-unified-panel[data-neko-unified-slot="side"] header strong { flex-basis:100%; }
-.neko-unified-panel header strong { flex:1; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }.neko-unified-panel button { padding:5px; white-space:nowrap; }.neko-unified-panel button:disabled { opacity:.55; cursor:default; }.neko-unified-panel .status { padding:12px; line-height:1.5; }
+.neko-unified-panel header strong { flex:1 1 80px; min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }.neko-unified-panel button { max-width:100%; min-width:0; overflow:hidden; text-overflow:ellipsis; padding:5px; white-space:nowrap; }.neko-unified-panel button:disabled { opacity:.55; cursor:default; }.neko-unified-panel .status { padding:12px; line-height:1.5; }
+@container (max-width: 260px) { .neko-unified-panel header strong { flex-basis:100%; } }
 .neko-unified-panel header .note { font-weight:400; color:var(--dsw-alias-label-secondary,#637d8c); }
 .neko-unified-panel[data-state="error"] header .note,.neko-unified-panel[data-state="error"] .status { color:#9a4a3e; }
 .neko-unified-panel[data-state="ok"] header .note { color:#2f6f4f; }

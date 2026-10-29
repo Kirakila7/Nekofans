@@ -56,10 +56,14 @@ function companionSnapshot(state) {
   const main = state.actors?.find(a => a.id === 'main');
   const runtime = state.mainChat || {};
   const messages = (main?.messages || []).filter(m => ['user', 'assistant', 'error'].includes(m.role)).slice(-40).map((m, i) => ({ id: String(m.id || m.requestId || m.time || i), role: m.role, text: String(m.text || '').slice(0, 8000) }));
-  const reply = main?.chatReply;
-  if (reply?.text && !messages.some(m => m.role === 'assistant' && m.text === reply.text)) messages.push({ id: reply.id || 'stream', role: 'assistant', text: String(reply.text).slice(-16000), streaming: !!reply.streaming });
   const backend = main?.chatBackend || runtime.backend || 'chat-api';
+  const chat = runtime.chat || {};
+  const failed = backend === 'chat-api' && chat.phase === 'error';
+  const reply = main?.chatReply;
+  if (reply?.text && !messages.some(m => m.role === 'assistant' && m.text === reply.text)) messages.push({ id: reply.id || 'stream', role: 'assistant', text: String(reply.text).slice(-16000), streaming: !!reply.streaming, partial: failed });
   return { name: main?.name || '主 agent', backend, ready: backend === 'neko' ? state.neko?.connection === 'ready' : !!runtime.ready && !!runtime.hasKey && !!runtime.settings?.baseUrl && !!runtime.settings?.model,
-    working: !!main?.active, messages, error: String(runtime.error || state.neko?.error || '').slice(0, 240) };
+    working: !!main?.active, messages,
+    error: String((failed && chat.errorMessage) || runtime.error || (backend === 'neko' && state.neko?.error) || '').slice(0, 240),
+    failedText: failed ? String(chat.lastUserMessage || '').slice(0, 8000) : '' };
 }
 module.exports = { createWorkspaceController, companionSnapshot };

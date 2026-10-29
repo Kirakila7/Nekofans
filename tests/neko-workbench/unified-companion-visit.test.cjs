@@ -23,7 +23,6 @@ function fixture(t, initial) {
   };
   w.eval(source + '\nwindow.startUnified=installUnifiedLayout;');
   const cleanup = w.startUnified({document:d,window:w,bridge,hideLegacy:()=>legacyClosed++,cssText:''});
-  if (saved.enabled) w.setTimeout(() => [...d.querySelectorAll('.neko-unified-config button')].find(b => b.textContent === '恢复上次多栏布局')?.click(), 0);
   return {w,d,calls,cleanup,get saved(){return saved},get legacyClosed(){return legacyClosed},get listener(){return listener}};
 }
 function visit(f) {
@@ -32,41 +31,43 @@ function visit(f) {
   return detail;
 }
 const base = {enabled:true,side:'workspace',left:'coding',right:null,ratio:0.5};
-test('default companion visit opens community next to coding', {skip:!JSDOM}, async t => {
+test('companion visit opens community in the sidebar and preserves coding', {skip:!JSDOM}, async t => {
   const f = fixture(t, {...base,enabled:false}); await tick();
   const event = visit(f);
   assert.equal(event.handled,true); await event.promise; await tick();
-  assert.equal(f.saved.left,'community'); assert.equal(f.saved.right,'coding');
-  assert(f.calls.some(c=>c.action==='open'&&c.slot==='left'&&c.site==='community'));
+  assert.deepEqual(f.saved,{...base,enabled:false});
+  assert(f.calls.some(c=>c.action==='open'&&c.slot==='side'&&c.site==='community'));
+  assert.equal(f.d.querySelector('#draft').value,'coding draft');
   f.cleanup();
 });
-test('visit saves community opposite Coding without waiting on a visible companion menu or site load', {skip:!JSDOM}, async t => {
+test('visit opens the sidebar without waiting on a visible companion menu or site load', {skip:!JSDOM}, async t => {
   const f = fixture(t, {...base,right:'bilibili'}); await tick();
   const menu = f.d.createElement('div'); menu.setAttribute('role','menu'); f.d.body.appendChild(menu); await tick();
   const before = f.calls.filter(c=>c.action==='open').length;
   const event = visit(f); assert.equal(event.handled,true); assert(event.promise && typeof event.promise.then==='function');
   const result = await Promise.race([event.promise.then(()=> 'resolved'),new Promise(resolve=>setTimeout(()=>resolve('timeout'),200))]);
   assert.equal(result,'resolved','menu action must complete before remote site is loaded');
-  assert.equal(f.saved.left,'coding'); assert.equal(f.saved.right,'community');
+  assert.deepEqual(f.saved,{...base,right:'bilibili'});
   assert.equal(f.calls.filter(c=>c.action==='open').length,before,'views remain detached until menu closes');
   menu.hidden=true; await tick(); await tick();
-  assert(f.calls.some(c=>c.action==='open' && c.slot==='right' && c.site==='community'));
+  assert(f.calls.some(c=>c.action==='open' && c.slot==='side' && c.site==='community'));
   assert.equal(f.d.querySelector('#draft').value,'coding draft'); assert.equal(f.d.querySelector('.neko-companion-dock textarea').value,'pet draft');
   f.cleanup();
 });
-test('visit reuses an already placed community and keeps the rest of the layout', {skip:!JSDOM}, async t => {
+test('visit retains a previously saved layout without activating it', {skip:!JSDOM}, async t => {
   const initial = {...base,side:'community',right:'bilibili'};
   const f = fixture(t, initial); await tick();
   const event = visit(f); assert.equal(event.handled,true); await event.promise; await tick();
-  assert.deepEqual(f.saved,initial); assert.equal(f.saved.side,'community'); assert.equal(f.saved.right,'bilibili');
+  assert.deepEqual(f.saved,initial); assert(f.calls.some(c=>c.action==='open'&&c.slot==='side'&&c.site==='community'));
+  assert.equal(f.calls.filter(c=>c.action==='open'&&c.slot!=='side').length,0);
   assert(!f.calls.some(c=>c.action==='open'&&!c.slot),'must not use legacy single-view open');
   f.cleanup();
 });
-test('visit places community on the left when Coding is on the right', {skip:!JSDOM}, async t => {
+test('visit does not activate a previously saved left and right split', {skip:!JSDOM}, async t => {
   const f=fixture(t,{...base,left:'bilibili',right:'coding'}); await tick();
   const event=visit(f); assert.equal(event.handled,true); await event.promise; await tick();
-  assert.equal(f.saved.left,'community');assert.equal(f.saved.right,'coding');
-  assert(f.calls.some(c=>c.action==='open'&&c.slot==='left'&&c.site==='community'));
+  assert.equal(f.saved.left,'bilibili');assert.equal(f.saved.right,'coding');
+  assert(f.calls.some(c=>c.action==='open'&&c.slot==='side'&&c.site==='community'));
   f.cleanup();
 });
 

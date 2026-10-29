@@ -119,6 +119,21 @@ test('Escape closes the dialog and returns focus to the trigger; close button do
   f.cleanup();
 });
 
+test('settings opens layout configuration and focus returns to the settings entry', { skip:!JSDOM }, async t => {
+  const f = fixture(t); await tick();
+  const entry = f.d.createElement('button'); entry.className = 'neko-workspace-settings'; entry.textContent = '设置';
+  q(f, '.neko-workspace-rail-controls').appendChild(entry);
+  f.d.dispatchEvent(new f.w.CustomEvent('neko-unified-open-config', { detail:{ returnFocus:entry } })); await tick();
+  assert.equal(q(f, '.neko-unified-config').hidden, false);
+  assert.equal(f.d.activeElement, q(f, '[data-target="left"]'));
+  key(f, f.d.activeElement, 'Escape'); await tick();
+  assert.equal(q(f, '.neko-unified-config').hidden, true);
+  assert.equal(f.d.activeElement, entry);
+  f.cleanup();
+  f.d.dispatchEvent(new f.w.CustomEvent('neko-unified-open-config', { detail:{ returnFocus:entry } }));
+  assert.equal(q(f, '.neko-unified-config'), null, 'unloaded controller does not recreate the dialog');
+});
+
 test('drop zones show current content and highlight only while hovered', { skip:!JSDOM }, async t => {
   const f = fixture(t, two); await tick(); q(f, '.neko-layout-entry').click(); await tick();
   const start = new f.w.Event('dragstart', { bubbles:true }); Object.defineProperty(start, 'dataTransfer', { value:{ setData() {}, effectAllowed:'' } });

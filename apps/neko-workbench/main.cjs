@@ -3,6 +3,7 @@ const {spawn} = require('node:child_process');
 const {resolveRuntimePaths,prepareRuntimeDirectories,assertDshRuntime,buildDshPatch,buildDshLaunch}=require('./runtime-config.cjs');
 const {createDshLifecycle}=require('./dsh-lifecycle.cjs');
 const {createSocialController}=require('./community-config.cjs');
+const {createNativeDividerController}=require('./native-divider-controller.cjs');
 const {createCommunityAccount}=require('./community-account.cjs');
 const {createSubagentMotion,motionOptions}=require('./subagent-motion.cjs');
 const {createScreenShare}=require('./screen-share-controller.cjs');
@@ -59,7 +60,7 @@ const workspaceController=createWorkspaceController({layout:workspaceLayout,code
 }});
 app.setName('N.E.K.O. 桌宠工作台');
 app.setPath('userData',runtimePaths.userDataDir);
-if(!app.requestSingleInstanceLock())app.quit();
+if(!globalThis.__nekoTrialInstanceLocked&&!app.requestSingleInstanceLock())app.quit();
 let state={version:3,rootId:null,memory:[],diary:[],preferences:{helpersVisible:true},positions:{},actors:[
   {id:'main',name:'大肥鱼',sessionId:null,status:'idle',present:true,messages:[]}
 ]};
@@ -82,9 +83,10 @@ let memoryWindow,settingsWindow,nekoSettingsWindow,chatSettingsWindow,chatMemory
 const localWindows=new WeakMap();
 const nekoChat=new NekoChat();
 let communityAccount;
+const nativeDividerController=createNativeDividerController({WebContentsView,ipcMain});
 const communityController=createSocialController({WebContentsView,openExternal:url=>shell.openExternal(url),copyText:text=>clipboard.writeText(text),
   onHide:()=>communityAccount?.cancel(),
-  onState:(host,value)=>{if(host===dshWindow&&!host.isDestroyed()&&isWorkbenchOrigin(host.webContents.getURL()))host.webContents.send('workbench:community-state',value);},
+  onState:(host,value)=>{if(host===dshWindow&&!host.isDestroyed()&&isWorkbenchOrigin(host.webContents.getURL())){host.webContents.send('workbench:community-state',value);nativeDividerController.setEnabled(communityController.hasVisibleView);nativeDividerController.raise(value.status==='ready');}},
   onExternalError:()=>dialog.showErrorBox('链接未打开','系统浏览器未能打开这个链接，请稍后重试。')});
 communityAccount=createCommunityAccount({getBaseUrl:()=>state.neko.baseUrl,
   getCommunityUrl:()=>process.env.NEKO_WORKBENCH_COMMUNITY_URL,
@@ -533,7 +535,7 @@ function popupMainMenu(){const w=petWindows.get('main');if(w){w.show();setTimeou
 async function openDsh(){
   if(dshWindow&&!dshWindow.isDestroyed()){dshWindow.show();app.focus({steal:true});dshWindow.focus();return;}
   dshWindow=new BrowserWindow({width:1100,height:780,minWidth:800,minHeight:560,title:'N.E.K.O. 工作台',backgroundColor:nativeTheme.shouldUseDarkColors?'#131C27':'#EDF3F8',show:false,webPreferences:{preload:path.join(base,'workbench-preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,partition:'persist:pet-dsh'}});
-  communityController.bindHost(dshWindow);
+  communityController.bindHost(dshWindow);nativeDividerController.bind(dshWindow);
   dshWindow.webContents.on('did-finish-load',()=>{if(isWorkbenchOrigin(dshWindow.webContents.getURL())&&typeof dshWindow.webContents.executeJavaScript==='function')void dshWindow.webContents.executeJavaScript(fs.readFileSync(path.join(base,'screen-share-host.js'),'utf8')).catch(()=>{});});
   dshWindow.on('close',event=>{if(!quitting){event.preventDefault();dshWindow.hide();}});
   dshWindow.webContents.on('will-navigate',(event,url)=>{if(!/^https?:/.test(url))event.preventDefault();});
@@ -723,8 +725,10 @@ ipcMain.handle('workbench:screen-share',async(event,method)=>{assertWorkbenchCal
 ipcMain.handle('workbench:community',async(event,request)=>{
   assertWorkbenchCaller(event);
   if(request?.action==='open')screenShare.hide();
-  return communityController.action(dshWindow,request);
+  try{return await communityController.action(dshWindow,request);}
+  finally{nativeDividerController.setEnabled(communityController.hasVisibleView);nativeDividerController.raise(request?.action==='open');}
 });
+ipcMain.handle('workbench:divider',(event,request)=>{assertWorkbenchCaller(event);return nativeDividerController.place(dshWindow,request);});
 ipcMain.handle('workbench:community-account',async(event,action)=>{
   assertWorkbenchCaller(event);
   if(action!=='cancel'&&!communityController.isOpen)throw new Error('请先打开社区');
@@ -866,7 +870,7 @@ ipcMain.handle('pet:call',async(event,method,p={})=>{
 });
 // Opt-in read-only native evidence capture; disabled for normal launches.
 if(process.env.PET_CAPTURE_SIGNAL==='1')process.on('SIGUSR1',()=>capture().catch(error=>fs.appendFileSync(path.join(data,'capture-error.log'),String(error)+'\n')));
-app.on('second-instance',()=>{if(dshWindow&&!dshWindow.isDestroyed()&&dshWindow.isVisible())openDsh().catch(engineError);else showInput();});
+app.on('second-instance',()=>{openDsh().catch(engineError);});
 app.on('activate',()=>{if(workbenchOnly&&dshWindow&&!dshWindow.isDestroyed()&&dshWindow.isVisible()){dshWindow.focus();return;}if(petWindows.size&&![...petWindows.values()].some(w=>!w.isDestroyed()&&w.isVisible()))showInput();});
 app.whenReady().then(async()=>{
   prepareRuntimeDirectories(runtimePaths);
@@ -879,7 +883,7 @@ app.on('before-quit',event=>{
   if(shutdownComplete)return;
   event.preventDefault();
   if(shutdownStarted)return;
-  shutdownStarted=true;quitting=true;communityController.dispose();communityAccount.cancel();screenShare.dispose();catMotion.dispose();clearTimeout(nekoRetry);clearTimeout(rosterTimer);for(const timer of terminalTimers.values())clearTimeout(timer);terminalTimers.clear();nekoChat.close();save();
+  shutdownStarted=true;quitting=true;nativeDividerController.dispose();communityController.dispose();communityAccount.cancel();screenShare.dispose();catMotion.dispose();clearTimeout(nekoRetry);clearTimeout(rosterTimer);for(const timer of terminalTimers.values())clearTimeout(timer);terminalTimers.clear();nekoChat.close();save();
   const current=childLifecycle;
   Promise.allSettled([visitsController?.close(),mainChatRuntime?.close(),current?.stop(),codexAccount.dispose(),codexWorkspace.dispose()]).finally(()=>{shutdownComplete=true;app.quit();});
 });

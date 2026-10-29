@@ -144,7 +144,7 @@ async function runMainHarness() {
     static fromWebContents(wc) { return windows.find(w => w.webContents === wc); }
   }
   class Tray extends EventEmitter { setTitle() {} setToolTip() {} popUpContextMenu() {} }
-  const electron = { app, BrowserWindow: Window, ipcMain: { handle: (name, handler) => handlers.set(name, handler) },
+  const electron = { app, BrowserWindow: Window, ipcMain: Object.assign(new EventEmitter(), { handle: (name, handler) => handlers.set(name, handler) }),
     screen: { getPrimaryDisplay: () => ({ workArea: { x: 0, y: 0, width: 1600, height: 1000 } }) },
     shell: { openExternal: async () => {}, openPath: async () => {} },
     Menu: { buildFromTemplate: template => ({ template, popup() { menus.push(template); } }), setApplicationMenu() {} },
