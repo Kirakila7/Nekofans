@@ -1,9 +1,10 @@
-# Local test workbench 0.28.7
+# Local test workbench 0.28.8
 
 The daily artifact is built from this repository. `config/daily-release.json` is the version authority; every app includes `Contents/Resources/WORKBENCH_BUILD.json` with the source commit and SHA-256 of every shipped source file. Historical QA checkouts and profiles are not release inputs.
 
 ## Included local workbench changes
 
+- Each workbench opening starts with the chatroom sidebar and a single coding area. Community and Bilibili rail entries open an optional middle pane alongside coding. A previously saved multi-pane layout can be restored explicitly without discarding it on startup.
 - The left rail opens a static chatroom preview by default in the existing sidebar. A separate rail control returns to workspace navigation; companion and account controls remain mounted. Any configured native community or Bilibili sidebar view is temporarily hidden and restored when returning to workspace, without changing the saved layout or the main panels. The preview does not connect to a chat service or show real members or messages.
 - Interaction and accessibility refinements, with layout, regions, characters and the light-blue palette unchanged. Enabled controls show hover and press states; disabled controls (including Codex, which stays 测试中 and unavailable) show none. Keyboard focus rings are 2px. Async saves expose `aria-busy` and cannot be submitted twice. The session list announces loading and errors. Low-contrast text and buttons now use darker shades of the same hues.
 - Unified layout configuration is easier to understand. The ▤ dialog shows what each region currently holds, labels the sidebar choice 工作区导航, and offers 不显示 to return two panes to one (at least one main pane always remains). Escape closes the dialog. The divider supports arrow keys, Home/End and double-click reset, and reports its value to assistive technology. Drop zones highlight the target region. Panel headers show refresh, copy and error states that the native site view previously covered. A failed save reverts to the last saved layout. The persisted layout format is unchanged. Synthetic JSDOM tests cover these controls. Real community login, Bilibili playback and production DSH layout were not verified in this change.
@@ -49,7 +50,7 @@ The GitHub PR list was inspected on 2026-10-28. It contains 14 PRs: 12 merged, 1
 | #14 | Screen sharing and companion text feedback | Integrated with explicit destination confirmation and optional private-context consent; real screen and provider use remain unverified |
 | #15 | Fountain spawning and DBSCAN | Integrated with bounded return expiry; real desktop motion and performance remain unverified |
 
-The private Workbench main already contains the #14 and #15 integration above; merging that main into this branch preserves those existing changes without newly applying the Bigfish patches. This does not merge or close source PRs in the Bigfish repository. Workbench #7 remains a separate, unmerged change. The previously installed 0.28.7 local build predates this main-branch merge and requires a separate rebuild and runtime verification to include it.
+The private Workbench main already contains the #14 and #15 integration above; this branch preserves those existing changes without newly applying the Bigfish patches. This does not merge or close source PRs in the Bigfish repository. Workbench #7 remains a separate, unmerged change.
 
 ## Build and install
 

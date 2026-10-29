@@ -23,6 +23,7 @@ function fixture(t, initial) {
   };
   w.eval(source + '\nwindow.startUnified=installUnifiedLayout;');
   const cleanup = w.startUnified({document:d,window:w,bridge,hideLegacy:()=>legacyClosed++,cssText:''});
+  if (saved.enabled) w.setTimeout(() => [...d.querySelectorAll('.neko-unified-config button')].find(b => b.textContent === '恢复上次多栏布局')?.click(), 0);
   return {w,d,calls,cleanup,get saved(){return saved},get legacyClosed(){return legacyClosed},get listener(){return listener}};
 }
 function visit(f) {
@@ -31,12 +32,12 @@ function visit(f) {
   return detail;
 }
 const base = {enabled:true,side:'workspace',left:'coding',right:null,ratio:0.5};
-test('unified disabled leaves companion visit to existing legacy entrance', {skip:!JSDOM}, async t => {
+test('default companion visit opens community next to coding', {skip:!JSDOM}, async t => {
   const f = fixture(t, {...base,enabled:false}); await tick();
   const event = visit(f);
-  assert.equal(event.handled,false); assert.equal(event.promise,null);
-  assert.equal(f.calls.filter(c=>c.action==='set-pane-layout').length,0);
-  assert.equal(f.calls.filter(c=>c.action==='open').length,0);
+  assert.equal(event.handled,true); await event.promise; await tick();
+  assert.equal(f.saved.left,'community'); assert.equal(f.saved.right,'coding');
+  assert(f.calls.some(c=>c.action==='open'&&c.slot==='left'&&c.site==='community'));
   f.cleanup();
 });
 test('visit saves community opposite Coding without waiting on a visible companion menu or site load', {skip:!JSDOM}, async t => {

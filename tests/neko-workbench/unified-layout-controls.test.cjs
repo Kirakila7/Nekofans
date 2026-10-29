@@ -25,6 +25,9 @@ function fixture(t, initial = {}, { width = 800, failSave = false } = {}) {
   };
   w.eval(source + '\nwindow.startUnified=installUnifiedLayout;');
   const cleanup = w.startUnified({ document:d, window:w, bridge, hideLegacy:() => {}, cssText:'' });
+  // These controls tests exercise the persisted multi-pane configuration after
+  // the user explicitly restores it; startup itself now shows two areas.
+  if (saved.enabled) w.setTimeout(() => [...d.querySelectorAll('.neko-unified-config button')].find(b => b.textContent === '恢复上次多栏布局')?.click(), 0);
   return { w, d, calls, bridge, cleanup, get saved() { return saved; }, get listener() { return listener; }, setFail(v) { fail = v; } };
 }
 const q = (f, s) => f.d.querySelector(s);
@@ -72,11 +75,11 @@ test('configuration dialog states what each region shows and updates the summary
   trigger.click(); await tick();
   assert.equal(config.hidden, false); assert.equal(f.d.activeElement, q(f, '[data-target="left"]'), 'focus moves into the dialog');
   const summary = q(f, '[data-neko-unified-summary]');
-  assert.match(summary.textContent, /未启用/);
+  assert.match(summary.textContent, /默认显示侧栏与工作区/);
   assert.equal(q(f, '[data-target="side"] .current').textContent, '工作区导航');
-  assert.equal(q(f, '[data-target="left"] .current').textContent, '工作区');
-  assert.equal(q(f, '[data-target="right"] .current').textContent, '空');
-  assert.equal(q(f, '[data-target="right"]').getAttribute('aria-label'), '右面板，当前显示空');
+  assert.equal(q(f, '[data-target="left"] .current').textContent, '空');
+  assert.equal(q(f, '[data-target="right"] .current').textContent, '工作区');
+  assert.equal(q(f, '[data-target="right"]').getAttribute('aria-label'), '右面板，当前显示工作区');
   q(f, '[data-target="right"]').click(); q(f, '[data-content="bilibili"]').click(); await tick(); await tick();
   assert.equal(f.saved.right, 'bilibili');
   assert.match(summary.textContent, /侧栏：工作区导航 · 左面板：工作区 · 右面板：B站视频（宽度 50% \/ 50%）/);
