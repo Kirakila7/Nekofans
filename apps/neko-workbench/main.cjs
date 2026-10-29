@@ -56,7 +56,7 @@ const workspaceController=createWorkspaceController({layout:workspaceLayout,code
 }});
 app.setName('N.E.K.O. 桌宠工作台');
 app.setPath('userData',runtimePaths.userDataDir);
-if(!app.requestSingleInstanceLock())app.quit();
+if(!globalThis.__nekoTrialInstanceLocked&&!app.requestSingleInstanceLock())app.quit();
 let state={version:3,rootId:null,memory:[],diary:[],preferences:{helpersVisible:true},positions:{},actors:[
   {id:'main',name:'大肥鱼',sessionId:null,status:'idle',present:true,messages:[]}
 ]};
@@ -830,7 +830,7 @@ ipcMain.handle('pet:call',async(event,method,p={})=>{
 });
 // Opt-in read-only native evidence capture; disabled for normal launches.
 if(process.env.PET_CAPTURE_SIGNAL==='1')process.on('SIGUSR1',()=>capture().catch(error=>fs.appendFileSync(path.join(data,'capture-error.log'),String(error)+'\n')));
-app.on('second-instance',()=>{if(dshWindow&&!dshWindow.isDestroyed()&&dshWindow.isVisible())openDsh().catch(engineError);else showInput();});
+app.on('second-instance',()=>{openDsh().catch(engineError);});
 app.on('activate',()=>{if(workbenchOnly&&dshWindow&&!dshWindow.isDestroyed()&&dshWindow.isVisible()){dshWindow.focus();return;}if(petWindows.size&&![...petWindows.values()].some(w=>!w.isDestroyed()&&w.isVisible()))showInput();});
 app.whenReady().then(async()=>{
   prepareRuntimeDirectories(runtimePaths);

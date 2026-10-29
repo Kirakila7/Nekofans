@@ -40,6 +40,13 @@ function installWorkbenchSideRail(options = {}) {
   account.appendChild(accountImage);
   const notice = doc.createElement('p'); notice.className = 'neko-side-rail__notice'; notice.hidden = true; notice.setAttribute('role', 'status');
   bottom.append(expand, bili, fish, account); rail.append(theme, space, bottom, notice);
+  // The upstream DSH sidebar handle clamps its width like a navigation rail.
+  // The chatroom is a primary surface, so give it its own live grid divider.
+  const chatDivider = doc.createElement('div'); chatDivider.className = 'neko-chat-sidebar-divider'; chatDivider.hidden = true;
+  chatDivider.tabIndex = 0; chatDivider.setAttribute('role', 'separator'); chatDivider.setAttribute('aria-orientation', 'vertical');
+  chatDivider.setAttribute('aria-label', '调整聊天室和工作区宽度');
+  chatDivider.title = '拖动调整宽度 · 双击恢复 3:1 · 方向键调整';
+  let preferredRatio = .75, chatFrame = null, chatCenter = null, oldChatGrid = null, chatDrag = null, lastChatGeometry = null;
   const style = doc.createElement('style'); style.dataset.nekoSideRailStyle = ''; style.textContent = options.cssText || '';
   const originalBodyMarker = doc.body.getAttribute('data-neko-side-rail-layout');
   const claimed = new Map(); let stopped = false, queued = false, pending = false, appRoot = null, nativeAccount = null, nativeToggle = null, hiddenFrame = null, previousGrid = null, sidebarDrag = null;
@@ -66,9 +73,80 @@ function installWorkbenchSideRail(options = {}) {
     }
     attrs.delete(name); if (!attrs.size) claimed.delete(node);
   }
+  function clearChatGrid() {
+    if (!chatFrame) return;
+    if (chatDrag) { const pending = chatDrag; chatDrag = null; preferredRatio = pending.started; delete chatDivider.dataset.dragging; try { chatDivider.releasePointerCapture(pending.id); } catch {} }
+    release(chatFrame, 'data-neko-chat-sidebar-grid');
+    if (chatCenter) release(chatCenter, 'data-neko-chat-center');
+    if (oldChatGrid?.value) chatFrame.style.setProperty('--neko-chat-sidebar-grid', oldChatGrid.value, oldChatGrid.priority);
+    else chatFrame.style.removeProperty('--neko-chat-sidebar-grid');
+    chatFrame = null; chatCenter = null; oldChatGrid = null; lastChatGeometry = null; chatDivider.hidden = true;
+    win.dispatchEvent(new win.Event('resize'));
+  }
+  function findChatFrame(sidebar) {
+    // On current DSH the sidebar slot is display:contents. The grid track is
+    // owned by an ancestor whose next track is the native center column.
+    for (let item = sidebar; item?.parentElement && item.parentElement !== doc.body; item = item.parentElement) {
+      const next = item.nextElementSibling;
+      if (next && typeof next.className === 'string' && /(?:^|\s)[^\s]*_centerCol(?:[_-][^\s]+)?(?:\s|$)/.test(next.className)) return { frame:item.parentElement, center:next };
+    }
+    // Fallback for earlier DSH versions with a direct sidebar/main grid.
+    for (let item = sidebar; item?.parentElement && item.parentElement !== doc.body; item = item.parentElement) {
+      const parent = item.parentElement;
+      if (parent.style.gridTemplateColumns && item.nextElementSibling) return { frame:parent, center:item.nextElementSibling };
+    }
+    return null;
+  }
+  function chatGeometry(found) {
+    const bounds = found.frame.getBoundingClientRect(), center = found.center.getBoundingClientRect();
+    // Exclude an independent native right track (if open) from the 3:1 split.
+    const reserve = center.width > 0 && center.right > bounds.left && center.right <= bounds.right ? Math.max(0, bounds.right - center.right) : 0;
+    const width = bounds.width - reserve;
+    if (!Number.isFinite(width) || width < 240 || bounds.height < 100) return null;
+    const min = Math.min(180, width * .2), max = width - Math.min(200, width * .25);
+    return { bounds, width, min, max };
+  }
+  function setChatRatio(next) {
+    if (!Number.isFinite(next)) return;
+    preferredRatio = Math.min(.99, Math.max(.01, next));
+    schedule();
+  }
+  function syncChatGrid(sidebar) {
+    const found = sidebar && findChatFrame(sidebar);
+    const active = doc.body.hasAttribute('data-neko-chatroom-active') && found && !sidebar.closest('[data-sidebar-collapsed="true"]');
+    const rawColumns = found?.frame.style.gridTemplateColumns || '';
+    const rest = rawColumns.match(/^\s*\S+\s+([\s\S]+)$/)?.[1];
+    const geometry = active && rest ? chatGeometry(found) : null;
+    if (!geometry) { clearChatGrid(); return; }
+    if (chatFrame !== found.frame) {
+      clearChatGrid(); chatFrame = found.frame;
+      oldChatGrid = { value:chatFrame.style.getPropertyValue('--neko-chat-sidebar-grid'), priority:chatFrame.style.getPropertyPriority('--neko-chat-sidebar-grid') };
+    }
+    if (chatCenter !== found.center) { if (chatCenter) release(chatCenter, 'data-neko-chat-center'); chatCenter = found.center; }
+    mark(chatCenter, 'data-neko-chat-center');
+    const actual = Math.max(geometry.min, Math.min(geometry.max, geometry.width * preferredRatio));
+    const width = Math.round(actual), grid = `${width}px ${rest}`;
+    const changed = chatFrame.style.getPropertyValue('--neko-chat-sidebar-grid') !== grid || !chatFrame.hasAttribute('data-neko-chat-sidebar-grid');
+    if (changed) chatFrame.style.setProperty('--neko-chat-sidebar-grid', grid);
+    mark(chatFrame, 'data-neko-chat-sidebar-grid');
+    lastChatGeometry = geometry;
+    // Keep the full grab target on the sidebar: native WebContentsView panes
+    // can otherwise cover the half protruding into the neighboring region.
+    for (const [key, value] of Object.entries({ left: `${Math.round(geometry.bounds.left + width - 12)}px`, top:`${Math.round(geometry.bounds.top)}px`, height:`${Math.round(geometry.bounds.height)}px` }))
+      if (chatDivider.style[key] !== value) chatDivider.style[key] = value;
+    chatDivider.hidden = false;
+    chatDivider.setAttribute('aria-valuemin', String(Math.round(geometry.min / geometry.width * 100)));
+    chatDivider.setAttribute('aria-valuemax', String(Math.round(geometry.max / geometry.width * 100)));
+    chatDivider.setAttribute('aria-valuenow', String(Math.round(width / geometry.width * 100)));
+    chatDivider.setAttribute('aria-valuetext', `聊天室 ${Math.round(width / geometry.width * 100)}%，工作区 ${100 - Math.round(width / geometry.width * 100)}%`);
+    // Existing workspace/preview and native social view code already reacts to
+    // resize; the parent grid's own outer size stays fixed during divider drag.
+    if (changed) win.dispatchEvent(new win.Event('resize'));
+  }
   function sync() {
     queued = false; if (stopped) return;
     const sidebar = doc.querySelector('[data-slot="sidebar"]');
+    syncChatGrid(sidebar);
     const frame = sidebar?.closest('[data-sidebar-collapsed="true"]');
     nativeToggle = frame ? [...sidebar.querySelectorAll('button')].find(button => /^(打开侧边栏|展开侧边栏|open sidebar|expand sidebar)$/i.test((button.getAttribute('aria-label') || button.getAttribute('title') || '').trim())) : null;
     const columns = frame?.style.gridTemplateColumns || '';
@@ -139,24 +217,52 @@ function installWorkbenchSideRail(options = {}) {
     if (event.target !== nativeAccount) return;
     Promise.resolve().then(() => { if (!stopped && nativeAccount?.getAttribute('aria-expanded') !== 'true') account.focus(); });
   };
+  const onChatDown = event => {
+    if (event.button !== 0 || !lastChatGeometry || chatDrag) return;
+    chatDrag = { id:event.pointerId, started:preferredRatio }; chatDivider.dataset.dragging = 'true';
+    try { chatDivider.setPointerCapture(event.pointerId); } catch {} event.preventDefault();
+  };
+  const onChatMove = event => {
+    if (!chatDrag || chatDrag.id !== event.pointerId || !lastChatGeometry) return;
+    const { bounds, width, min, max } = lastChatGeometry;
+    setChatRatio(Math.max(min, Math.min(max, event.clientX - bounds.left)) / width); event.preventDefault();
+  };
+  const onChatEnd = event => {
+    if (!chatDrag || chatDrag.id !== event.pointerId) return;
+    const cancelled = event.type !== 'pointerup', previous = chatDrag.started; chatDrag = null; delete chatDivider.dataset.dragging;
+    try { chatDivider.releasePointerCapture(event.pointerId); } catch {}
+    setChatRatio(cancelled ? previous : preferredRatio);
+  };
+  const onChatKey = event => {
+    if (!lastChatGeometry || !['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
+    const { width, min, max } = lastChatGeometry, current = Math.max(min, Math.min(max, preferredRatio * width));
+    const pixels = event.key === 'Home' ? min : event.key === 'End' ? max : current + (event.key === 'ArrowLeft' ? -1 : 1) * (event.shiftKey ? 48 : 12);
+    event.preventDefault(); setChatRatio(Math.max(min, Math.min(max, pixels)) / width);
+  };
+  const onChatReset = () => setChatRatio(.75);
+  chatDivider.addEventListener('pointerdown', onChatDown); chatDivider.addEventListener('pointermove', onChatMove);
+  for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) chatDivider.addEventListener(type, onChatEnd);
+  chatDivider.addEventListener('keydown', onChatKey); chatDivider.addEventListener('dblclick', onChatReset);
+  win.addEventListener('resize', schedule);
   expand.addEventListener('click', onExpand); bili.addEventListener('click', onBili); fish.addEventListener('click', onFish);
   account.addEventListener('click', onAccount); doc.addEventListener('focusin', onFocus);
   doc.addEventListener('pointerdown', onDragStart, true); doc.addEventListener('pointerup', onDragEnd); doc.addEventListener('pointercancel', onDragEnd);
-  doc.head.appendChild(style); doc.body.prepend(rail); doc.body.setAttribute('data-neko-side-rail-layout', '');
+  doc.head.appendChild(style); doc.body.prepend(rail); doc.body.appendChild(chatDivider); doc.body.setAttribute('data-neko-side-rail-layout', '');
   const observer = new win.MutationObserver(schedule);
-  observer.observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-label', 'aria-expanded', 'data-sidebar-collapsed', 'style'] });
+  observer.observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-label', 'aria-expanded', 'data-sidebar-collapsed', 'data-neko-chatroom-active', 'style'] });
   sync();
   return () => {
     if (stopped) return; stopped = true; observer.disconnect();
     expand.removeEventListener('click', onExpand); bili.removeEventListener('click', onBili); fish.removeEventListener('click', onFish);
     account.removeEventListener('click', onAccount); doc.removeEventListener('focusin', onFocus);
     doc.removeEventListener('pointerdown', onDragStart, true); doc.removeEventListener('pointerup', onDragEnd); doc.removeEventListener('pointercancel', onDragEnd);
+    win.removeEventListener('resize', schedule); clearChatGrid();
     releaseFrame();
     for (const [node, attrs] of [...claimed]) for (const name of [...attrs.keys()]) release(node, name);
     if (doc.body.getAttribute('data-neko-side-rail-layout') === '') {
       if (originalBodyMarker === null) doc.body.removeAttribute('data-neko-side-rail-layout');
       else doc.body.setAttribute('data-neko-side-rail-layout', originalBodyMarker);
     }
-    rail.remove(); style.remove();
+    rail.remove(); chatDivider.remove(); style.remove();
   };
 }

@@ -1,8 +1,12 @@
-# Local test workbench 0.28.9 (source, pending installation)
+# Local test workbench 0.28.10 (source, pending installation)
 
 The daily artifact is built from this repository. `config/daily-release.json` is the version authority; every app includes `Contents/Resources/WORKBENCH_BUILD.json` with the source commit and SHA-256 of every shipped source file. Historical QA checkouts and profiles are not release inputs.
 
 ## Pending source changes
+
+- In the default chatroom view the sidebar and coding area start at a 3:1 proportion excluding the rail, subject to minimum usable widths. Dragging resizes the grid continuously; keyboard arrows, Home/End and double-click are available. The adjusted width is session-only and resets on reopening. Isolated DOM and Electron fixtures exercise responsive geometry, but actual DSH narrow layouts and native-view pointer routing still need production verification.
+- Companion chat now distinguishes connection checks, an unconfigured provider and failures, retains unsent text and lets the user restore failed input without replacing an existing draft. Provider replies have not been tested with real credentials.
+- Startup detects conflicting native DSH profile use and offers retry or exit without terminating the other process; a second daily-workbench launch focuses the existing instance. Conflict and single-instance behavior were tested in isolated fixtures, not against a live user session.
 
 - On opening the workbench, the right-hand coding area offers a search and selection surface for known local work sessions and their projects. Opening a DSH session or starting a session for a known DSH project uses the existing native navigation; Codex remains disabled while its integration is testing. The project catalog is derived from known sessions and does not discover empty projects. A user-selected custom split dismisses the selector without replacing the saved layout. Synthetic DOM tests verify navigation and draft preservation; real-session and installed-app verification are pending.
 - A workbench-styled control in the DSH coding area exposes the existing native Plugins, Automation and More navigation, preserving native handlers and plugin contributions. DOM checks verify the adapter; real-window positioning and native service behavior still need verification.

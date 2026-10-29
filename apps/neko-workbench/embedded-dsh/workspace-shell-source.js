@@ -226,10 +226,22 @@ function installWorkspaceShell(options = {}) {
   }
   motion?.addEventListener?.('change', syncCharacter); doc.addEventListener('visibilitychange', syncCharacter);
   const history = el('div', 'neko-companion-history'); history.id = 'neko-companion-history'; history.hidden = true; history.tabIndex = 0; history.setAttribute('role', 'log'); history.setAttribute('aria-label', '主 agent 最近聊天记录'); history.setAttribute('aria-live', 'polite');
-  const chatStatus = el('p', 'neko-companion-status'); chatStatus.hidden = true; chatStatus.setAttribute('role', 'status');
+  const chatStatus = el('div', 'neko-companion-status'); chatStatus.hidden = true;
+  const chatStatusText = el('span'); chatStatusText.setAttribute('role', 'status'); chatStatusText.setAttribute('aria-live', 'polite');
+  const chatSetup = button('聊天设置', 'neko-companion-setup', async () => { try { await bridge.action('chat-settings'); } catch (error) { chatError = error.message || '聊天设置未能打开'; renderCompanion(); } });
+  const chatRecover = button('恢复失败内容', 'neko-companion-recover', () => {
+    const failedText = state?.companion?.failedText;
+    if (!failedText || chatInput.value.trim()) return;
+    chatInput.value = failedText; chatInput.focus(); renderCompanion();
+  });
+  chatSetup.hidden = chatRecover.hidden = true; chatStatus.append(chatStatusText, chatSetup, chatRecover);
   const form = el('form', 'neko-companion-form'), chatInput = el('textarea'); chatInput.rows = 1; chatInput.placeholder = '说点什么…'; chatInput.maxLength = 8000; chatInput.setAttribute('aria-label', '给主 agent 的消息');
   const chatSend = el('button', '', '↑'); chatSend.type = 'submit'; chatSend.setAttribute('aria-label', '发送给主 agent');
-  const historyToggle = button('', 'neko-companion-history-toggle', () => saveLayout({ companionHistoryOpen: !layout?.companionHistoryOpen }));
+  let historyPeek = false;
+  const historyToggle = button('', 'neko-companion-history-toggle', () => {
+    const open = !!layout?.companionHistoryOpen || historyPeek;
+    historyPeek = false; saveLayout({ companionHistoryOpen: !open });
+  });
   historyToggle.setAttribute('aria-controls', history.id); historyToggle.setAttribute('aria-label', '展开聊天记录'); historyToggle.title = '展开聊天记录'; historyToggle.setAttribute('aria-expanded', 'false');
   const historyIcon = doc.createElementNS('http://www.w3.org/2000/svg', 'svg'); historyIcon.setAttribute('viewBox', '0 0 24 24'); historyIcon.setAttribute('aria-hidden', 'true');
   const historyPath = doc.createElementNS('http://www.w3.org/2000/svg', 'path'); historyPath.setAttribute('d', 'M4 5h16v11H9l-5 4V5Zm4 4h8M8 12h5'); historyIcon.appendChild(historyPath); historyToggle.appendChild(historyIcon);
@@ -404,10 +416,11 @@ function installWorkspaceShell(options = {}) {
     chatError = '';
     if (!state?.companion?.ready) { try { await bridge.action('chat-settings'); } catch (error) { chatError = error.message || '请从左上角设置连接聊天'; } renderCompanion(); return; }
     const draft = chatInput.value; sending = true; renderCompanion();
-    try { await bridge.companion({ action: 'send', text }); if (chatInput.value === draft) chatInput.value = ''; }
+    try { await bridge.companion({ action: 'send', text }); historyPeek = true; if (chatInput.value === draft) chatInput.value = ''; }
     catch (error) { chatError = error.message || '消息未发送，请重试'; }
     finally { sending = false; renderCompanion(); }
   });
+  chatInput.addEventListener('input', renderCompanion);
   chatInput.addEventListener('keydown', event => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); form.requestSubmit(); } });
   const panel = own(el('section', 'neko-office-panel')); panel.hidden = true; panel.setAttribute('aria-label', 'Codex 工作界面');
   const officeHeader = el('header', 'neko-office-header'); const officeTitle = el('strong', '', 'Codex'); const officeModel = el('span', 'neko-office-model');
@@ -579,14 +592,20 @@ function installWorkspaceShell(options = {}) {
   }
   function newOffice() { ++readVersion; hideSocial(); selectedId = null; officeReading = false; officeErrorText = ''; office = { status: 'idle', thread: null, items: [], approvals: office.approvals || [], error: '' }; officeInput.value = drafts.get('new') || ''; officeRenderKey = ''; renderOffice(); closeStartup(); officeInput.focus(); }
   function renderCompanion() {
-    const c = state?.companion || {}, open = !!layout?.companionHistoryOpen, wasHidden = history.hidden;
+    const c = state?.companion || {}, open = !!layout?.companionHistoryOpen || historyPeek, wasHidden = history.hidden;
     history.hidden = !open; historyToggle.setAttribute('aria-expanded', String(open)); historyToggle.setAttribute('aria-label', open ? '收起聊天记录' : '展开聊天记录'); historyToggle.title = open ? '收起聊天记录' : '展开聊天记录';
     chatSend.hidden = !!c.working; chatStop.hidden = !c.working; chatSend.disabled = sending; chatSend.title = c.ready ? '发送消息' : '连接聊天设置';
-    chatStatus.textContent = chatError || c.error || ''; chatStatus.hidden = !chatStatus.textContent;
+    const status = !state?.companion ? '正在检查聊天连接…' : sending ? '正在发送…' : c.working ? '大肥鱼正在回复…' : chatError || c.error || (!c.ready ? '聊天尚未连接，请先设置' : '');
+    chatStatusText.textContent = status;
+    chatSetup.hidden = !state?.companion || !!c.ready || sending || !!c.working;
+    chatRecover.hidden = !c.failedText || sending || !!c.working;
+    chatRecover.disabled = !!chatInput.value.trim();
+    chatRecover.title = chatRecover.disabled ? '请先保留或清空当前草稿，再恢复失败的消息' : '将失败的消息放回输入框，不会自动发送';
+    chatStatus.hidden = !status && chatSetup.hidden && chatRecover.hidden;
     const key = JSON.stringify(c.messages || []);
     if (key !== historyKey) {
       const bottom = history.scrollHeight - history.scrollTop - history.clientHeight < 30; historyKey = key;
-      history.replaceChildren(...(c.messages || []).map(m => { const line = el('p', 'neko-companion-message'); line.dataset.role = m.role; line.append(el('strong', '', m.role === 'user' ? '你：' : m.role === 'error' ? '提示：' : '回复：'), doc.createTextNode(m.text)); return line; }));
+      history.replaceChildren(...(c.messages || []).map(m => { const line = el('p', 'neko-companion-message'); line.dataset.role = m.role; line.append(el('strong', '', m.role === 'user' ? '你：' : m.role === 'error' ? '提示：' : m.streaming ? '回复中：' : m.partial ? '未完成回复：' : '回复：'), doc.createTextNode(m.text)); return line; }));
       if (!history.children.length) history.appendChild(el('p', 'neko-companion-empty', '暂无聊天记录'));
       if (bottom) history.scrollTop = history.scrollHeight;
     }
@@ -769,7 +788,7 @@ function installWorkspaceShell(options = {}) {
   }
   function schedule() { if (!disposed && !queued) { queued = true; Promise.resolve().then(() => { queued = false; place(); positionCompanionMenu(); }); } }
   function nativeNew(event) { if (layout?.officeMode !== 'codex' || !event.target.closest?.('[data-neko-new-session="plus"]')) return; event.preventDefault(); event.stopImmediatePropagation(); newOffice(); }
-  function escape(event) { if (event.key !== 'Escape') return; if (!companionMenu.hidden) { event.preventDefault(); event.stopPropagation(); closeCompanionMenu(); } else if (!modal.hidden) { event.stopPropagation(); closeSettings(); } else if (layout?.companionHistoryOpen && dock.contains(doc.activeElement)) { event.preventDefault(); saveLayout({ companionHistoryOpen: false }); historyToggle.focus(); } }
+  function escape(event) { if (event.key !== 'Escape') return; if (!companionMenu.hidden) { event.preventDefault(); event.stopPropagation(); closeCompanionMenu(); } else if (!modal.hidden) { event.stopPropagation(); closeSettings(); } else if ((layout?.companionHistoryOpen || historyPeek) && dock.contains(doc.activeElement)) { event.preventDefault(); historyPeek = false; saveLayout({ companionHistoryOpen: false }); historyToggle.focus(); } }
   const observer = new win.MutationObserver(schedule); observer.observe(doc.body, { childList: true, subtree: true, attributes:true, attributeFilter:['data-neko-unified-enabled', 'data-neko-tools'] });
   // Observe only the dock's ancestors for inline style changes: watching every
   // style mutation would also watch our own drag/position updates.
