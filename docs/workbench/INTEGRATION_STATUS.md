@@ -1,9 +1,10 @@
-# Local test workbench 0.28.17 (source, pending installation)
+# Local test workbench 0.28.18 (source, pending installation)
 
 The daily artifact is built from this repository. `config/daily-release.json` is the version authority; every app includes `Contents/Resources/WORKBENCH_BUILD.json` with the source commit and SHA-256 of every shipped source file. Historical QA checkouts and profiles are not release inputs.
 
 ## Pending source changes
 
+- Dragging the left-content divider to the far right (or pressing End) collapses the work area to a compact native DSH composer with a restore button. The original input remains mounted, and the previous width and project chooser return on expansion. Community/Bilibili native views leave space for the floating control. DOM tests cover draft preservation and view geometry; a temporary DSH window verified the visual collapsed state and restore. The temporary profile was signed out, so message sending and a real active task have not been verified. Installation is pending disk-space recovery.
 - The work area shows a project and session chooser instead of the unbound native landing page. A genuinely active DSH session can be resumed; starting a project-bound session retains its input and drafts. DSH selection and active-session fields are feature-detected internal APIs of the installed version; isolated DOM and Electron tests cover navigation and layout, while real DSH session transitions and older-version fallback still need verification.
 
 - Community and Bilibili replace the chatroom inside the existing left content area while retaining its width and the right-hand work area. The rail or the return control switches back to chatroom or workspace navigation. The three-column configuration entry is removed; old saved layout data is preserved but not activated on startup. DOM tests cover navigation, drafts and collapsed-sidebar recovery; a temporary real DSH window showed the live community and Bilibili pages on the left. This does not verify login, identity linking or video playback. Opening settings while community identity authorization is pending cancels that attempt.

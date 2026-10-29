@@ -342,7 +342,8 @@ function installUnifiedLayout(options = {}) {
     // the corresponding grid track is the visible sidebar in that case.
     const sideRect = slotRect.width > 0 && slotRect.height > 0 ? slotRect : item.getBoundingClientRect();
     const columns = win.getComputedStyle(frameNode).gridTemplateColumns.trim().split(/\s+/).map(Number.parseFloat);
-    if (columns.length < 2 || !Number.isFinite(columns[0]) || !Number.isFinite(columns[1]) || columns[1] < 100) return null;
+    const collapsed = doc.body.hasAttribute('data-neko-workspace-collapsed');
+    if (columns.length < 2 || !Number.isFinite(columns[0]) || !Number.isFinite(columns[1]) || columns[1] < (collapsed ? 0 : 100)) return null;
     const full = { x: bounds.left + columns[0], y: bounds.top, width: columns[1], height: bounds.height };
     if (![full.x, full.y, full.width, full.height].every(Number.isFinite) || full.height < 100) return null;
     let sideBottom = sideRect.bottom;
@@ -355,6 +356,16 @@ function installUnifiedLayout(options = {}) {
     for (const node of [settingsSlot?.parentElement, footer, dock, launcher]) {
       const part = node?.getBoundingClientRect();
       if (part && part.height > 0 && part.top > sideRect.top + 60) sideBottom = Math.min(sideBottom, part.top);
+    }
+    // Child WebContentsViews are always above the host renderer. In the
+    // collapsed layout the real work composer floats in the bottom-right;
+    // reserve its whole horizontal band so that it remains usable over a
+    // community or video view. Do not detach, reload or cover the composer.
+    if (collapsed) for (const node of doc.querySelectorAll('[data-neko-collapsed-composer], [data-neko-workspace-expand-control]')) {
+      const part = node.getBoundingClientRect();
+      if (part.width > 0 && part.height > 0 && part.left < sideRect.right && part.right > sideRect.left && part.bottom > sideRect.top && part.top < sideBottom) {
+        sideBottom = Math.min(sideBottom, Math.max(sideRect.top, part.top - 8));
+      }
     }
     return { frameNode, center, full, side: { x: sideRect.left, y: sideRect.top, width: sideRect.width, height: Math.max(0, sideBottom - sideRect.top) } };
   }
@@ -540,6 +551,7 @@ function installUnifiedLayout(options = {}) {
   observer.observe(doc.body, { childList:true, subtree:true, attributes:true, attributeFilter:['aria-expanded','role','data-neko-account-habitat-menu'] });
   watchOverlayAncestors();
   win.addEventListener('resize', schedule); doc.addEventListener('scroll', schedule, true);
+  doc.addEventListener('neko-collapsed-composer-geometry', schedule);
   function visibilityChanged() { if (doc.visibilityState === 'hidden') hideAll(); else schedule(); }
   doc.addEventListener('visibilitychange', visibilityChanged); win.addEventListener('focus', visibilityChanged);
   divider.addEventListener('pointerdown', e => { if (e.button !== 0) return; const geo = findGeometry(); if (!geo) return; drag = { pointerId: e.pointerId, left: geo.full.x, width: geo.full.width, started: layout.ratio }; divider.setPointerCapture?.(e.pointerId); divider.dataset.dragging = 'true'; e.preventDefault(); });
@@ -626,7 +638,7 @@ function installUnifiedLayout(options = {}) {
   return () => {
     closeSideSurface();
     disposed = true; revision++; hideAll(); clearCoding(); postNativeDivider(null); if (typeof unsubscribeNativeDivider === 'function') unsubscribeNativeDivider(); doc.body.removeAttribute('data-neko-unified-enabled');
-    observer.disconnect(); overlayObserver.disconnect(); resize?.disconnect(); win.removeEventListener('resize', schedule); doc.removeEventListener('scroll', schedule, true); doc.removeEventListener('click', shortcut, true); doc.removeEventListener('neko-unified-open-community', visitCommunity); doc.removeEventListener('keydown', escapeConfig);
+    observer.disconnect(); overlayObserver.disconnect(); resize?.disconnect(); win.removeEventListener('resize', schedule); doc.removeEventListener('scroll', schedule, true); doc.removeEventListener('click', shortcut, true); doc.removeEventListener('neko-unified-open-community', visitCommunity); doc.removeEventListener('neko-collapsed-composer-geometry', schedule); doc.removeEventListener('keydown', escapeConfig);
     doc.removeEventListener('neko-chatroom-mode-change', roomModeChanged);
     doc.removeEventListener('neko-unified-open-config', openConfigFromSettings);
     doc.removeEventListener('neko-side-surface-close', closeSideSurface);

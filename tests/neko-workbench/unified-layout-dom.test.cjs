@@ -103,6 +103,32 @@ test('sidebar switches between social views and yields to chat or a settings dia
   assert.equal(f.calls.filter(x=>x.action==='set-pane-layout').length,0);
   f.cleanup();
 });
+test('collapsed work composer remains above the native social view and restores it without reload', {skip:!JSDOM}, async t=>{
+  for (const [selector, site] of [['.neko-community-yui','community'], ['.neko-side-rail__bilibili','bilibili']]) {
+    const f=fixture(t); await sleep();
+    f.d.querySelector(selector).click();
+    await waitFor(()=>f.calls.some(x=>x.action==='open'&&x.slot==='side'&&x.site===site),'initial native view');
+    const frame=f.d.querySelector('#frame'), sidebar=f.d.querySelector('[data-slot="sidebar"]');
+    const composer=f.d.createElement('div'); composer.setAttribute('data-neko-collapsed-composer','');
+    composer.getBoundingClientRect=()=>({left:500,right:1000,top:500,bottom:570,width:500,height:70});
+    const restore=f.d.createElement('button'); restore.setAttribute('data-neko-workspace-expand-control','');
+    restore.getBoundingClientRect=()=>({left:1000,right:1040,top:480,bottom:520,width:40,height:40});
+    f.d.body.append(composer,restore); f.d.body.setAttribute('data-neko-workspace-collapsed','');
+    frame.style.gridTemplateColumns='1020px 0px 0px';
+    sidebar.getBoundingClientRect=()=>({left:64,top:0,right:1084,bottom:780,width:1020,height:780});
+    f.d.dispatchEvent(new f.w.Event('neko-collapsed-composer-geometry'));
+    await waitFor(()=>f.calls.some(x=>x.action==='layout'&&x.slot==='side'&&x.bounds.width===1020),'collapsed view bounds');
+    const reduced=f.calls.filter(x=>x.action==='layout'&&x.slot==='side').at(-1).bounds;
+    assert(reduced.y+reduced.height<=472,'native view stops before both floating controls');
+    assert.equal(f.calls.filter(x=>x.action==='hide'&&x.slot==='side').length,0,'resize does not hide or cancel the view');
+    f.d.body.removeAttribute('data-neko-workspace-collapsed'); frame.style.gridTemplateColumns='220px 800px 0px';
+    sidebar.getBoundingClientRect=()=>({left:64,top:0,right:284,bottom:780,width:220,height:780});
+    f.d.dispatchEvent(new f.w.Event('neko-collapsed-composer-geometry'));
+    await waitFor(()=>f.calls.filter(x=>x.action==='layout'&&x.slot==='side').at(-1)?.bounds.width===220,'restored view bounds');
+    assert.equal(f.calls.filter(x=>x.action==='open'&&x.slot==='side').length,1,'restoring does not reload native page');
+    assert.equal(f.d.querySelector('#draft').value,'coding draft'); f.cleanup();
+  }
+});
 test('opening community or B station expands a collapsed sidebar before placing the native view', {skip:!JSDOM}, async t=>{
   for (const [selector, site] of [['.neko-community-yui','community'],['.neko-side-rail__bilibili','bilibili']]) {
     const f=fixture(t); await sleep();

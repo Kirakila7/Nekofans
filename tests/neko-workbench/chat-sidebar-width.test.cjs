@@ -51,12 +51,25 @@ test('width adapts on resize, keyboard and reset, and cancelled drags do not per
   assert.equal(f.frame.style.getPropertyValue('--neko-chat-sidebar-grid'),'480px minmax(0px, 1fr) 0px');
   pointer(f.w,h,'pointerdown',544); pointer(f.w,h,'pointermove',700); await tick(f.w); pointer(f.w,h,'pointercancel',700); await tick(f.w);
   assert.equal(h.getAttribute('aria-valuenow'),'60');
-  h.dispatchEvent(new f.w.KeyboardEvent('keydown',{key:'End',bubbles:true})); await tick(f.w); assert.equal(h.getAttribute('aria-valuenow'),'75');
+  h.dispatchEvent(new f.w.KeyboardEvent('keydown',{key:'End',bubbles:true})); await tick(f.w); assert.equal(h.getAttribute('aria-valuenow'),'100'); assert(f.d.body.hasAttribute('data-neko-workspace-collapsed'));
+  f.d.dispatchEvent(new f.w.Event('neko-workspace-expand')); await tick(f.w); assert.equal(h.getAttribute('aria-valuenow'),'60'); assert(!f.d.body.hasAttribute('data-neko-workspace-collapsed'));
   h.dispatchEvent(new f.w.MouseEvent('dblclick',{bubbles:true})); await tick(f.w); assert.equal(h.getAttribute('aria-valuenow'),'75');
   f.setReserved(160); await tick(f.w); assert.equal(f.frame.style.getPropertyValue('--neko-chat-sidebar-grid'),'480px minmax(0px, 1fr) 0px');
   f.frame.setAttribute('data-sidebar-collapsed','true'); await tick(f.w); assert(h.hidden); assert(!f.frame.hasAttribute('data-neko-chat-sidebar-grid'));
   f.frame.removeAttribute('data-sidebar-collapsed'); await tick(f.w); assert(!h.hidden);
   f.cleanup();
+});
+
+test('dragging to the right collapses and restore keeps the original working draft and previous width', {skip:!JSDOM}, async t => {
+  const f=fixture(t); f.d.body.setAttribute('data-neko-chatroom-active',''); await tick(f.w);
+  const h=f.d.querySelector('.neko-chat-sidebar-divider');
+  pointer(f.w,h,'pointerdown',814); pointer(f.w,h,'pointermove',1050); await tick(f.w); pointer(f.w,h,'pointerup',1050); await tick(f.w);
+  assert(f.d.body.hasAttribute('data-neko-workspace-collapsed'));
+  assert.equal(f.frame.style.getPropertyValue('--neko-chat-sidebar-grid'),'1000px minmax(0px, 1fr) 0px');
+  assert.equal(f.d.querySelector('textarea').value,'unsent draft');
+  f.d.dispatchEvent(new f.w.Event('neko-workspace-expand')); await tick(f.w);
+  assert.equal(h.getAttribute('aria-valuenow'),'75'); assert(!f.d.body.hasAttribute('data-neko-workspace-collapsed'));
+  assert.equal(f.d.querySelector('textarea').value,'unsent draft'); f.cleanup();
 });
 
 test('community and B站 retain the left width when replacing the chatroom', {skip:!JSDOM}, async t => {

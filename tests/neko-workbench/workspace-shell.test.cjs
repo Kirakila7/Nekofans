@@ -117,6 +117,30 @@ test('startup project opens an existing DSH workspace and custom split closes th
  d.body.setAttribute('data-neko-side-social-active','');center.removeAttribute('data-neko-unified-coding');center.setAttribute('data-neko-chat-center','');center.getBoundingClientRect=()=>({left:480,right:1024,top:40,bottom:800,width:544,height:760});await tick();assert(!picker.hidden);assert.equal(picker.style.left,'480px');assert.equal(picker.style.width,'544px');stop();
 });
 
+test('collapsed workspace keeps the native composer mounted and restores its draft',{skip:!JSDOM},async t=>{
+ const dom=new JSDOM('<body><aside data-neko-side-rail><div class="neko-side-rail__theme"></div></aside><aside data-slot="sidebar"><div data-slot="settings.launcher"></div></aside><main data-neko-chat-center><div data-composer-seat><textarea>原有草稿</textarea><button>发送</button></div></main></body>',{runScripts:'outside-only',pretendToBeVisual:true});t.after(()=>dom.window.close());
+ const w=dom.window,d=w.document,sidebar=d.querySelector('[data-slot="sidebar"]'),store=createWorkspaceLayout(path.join(temp(t),'layout.json'));sidebar.getBoundingClientRect=()=>({left:64,top:0,right:304,bottom:800,width:240,height:800});
+ const bridge={action:async()=>({}),getState:async()=>({workspaceRoot:'/p',workspaceRevision:0,companion:{ready:true,messages:[]}}),companion:async()=>({}),workspace:async r=>{if(r.action==='state')return {...store.get(),codexAvailable:false};if(r.action==='codex-state')return {items:[],approvals:[]};if(r.action==='catalog')return {sessions:[],projects:[],providers:{dsh:'ready',codex:'testing'}};return null;}};
+ w.eval(fs.readFileSync(path.join(base,'embedded-dsh/workspace-shell-source.js'),'utf8')+'\nwindow.install=installWorkspaceShell');
+ const stop=w.install({window:w,document:d,bridge,avatar:()=>'',locateSidebar:()=>({root:sidebar,slot:sidebar}),hasDshActiveSession:()=>true});await tick();
+ let expands=0;d.addEventListener('neko-workspace-expand',()=>{expands++;d.body.removeAttribute('data-neko-workspace-collapsed')});
+ const seat=d.querySelector('[data-composer-seat]'),parent=seat.parentElement,input=seat.querySelector('textarea'),picker=d.querySelector('.neko-startup');assert(!picker.hidden);
+ d.body.setAttribute('data-neko-workspace-collapsed','');await tick();assert(picker.hidden,'temporarily hide project selection in compact mode');
+ assert.equal(seat.parentElement,parent);assert(seat.hasAttribute('data-neko-collapsed-composer'));assert.equal(input.value,'原有草稿');assert(!d.querySelector('[data-neko-workspace-expand-control]').hidden);
+ d.querySelector('[data-neko-workspace-expand-control]').click();await tick();assert.equal(expands,1);assert(!seat.hasAttribute('data-neko-collapsed-composer'));assert(!picker.hidden,'restore pending project selection on expansion');assert.equal(input.value,'原有草稿');
+ input.remove();const inertEditor=d.createElement('div');inertEditor.setAttribute('role','textbox');inertEditor.setAttribute('contenteditable','false');seat.prepend(inertEditor);
+ d.body.setAttribute('data-neko-workspace-collapsed','');await tick();assert(seat.hasAttribute('data-neko-collapsed-composer'),'unselected native workspace picker input is still shown');assert.equal(expands,1);
+ d.querySelector('[data-neko-workspace-expand-control]').click();await tick();assert(!picker.hidden);assert.equal(expands,2);
+ seat.remove();d.body.setAttribute('data-neko-workspace-collapsed','');await tick();assert.equal(expands,3,'missing composer must expand instead of leaving an unusable workspace');assert(!d.body.hasAttribute('data-neko-workspace-collapsed'));stop();
+});
+
+test('compact native composer keeps the input and original controls together',{skip:!JSDOM},async t=>{
+ const dom=new JSDOM('<body data-neko-workspace-collapsed><div data-neko-collapsed-composer><div class="test_composerStack"><div class="hero"><div class="neko-gallery"></div></div><div class="test_heroWorkspaceRow"><button>选择工作区</button><button>标准模式</button></div><div><div data-composer-card><div data-input-scroll><div role="textbox" contenteditable="true" data-composer-input>草稿</div></div><div class="test_row"><button>附件</button><button>发送</button></div></div></div></div></div></body>',{pretendToBeVisual:true});t.after(()=>dom.window.close());const w=dom.window,d=w.document,style=d.createElement('style');style.textContent=fs.readFileSync(path.join(base,'embedded-dsh/workspace-shell-source.css'),'utf8');d.head.appendChild(style);
+ const seat=d.querySelector('[data-neko-collapsed-composer]'),card=d.querySelector('[data-composer-card]'),input=d.querySelector('[data-composer-input]'),row=d.querySelector('.test_row');
+ assert.equal(w.getComputedStyle(card).flexDirection,'row');assert.equal(w.getComputedStyle(input).minHeight,'32px');assert.equal(w.getComputedStyle(row).flexWrap,'wrap');assert.equal(w.getComputedStyle(row).overflow,'visible');assert.equal(w.getComputedStyle(row).flex,'0 0 auto');assert.equal(input.textContent,'草稿');assert.equal(row.querySelectorAll('button').length,2);
+ d.body.removeAttribute('data-neko-workspace-collapsed');assert.equal(input.textContent,'草稿');assert.equal(seat.querySelector('.test_heroWorkspaceRow button').textContent,'选择工作区');
+});
+
 test('new session without a selected project shows chooser without disturbing the draft',{skip:!JSDOM},async t=>{
  const dom=new JSDOM('<body><aside data-neko-side-rail><div class="neko-side-rail__theme"></div></aside><aside data-slot="sidebar"><button data-neko-new-session="plus">+</button><div data-neko-seat-mount></div><div data-slot="sidebar.workspaces"></div><div data-slot="settings.launcher"></div></aside><main><textarea>保留草稿</textarea></main></body>',{runScripts:'outside-only',pretendToBeVisual:true});t.after(()=>dom.window.close());
  const w=dom.window,d=w.document,sidebar=d.querySelector('[data-slot="sidebar"]'),store=createWorkspaceLayout(path.join(temp(t),'layout.json')),opened=[];sidebar.getBoundingClientRect=()=>({left:64,top:0,right:304,bottom:800,width:240,height:800});
