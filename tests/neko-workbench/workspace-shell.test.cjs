@@ -173,7 +173,11 @@ test('workspace DOM keeps three configurable filters, all sessions reset, collap
 
  doc.querySelectorAll('.neko-custom-seat__settings')[2].click();doc.querySelector('.neko-seat-editor input').value='开发二号';doc.querySelector('.neko-seat-editor').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));await tick();assert.equal(store.get().seats[2].name,'开发二号');assert.match(doc.querySelector('.neko-custom-seats').textContent,/开发二号/);
  await bridge.workspace({action:'update',patch:{officeMode:'codex'}});subscriber({...state,workspaceRevision:1});await tick();assert(!doc.querySelector('.neko-office-panel').hidden);assert.equal(doc.querySelector('.neko-office-panel').style.left,'300px');assert(doc.querySelector('main').hasAttribute('inert'));assert.equal(doc.querySelector('main textarea').value,'native draft');
- doc.querySelector('.neko-workspace-settings').click();
+ const settingsTrigger=doc.querySelector('.neko-workspace-settings');settingsTrigger.focus();settingsTrigger.click();
+ const moreSettings=doc.querySelector('.neko-workspace-more-settings');assert(moreSettings&&!moreSettings.open,'additional tools are collapsed initially');assert.match(moreSettings.querySelector('summary').textContent,/更多工具/);
+ assert.match(doc.querySelector('.neko-workspace-common').textContent,/账号、隐私 \/ 高级设置/,'privacy and advanced settings remain accessible');
+ let layoutRequests=0;doc.addEventListener('neko-unified-open-config',()=>layoutRequests++);doc.querySelector('.neko-workspace-layout-setting').click();assert.equal(layoutRequests,1);assert(doc.querySelector('.neko-workspace-modal').hidden);assert.equal(doc.activeElement,settingsTrigger,'close returns focus to its opener');
+ settingsTrigger.click();doc.querySelector('.neko-workspace-more-settings').open=true;
  assert.equal(doc.querySelectorAll('[data-workbench-action]').length,5,'all bottom options move to the top-left settings');
  doc.querySelector('[data-workbench-action="open-neko"]').click();await tick();assert.match(doc.querySelector('.neko-workspace-modal').textContent,/本机服务未启动/);
  doc.querySelector('[data-workbench-action="task-notes"]').click();await tick();assert([...doc.querySelectorAll('[data-workbench-action]')].every(b=>b.disabled));releaseAction();await tick();assert(doc.querySelector('.neko-workspace-modal').hidden);

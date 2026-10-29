@@ -661,7 +661,8 @@ function installWorkspaceShell(options = {}) {
       box.append(button('允许本次', '', () => call({ action: 'codex-approve', key: a.key, decision: 'accept' }).catch(showOfficeError)), button('拒绝', '', () => call({ action: 'codex-approve', key: a.key, decision: 'decline' }).catch(showOfficeError))); return box;
     }));
   }
-  function closeSettings() { if (modal.hidden) return; modal.hidden = true; settingsButton.focus(); }
+  let settingsReturnFocus = null;
+  function closeSettings() { if (modal.hidden) return; modal.hidden = true; const target = settingsReturnFocus; settingsReturnFocus = null; if (target?.isConnected && typeof target.focus === 'function') target.focus(); else settingsButton.focus(); }
   function officeChoices() {
     const choices = el('div', 'neko-office-choices');
     for (const [id, name, pic] of [['dsh', 'DSH', 'bigfish'], ['codex', codexPaused() ? 'Codex · 测试中' : 'Codex', 'devcat'], ['claude', 'Claude · 待接入', 'claude']]) {
@@ -672,17 +673,22 @@ function installWorkspaceShell(options = {}) {
   }
   function connectionSummary() { const connected = phase => ['ready', 'connected'].includes(phase) ? '已连接' : phase === 'error' ? '连接出错' : '未连接'; return 'N.E.K.O.：' + connected(state?.neko?.connection) + ' · 工作台：' + connected(state?.workbench?.connection); }
   function openSettings(kind = 'general', id) {
+    if (modal.hidden) settingsReturnFocus = doc.activeElement;
     hideSocial(); modalBody.replaceChildren(); modalTitle.textContent = kind === 'seat' ? '自定义工作 agent' : '工作台设置'; modal.setAttribute('aria-label', modalTitle.textContent); modal.hidden = false;
     if (kind !== 'seat') {
       modalBody.append(el('h3', '', '右侧工作界面'), officeChoices());
       if (kind === 'general') {
         modalBody.append(el('h3', '', '头像与配色'));
         const palette = el('div', 'neko-workspace-palettes');
-        for (const id of ['yui', 'devcat', 'bigfish', 'claude', 'gemini']) { const b = button('', '', () => bridge.setAvatar(id).catch(showError)); b.setAttribute('aria-label', '配色：' + id); b.appendChild(image(avatar(id))); palette.appendChild(b); }
-        modalBody.append(palette, button('主 agent 聊天设置', 'neko-workspace-setting-link', () => { closeSettings(); bridge.action('chat-settings'); }), button('账号、隐私 / 高级设置', 'neko-workspace-setting-link', () => { closeSettings(); options.openNativeSettings?.(); }));
-        modalBody.append(el('h3', '', '连接与工作台'));
+        for (const [id, name] of [['yui','Yui'],['devcat','开发喵'],['bigfish','大肥鱼'],['claude','Claude 娘'],['gemini','Gemini 小猫']]) { const b = button('', '', () => bridge.setAvatar(id).catch(showError)); b.setAttribute('aria-label', '配色：' + name); b.title = name; b.appendChild(image(avatar(id))); palette.appendChild(b); }
+        modalBody.appendChild(palette);
+        modalBody.append(el('h3', '', '常用设置'));
+        const common = el('div', 'neko-workspace-common');
+        common.append(button('界面布局', 'neko-workspace-setting-link neko-workspace-layout-setting', () => { closeSettings(); doc.dispatchEvent(new win.Event('neko-unified-open-config')); }), button('主 agent 聊天设置', 'neko-workspace-setting-link', () => { closeSettings(); Promise.resolve(bridge.action('chat-settings')).catch(showError); }), button('账号、隐私 / 高级设置', 'neko-workspace-setting-link', () => { closeSettings(); options.openNativeSettings?.(); }));
+        modalBody.appendChild(common);
+        const more = el('details', 'neko-workspace-more-settings'); const summary = el('summary', '', '更多工具与连接'); more.appendChild(summary);
         const connections = el('p', 'neko-workspace-connections', connectionSummary());
-        connections.setAttribute('role', 'status'); modalBody.appendChild(connections);
+        connections.setAttribute('role', 'status'); more.appendChild(connections);
         const actions = el('div', 'neko-workspace-actions'), actionError = el('p', 'neko-workspace-form-error'); actionError.setAttribute('role', 'status');
         for (const [action, label] of options.settingsActions || []) {
           if (action === 'neko-settings') continue; // The main-chat settings entry above opens the same native window.
@@ -693,7 +699,7 @@ function installWorkspaceShell(options = {}) {
             finally { controls.forEach(b => b.disabled = false); item.removeAttribute('aria-busy'); }
           }); item.dataset.workbenchAction = action; actions.appendChild(item);
         }
-        modalBody.append(actions, actionError, el('p', 'neko-workspace-note', 'DSH 与 Codex 沿用本机登录；主 agent 陪伴聊天单独连接。'));
+        more.append(actions, actionError, el('p', 'neko-workspace-note', 'DSH 与 Codex 沿用本机登录；主 agent 陪伴聊天单独连接。')); modalBody.appendChild(more);
       }
     } else {
       const seat = layout?.seats.find(s => s.id === id); if (!seat) return;

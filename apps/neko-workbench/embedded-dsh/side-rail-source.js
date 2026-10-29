@@ -29,7 +29,8 @@ function installWorkbenchSideRail(options = {}) {
   for (const [key, value] of Object.entries({ d: 'M7 2.5 10 6m7-3.5L14 6M8 11v3m8-3v3M9 20l-1 1m7-1 1 1', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.7, 'stroke-linecap': 'round' })) path.setAttribute(key, value);
   svg.append(rect, path); bili.appendChild(svg);
   const fish = doc.createElement('button'); fish.type = 'button'; fish.className = 'neko-side-rail__button neko-side-rail__fish';
-  fish.setAttribute('aria-label', options.fishLabel || '养鱼界面'); fish.title = options.fishLabel || '养鱼界面';
+  const fishLabel = (options.fishLabel || '养鱼设置').replace('养鱼界面', '养鱼设置');
+  fish.setAttribute('aria-label', fishLabel); fish.title = fishLabel;
   const image = doc.createElement('img'); image.alt = ''; image.draggable = false;
   if (/^data:image\/(?:png|webp|jpeg);base64,/.test(options.fishAvatar || '')) image.src = options.fishAvatar;
   fish.appendChild(image);
@@ -197,7 +198,7 @@ function installWorkbenchSideRail(options = {}) {
     if (pending || stopped) return;
     pending = true; button.setAttribute('aria-busy', 'true'); notice.hidden = true;
     try { await callback(); }
-    catch { if (!stopped) { notice.textContent = button === bili ? 'B站未能打开，请重试' : '养鱼界面未能打开，请重试'; notice.hidden = false; } }
+    catch { if (!stopped) { notice.textContent = button === bili ? 'B站未能打开，请重试' : '养鱼设置未能打开，请重试'; notice.hidden = false; } }
     finally { pending = false; if (!stopped) button.removeAttribute('aria-busy'); }
   }
   const onBili = () => act(bili, () => options.openBilibiliHome());

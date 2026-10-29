@@ -22,6 +22,7 @@ function installUnifiedLayout(options = {}) {
   trigger.setAttribute('aria-haspopup', 'dialog'); trigger.setAttribute('aria-controls', 'neko-unified-config');
   const container = doc.querySelector('.neko-workspace-rail-controls') || rail;
   container.appendChild(trigger);
+  let configReturnFocus = trigger;
   const config = el('section', 'neko-unified-config'); config.dataset.nekoUnifiedConfig = ''; config.hidden = true; config.id = 'neko-unified-config';
   config.setAttribute('role', 'dialog'); config.setAttribute('aria-labelledby', 'neko-unified-config-title'); config.setAttribute('aria-describedby', 'neko-unified-config-help');
   const close = button('×', 'close', () => setConfig(false, true)); close.setAttribute('aria-label', '关闭界面配置'); close.title = '关闭（Esc）';
@@ -221,10 +222,19 @@ function installUnifiedLayout(options = {}) {
     if (disposed || config.hidden === !open) return;
     config.hidden = !open; suspended = open && layout.enabled; renderConfig();
     if (open) { info.textContent = ''; clearNotice(); focusFirst(); }
-    else if (returnFocus && trigger.isConnected) trigger.focus?.();
+    else if (returnFocus) {
+      const fallback = doc.querySelector('.neko-workspace-settings') || trigger;
+      const destination = configReturnFocus?.isConnected && !configReturnFocus.closest?.('[hidden]') ? configReturnFocus : fallback;
+      destination?.focus?.();
+    }
     if (suspended) hideAll(); else schedule();
   }
-  function toggleConfig() { void setConfig(config.hidden); }
+  function toggleConfig() { configReturnFocus = trigger; void setConfig(config.hidden); }
+  function openConfigFromSettings(event) {
+    configReturnFocus = event.detail?.returnFocus || doc.querySelector('.neko-workspace-settings') || trigger;
+    void setConfig(true);
+  }
+  doc.addEventListener('neko-unified-open-config', openConfigFromSettings);
   function clean(next) { return { enabled: !!next.enabled, side: next.side, left: next.left, right: next.right, ratio: next.ratio }; }
   let confirmed = null;
   function applySaved(saved) {
@@ -572,6 +582,7 @@ function installUnifiedLayout(options = {}) {
     disposed = true; revision++; hideAll(); clearCoding(); postNativeDivider(null); if (typeof unsubscribeNativeDivider === 'function') unsubscribeNativeDivider(); doc.body.removeAttribute('data-neko-unified-enabled');
     observer.disconnect(); overlayObserver.disconnect(); resize?.disconnect(); win.removeEventListener('resize', schedule); doc.removeEventListener('scroll', schedule, true); doc.removeEventListener('click', shortcut, true); doc.removeEventListener('neko-unified-open-community', visitCommunity); doc.removeEventListener('keydown', escapeConfig);
     doc.removeEventListener('neko-chatroom-mode-change', roomModeChanged);
+    doc.removeEventListener('neko-unified-open-config', openConfigFromSettings);
     doc.removeEventListener('visibilitychange', visibilityChanged); win.removeEventListener('focus', visibilityChanged); if (recoveryTimer) win.clearTimeout(recoveryTimer); if (noticeTimer) win.clearTimeout(noticeTimer);
     for (const p of Object.values(panels)) if (p.noteTimer) win.clearTimeout(p.noteTimer);
     if (frame) (win.cancelAnimationFrame || win.clearTimeout)(frame); if (typeof unsubscribe === 'function') unsubscribe(); if (typeof unsubscribeAccount === 'function') unsubscribeAccount();

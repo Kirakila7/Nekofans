@@ -117,10 +117,11 @@ body[data-neko-workspace-shell] .neko-chatroom-preview { position:fixed; z-index
 .neko-office-approval pre { white-space:pre-wrap; overflow-wrap:anywhere; font-size:11px; }
 .neko-office-approval button { margin-right:8px; }
 .neko-workspace-modal { position:fixed; inset:0; z-index:220; display:grid; place-items:center; box-sizing:border-box; padding:clamp(8px,3vw,24px); background:#0c24394d; color:var(--nws-text); font:13px/1.6 system-ui,sans-serif; }
-.neko-workspace-modal__card { box-sizing:border-box; width:min(460px,100%); max-width:100%; max-height:100%; overflow:auto; background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:18px; box-shadow:0 24px 80px #17303d30; padding:20px; }
-.neko-workspace-modal__card > header { display:flex; align-items:center; justify-content:space-between; }
-.neko-workspace-modal h2 { font-size:18px; margin:0; }
-.neko-workspace-modal h3 { font-size:13px; margin:20px 0 9px; }
+.neko-workspace-modal__card { box-sizing:border-box; width:min(480px,100%); max-width:100%; max-height:100%; overflow:auto; background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:20px; box-shadow:0 24px 80px #17303d30; padding:24px; }
+.neko-workspace-modal__card > header { display:flex; align-items:center; justify-content:space-between; gap:12px; padding-bottom:15px; border-bottom:1px solid color-mix(in srgb,var(--nws-border) 65%,transparent); }
+.neko-workspace-modal h2 { font-size:19px; letter-spacing:.02em; margin:0; }
+.neko-workspace-modal h3 { font-size:12px; letter-spacing:.04em; color:var(--nws-muted); margin:21px 0 10px; }
+.neko-workspace-modal button.neko-workspace-modal__close { display:grid; place-items:center; width:32px; height:32px; padding:0; border:0; border-radius:10px; color:var(--nws-muted); background:transparent; font-size:22px; line-height:1; }
 .neko-office-choices { display:flex; flex-wrap:wrap; gap:8px; }
 .neko-office-choice { flex:1 1 88px; min-width:0; display:grid; justify-items:center; gap:7px; padding:14px 8px !important; }
 .neko-office-choice img { width:45px; height:45px; object-fit:contain; }
@@ -129,6 +130,16 @@ body[data-neko-workspace-shell] .neko-chatroom-preview { position:fixed; z-index
 .neko-workspace-palettes button { padding:4px; }
 .neko-workspace-palettes img { width:35px; height:35px; object-fit:contain; }
 .neko-workspace-setting-link { display:block; width:100%; text-align:left; margin-top:8px; }
+.neko-workspace-common { overflow:hidden; border:1px solid var(--nws-border); border-radius:12px; }
+.neko-workspace-modal .neko-workspace-common .neko-workspace-setting-link { position:relative; margin:0; padding:11px 38px 11px 14px; border:0; border-radius:0; background:transparent; font-size:13px; }
+.neko-workspace-modal .neko-workspace-common .neko-workspace-setting-link + .neko-workspace-setting-link { border-top:1px solid color-mix(in srgb,var(--nws-border) 70%,transparent); }
+.neko-workspace-common .neko-workspace-setting-link::after { content:'›'; position:absolute; right:15px; top:50%; transform:translateY(-50%); color:var(--nws-muted); font-size:19px; }
+.neko-workspace-more-settings { margin-top:18px; border-top:1px solid color-mix(in srgb,var(--nws-border) 65%,transparent); }
+.neko-workspace-more-settings summary { padding:14px 2px 9px; color:var(--nws-muted); font-weight:600; cursor:pointer; }
+.neko-workspace-more-settings summary:focus-visible { outline:2px solid #4c89ad; outline-offset:2px; border-radius:5px; }
+.neko-workspace-actions { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(155px,100%),1fr)); gap:8px; }
+.neko-workspace-modal .neko-workspace-actions .neko-workspace-setting-link { margin:0; text-align:center; }
+@media(max-width:400px) { .neko-workspace-modal__card { padding:17px; } }
 .neko-workspace-note { font-size:11px; color:var(--nws-muted); margin-top:17px; }
 .neko-seat-editor { display:grid; gap:12px; padding-top:18px; }
 .neko-seat-editor label { display:grid; gap:5px; }
