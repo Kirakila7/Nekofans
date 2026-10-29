@@ -47,3 +47,23 @@ body[data-neko-unified-enabled] [data-neko-unified-coding="hidden"] { visibility
 .neko-unified-drop[data-active="true"] { border-style:solid; border-color:#3f78b5; background:#c4dcf6F2; box-shadow:inset 0 0 0 2px #3f78b555; }
 .neko-unified-drop[hidden] { display:none !important; }
 @media (prefers-reduced-motion: reduce) { .neko-unified-divider:after,.neko-unified-drop { transition:none; } }
+/* Three-pane layout keeps the original DSH and chatroom documents alive. */
+body[data-neko-flex-mode] [data-neko-flex-coding] { position:fixed !important; left:var(--neko-flex-x) !important; top:var(--neko-flex-y) !important; width:var(--neko-flex-width) !important; height:var(--neko-flex-height) !important; max-height:none !important; z-index:40; overflow:hidden; }
+body[data-neko-flex-mode] [data-neko-companion-footer] { position:fixed !important; left:var(--neko-social-x) !important; bottom:calc(100vh - var(--neko-social-y) - var(--neko-social-height)) !important; width:var(--neko-social-width) !important; box-sizing:border-box; z-index:51; }
+.neko-flex-config { margin:10px 0; padding:10px; border-radius:9px; background:#eff5fb; }
+.neko-flex-config .choices { display:grid; grid-template-columns:1fr 1fr; }
+.neko-flex-slots { display:grid; gap:5px; margin-bottom:8px; }
+.neko-flex-slot { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+.neko-flex-slot select { min-width:100px; max-width:60%; border:1px solid #c4dbe6; border-radius:6px; padding:4px; background:white; color:inherit; }
+.neko-unified-divider[data-orientation="horizontal"] { cursor:row-resize; }
+.neko-unified-divider[data-orientation="horizontal"]:after { width:42px; height:3px; top:2px; }
+.neko-unified-divider[data-orientation="horizontal"]:hover:after,.neko-unified-divider[data-orientation="horizontal"]:focus-visible:after,.neko-unified-divider[data-orientation="horizontal"][data-dragging="true"]:after { width:72px; height:3px; top:2px; }
+.neko-flex-move { position:fixed; z-index:56; width:24px; height:28px; padding:0; border:1px solid #c4dbe6; border-radius:6px; background:#fbfeffed; color:#536d89; font:16px system-ui,sans-serif; cursor:grab; }
+.neko-flex-move:active { cursor:grabbing; }
+.neko-flex-move[hidden] { display:none !important; }
+.neko-flex-tabs { position:fixed; z-index:58; display:flex; align-items:center; gap:4px; height:36px; box-sizing:border-box; padding:3px 5px; overflow:auto; background:#e5edf8; }
+.neko-flex-tabs::before { content:'窗口较小'; flex:none; font:11px system-ui,sans-serif; color:#627b96; }
+.neko-flex-tabs button { flex:none; border:1px solid #c4dbe6; border-radius:6px; padding:4px 8px; background:#fbfeff; color:#284e76; cursor:pointer; }
+.neko-flex-tabs button[aria-pressed="true"] { background:#d4e6f8; border-color:#8dabdb; }
+.neko-flex-tabs[hidden] { display:none !important; }
+body[data-neko-flex-social-hidden] [data-neko-companion-footer] { display:none !important; }

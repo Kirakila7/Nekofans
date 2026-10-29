@@ -10,7 +10,7 @@ let JSDOM; try { ({ JSDOM } = require(path.join(process.env.NEKO_DOM_DEPS || '/p
 const tick = () => new Promise(resolve => setTimeout(resolve, 45));
 const source = fs.readFileSync(path.join(__dirname, '../../apps/neko-workbench/embedded-dsh/unified-layout-source.js'), 'utf8');
 function fixture(t, initial = {}, { width = 800, failSave = false } = {}) {
-  const dom = new JSDOM(`<body><aside data-neko-side-rail><div class="neko-workspace-rail-controls"></div></aside><div id="frame" style="display:grid;grid-template-columns:220px ${width}px 0px"><div><aside data-slot="sidebar"><section class="neko-companion-dock"><textarea>pet draft</textarea></section><div data-slot="settings.launcher"></div></aside></div><div class="some_centerCol_HASH_42"><textarea id="draft">coding draft</textarea></div><div></div></div></body>`, { runScripts:'outside-only', pretendToBeVisual:true });
+  const dom = new JSDOM(`<body><aside data-neko-side-rail><div class="neko-workspace-rail-controls"></div><button class="neko-community-yui">社区</button><button class="neko-side-rail__bilibili">B站</button></aside><div id="frame" style="display:grid;grid-template-columns:220px ${width}px 0px"><div><aside data-slot="sidebar"><section class="neko-companion-dock"><textarea>pet draft</textarea></section><div data-slot="settings.launcher"></div></aside></div><div class="some_centerCol_HASH_42"><textarea id="draft">coding draft</textarea></div><div></div></div></body>`, { runScripts:'outside-only', pretendToBeVisual:true });
   t.after(() => dom.window.close());
   const w = dom.window, d = w.document;
   d.querySelector('#frame').getBoundingClientRect = () => ({ left:64, top:0, right:284 + width, bottom:780, width:220 + width, height:780 });
@@ -254,5 +254,101 @@ test('failed save falls back to the acknowledged layout if reading it also fails
   await frame(f);
   assert.equal(q(f, '.neko-unified-divider').getAttribute('aria-valuenow'), '50');
   assert.equal(f.saved.ratio, 0.5);
+  f.cleanup();
+});
+
+test('three-pane preset preserves the coding draft, swaps all content slots and resizes both axes', { skip:!JSDOM }, async t => {
+  const f=fixture(t); await tick(); q(f,'.neko-layout-entry').click(); await tick();
+  [...f.d.querySelectorAll('.neko-flex-config button')].find(b=>b.textContent==='左侧聊天室 / 右侧上下').click(); await tick();
+  assert.deepEqual(Array.from(f.saved.flex.slots), ['social','bilibili','coding']);
+  q(f,'.neko-unified-config .close').click(); await tick(); await tick();
+  const code=q(f,'.some_centerCol_HASH_42'); assert.equal(q(f,'#draft').value,'coding draft');
+  assert.equal(code.getAttribute('data-neko-flex-coding'),'');
+  assert.equal(code.style.getPropertyValue('--neko-flex-x'),'625px');
+  assert.equal(code.style.getPropertyValue('--neko-flex-y'),'390px');
+  assert(f.calls.some(c=>c.action==='open' && c.site==='bilibili' && c.bounds.y>=0));
+  key(f,q(f,'.neko-unified-divider'),'ArrowRight'); await tick(); await tick();
+  assert.equal(f.saved.flex.rootRatio,.56);
+  key(f,q(f,'.neko-flex-divider'),'ArrowDown'); await tick(); await tick();
+  assert.equal(f.saved.flex.stackRatio,.51);
+  q(f,'.neko-layout-entry').click(); await tick();
+  const sel=q(f,'.neko-flex-slot select'); sel.value='coding'; sel.dispatchEvent(new f.w.Event('change',{bubbles:true})); await tick();
+  assert.deepEqual(Array.from(f.saved.flex.slots), ['coding','bilibili','social']);
+  q(f,'.neko-unified-config .close').click(); await tick(); await tick();
+  assert.equal(code.style.getPropertyValue('--neko-flex-x'),'64px');
+  assert.equal(q(f,'#draft').value,'coding draft'); f.cleanup();
+});
+
+test('three-pane handles drag any content into another region without changing drafts', { skip:!JSDOM }, async t => {
+  const f=fixture(t); await tick(); q(f,'.neko-layout-entry').click(); await tick();
+  [...f.d.querySelectorAll('.neko-flex-config button')].find(b=>b.textContent==='左侧聊天室 / 右侧上下').click(); await tick(); q(f,'.neko-unified-config .close').click(); await tick(); await tick();
+  const handles=[...f.d.querySelectorAll('.neko-flex-move')], drops=[...f.d.querySelectorAll('.neko-flex-drop')];
+  const start=handles.find(n=>n.getAttribute('aria-label').includes('聊天室')), target=drops.find(n=>n.textContent==='工作区');
+  const loadingDrag = new f.w.Event('dragstart',{bubbles:true,cancelable:true}); start.dispatchEvent(loadingDrag); assert(loadingDrag.defaultPrevented); assert(target.hidden, 'loading B站 is not hidden or disposed by a drag');
+  f.listener({slot:'left',site:'bilibili',status:'ready'});
+  start.dispatchEvent(new f.w.Event('dragstart',{bubbles:true,cancelable:true}));
+  assert.equal(target.hidden,false); target.dispatchEvent(new f.w.Event('drop',{bubbles:true,cancelable:true})); await tick(); await tick();
+  assert.deepEqual(Array.from(f.saved.flex.slots),['coding','bilibili','social']);
+  assert.equal(q(f,'#draft').value,'coding draft'); assert.equal(q(f,'.neko-companion-dock textarea').value,'pet draft');
+  assert(target.hidden); f.cleanup();
+});
+
+
+test('three-pane social shortcuts preserve the layout and switch only the social region', { skip:!JSDOM }, async t => {
+  const f=fixture(t); await tick(); q(f,'.neko-layout-entry').click(); await tick();
+  [...f.d.querySelectorAll('.neko-flex-config button')].find(b=>b.textContent==='左侧聊天室 / 右侧上下').click(); await tick(); q(f,'.neko-unified-config .close').click(); await tick(); await tick();
+  const saved=JSON.stringify(f.saved.flex), code=q(f,'#draft');
+  q(f,'.neko-community-yui').click(); await tick(); await tick();
+  assert.equal(JSON.stringify(f.saved.flex),saved); assert(f.calls.some(c=>c.action==='open' && c.site==='community' && c.slot==='side'));
+  assert(f.calls.some(c=>c.action==='open' && c.site==='bilibili' && c.slot==='left'));
+  q(f,'.neko-side-rail__bilibili').click(); await tick(); await tick();
+  assert.equal(JSON.stringify(f.saved.flex),saved); assert.equal(f.d.body.hasAttribute('data-neko-flex-mode'),true); assert.equal(code.value,'coding draft');
+  assert(f.calls.some(c=>c.action==='hide' && c.slot==='side')); f.cleanup();
+});
+
+test('enabling or restoring the three-pane layout expands a collapsed sidebar even when chatroom is active', {skip:!JSDOM}, async t => {
+  const f=fixture(t); await tick(); let expanded=0;
+  const expand=f.d.createElement('button'); expand.className='neko-side-rail__expand'; expand.addEventListener('click',()=>{expanded++;expand.hidden=true;}); f.d.querySelector('[data-neko-side-rail]').appendChild(expand);
+  f.d.body.setAttribute('data-neko-chatroom-active',''); q(f,'.neko-layout-entry').click(); await tick();
+  [...f.d.querySelectorAll('.neko-flex-config button')].find(b=>b.textContent==='左侧聊天室 / 右侧上下').click(); await tick();
+  assert.equal(expanded,1); assert.equal(f.saved.flex.enabled,true); f.cleanup();
+});
+
+test('rapid adjustments to both split axes preserve both saved ratios', {skip:!JSDOM}, async t => {
+  const f=fixture(t); await tick(); q(f,'.neko-layout-entry').click(); await tick();
+  [...f.d.querySelectorAll('.neko-flex-config button')].find(b=>b.textContent==='左侧聊天室 / 右侧上下').click(); await tick(); q(f,'.neko-unified-config .close').click(); await tick(); await tick();
+  key(f,q(f,'.neko-unified-divider'),'ArrowRight'); key(f,q(f,'.neko-flex-divider'),'ArrowDown');
+  await tick(); await tick(); assert.equal(f.saved.flex.rootRatio,.56); assert.equal(f.saved.flex.stackRatio,.51);
+  f.cleanup();
+});
+
+test('same-axis extreme ratios retain visible video and accommodate the chat footer', {skip:!JSDOM}, async t => {
+  const f=fixture(t); await tick(); let social;
+  f.d.addEventListener('neko-flex-social-geometry',e=>{ if(e.detail) social=e.detail; });
+  const footer=f.d.createElement('div'); footer.setAttribute('data-neko-companion-footer',''); footer.getBoundingClientRect=()=>({height:260}); f.d.body.appendChild(footer);
+  q(f,'.neko-layout-entry').click(); await tick();
+  [...f.d.querySelectorAll('.neko-flex-config button')].find(b=>b.textContent==='上下排列').click(); await tick(); q(f,'.neko-unified-config .close').click(); await tick(); await tick();
+  key(f,q(f,'.neko-unified-divider'),'Home'); key(f,q(f,'.neko-flex-divider'),'End'); await tick(); await tick();
+  assert(social.height>=340, 'chat room leaves space for its current footer plus content');
+  const video=f.calls.filter(c=>['open','layout'].includes(c.action)&&c.site==='bilibili'||c.action==='layout'&&c.slot==='left').at(-1);
+  assert(video && video.bounds.height>=118, 'video retains a usable height beneath its header');
+  assert.equal(f.saved.flex.rootRatio,.15); assert.equal(f.saved.flex.stackRatio,.85);
+  f.cleanup();
+});
+
+test('small windows switch safely between single regions and restore the saved layout when enlarged', {skip:!JSDOM}, async t => {
+  const f=fixture(t); await tick(); q(f,'.neko-layout-entry').click(); await tick();
+  [...f.d.querySelectorAll('.neko-flex-config button')].find(b=>b.textContent==='左右排列').click(); await tick(); q(f,'.neko-unified-config .close').click(); await tick(); await tick();
+  const saved=JSON.stringify(f.saved.flex), frame=q(f,'#frame');
+  frame.getBoundingClientRect=()=>({left:64,top:0,right:464,bottom:450,width:400,height:450}); f.w.dispatchEvent(new f.w.Event('resize')); await tick(); await tick();
+  const tabs=q(f,'.neko-flex-tabs'); assert.equal(tabs.hidden,false); assert.equal(q(f,'.neko-flex-divider').hidden,true);
+  [...tabs.querySelectorAll('button')].find(b=>b.textContent==='工作区').click(); await tick(); await tick();
+  assert.equal(f.d.body.hasAttribute('data-neko-flex-social-hidden'),true); assert.equal(q(f,'#draft').value,'coding draft');
+  assert.equal(q(f,'.some_centerCol_HASH_42').getAttribute('data-neko-unified-coding'),'');
+  q(f,'.neko-side-rail__bilibili').click(); await tick(); await tick();
+  assert.equal([...tabs.querySelectorAll('button')].find(b=>b.textContent==='B站').getAttribute('aria-pressed'),'true');
+  assert(f.calls.some(c=>c.action==='open'&&c.site==='bilibili'));  assert.equal(JSON.stringify(f.saved.flex),saved);
+  frame.getBoundingClientRect=()=>({left:64,top:0,right:1084,bottom:780,width:1020,height:780}); f.w.dispatchEvent(new f.w.Event('resize')); await tick(); await tick();
+  assert(tabs.hidden); assert.equal(f.d.body.hasAttribute('data-neko-flex-social-hidden'),false); assert.equal(JSON.stringify(f.saved.flex),saved); assert.equal(q(f,'#draft').value,'coding draft');
   f.cleanup();
 });
