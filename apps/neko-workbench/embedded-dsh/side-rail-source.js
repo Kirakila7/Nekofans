@@ -47,6 +47,12 @@ function installWorkbenchSideRail(options = {}) {
   chatDivider.setAttribute('aria-label', '调整聊天室和工作区宽度');
   chatDivider.title = '拖动调整宽度 · 双击恢复 3:1 · 方向键调整';
   let preferredRatio = .75, chatFrame = null, chatCenter = null, oldChatGrid = null, chatDrag = null, lastChatGeometry = null;
+  let nativeDividerKey = '';
+  function postNativeDivider(rect) {
+    if (typeof bridge.divider !== 'function') return;
+    const key = JSON.stringify(rect); if (key === nativeDividerKey) return; nativeDividerKey = key;
+    void Promise.resolve(bridge.divider(rect ? {action:'place',id:'chat',rect} : {action:'remove',id:'chat'})).catch(()=>{});
+  }
   const style = doc.createElement('style'); style.dataset.nekoSideRailStyle = ''; style.textContent = options.cssText || '';
   const originalBodyMarker = doc.body.getAttribute('data-neko-side-rail-layout');
   const claimed = new Map(); let stopped = false, queued = false, pending = false, appRoot = null, nativeAccount = null, nativeToggle = null, hiddenFrame = null, previousGrid = null, sidebarDrag = null;
@@ -81,6 +87,7 @@ function installWorkbenchSideRail(options = {}) {
     if (oldChatGrid?.value) chatFrame.style.setProperty('--neko-chat-sidebar-grid', oldChatGrid.value, oldChatGrid.priority);
     else chatFrame.style.removeProperty('--neko-chat-sidebar-grid');
     chatFrame = null; chatCenter = null; oldChatGrid = null; lastChatGeometry = null; chatDivider.hidden = true;
+    postNativeDivider(null);
     win.dispatchEvent(new win.Event('resize'));
   }
   function findChatFrame(sidebar) {
@@ -135,6 +142,7 @@ function installWorkbenchSideRail(options = {}) {
     for (const [key, value] of Object.entries({ left: `${Math.round(geometry.bounds.left + width - 12)}px`, top:`${Math.round(geometry.bounds.top)}px`, height:`${Math.round(geometry.bounds.height)}px` }))
       if (chatDivider.style[key] !== value) chatDivider.style[key] = value;
     chatDivider.hidden = false;
+    postNativeDivider({x:Math.round(geometry.bounds.left + width - 12),y:Math.round(geometry.bounds.top),width:12,height:Math.round(geometry.bounds.height)});
     chatDivider.setAttribute('aria-valuemin', String(Math.round(geometry.min / geometry.width * 100)));
     chatDivider.setAttribute('aria-valuemax', String(Math.round(geometry.max / geometry.width * 100)));
     chatDivider.setAttribute('aria-valuenow', String(Math.round(width / geometry.width * 100)));
@@ -240,6 +248,18 @@ function installWorkbenchSideRail(options = {}) {
     event.preventDefault(); setChatRatio(Math.max(min, Math.min(max, pixels)) / width);
   };
   const onChatReset = () => setChatRatio(.75);
+  const unsubscribeNativeDivider = typeof bridge.subscribeDivider === 'function' ? bridge.subscribeDivider(event => {
+    if (event?.id !== 'chat' || !lastChatGeometry) return;
+    if (event.type === 'start') { if (!chatDrag) { chatDrag = {id:'native',started:preferredRatio}; chatDivider.dataset.dragging='true'; } }
+    else if (event.type === 'move' && chatDrag?.id === 'native' && Number.isFinite(event.x)) {
+      const {bounds,width,min,max}=lastChatGeometry; setChatRatio(Math.max(min,Math.min(max,event.x-bounds.left))/width);
+    } else if ((event.type === 'end' || event.type === 'cancel') && chatDrag?.id === 'native') {
+      const previous=chatDrag.started; chatDrag=null; delete chatDivider.dataset.dragging;
+      if (event.type === 'cancel') setChatRatio(previous);
+      else { if (event.click) setChatRatio(previous); else if (Number.isFinite(event.x)) { const {bounds,width,min,max}=lastChatGeometry; setChatRatio(Math.max(min,Math.min(max,event.x-bounds.left))/width); } chatDivider.focus(); }
+    } else if (event.type === 'reset') onChatReset();
+    else if (event.type === 'key') onChatKey({key:event.key,shiftKey:event.shift,preventDefault(){}});
+  }) : null;
   chatDivider.addEventListener('pointerdown', onChatDown); chatDivider.addEventListener('pointermove', onChatMove);
   for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) chatDivider.addEventListener(type, onChatEnd);
   chatDivider.addEventListener('keydown', onChatKey); chatDivider.addEventListener('dblclick', onChatReset);
@@ -256,7 +276,7 @@ function installWorkbenchSideRail(options = {}) {
     expand.removeEventListener('click', onExpand); bili.removeEventListener('click', onBili); fish.removeEventListener('click', onFish);
     account.removeEventListener('click', onAccount); doc.removeEventListener('focusin', onFocus);
     doc.removeEventListener('pointerdown', onDragStart, true); doc.removeEventListener('pointerup', onDragEnd); doc.removeEventListener('pointercancel', onDragEnd);
-    win.removeEventListener('resize', schedule); clearChatGrid();
+    win.removeEventListener('resize', schedule); clearChatGrid(); if (typeof unsubscribeNativeDivider === 'function') unsubscribeNativeDivider();
     releaseFrame();
     for (const [node, attrs] of [...claimed]) for (const name of [...attrs.keys()]) release(node, name);
     if (doc.body.getAttribute('data-neko-side-rail-layout') === '') {

@@ -95,7 +95,7 @@ test('startup selects a real session without touching drafts, and reports unavai
  // A native navigation root may stay narrow even when its grid track expands.
  // The chooser must follow the real work column, including during dragging.
  const center=d.querySelector('main');let edge=832;center.setAttribute('data-neko-chat-center','');center.getBoundingClientRect=()=>({left:edge,right:1024,width:1024-edge,top:0,bottom:800,height:800});
- w.dispatchEvent(new w.Event('resize'));assert.equal(picker.style.left,'832px');edge=560;w.dispatchEvent(new w.Event('resize'));assert.equal(picker.style.left,'560px');center.removeAttribute('data-neko-chat-center');w.dispatchEvent(new w.Event('resize'));assert.equal(picker.style.left,'304px');
+ w.dispatchEvent(new w.Event('resize'));assert.equal(picker.style.left,'832px');assert(d.querySelector('.neko-office-panel').hasAttribute('data-neko-compact'));edge=560;w.dispatchEvent(new w.Event('resize'));assert.equal(picker.style.left,'560px');assert(!d.querySelector('.neko-office-panel').hasAttribute('data-neko-compact'));center.removeAttribute('data-neko-chat-center');w.dispatchEvent(new w.Event('resize'));assert.equal(picker.style.left,'304px');
  picker.querySelector('.neko-startup__project-header').click();assert.equal(picker.querySelectorAll('.neko-startup__session').length,1);assert.equal(picker.querySelector('.neko-startup__project-header').getAttribute('aria-expanded'),'false');picker.querySelector('.neko-startup__project-header').click();assert.equal(picker.querySelectorAll('.neko-startup__session').length,3);
  const search=picker.querySelector('input');search.value='修复';search.dispatchEvent(new w.Event('input'));assert.equal(picker.querySelectorAll('.neko-startup__session').length,1);assert.equal(picker.querySelector('.neko-startup__session').textContent,'修复界面›');
  picker.querySelector('.neko-startup__session').click();await tick();assert(!picker.hidden);assert.match(picker.textContent,/会话打开失败/);assert.equal(d.querySelector('main textarea').value,'未发送草稿');
@@ -186,6 +186,8 @@ test('installed UI bundle contains the canonical workspace implementation and ac
  const code=fs.readFileSync(path.join(base,'embedded-dsh/b0-skin/packages/dsh-client-ui-white-label/lib/client.js'),'utf8');
  const source=fs.readFileSync(path.join(base,'embedded-dsh/workspace-shell-source.js'),'utf8');
  const css=fs.readFileSync(path.join(base,'embedded-dsh/workspace-shell-source.css'),'utf8');
+ const accountCss=fs.readFileSync(path.join(base,'embedded-dsh/account-habitat-source.css'),'utf8');
  assert(code.includes(source));assert(code.includes(JSON.stringify(css)));
+ assert(code.includes('const ACCOUNT_HABITAT_CSS = '+JSON.stringify(accountCss)+';'));
  assert.match(code,/'aria-label': a.name/);assert.match(css,/\.neko-hero-pick__name \{ display:none !important/);
 });

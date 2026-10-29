@@ -54,6 +54,15 @@ test('startup uses two areas without overwriting saved multi-pane layout and can
   assert(restore && !restore.hidden); restore.click(); f.d.querySelector('.neko-unified-config .close').click();
   await waitFor(()=>f.calls.some(x=>x.action==='open'&&x.slot==='left'&&x.site==='community')&&f.calls.some(x=>x.action==='open'&&x.slot==='right'&&x.site==='bilibili'),'restored native views');
   assert.deepEqual(f.saved,previous); assert.equal(f.calls.filter(x=>x.action==='set-pane-layout').length,0,'restore reuses saved layout without rewriting');
+  const left=f.calls.find(x=>x.action==='open'&&x.slot==='left').bounds;
+  const right=f.calls.find(x=>x.action==='open'&&x.slot==='right').bounds;
+  assert.equal(right.x-(left.x+left.width),12,'native child views leave the divider hit area uncovered');
+  f.d.querySelector('.neko-unified-divider').dispatchEvent(new f.w.KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true}));
+  await waitFor(()=>f.calls.some(x=>x.action==='layout'&&x.slot==='left')&&f.calls.some(x=>x.action==='layout'&&x.slot==='right'),'resized native views');
+  const movedLeft=f.calls.filter(x=>x.action==='layout'&&x.slot==='left').at(-1).bounds;
+  const movedRight=f.calls.filter(x=>x.action==='layout'&&x.slot==='right').at(-1).bounds;
+  assert.equal(movedRight.x-(movedLeft.x+movedLeft.width),12,'divider hit area remains free while resizing');
+  assert.equal(f.calls.filter(x=>x.action==='open').length,2,'resizing updates existing views without reloading them');
   f.cleanup();
 });
 test('rail shortcuts open an optional middle panel while preserving coding and can close it', {skip:!JSDOM}, async t=>{

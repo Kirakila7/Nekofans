@@ -1,8 +1,10 @@
-# Local test workbench 0.28.12 (source, pending installation)
+# Local test workbench 0.28.13 (source, pending installation)
 
 The daily artifact is built from this repository. `config/daily-release.json` is the version authority; every app includes `Contents/Resources/WORKBENCH_BUILD.json` with the source commit and SHA-256 of every shipped source file. Historical QA checkouts and profiles are not release inputs.
 
 ## Pending source changes
+
+- Workbench navigation, settings, account menu and role settings adapt to narrower containers. Native community and Bilibili panel toolbars wrap and their embedded views track the actual toolbar and pane dimensions. An isolated Electron test with real mouse input verified dragging across one and two native views while preserving page rendering, keyboard focus and chat divider reset. Actual remote site responsiveness, non-default zoom and interrupted drags outside the window remain to be checked in the daily app.
 
 - In the default chatroom view the sidebar and coding area start at a 3:1 proportion excluding the rail, subject to minimum usable widths. Dragging resizes the grid continuously; keyboard arrows, Home/End and double-click are available. The adjusted width is session-only and resets on reopening. Isolated DOM and Electron fixtures exercise responsive geometry, actual DSH compact controls were visually checked, but native-view pointer routing still needs production verification. The startup picker stays inside the coding pane and uses a compact layout in narrow panes; the latter still needs production verification.
 - Companion chat now distinguishes connection checks, an unconfigured provider and failures, retains unsent text and lets the user restore failed input without replacing an existing draft. Provider replies have not been tested with real credentials.

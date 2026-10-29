@@ -587,6 +587,7 @@ function createSocialController(options = {}) {
     },
     bindHost(host) { Object.values(controllers).forEach(controller => controller.bindHost(host)); },
     dispose() { ++generation; for (const slot of slots.keys()) bump(slot); slots.clear(); legacyVisible = false; Object.values(controllers).forEach(controller => controller.dispose()); },
+    get hasVisibleView() { return controllers.community.isOpen || controllers.bilibili.isOpen; },
     get isOpen() { return controllers.community.isOpen; },
     get view() { return controllers[active].view; } });
 }

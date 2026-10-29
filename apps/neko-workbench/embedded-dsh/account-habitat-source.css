@@ -56,7 +56,7 @@ button.hjANda_trigger[data-neko-account-habitat][data-collapsed="true"] .neh-dev
 button.hjANda_trigger[data-neko-account-habitat][data-collapsed="true"] .neh-habitat-column { display: none; }
 [data-neko-account-habitat-menu] {
   width: 340px; min-width: min(340px, calc(100vw - 24px)) !important;
-  max-width: calc(100vw - 24px); border-radius: 16px !important;
+  box-sizing: border-box; max-width: calc(100vw - 24px); max-height: calc(100vh - 24px); overflow-y: auto; overflow-x: hidden; border-radius: 16px !important;
   color: var(--dsw-alias-label-primary, #17283a);
   background: var(--dsw-alias-bg-layer-1, #fcfdff) !important;
 }

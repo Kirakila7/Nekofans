@@ -94,6 +94,12 @@ function installUnifiedLayout(options = {}) {
   let layout = { enabled: false, side: 'workspace', left: null, right: 'coding', ratio: 0.5 };
   let startupSaved = null;
   let disposed = false, frame = 0, revision = 0, requestId = 0, codingNode = null, codingInert = false, suspended = false, drag = null, draggedContent = null;
+  let nativeDividerKey = '';
+  function postNativeDivider(rect) {
+    if (typeof bridge.divider !== 'function') return;
+    const key=JSON.stringify(rect); if (key===nativeDividerKey) return; nativeDividerKey=key;
+    void Promise.resolve(bridge.divider(rect ? {action:'place',id:'unified',rect} : {action:'remove',id:'unified'})).catch(()=>{});
+  }
   let scheduled = false, placements = new Map(), unsubscribe = null, unsubscribeAccount = null, lastRects = {}, openTickets = {}, recoveryTimer = null;
   let accountPending = false, accountRevision = 0;
   const panels = {};
@@ -327,7 +333,7 @@ function installUnifiedLayout(options = {}) {
     placements.delete(slot); delete lastRects[slot]; delete openTickets[slot];
     void Promise.resolve(bridge.community({ action: 'hide', slot })).catch(() => {});
   }
-  function placePanel(slot, rect, site) {
+  function placePanel(slot, rect, site, splitGutter = false) {
     const p = panels[slot]; if (!rect || rect.width < 80 || rect.height < 80 || !site) { p.node.hidden = true; closeView(slot); return; }
     p.node.hidden = false;
     const title = site === 'community' ? 'N.E.K.O. 社区' : 'B站视频';
@@ -337,7 +343,13 @@ function installUnifiedLayout(options = {}) {
     const boundsStyle = { left: `${Math.round(rect.x)}px`, top: `${Math.round(rect.y)}px`, width: `${Math.round(rect.width)}px`, height: `${Math.round(rect.height)}px` };
     for (const [key, value] of Object.entries(boundsStyle)) if (p.node.style[key] !== value) p.node.style[key] = value;
     const bar = Math.max(42, Math.ceil(p.header.getBoundingClientRect().height));
-    const targetBounds = { x: rect.x, y: rect.y + bar, width: rect.width, height: rect.height - bar };
+    // Electron child views are composited above renderer DOM, including the
+    // divider. Leave its hit area uncovered on both sides of a split so the
+    // user can grab it even when a community/video page occupies either pane.
+    // The web document receives the reduced viewport directly through
+    // setBounds; it is not reloaded when the divider moves.
+    const inset = splitGutter && (slot === 'left' || slot === 'right') ? 6 : 0;
+    const targetBounds = { x: rect.x + (slot === 'right' ? inset : 0), y: rect.y + bar, width: rect.width - inset, height: rect.height - bar };
     if (targetBounds.height <= 1) { closeView(slot); return; }
     const key = JSON.stringify(targetBounds), current = placements.get(slot);
     if (current !== site) {
@@ -373,12 +385,12 @@ function installUnifiedLayout(options = {}) {
   }
   function place() {
     frame = 0; if (disposed) return;
-    if (!layout.enabled) { for (const p of Object.values(panels)) p.node.hidden = true; divider.hidden = mobile.hidden = true; return; }
+    if (!layout.enabled) { for (const p of Object.values(panels)) p.node.hidden = true; divider.hidden = mobile.hidden = true; postNativeDivider(null); return; }
     if (doc.visibilityState === 'hidden' || suspended || hasOverlay()) {
-      hideAll(); for (const p of Object.values(panels)) p.node.hidden = true; divider.hidden = mobile.hidden = true; return;
+      hideAll(); for (const p of Object.values(panels)) p.node.hidden = true; divider.hidden = mobile.hidden = true; postNativeDivider(null); return;
     }
     const geo = findGeometry();
-    if (!geo) { hideAll(); for (const p of Object.values(panels)) p.node.hidden = true; divider.hidden = mobile.hidden = true; clearCoding(); info.textContent = '工作台布局尚未就绪，请展开侧栏后重试。'; return; }
+    if (!geo) { hideAll(); for (const p of Object.values(panels)) p.node.hidden = true; divider.hidden = mobile.hidden = true; postNativeDivider(null); clearCoding(); info.textContent = '工作台布局尚未就绪，请展开侧栏后重试。'; return; }
     const { full, center, side } = geo;
     const narrow = full.width < 540;
     const two = !!layout.left && !!layout.right;
@@ -402,14 +414,15 @@ function installUnifiedLayout(options = {}) {
     divider.hidden = !two || narrow;
     if (!divider.hidden) {
       Object.assign(divider.style, { left: `${x + split - 4}px`, top: `${y}px`, height: `${h}px` });
+      postNativeDivider({x:x+split-4,y,width:8,height:h});
       const percent = Math.round(clampRatio(layout.ratio) * 100);
       divider.setAttribute('aria-valuenow', String(percent)); divider.setAttribute('aria-valuetext', `左面板 ${percent}% · 右面板 ${100 - percent}%`);
-    }
+    } else postNativeDivider(null);
     for (const slot of ['side', 'left', 'right']) {
       const value = layout[slot];
       const site = value === 'community' || value === 'bilibili' ? value : null;
       if (suspended || slot === 'side' && doc.body.hasAttribute('data-neko-chatroom-active')) { panels[slot].node.hidden = true; closeView(slot); }
-      else placePanel(slot, rects[slot], site);
+      else placePanel(slot, rects[slot], site, two && !narrow);
     }
   }
   function schedule() { if (disposed || frame) return; frame = (win.requestAnimationFrame || (fn => win.setTimeout(fn, 16)))(place); }
@@ -440,7 +453,7 @@ function installUnifiedLayout(options = {}) {
   function endContentDrag() { draggedContent = null; hideDrops(); suspended = !config.hidden && layout.enabled; schedule(); }
   contents.addEventListener('dragstart', startContentDrag); contents.addEventListener('dragend', endContentDrag);
   const resize = win.ResizeObserver ? new win.ResizeObserver(schedule) : null;
-  function observe() { const geo = findGeometry(); if (geo && geo.frameNode !== observe.frame) { resize?.disconnect(); resize?.observe(geo.frameNode); resize?.observe(doc.querySelector('[data-slot="sidebar"]')); observe.frame = geo.frameNode; } }
+  function observe() { const geo = findGeometry(); if (geo && geo.frameNode !== observe.frame) { resize?.disconnect(); resize?.observe(geo.frameNode); resize?.observe(doc.querySelector('[data-slot="sidebar"]')); for (const panel of Object.values(panels)) resize?.observe(panel.header); observe.frame = geo.frameNode; } }
   // Watch attributes only on actual overlay/account ancestors, avoiding global
   // class/style observation for DSH's frequent streaming updates. A separate
   // child-list observer refreshes this set if React mounts or replaces menus.
@@ -479,6 +492,20 @@ function installUnifiedLayout(options = {}) {
     const next = e.key === 'Home' ? MIN_RATIO : e.key === 'End' ? MAX_RATIO : clampRatio(layout.ratio + (e.key === 'ArrowLeft' ? -step : step));
     void update({ ...layout, ratio: next });
   });
+  const unsubscribeNativeDivider = typeof bridge.subscribeDivider === 'function' ? bridge.subscribeDivider(event => {
+    if (event?.id !== 'unified' || divider.hidden) return;
+    if (event.type === 'start') { const geo=findGeometry(); if (!geo || drag) return; drag={pointerId:'native',left:geo.full.x,width:geo.full.width,started:layout.ratio}; divider.dataset.dragging='true'; }
+    else if (event.type === 'move' && drag?.pointerId === 'native' && Number.isFinite(event.x)) { layout.ratio=clampRatio((event.x-drag.left)/drag.width); schedule(); }
+    else if ((event.type === 'end' || event.type === 'cancel') && drag?.pointerId === 'native') {
+      const started=drag.started; if(event.type === 'end' && event.click) layout.ratio=started; else if (event.type === 'end' && Number.isFinite(event.x)) layout.ratio=clampRatio((event.x-drag.left)/drag.width);
+      drag=null; divider.removeAttribute('data-dragging');
+      if (event.type === 'cancel') { layout.ratio=started; schedule(); }
+      else { divider.focus(); if (Math.abs(layout.ratio-started)>=.01) void update(layout); else { layout.ratio=started; schedule(); } }
+    } else if (event.type === 'reset') void update({ ...layout, ratio:.5 });
+    else if (event.type === 'key' && ['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) {
+      const step=event.shift?.05:.01, next=event.key==='Home'?MIN_RATIO:event.key==='End'?MAX_RATIO:clampRatio(layout.ratio+(event.key==='ArrowLeft'?-step:step)); void update({ ...layout, ratio:next });
+    }
+  }) : null;
   function shortcut(event) {
     const item = event.target.closest?.('.neko-community-yui, .neko-side-rail__bilibili'); if (!item) return;
     event.preventDefault(); event.stopImmediatePropagation();
@@ -542,7 +569,7 @@ function installUnifiedLayout(options = {}) {
   }).catch(() => { if (!disposed) showNotice('布局暂不可用，请更新工作台后重试'); });
   renderConfig();
   return () => {
-    disposed = true; revision++; hideAll(); clearCoding(); doc.body.removeAttribute('data-neko-unified-enabled');
+    disposed = true; revision++; hideAll(); clearCoding(); postNativeDivider(null); if (typeof unsubscribeNativeDivider === 'function') unsubscribeNativeDivider(); doc.body.removeAttribute('data-neko-unified-enabled');
     observer.disconnect(); overlayObserver.disconnect(); resize?.disconnect(); win.removeEventListener('resize', schedule); doc.removeEventListener('scroll', schedule, true); doc.removeEventListener('click', shortcut, true); doc.removeEventListener('neko-unified-open-community', visitCommunity); doc.removeEventListener('keydown', escapeConfig);
     doc.removeEventListener('neko-chatroom-mode-change', roomModeChanged);
     doc.removeEventListener('visibilitychange', visibilityChanged); win.removeEventListener('focus', visibilityChanged); if (recoveryTimer) win.clearTimeout(recoveryTimer); if (noticeTimer) win.clearTimeout(noticeTimer);

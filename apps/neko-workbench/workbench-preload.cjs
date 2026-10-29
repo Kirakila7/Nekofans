@@ -16,6 +16,8 @@ contextBridge.exposeInMainWorld('nekoWorkbench',Object.freeze({
   qqbot:action=>call('qqbot',action),
   fishQq:request=>call('fish-qq',request),
   community:request=>ipcRenderer.invoke('workbench:community',request),
+  divider:request=>ipcRenderer.invoke('workbench:divider',request),
+  subscribeDivider:callback=>{if(typeof callback!=='function')throw new TypeError('callback must be a function');const listener=(_event,state)=>callback(state);ipcRenderer.on('workbench:divider-event',listener);return()=>ipcRenderer.removeListener('workbench:divider-event',listener);},
   subscribeCommunity:callback=>{const listener=(_event,state)=>callback(state);ipcRenderer.on('workbench:community-state',listener);return()=>ipcRenderer.removeListener('workbench:community-state',listener);},
   communityAccount:action=>ipcRenderer.invoke('workbench:community-account',action),
   subscribeCommunityAccount:callback=>{if(typeof callback!=='function')throw new TypeError('callback must be a function');const listener=(_event,state)=>callback(state);ipcRenderer.on('workbench:community-account-state',listener);return()=>ipcRenderer.removeListener('workbench:community-account-state',listener);},

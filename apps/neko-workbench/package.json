@@ -1,7 +1,7 @@
 {
   "name": "@bigfish/neko-workbench",
   "productName": "N.E.K.O. 桌宠工作台",
-  "version": "0.28.12",
+  "version": "0.28.13",
   "private": true,
   "main": "main.cjs",
   "scripts": {
