@@ -59,6 +59,7 @@ export interface MainChatServiceOptions {
 const ERROR_TEXT: Readonly<Record<string, string>> = {
   not_configured: "聊天 API 还没配置好（地址、模型或密钥）",
   auth: "API 密钥无效或没有权限",
+  insufficient_balance: "DeepSeek API 余额不足，请检查 API 平台余额",
   rate_limit: "请求太频繁或额度不足，稍后再试",
   timeout: "聊天 API 响应超时",
   network: "连不上聊天 API",
@@ -71,7 +72,7 @@ const DEFAULT_ERROR_TEXT = "聊天 API 出错了";
 // Matches the overlay IPC limit; enforce it here too for callers that bypass IPC.
 const MAX_INPUT_CHARS = 8000;
 const API_FAILURE_CODES = new Set([
-  "not_configured", "auth", "rate_limit", "http", "network", "timeout", "refusal", "empty", "bad_response",
+  "not_configured", "auth", "insufficient_balance", "rate_limit", "http", "network", "timeout", "refusal", "empty", "bad_response",
 ]);
 
 /** Short user-facing text for an error code; unknown codes get the generic text. */

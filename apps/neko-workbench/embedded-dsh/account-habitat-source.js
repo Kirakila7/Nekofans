@@ -148,10 +148,9 @@ function installNekoAccountHabitat(ctx, options) {
   if (doc.getElementById(style.id)) return () => {};
   doc.head.appendChild(style);
   let stopped = false, scheduled = false, launcher = null, menuRecord = null, nativeSignedIn = null;
+  const accountsBridge = options.accountsBridge || (typeof win.nekoWorkbench?.getAccounts === 'function' ? win.nekoWorkbench : null);
+  let codexSnapshot = { status: 'loading', quota: { status: 'idle', buckets: [] } }, codexPending = null;
   let reduced = false, lastAnnouncement = '';
-  // This is a projection of the host's own Codex authentication status.
-  // Unknown, unsupported and API-key modes are not ChatGPT sign-in.
-  let codexSignedIn = false, codexRevision = 0;
   const releases = [];
   const motion = typeof win.matchMedia === 'function' ? win.matchMedia('(prefers-reduced-motion: reduce)') : null;
   reduced = !!(motion && motion.matches);
@@ -196,8 +195,7 @@ function installNekoAccountHabitat(ctx, options) {
     root.replaceChildren();
   }
   function addPet(world) {
-    const pet = element('span', 'neh-pet neh-pet--dsh');
-    pet.setAttribute('data-neko-account-pet', 'dsh');
+    const pet = element('span', 'neh-pet');
     pet.setAttribute('aria-hidden', 'true');
     if (reduced || !videoSrc || doc.visibilityState === 'hidden') {
       if (posterSrc) {
@@ -218,19 +216,93 @@ function installNekoAccountHabitat(ctx, options) {
     }
     world.appendChild(pet);
   }
-  function addCodexPet(world) {
-    if (!developerSrc) return;
-    const pet = element('span', 'neh-pet neh-pet--codex');
-    pet.setAttribute('data-neko-account-pet', 'chatgpt');
-    pet.setAttribute('aria-hidden', 'true');
-    const image = element('img', 'neh-pet-poster');
-    image.src = developerSrc; image.alt = ''; image.draggable = false;
-    pet.appendChild(image); world.appendChild(pet);
-  }
   function balanceLabel(snap) {
     return nekoAccountBalanceLabel(snap);
   }
   function effectiveSignedIn(snap) { return nativeSignedIn === true && snap.signedIn !== false; }
+  function dshLoginLabel(snap) { return nativeSignedIn === null ? '检测中' : effectiveSignedIn(snap) ? '已登录' : '未登录'; }
+  function codexLoginLabel() {
+    return ({ 'signed-in': '已登录', 'signed-out': '未登录', external: '外部模型', 'not-installed': '未安装', loading: '检测中', testing: '测试中', unavailable: '暂不可读取' })[codexSnapshot.status] || '暂不可读取';
+  }
+  function refreshCodex(includeQuota = false, force = false) {
+    if (!accountsBridge || stopped) return Promise.resolve();
+    if (codexPending) {
+      if (includeQuota && !codexPending.includeQuota) return codexPending.promise.then(() => refreshCodex(true, force));
+      return codexPending.promise;
+    }
+    const own = { includeQuota, promise: null };
+    own.promise = Promise.resolve().then(() => accountsBridge.getAccounts({ includeQuota, force })).then(result => {
+      if (!stopped) codexSnapshot = result?.codex || { status: 'unavailable', quota: { status: 'unavailable', buckets: [] } };
+    }, () => {
+      if (!stopped) codexSnapshot = { status: 'unavailable', quota: { status: 'unavailable', buckets: [] } };
+    }).finally(() => {
+      if (codexPending === own) codexPending = null;
+      if (!stopped) render();
+    });
+    codexPending = own;
+    return own.promise;
+  }
+  function providerStatus(name, label, signedIn) {
+    const row = element('span', 'neh-provider-status');
+    const status = element('span', 'neh-provider-login', label);
+    status.dataset.connected = signedIn ? 'true' : 'false';
+    row.append(element('strong', '', name), status);
+    return row;
+  }
+  function quotaWindowLabel(minutes) {
+    if (!Number.isFinite(minutes) || minutes <= 0) return '时间窗口';
+    if (minutes % 1440 === 0) return minutes / 1440 + ' 天';
+    if (minutes % 60 === 0) return minutes / 60 + ' 小时';
+    return minutes + ' 分钟';
+  }
+  function renderUnifiedMenu(snap) {
+    const focused = menuRecord.owned.contains(doc.activeElement) && doc.activeElement?.dataset.nekoAccountRefresh === '';
+    clearOwned(menuRecord.owned);
+    const heading = element('div', 'neh-menu-heading');
+    const refresh = element('button', 'neh-account-refresh', '刷新');
+    refresh.type = 'button'; refresh.dataset.nekoAccountRefresh = ''; refresh.setAttribute('aria-label', '刷新 DSH 和 Codex 登录状态与额度');
+    refresh.addEventListener('click', event => {
+      event.preventDefault(); event.stopPropagation(); reader.refresh(); refreshCodex(true, true);
+    });
+    heading.append(element('h3', '', '账号与额度'), refresh);
+    const dsh = element('section', 'neh-provider-card'); dsh.setAttribute('aria-label', 'DSH 账号与余额');
+    dsh.append(providerStatus('DSH', dshLoginLabel(snap), effectiveSignedIn(snap)),
+      element('strong', 'neh-provider-balance', effectiveSignedIn(snap) ? balanceLabel(snap) : '登录后查看钱包余额'),
+      element('span', 'neh-provider-source', '官方充值钱包'));
+    const codex = element('section', 'neh-provider-card'); codex.setAttribute('aria-label', 'Codex 账号与额度');
+    codex.append(providerStatus('Codex', codexLoginLabel(), codexSnapshot.status === 'signed-in'));
+    if (codexSnapshot.status === 'signed-in') {
+      const mode = codexSnapshot.authType === 'chatgpt' ? 'ChatGPT' : codexSnapshot.authType === 'apiKey' ? 'API Key' : '原生账号';
+      codex.append(element('span', 'neh-provider-source', mode + (codexSnapshot.planType ? ' · ' + codexSnapshot.planType : '')));
+    }
+    const quota = codexSnapshot.quota;
+    if (quota?.ordinaryUsageAllowed === false) codex.append(element('p', 'neh-quota-note', '当前包含额度受限，以原生账号状态为准'));
+    if (quota?.status === 'ready') {
+      for (const bucket of quota.buckets || []) {
+        if (!bucket.windows?.length) continue;
+        codex.append(element('span', 'neh-quota-bucket', bucket.name || bucket.id || 'Codex'));
+        for (const window of bucket.windows) {
+          const row = element('div', 'neh-quota-window');
+          const label = quotaWindowLabel(window.windowDurationMins);
+          const remaining = Math.round(window.remainingPercent * 10) / 10;
+          const title = element('div', 'neh-quota-title');
+          title.append(element('span', '', label), element('strong', '', '剩余 ' + remaining + '%'));
+          const progress = element('progress', 'neh-quota-progress');
+          progress.max = 100; progress.value = window.remainingPercent;
+          progress.setAttribute('aria-label', label + '额度剩余');
+          row.append(title, progress);
+          const reset = typeof window.resetsAt === 'number' ? new Date(window.resetsAt * 1000) : null;
+          row.append(element('span', 'neh-quota-reset', reset && Number.isFinite(reset.getTime()) ? '重置：' + reset.toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }) : '重置时间暂不可读取'));
+          codex.append(row);
+        }
+      }
+    } else {
+      const note = codexSnapshot.status === 'testing' ? 'Codex 功能测试中，暂不读取账号与额度' : codexSnapshot.status === 'signed-out' ? '在本机 Codex 登录后刷新' : codexSnapshot.status === 'not-installed' ? '未找到本机 Codex' : quota?.status === 'not-applicable' ? '此登录方式不提供 ChatGPT 订阅额度' : quota?.status === 'idle' ? '正在读取额度…' : '额度暂不可读取，可稍后刷新';
+      codex.append(element('p', 'neh-quota-note', note));
+    }
+    menuRecord.owned.append(heading, dsh, codex, element('p', 'neh-menu-help', '下方设置与登录/退出操作属于 DSH；Codex 沿用本机登录。'));
+    if (focused) refresh.focus({ preventScroll: true });
+  }
   function habitat(snap, inMenu) {
     const column = element('span', 'neh-habitat-column');
     const overhead = element('span', 'neh-overhead');
@@ -238,10 +310,8 @@ function installNekoAccountHabitat(ctx, options) {
     const world = element('span', 'neh-world');
     world.setAttribute('aria-hidden', 'true');
     world.appendChild(element('span', 'neh-ground'));
-    const pets = element('span', 'neh-pets');
-    if (effectiveSignedIn(snap)) addPet(pets);
-    if (codexSignedIn) addCodexPet(pets);
-    world.appendChild(pets);
+    if (effectiveSignedIn(snap)) addPet(world);
+    else world.appendChild(element('span', 'neh-empty-world', '未登录'));
     column.append(overhead, world);
     if (inMenu) column.classList.add('neh-habitat-column--menu');
     return column;
@@ -272,12 +342,24 @@ function installNekoAccountHabitat(ctx, options) {
   }
   function renderLauncher(snap) {
     if (!launcher) return;
-    const key = JSON.stringify([snap, nativeSignedIn, codexSignedIn, reduced, doc.visibilityState, launcher.element.getAttribute('data-collapsed')]);
+    const key = JSON.stringify([snap, nativeSignedIn, reduced, doc.visibilityState, launcher.element.getAttribute('data-collapsed'), accountsBridge ? codexSnapshot : null]);
     if (launcher.renderKey === key) return;
     launcher.renderKey = key;
     clearOwned(launcher.owned);
-    rememberSet(launcher, "data-neko-account-compact", !nativeSignedIn && !codexSignedIn ? "true" : "false");
-    if (!nativeSignedIn && !codexSignedIn) {
+    if (accountsBridge) {
+      const identity = element('span', 'neh-identity');
+      identity.appendChild(element('span', 'neh-developer-name', '账号'));
+      const avatar = element('img', 'neh-developer-avatar'); avatar.alt = ''; avatar.draggable = false;
+      if (developerSrc) avatar.src = developerSrc;
+      identity.appendChild(avatar);
+      const providers = element('span', 'neh-providers');
+      providers.append(providerStatus('DSH', dshLoginLabel(snap), effectiveSignedIn(snap)), providerStatus('Codex', codexLoginLabel(), codexSnapshot.status === 'signed-in'));
+      launcher.owned.append(identity, providers);
+      rememberSet(launcher, 'aria-label', '账号与额度：DSH ' + dshLoginLabel(snap) + '，Codex ' + codexLoginLabel());
+      rememberSet(launcher, 'title', '查看 DSH 和 Codex 额度');
+      return;
+    }
+    if (!nativeSignedIn) {
       const icon = element('img', 'neh-signed-out-icon');
       icon.alt = ''; icon.draggable = false;
       if (signedOutSrc) icon.src = signedOutSrc;
@@ -293,14 +375,15 @@ function installNekoAccountHabitat(ctx, options) {
     if (developerSrc) avatar.src = developerSrc;
     identity.appendChild(avatar);
     launcher.owned.append(identity, habitat(snap, false));
-    rememberSet(launcher, 'aria-label', '开发喵账号菜单，工作台账号' + (effectiveSignedIn(snap) ? '已登录' : '未登录') + '，ChatGPT ' + (codexSignedIn ? '已登录' : '未确认登录') + '，' + balanceLabel(snap) + '，来源：' + snap.source);
+    rememberSet(launcher, 'aria-label', '开发喵账号菜单，' + (effectiveSignedIn(snap) ? '已登录，' : '未登录，') + balanceLabel(snap) + '，来源：' + snap.source);
     rememberSet(launcher, 'title', '开发喵 · 账号菜单');
   }
   function renderMenu(snap) {
     if (!menuRecord) return;
-    const key = JSON.stringify([snap, nativeSignedIn, codexSignedIn, reduced, doc.visibilityState]);
+    const key = JSON.stringify([snap, nativeSignedIn, reduced, doc.visibilityState, accountsBridge ? codexSnapshot : null]);
     if (menuRecord.renderKey === key) return;
     menuRecord.renderKey = key;
+    if (accountsBridge) { renderUnifiedMenu(snap); return; }
     clearOwned(menuRecord.owned);
     const heading = element('div', 'neh-menu-heading');
     heading.append(element('h3', '', '账号与生活'), element('span', 'neh-login-status', effectiveSignedIn(snap) ? '已登录' : '未登录'));
@@ -313,7 +396,7 @@ function installNekoAccountHabitat(ctx, options) {
     if (stopped) return;
     const snap = reader.getSnapshot();
     renderLauncher(snap); renderMenu(snap);
-    const message = effectiveSignedIn(snap) ? '账号，' + balanceLabel(snap) + '，来源：' + snap.source : '账号未登录，余额暂不可读取';
+    const message = accountsBridge ? 'DSH ' + dshLoginLabel(snap) + '，Codex ' + codexLoginLabel() : effectiveSignedIn(snap) ? '账号，' + balanceLabel(snap) + '，来源：' + snap.source : '账号未登录，余额暂不可读取';
     if (message !== lastAnnouncement) { announcement.textContent = message; lastAnnouncement = message; }
   }
   function matchAccountMenu(menu) {
@@ -365,6 +448,7 @@ function installNekoAccountHabitat(ctx, options) {
       own.setAttribute('aria-hidden', 'true');
       launcher = { element: trigger, owned: own, attributes: new Map(), renderKey: null };
       rememberSet(launcher, 'data-neko-account-habitat', '');
+      if (accountsBridge) rememberSet(launcher, 'data-neko-unified-account', '');
       trigger.appendChild(own);
       nativeSignedIn = null;
     }
@@ -372,7 +456,7 @@ function installNekoAccountHabitat(ctx, options) {
     if (signedIn !== nativeSignedIn) {
       nativeSignedIn = signedIn;
       reader.invalidate(signedIn);
-      if (signedIn) reader.refresh();
+      if (signedIn && !accountsBridge) reader.refresh();
     }
     const menus = trigger.getAttribute('aria-expanded') === 'true' ? Array.from(doc.querySelectorAll(menuSelector)).filter(matchAccountMenu) : [];
     if (menus.length !== 1) releaseMenu();
@@ -388,6 +472,7 @@ function installNekoAccountHabitat(ctx, options) {
         menuRecord = { element: menu, owned: own, attributes: new Map(), renderKey: null };
         rememberSet(menuRecord, 'data-neko-account-habitat-menu', '');
         viewport.prepend(own); // Only our node is inserted; original buttons are untouched.
+        if (accountsBridge) { if (signedIn) reader.refresh(); refreshCodex(true); }
       }
     }
     render();
@@ -400,21 +485,7 @@ function installNekoAccountHabitat(ctx, options) {
   function invalidateAndRead() {
     reader.invalidate(null); // Synchronous clearing; old in-flight requests cannot commit.
     schedule();
-    if (nativeSignedIn === true) reader.refresh();
-  }
-  function acceptCodexStatus(value) {
-    if (stopped) return;
-    codexRevision++;
-    const next = !!value && value.status === 'signed-in' && value.source === 'chatgpt';
-    if (next !== codexSignedIn) { codexSignedIn = next; render(); }
-  }
-  const codex = win.nekoWorkbench && win.nekoWorkbench.codex;
-  if (codex && typeof codex.onAccountStatus === 'function') {
-    try { const off = codex.onAccountStatus(acceptCodexStatus); if (typeof off === 'function') releases.push(off); } catch (_) {}
-  }
-  if (codex && typeof codex.accountStatus === 'function') {
-    const revision = codexRevision;
-    try { Promise.resolve(codex.accountStatus()).then(value => { if (!stopped && codexRevision === revision) acceptCodexStatus(value); }, () => {}); } catch (_) {}
+    if (nativeSignedIn === true && (!accountsBridge || menuRecord)) reader.refresh();
   }
   const unsubscribe = reader.subscribe(render);
   const observer = new win.MutationObserver(schedule);
@@ -428,13 +499,16 @@ function installNekoAccountHabitat(ctx, options) {
     if (!target) return;
     schedule();
     if (target.getAttribute('data-signed-out') === 'false') reader.refresh();
+    refreshCodex(true, true);
   }, true);
   listen(doc, 'visibilitychange', () => {
     if (launcher) launcher.renderKey = null;
     if (menuRecord) menuRecord.renderKey = null;
     render();
-    if (doc.visibilityState !== 'hidden' && nativeSignedIn === true) reader.refresh();
+    if (doc.visibilityState !== 'hidden' && nativeSignedIn === true && (!accountsBridge || menuRecord)) reader.refresh();
+    if (doc.visibilityState !== 'hidden') refreshCodex(!!menuRecord);
   });
+  listen(win, 'focus', () => { if (doc.visibilityState !== 'hidden') refreshCodex(!!menuRecord, true); });
   if (motion) {
     const changed = event => { reduced = !!event.matches; render(); };
     if (typeof motion.addEventListener === 'function') { motion.addEventListener('change', changed); releases.push(() => motion.removeEventListener('change', changed)); }
@@ -451,9 +525,11 @@ function installNekoAccountHabitat(ctx, options) {
     try { const off = ctx.on('connection/reset', invalidateAndRead); if (typeof off === 'function') releases.push(off); } catch (_) {}
   }
   const interval = win.setInterval(() => {
-    if (nativeSignedIn === true && doc.visibilityState !== 'hidden') reader.refresh();
+    if (nativeSignedIn === true && doc.visibilityState !== 'hidden' && (!accountsBridge || menuRecord)) reader.refresh();
+    if (doc.visibilityState !== 'hidden') refreshCodex(!!menuRecord);
   }, Math.max(15000, options.pollIntervalMs || 60000));
   sync();
+  refreshCodex();
   return () => {
     if (stopped) return;
     stopped = true;

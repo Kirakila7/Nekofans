@@ -208,6 +208,7 @@ test("API errors resolve with fixed text, keep the user message, save no reply",
   const raw = "upstream said sk-secret-123";
   const cases: Array<[unknown, string, string]> = [
     [new ChatApiError("auth", raw, 401), "auth", "API 密钥无效或没有权限"],
+    [new ChatApiError("insufficient_balance", raw, 402), "insufficient_balance", "DeepSeek API 余额不足，请检查 API 平台余额"],
     [new ChatApiError("timeout", raw), "timeout", "聊天 API 响应超时"],
     [new Error(raw), "internal", "聊天 API 出错了"],
   ];

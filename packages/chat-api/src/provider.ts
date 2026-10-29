@@ -25,6 +25,7 @@ export interface ChatApiConfig {
 export type ChatApiErrorCode =
   | "not_configured"
   | "auth"
+  | "insufficient_balance"
   | "rate_limit"
   | "http"
   | "network"
@@ -180,7 +181,7 @@ export function createChatApiProvider(opts: ChatApiProviderOptions): ChatProvide
       }
       if (!response.ok) {
         void response.body?.cancel().catch(() => {});
-        throw httpError(response.status);
+        throw httpError(response.status, config);
       }
       if (!response.body) throw new ChatApiError("bad_response", "Chat API returned no body.");
 
@@ -227,6 +228,10 @@ function requestHeaders(protocol: ChatProtocol, apiKey: string): Record<string, 
   return headers;
 }
 
+function isOfficialDeepSeek(config: Pick<ChatApiConfig, "protocol" | "baseUrl">): boolean {
+  return config.protocol === "openai-compatible" && new URL(config.baseUrl.trim()).origin === "https://api.deepseek.com";
+}
+
 function requestBody(config: ChatApiConfig, system: string, messages: WireMessage[], maxTokens: number): unknown {
   if (config.protocol === "anthropic") {
     return { model: config.model, max_tokens: maxTokens, system, messages, stream: true };
@@ -236,11 +241,18 @@ function requestBody(config: ChatApiConfig, system: string, messages: WireMessag
     messages: [{ role: "system", content: system }, ...messages],
     max_tokens: maxTokens,
     stream: true,
+    // DeepSeek V4 defaults to thinking mode. Companion chat needs the normal
+    // text stream promptly, and reasoning consumes the same output budget.
+    // Never send provider-specific fields to a proxy or another API provider.
+    ...(isOfficialDeepSeek(config)
+      ? { thinking: { type: "disabled" } }
+      : {}),
   };
 }
 
-function httpError(status: number): ChatApiError {
+function httpError(status: number, config: ChatApiConfig): ChatApiError {
   if (status === 401 || status === 403) return new ChatApiError("auth", "Chat API rejected the key.", status);
+  if (status === 402 && isOfficialDeepSeek(config)) return new ChatApiError("insufficient_balance", "DeepSeek API balance is insufficient.", status);
   if (status === 429) return new ChatApiError("rate_limit", "Chat API rate limit or quota reached.", status);
   return new ChatApiError("http", `Chat API request failed with HTTP ${status}.`, status);
 }

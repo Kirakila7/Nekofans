@@ -14,7 +14,8 @@ from workbench_gateway import NativeMemoryGateway
 class GatewayRecoveryTest(unittest.IsolatedAsyncioTestCase):
     async def test_native_write_before_receipt_and_observation_before_cursor_recover(self):
         logging.disable(logging.CRITICAL)
-        directory=Path(tempfile.mkdtemp(prefix="neko-memory-recovery-"))
+        # Match workbench_server's canonical root, including macOS /var aliases.
+        directory=Path(tempfile.mkdtemp(prefix="neko-memory-recovery-")).resolve()
         runtime=None;gateway=None
         try:
             app_root=directory/"N.E.K.O"

@@ -102,9 +102,16 @@ export class WorkbenchMemory {
   localSync(){const task=this.localTail.then(()=>this.reconcile());this.localTail=task.catch(()=>{});return task;}
   async sync(){
     if(this.closed)throw Error('记忆服务已关闭');
-    if(this.activeSync)return this.activeSync;
+    // A completed chat may arrive while an earlier synchronization is in flight.
+    // Stage its durable events before joining that job, then deliver anything it missed.
+    await this.localSync();
+    if(this.closed)throw Error('记忆服务已关闭');
+    if(this.activeSync){
+      await this.activeSync;
+      if(this.closed)throw Error('记忆服务已关闭');
+      return this.status().pending?this.sync():this.status();
+    }
     const task=(async()=>{
-      await this.localSync();
       // Pull generated native facts after delivering completed turns.
       for(let pass=0;pass<2;pass++){
         const results=await this.hub.sync();

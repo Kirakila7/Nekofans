@@ -28,6 +28,17 @@ test('offline native keeps pending writes and never falls back to local recall',
   await assert.rejects(memory.sync());await assert.rejects(memory.recall('bigfish','晚上',1000));assert.equal(memory.status().mode,'neko');assert.equal(memory.status().pending,1);
   f.setOnline(true);await memory.sync();assert.equal(memory.status().pending,0);assert.equal((await memory.recall('bigfish','晚上',1000)).length,1);
 });
+test('sync stages a newly saved turn before joining an in-flight synchronization',async t=>{
+  const f=fixture(t),memory=f.create(),pull=memory.neko.pull.bind(memory.neko);
+  let release,entered,pulls=0;
+  const gate=new Promise(resolve=>{release=resolve;}),blocked=new Promise(resolve=>{entered=resolve;});
+  memory.neko.pull=async cursor=>{const result=await pull(cursor);if(++pulls===2){entered();await gate;}return result;};
+  const first=memory.sync();await blocked;
+  f.setLegacy({items:[{id:'just-saved',kind:'preference',text:'合成用户刚保存的新偏好',confirmation:'confirmed',sourceMessageIds:['new-source']}],summaries:[]});
+  const following=memory.sync();release();await Promise.all([first,following]);
+  assert.equal(memory.status().pending,0);
+  assert.equal(f.remote.events().filter(e=>e.itemId==='local:just-saved').length,1);
+});
 test('a durable native history larger than one transport batch reopens without losing pending events',async t=>{
   const f=fixture(t);let memory=f.create();
   const history=Array.from({length:10001},(_,i)=>event('history-'+i,[],{itemId:'history-item-'+i}));

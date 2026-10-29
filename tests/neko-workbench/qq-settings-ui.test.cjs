@@ -4,6 +4,46 @@ const {createRequire}=require('node:module');
 const {execFileSync}=require('node:child_process');
 const deps=process.env.NEKO_DOM_DEPS;
 
+test('first private pairing is visible, displays its one-time code and requires local confirmation', {skip:!deps}, async()=>{
+  const req=createRequire(path.join(deps,'package.json'));
+  const {JSDOM}=req('jsdom'),React=req('react'),{createRoot}=req('react-dom/client'),{act}=req('react');
+  const dom=new JSDOM('<!doctype html><body><div id="root"></div></body>',{url:'http://127.0.0.1/'});
+  const previous={window:global.window,document:global.document,fetch:global.fetch,act:global.IS_REACT_ACT_ENVIRONMENT};
+  global.window=dom.window;global.document=dom.window.document;global.IS_REACT_ACT_ENVIRONMENT=true;
+  const actions=[];let status={active:false,matched:false,connected:false};const challenge='1234567890abcdef1234567890abcdef';
+  global.fetch=async(url,options={})=>{
+    assert.equal(url,'/qqbot-workbench/private-pairing');
+    const action=options.body?JSON.parse(options.body).action:null;
+    if(action)actions.push(action);
+    if(action==='begin'){status={active:true,matched:false,connected:true};return {ok:true,json:async()=>({...status,challenge})};}
+    if(action==='confirm'){assert.equal(status.matched,true);status={active:false,matched:false,connected:false};return {ok:true,json:async()=>({ok:true})};}
+    if(action==='cancel'){status={active:false,matched:false,connected:false};return {ok:true,json:async()=>({ok:true})};}
+    return {ok:true,json:async()=>({...status})};
+  };
+  let entry;window.__ModuleLoader__={load(value){entry=value}};
+  const source=fs.readFileSync(path.join(__dirname,'../../apps/neko-workbench/vendor/dsh-bili-whale/lib/client.js'),'utf8');
+  vm.runInThisContext(source,{filename:'fish-client-pairing.js'});
+  const ui=entry.factory(id=>id==='react'?React:id==='react-dom'?req('react-dom'):(()=>{throw Error(id)})());
+  const root=createRoot(document.getElementById('root'));const settle=()=>new Promise(resolve=>setImmediate(resolve));
+  const button=label=>[...document.querySelectorAll('button')].find(x=>x.textContent===label);
+  try{
+    await act(async()=>{root.render(React.createElement(ui.QQPrivatePairing,{available:true}));await settle();});
+    assert.ok(button('开始私聊配对'));assert.deepEqual(actions,[]);
+    await act(async()=>{button('开始私聊配对').click();await settle();await settle();});
+    assert.ok(document.body.textContent.includes('QQ配对 '+challenge));
+    assert.equal(button('确认绑定此 QQ').disabled,true,'must not allow confirmation before an inbound match');
+    status.matched=true;
+    await act(async()=>{await new Promise(resolve=>setTimeout(resolve,1600));await settle();});
+    assert.equal(button('确认绑定此 QQ').disabled,false);
+    await act(async()=>{button('确认绑定此 QQ').click();await settle();await settle();});
+    assert.deepEqual(actions,['begin','confirm']);assert.match(document.body.textContent,/群聊仍关闭/);
+    assert.ok(!document.body.textContent.includes(challenge),'challenge is removed after confirmation');
+  }finally{
+    await act(async()=>root.unmount());dom.window.close();
+    global.window=previous.window;global.document=previous.document;global.fetch=previous.fetch;global.IS_REACT_ACT_ENVIRONMENT=previous.act;
+  }
+});
+
 // Optional UI harness: run with NEKO_DOM_DEPS pointing at a directory with
 // React 18, react-dom and jsdom. Production has no dependency on this folder.
 test('QQ settings start only on request and reuse the official binding panel', {skip:!deps}, async()=>{

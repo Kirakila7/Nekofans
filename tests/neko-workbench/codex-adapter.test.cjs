@@ -1,27 +1,32 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const path = require('node:path');
+const fs = require('node:fs');
+const os = require('node:os');
+const workspace = fs.realpathSync(os.tmpdir());
 const { PassThrough } = require('node:stream');
 const { EventEmitter } = require('node:events');
 const { createCodexAdapter, findCodexCommand } = require('../../apps/neko-workbench/codex-adapter.cjs');
 
 test('finds Codex in the user installation for GUI launches and falls back to PATH', () => {
-  const accessed = [], present = new Set(['/Users/example/.local/bin/codex']);
+  const homeDir=path.resolve('/Users/example'), local=path.join(homeDir,'.local','bin','codex'), custom=path.resolve('/custom/bin');
+  const accessed = [], present = new Set([local]);
   const fsApi = {
     constants: { X_OK: 1 },
     accessSync: (candidate, mode) => { accessed.push(candidate); assert.equal(mode, 1); if (!present.has(candidate)) throw new Error('not executable'); },
     statSync: () => ({ isFile: () => true })
   };
-  const options = { env: { PATH: '' }, homeDir: '/Users/example', platform: 'darwin', fsApi };
-  assert.equal(findCodexCommand(options), '/Users/example/.local/bin/codex');
-  present.clear(); present.add('/custom/bin/codex');
-  assert.equal(findCodexCommand({ ...options, env: { PATH: '/custom/bin:relative/bin' } }), '/custom/bin/codex');
+  const options = { env: { PATH: '' }, homeDir, platform: 'darwin', fsApi };
+  assert.equal(findCodexCommand(options), local);
+  present.clear(); present.add(path.join(custom,'codex'));
+  assert.equal(findCodexCommand({ ...options, env: { PATH: [custom,'relative/bin'].join(path.delimiter) } }), path.join(custom,'codex'));
   present.clear(); present.add('relative/bin/codex');
-  assert.equal(findCodexCommand({ ...options, env: { PATH: 'relative/bin' } }), '/Users/example/.local/bin/codex');
+  assert.equal(findCodexCommand({ ...options, env: { PATH: 'relative/bin' } }), local);
   assert(!accessed.some(candidate => candidate.includes('auth') || candidate.includes('credential')));
 });
 
-function fakeServer({ resumeCwd = '/private/tmp', failTurn = false, accountResult = { account: null, requiresOpenaiAuth: true } } = {}) {
+function fakeServer({ resumeCwd = workspace, failTurn = false, accountResult = { account: null, requiresOpenaiAuth: true } } = {}) {
   const child = new EventEmitter(); child.stdout = new PassThrough(); child.stderr = new PassThrough();
   child.stdin = new PassThrough(); child.kill = () => { child.emit('close', 0); return true; };
   const requests = [], responses = [];
@@ -82,7 +87,7 @@ test('account refresh retries after an app-server exits', async () => {
 test('real protocol routing, streaming, cancellation and explicit approval', async () => {
   const server = fakeServer(); const events = [];
   const adapter = createCodexAdapter({ spawnProcess: () => server.child, onEvent: e => events.push(e) });
-  const { threadId } = await adapter.createSession({ cwd: '/private/tmp' });
+  const { threadId } = await adapter.createSession({ cwd: workspace });
   assert.equal(threadId, 'test-thread');
   assert.deepEqual(server.requests.map(r => r.method).slice(0, 3), ['initialize', 'initialized', 'thread/start']);
   assert.equal(server.requests[2].params.sandbox, 'workspace-write');
@@ -108,7 +113,7 @@ test('real protocol routing, streaming, cancellation and explicit approval', asy
 test('unhandled approval expires with decline and unknown requests are rejected', async () => {
   const server = fakeServer();
   const adapter = createCodexAdapter({ spawnProcess: () => server.child, approvalTimeoutMs: 10 });
-  await adapter.createSession({ cwd: '/private/tmp' });
+  await adapter.createSession({ cwd: workspace });
   server.child.notify({ id: 13, method: 'item/fileChange/requestApproval', params: { threadId: 'test-thread' } });
   server.child.notify({ id: 14, method: 'account/chatgptAuthTokens/refresh', params: {} });
   await new Promise(resolve => setTimeout(resolve, 25));
@@ -120,13 +125,13 @@ test('unhandled approval expires with decline and unknown requests are rejected'
 test('resume checks selected project; failure is not reported as success', async () => {
   const server = fakeServer({ resumeCwd: '/' });
   const adapter = createCodexAdapter({ spawnProcess: () => server.child });
-  await assert.rejects(adapter.resumeSession({ cwd: '/private/tmp', threadId: 'other' }), /不匹配/);
+  await assert.rejects(adapter.resumeSession({ cwd: workspace, threadId: 'other' }), /不匹配/);
   assert.equal(server.requests.some(r => r.method === 'thread/resume'), false);
   await assert.rejects(adapter.sendMessage({ threadId: 'other', text: 'hello' }), /不属于/);
   adapter.dispose();
   const failed = fakeServer({ failTurn: true });
   const adapter2 = createCodexAdapter({ spawnProcess: () => failed.child });
-  await adapter2.createSession({ cwd: '/private/tmp' });
+  await adapter2.createSession({ cwd: workspace });
   await assert.rejects(adapter2.sendMessage({ threadId: 'test-thread', text: 'hello' }), /login required/);
   adapter2.dispose();
 });

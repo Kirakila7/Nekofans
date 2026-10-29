@@ -1,0 +1,68 @@
+/* One independent rail; the native session/sidebar/composer layout remains. */
+body[data-neko-side-rail-layout] { --neko-rail-width: 64px; }
+body[data-neko-side-rail-layout] [data-neko-rail-app] {
+  width: calc(100% - var(--neko-rail-width)) !important;
+  margin-left: var(--neko-rail-width) !important; min-width: 0;
+}
+body[data-neko-side-rail-layout] [data-sidebar-collapsed="true"][data-neko-sidebar-hidden-grid] {
+  grid-template-columns: var(--neko-hidden-grid) !important;
+}
+.neko-side-rail {
+  position: fixed; inset: 0 auto 0 0; z-index: 40;
+  display: flex; flex-direction: column; align-items: center;
+  width: var(--neko-rail-width, 64px); box-sizing: border-box; padding: 14px 12px 12px;
+  border-right: 1px solid var(--dsw-alias-border-l1, #c4dbe6);
+  background: var(--dsw-alias-bg-layer-1, #fbfeff);
+  color: var(--dsw-alias-label-primary, #17303d);
+  -webkit-app-region: no-drag;
+}
+.neko-side-rail__theme { width: 40px; height: 40px; flex: none; }
+.neko-side-rail__space { flex: 1; min-height: 32px; }
+.neko-side-rail__bottom { display: flex; flex-direction: column; gap: 12px; }
+.neko-side-rail__button {
+  display: grid; place-items: center; width: 40px; height: 40px; padding: 4px;
+  border: 0; border-radius: 12px; background: transparent; color: inherit; cursor: pointer;
+}
+.neko-side-rail__button[hidden] { display: none !important; }
+.neko-side-rail__button:hover { background: var(--dsw-alias-interactive-bg-hover, #ddedf4); }
+.neko-side-rail__button:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary, #246b91); outline-offset: 2px; }
+.neko-side-rail__button[aria-busy="true"] { opacity: .55; cursor: progress; }
+.neko-side-rail__button[aria-expanded="true"], .neko-side-rail__button[aria-pressed="true"] { background: var(--dsw-alias-interactive-bg-active, #d0e5ef); }
+.neko-side-rail__button svg { display: block; width: 24px; height: 24px; }
+.neko-side-rail__button img { display: block; width: 36px; height: 36px; object-fit: contain; border-radius: 10px; }
+.neko-side-rail__notice {
+  position: absolute; bottom: 60px; left: 72px; width: 190px; padding: 10px 12px; margin: 0;
+  border: 1px solid var(--dsw-alias-border-l1, #c4dbe6); border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-1, #fbfeff); color: inherit; font: 12px/1.5 system-ui, sans-serif;
+}
+.neko-side-rail__notice[hidden] { display: none; }
+body[data-neko-side-rail-layout] .neko-avatar-anchor {
+  position: fixed; left: 12px; top: 14px; width: 40px !important; height: 40px !important; z-index: 41;
+}
+body[data-neko-side-rail-layout] .neko-avatar-portal .neko-avatar--mark {
+  width: 100%; height: 100%; object-fit: contain;
+}
+body[data-neko-side-rail-layout] .neko-role-host .neko-bilibili,
+body[data-neko-side-rail-layout] [data-neko-rail-fish-original] { display: none !important; }
+body[data-neko-side-rail-layout] .neko-role-host .neko-social-actions { grid-template-columns: 1fr; }
+body[data-neko-side-rail-layout] [data-slot="settings.launcher"] { height: 0; min-height: 0; margin: 0; padding: 0; }
+body[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-account-habitat][data-neko-unified-account] {
+  position: fixed; left: 12px; bottom: 12px; z-index: 41;
+  display: grid !important; place-items: center; width: 40px !important; height: 40px !important;
+  min-height: 40px !important; padding: 4px !important; margin: 0 !important;
+  border: 0 !important; border-radius: 12px; background: transparent;
+  opacity: 0 !important; pointer-events: none !important;
+}
+body[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account] .neh-launcher {
+  display: block !important; width: 32px !important; height: 32px !important;
+}
+body[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account] .neh-identity { display: block; }
+body[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account] .neh-developer-avatar { width: 32px; height: 32px; }
+body[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account] .neh-developer-name,
+body[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account] .neh-providers { display: none; }
+body[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account]:hover { background: var(--dsw-alias-interactive-bg-hover, #ddedf4); }
+body[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account]:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary, #246b91); outline-offset: 2px; }
+/* Press and disabled cues for rail icon buttons (focus ring is defined above). */
+.neko-side-rail__button:active:not(:disabled) { background: var(--dsw-alias-interactive-bg-active, #d0e5ef); }
+.neko-side-rail__button:disabled { opacity: .45; cursor: not-allowed; }
+.neko-side-rail__button:disabled:hover { background: transparent; }

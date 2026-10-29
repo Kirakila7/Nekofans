@@ -1,0 +1,10 @@
+'use strict';
+const fs = require('node:fs'), path = require('node:path');
+const base = __dirname, file = path.join(base, 'b0-skin/packages/dsh-client-ui-white-label/lib/client.js');
+const source = fs.readFileSync(path.join(base, 'unified-layout-source.js'), 'utf8');
+const css = fs.readFileSync(path.join(base, 'unified-layout-source.css'), 'utf8');
+const block = '// @neko-unified-layout:start\nconst UNIFIED_LAYOUT_CSS = ' + JSON.stringify(css) + ';\n' + source + '\n// @neko-unified-layout:end\n';
+let code = fs.readFileSync(file, 'utf8');
+if (code.includes('// @neko-unified-layout:start')) code = code.replace(/\/\/ @neko-unified-layout:start[\s\S]*?\/\/ @neko-unified-layout:end\n/, block);
+else code = code.replace('// @neko-workspace-shell:start', block + '\n// @neko-workspace-shell:start');
+fs.writeFileSync(file, code);
