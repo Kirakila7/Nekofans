@@ -10,6 +10,7 @@ function installWorkspaceShell(options = {}) {
   const style = el('style'); style.dataset.nekoWorkspaceShell = ''; style.textContent = options.cssText || ''; doc.head.appendChild(style);
   let disposed = false, queued = false, layout = null, state = null, catalog = null, selectedProject = '', selectedId = null, searchText = '', layoutVersion = -1, listLoading = false, sending = false, socialOpen = false;
   let startupOpen = true, startupSearchText = '', catalogError = '', startupError = '', startupOpening = false;
+  let nativeNewPending = false, nativeNewTimer = null, nativeNewBefore = null;
   let office = { status: 'idle', thread: null, items: [], approvals: [], error: '' };
   const nativeMarks = new Map(), nodes = [], releases = [], drafts = new Map(), groupOpen = new Set(), startupCollapsed = new Set();
   const modelChoices = new Map();
@@ -115,7 +116,10 @@ function installWorkspaceShell(options = {}) {
   const startupInner = el('div', 'neko-startup__inner');
   const startupHead = el('header', 'neko-startup__header');
   const startupHeading = el('div'); startupHeading.append(el('h1', '', '选择工作内容'), el('p', '', '打开已有项目中的工作会话'));
-  const startupContinue = button('继续当前工作', 'neko-startup__continue', () => closeStartup());
+  // A live native binding is required: saved selection alone may still be
+  // awaiting startup restoration, or point to an unavailable session.
+  const startupContinue = button('继续当前工作', 'neko-startup__continue', () => { if (hasActiveDshSession()) closeStartup(); });
+  startupContinue.hidden = true;
   startupHead.append(startupHeading, startupContinue);
   const startupSearch = el('input', 'neko-startup__search'); startupSearch.type = 'search'; startupSearch.placeholder = '搜索项目或会话'; startupSearch.setAttribute('aria-label', '搜索项目或会话');
   startupSearch.addEventListener('input', () => { startupSearchText = startupSearch.value.toLowerCase(); renderStartup(); });
@@ -125,7 +129,15 @@ function installWorkspaceShell(options = {}) {
   const startupStatus = el('p', 'neko-startup__status', '正在读取本地工作会话…'); startupStatus.setAttribute('role', 'status'); startupStatus.setAttribute('aria-live', 'polite');
   const startupProjects = el('div', 'neko-startup__projects');
   startupInner.append(startupHead, startupSearch, startupToolbar, startupStatus, startupProjects); startup.appendChild(startupInner); doc.body.appendChild(startup);
+  function stopNativeNew() { nativeNewPending = false; if (nativeNewTimer !== null) win.clearTimeout(nativeNewTimer); nativeNewTimer = null; }
+  function beginNativeNew() {
+    stopNativeNew(); nativeNewBefore = nativeSelection()?.sessionId || null; nativeNewPending = true;
+    nativeNewTimer = win.setTimeout(() => { nativeNewPending = false; nativeNewTimer = null; schedule(); }, 10000);
+  }
+  function nativeSelection() { try { const value = options.getDshSelection?.(); return value && typeof value === 'object' ? value : null; } catch { return null; } }
+  function hasActiveDshSession() { try { return layout?.officeMode === 'dsh' && options.hasDshActiveSession?.() === true; } catch { return false; } }
   function closeStartup() { startupOpen = false; startup.hidden = true; }
+  function showStartup() { startupOpen = true; renderStartup(); schedule(); }
   function showNativeToolsPage() { closeStartup(); }
   doc.addEventListener('neko-native-tools-navigate', showNativeToolsPage);
   function renderStartup() {
@@ -502,10 +514,11 @@ function installWorkspaceShell(options = {}) {
     hideSocial(); closeSettings();
     if (!await saveLayout({ activeSeatId: seat.id, officeMode: seat.provider })) return;
     if (seat.provider === 'codex') { selectedProject = seat.projectRoot || state?.workspaceRoot || ''; newOffice(); return; }
+    if (!seat.projectRoot) { showStartup(); return; }
     try {
       if (typeof options.openDshNew !== 'function') throw Error('无法打开 DSH 工作界面，请重试');
-      await options.openDshNew(seat.projectRoot); closeStartup();
-    } catch (error) { showError(error); }
+      beginNativeNew(); await options.openDshNew(seat.projectRoot); closeStartup();
+    } catch (error) { stopNativeNew(); showError(error); }
   }
   function renderLayout() {
     if (!layout || disposed) return;
@@ -582,7 +595,7 @@ function installWorkspaceShell(options = {}) {
     if (!await saveLayout(sessionPatch(group))) throw Error('无法切换工作界面，请重试');
     if (group.provider === 'dsh') {
       if (typeof options.openDshNew !== 'function') throw Error('无法打开 DSH 工作项目，请重试');
-      await options.openDshNew(group.cwd); closeStartup();
+      beginNativeNew(); try { await options.openDshNew(group.cwd); closeStartup(); } catch (error) { stopNativeNew(); throw error; }
     } else if (group.provider === 'codex') { selectedProject = group.cwd; newOffice(); }
     else throw Error('不支持的工作平台');
   }
@@ -736,10 +749,15 @@ function installWorkspaceShell(options = {}) {
   }
   function place() {
     if (disposed) return;
-    // Native embedded pages render in separate views. Once the user chooses a
-    // custom multi-pane layout, remove this temporary surface altogether so it
-    // cannot overlap any pane or sit behind an Electron child view.
-    if (startupOpen && doc.body.hasAttribute('data-neko-unified-enabled')) closeStartup();
+    // A valid selection snapshot with no session plus a visible DSH hero means
+    // the native workspace was cleared. Global tool pages do not mount it.
+    const selection = nativeSelection();
+    startupContinue.hidden = !hasActiveDshSession();
+    if (nativeNewPending && selection?.sessionId && selection.sessionId !== nativeNewBefore) stopNativeNew();
+    const hero = doc.querySelector('.neko-gallery');
+    if (!startupOpen && !nativeNewPending && layout?.officeMode === 'dsh' && selection && !selection.sessionId && hero && !hero.closest('[hidden],[inert]')) {
+      startupOpen = true; renderStartup();
+    }
     const found = options.locateSidebar?.(); const root = found?.root || found?.slot || doc.querySelector('[data-slot="sidebar"]');
     const rail = doc.querySelector('[data-neko-side-rail]'), theme = rail?.querySelector('.neko-side-rail__theme');
     const space = rail?.querySelector('.neko-side-rail__space') || null;
@@ -809,14 +827,26 @@ function installWorkspaceShell(options = {}) {
       const x = Math.ceil(centerRect && centerRect.width > 0 ? centerRect.left : r.right), bottom = strip?.top > 0 ? strip.top : win.innerHeight;
       panel.toggleAttribute('data-neko-compact', win.innerWidth - x <= 400);
       Object.assign(panel.style, { left: x + 'px', top: '0px', width: Math.max(0, win.innerWidth - x) + 'px', height: Math.max(0, bottom) + 'px' });
-      Object.assign(startup.style, { left: x + 'px', top: '56px', width: Math.max(0, win.innerWidth - x) + 'px', height: Math.max(0, bottom - 56) + 'px' });
+      // In unified mode only cover the actual coding track, never a native
+      // community or video WebContentsView. The hidden track keeps the chooser
+      // pending so it returns when the user switches back to coding.
+      const unified = doc.body.hasAttribute('data-neko-unified-enabled') && !doc.body.hasAttribute('data-neko-side-social-active');
+      const coding = unified ? doc.querySelector('[data-neko-unified-coding]') : null;
+      const codeRect = coding?.getBoundingClientRect();
+      const codeVisible = !!coding && coding.getAttribute('data-neko-unified-coding') !== 'hidden' && !coding.hasAttribute('inert') && codeRect?.width > 0 && codeRect?.height > 0;
+      const px = unified && codeVisible ? Math.ceil(codeRect.left) : x;
+      const py = unified && codeVisible ? Math.max(56, Math.ceil(codeRect.top)) : 56;
+      const pw = unified && codeVisible ? Math.floor(codeRect.width) : Math.max(0, win.innerWidth - x);
+      const ph = unified && codeVisible ? Math.max(0, Math.min(bottom, Math.floor(codeRect.bottom)) - py) : Math.max(0, bottom - 56);
+      startup.hidden = !startupOpen || (unified && !codeVisible);
+      Object.assign(startup.style, { left: px + 'px', top: py + 'px', width: pw + 'px', height: ph + 'px' });
     }
     positionCompanionMenu();
   }
   function schedule() { if (!disposed && !queued) { queued = true; Promise.resolve().then(() => { queued = false; place(); positionCompanionMenu(); }); } }
-  function nativeNew(event) { if (layout?.officeMode !== 'codex' || !event.target.closest?.('[data-neko-new-session="plus"]')) return; event.preventDefault(); event.stopImmediatePropagation(); newOffice(); }
+  function nativeNew(event) { if (!event.target.closest?.('[data-neko-new-session="plus"]')) return; event.preventDefault(); event.stopImmediatePropagation(); if (layout?.officeMode === 'codex') newOffice(); else showStartup(); }
   function escape(event) { if (event.key !== 'Escape') return; if (!companionMenu.hidden) { event.preventDefault(); event.stopPropagation(); closeCompanionMenu(); } else if (!modal.hidden) { event.stopPropagation(); closeSettings(); } else if ((layout?.companionHistoryOpen || historyPeek) && dock.contains(doc.activeElement)) { event.preventDefault(); historyPeek = false; saveLayout({ companionHistoryOpen: false }); historyToggle.focus(); } }
-  const observer = new win.MutationObserver(schedule); observer.observe(doc.body, { childList: true, subtree: true, attributes:true, attributeFilter:['data-neko-unified-enabled', 'data-neko-tools'] });
+  const observer = new win.MutationObserver(records => { if (records.some(record => record.type !== 'attributes' || record.attributeName !== 'style' || record.target.matches?.('[data-neko-unified-coding]'))) schedule(); }); observer.observe(doc.body, { childList: true, subtree: true, attributes:true, attributeFilter:['data-neko-unified-enabled', 'data-neko-unified-coding', 'data-neko-side-social-active', 'data-neko-tools', 'style'] });
   // Observe only the dock's ancestors for inline style changes: watching every
   // style mutation would also watch our own drag/position updates.
   const ancestorObserver = new win.MutationObserver(schedule);
@@ -836,6 +866,12 @@ function installWorkspaceShell(options = {}) {
   if (options.locateSidebar?.()?.root) resize?.observe(options.locateSidebar().root);
   resize?.observe(dock);
   doc.body.setAttribute('data-neko-workspace-shell', '');
+  if (typeof options.subscribeDshSelection === 'function') {
+    try {
+      const releaseSelection = options.subscribeDshSelection(() => schedule());
+      if (typeof releaseSelection === 'function') releases.push(releaseSelection);
+    } catch { /* Older DSH versions may not expose selection subscriptions. */ }
+  }
   if (typeof bridge.subscribe === 'function') releases.push(bridge.subscribe(next => {
     if (disposed) return; state = next; const connections = modalBody.querySelector('.neko-workspace-connections'); if (connections) connections.textContent = connectionSummary(); if (!selectedProject) selectedProject = next.workspaceRoot || '';
     renderCompanion(); if (next.workspaceRevision !== layoutVersion) { layoutVersion = next.workspaceRevision; call({ action: 'state' }).then(value => { if (!disposed) { layout = value; renderLayout(); } }).catch(showError); }
@@ -847,7 +883,7 @@ function installWorkspaceShell(options = {}) {
   const interval = win.setInterval(() => { if (doc.visibilityState !== 'hidden') refreshCatalog(true); }, 60000);
   place();
   return () => {
-    if (disposed) return; disposed = true; motion?.removeEventListener?.('change', syncCharacter); motion?.removeEventListener?.('change', syncRailWalking); doc.removeEventListener('visibilitychange', syncCharacter); doc.removeEventListener('visibilitychange', syncRailWalking); stopRailWalking(); if (railClickTimer !== null) win.clearTimeout(railClickTimer); if (railSpace) { if (railSpaceBeforeAria === null) railSpace.removeAttribute('aria-hidden'); else railSpace.setAttribute('aria-hidden', railSpaceBeforeAria); } if (characterVideo) { characterVideo.pause(); characterVideo.removeAttribute('src'); characterVideo.load(); } observer.disconnect(); ancestorObserver.disconnect(); intersection?.disconnect(); resize?.disconnect(); win.clearInterval(interval);
+    if (disposed) return; disposed = true; stopNativeNew(); motion?.removeEventListener?.('change', syncCharacter); motion?.removeEventListener?.('change', syncRailWalking); doc.removeEventListener('visibilitychange', syncCharacter); doc.removeEventListener('visibilitychange', syncRailWalking); stopRailWalking(); if (railClickTimer !== null) win.clearTimeout(railClickTimer); if (railSpace) { if (railSpaceBeforeAria === null) railSpace.removeAttribute('aria-hidden'); else railSpace.setAttribute('aria-hidden', railSpaceBeforeAria); } if (characterVideo) { characterVideo.pause(); characterVideo.removeAttribute('src'); characterVideo.load(); } observer.disconnect(); ancestorObserver.disconnect(); intersection?.disconnect(); resize?.disconnect(); win.clearInterval(interval);
     win.removeEventListener('resize', place); doc.removeEventListener('scroll', schedule, true); doc.removeEventListener('click', nativeNew, true); doc.removeEventListener('keydown', escape, true);
     doc.removeEventListener('pointerdown', dismissCompanionMenu, true);
     doc.removeEventListener('neko-native-tools-navigate', showNativeToolsPage);

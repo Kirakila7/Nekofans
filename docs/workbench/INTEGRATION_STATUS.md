@@ -1,8 +1,10 @@
-# Local test workbench 0.28.15 (source, pending installation)
+# Local test workbench 0.28.16 (source, pending installation)
 
 The daily artifact is built from this repository. `config/daily-release.json` is the version authority; every app includes `Contents/Resources/WORKBENCH_BUILD.json` with the source commit and SHA-256 of every shipped source file. Historical QA checkouts and profiles are not release inputs.
 
 ## Pending source changes
+
+- The work area shows a project and session chooser instead of the unbound native landing page. A genuinely active DSH session can be resumed; starting a project-bound session retains its input and drafts. DSH selection and active-session fields are feature-detected internal APIs of the installed version; isolated DOM and Electron tests cover navigation and layout, while real DSH session transitions and older-version fallback still need verification.
 
 - Community and Bilibili replace the chatroom inside the existing left content area while retaining its width and the right-hand work area. The rail or the return control switches back to chatroom or workspace navigation. The three-column configuration entry is removed; old saved layout data is preserved but not activated on startup. DOM tests cover navigation, drafts and collapsed-sidebar recovery; a temporary real DSH window showed the live community and Bilibili pages on the left. This does not verify login, identity linking or video playback. Opening settings while community identity authorization is pending cancels that attempt.
 - Simplify the left rail and workbench settings: layout configuration moves into common settings; the fish entry is named for its existing settings action; existing tools remain available under a collapsed section, and native account/privacy/advanced settings remain accessible. Synthetic layout and settings tests plus a temporary DSH window verified the layout entry, focus return, tools expansion and native settings navigation. In legacy single-pane community mode, opening workbench settings still closes that community view; preserving it requires a separate native-view suspend/resume change.

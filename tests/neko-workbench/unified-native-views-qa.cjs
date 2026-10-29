@@ -94,6 +94,10 @@ if (!process.versions.electron || process.env.NEKO_UNIFIED_NATIVE_QA_CHILD !== '
       const source = fs.readFileSync(path.join(__dirname, '../../apps/neko-workbench/embedded-dsh/unified-layout-source.js'), 'utf8');
       const css = fs.readFileSync(path.join(__dirname, '../../apps/neko-workbench/embedded-dsh/unified-layout-source.css'), 'utf8');
       await read(source + '\nwindow.__qaDisposeUnified=installUnifiedLayout({window,document,bridge:window.nekoWorkbench,cssText:' + JSON.stringify(css) + '}); true;');
+      const shell = fs.readFileSync(path.join(__dirname, '../../apps/neko-workbench/embedded-dsh/workspace-shell-source.js'), 'utf8');
+      const shellCss = fs.readFileSync(path.join(__dirname, '../../apps/neko-workbench/embedded-dsh/workspace-shell-source.css'), 'utf8');
+      await read(shell + `\nwindow.__shellBridge={action:async()=>({}),getState:async()=>({workspaceRevision:0,companion:{ready:true,messages:[]}}),companion:async()=>({}),workspace:async r=>r.action==='state'?{officeMode:'dsh',seats:[]}:r.action==='codex-state'?{items:[],approvals:[]}:r.action==='catalog'?{sessions:[{id:'one',provider:'dsh',cwd:'/demo',title:'示例会话'}],providers:{dsh:'ready'}}:null};window.__qaDisposeShell=installWorkspaceShell({window,document,bridge:window.__shellBridge,avatar:()=>'',locateSidebar:()=>({root:document.querySelector('#side-track')}),cssText:${JSON.stringify(shellCss)}});true;`);
+
       await waitFor("!!document.querySelector('.neko-layout-entry')");
       const initialWidth = await read("document.querySelector('.fixture_centerCol_hash42').getBoundingClientRect().width");
       await read("document.querySelector('.neko-layout-entry').click()");
@@ -113,6 +117,11 @@ if (!process.versions.electron || process.env.NEKO_UNIFIED_NATIVE_QA_CHILD !== '
         return {code:{left:c.left,right:c.right,width:c.width},pane:{left:p.left,right:p.right},headerBottom:h.bottom,button:{width:b.width,height:b.height},draft:document.querySelector('#draft').value}; })()`);
       assert(Math.abs(first.code.width - initialWidth / 2) < 2, 'real native coding grid is resized to half width');
       assert(first.code.right <= first.pane.left + 1, 'coding and community occupy distinct regions');
+      await waitFor("!document.querySelector('.neko-startup').hidden");
+      const picker = await read(`(() => {const x=document.querySelector('.neko-startup').getBoundingClientRect();return {left:x.left,right:x.right,width:x.width};})()`);
+      assert(Math.abs(picker.left-first.code.left)<2 && Math.abs(picker.right-first.code.right)<2, 'project chooser tracks coding only');
+      assert(picker.right<=community.getBounds().x+1,'project chooser never covers the native community view');
+
       assert(first.button.width > 0 && first.button.height > 0, 'real toolbar buttons remain visible');
       assert(community.getBounds().y >= Math.floor(first.headerBottom), 'native view starts below its toolbar');
       assert.equal(first.draft, 'local coding draft');
@@ -123,6 +132,9 @@ if (!process.versions.electron || process.env.NEKO_UNIFIED_NATIVE_QA_CHILD !== '
       await read("document.querySelector('.neko-unified-divider').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true}))");
       for (let attempt=0; attempt<100 && community.getBounds().x <= originalX; attempt++) await new Promise(resolve => setTimeout(resolve, 25));
       assert(community.getBounds().x > originalX, 'native view follows split changes');
+      await waitFor("Math.abs(document.querySelector('.neko-startup').getBoundingClientRect().right-document.querySelector('.fixture_centerCol_hash42').getBoundingClientRect().right)<2");
+      assert.equal(await read("document.querySelector('#draft').value"),'local coding draft');
+
       assert.equal(await community.webContents.executeJavaScript('document.body.dataset.resizeState', true), 'kept', 'resizing retains the same document');
       assert.equal(hits.filter(x => x.partition === COMMUNITY_PARTITION).length, 2, 'renderer resize does not reload community');
       await read("document.querySelector('.neko-unified-divider').dispatchEvent(new KeyboardEvent('keydown',{key:'End',bubbles:true}))");

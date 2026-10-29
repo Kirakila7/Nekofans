@@ -178,7 +178,7 @@ body[data-neko-workspace-shell] [data-neko-companion-footer] { display:block !im
 
 /* Startup is a temporary view over the existing work area, not a new session. */
 .neko-startup { position:fixed; z-index:40; box-sizing:border-box; overflow:auto; container-type:inline-size; color:var(--nws-text); background:var(--dsw-alias-bg-base,#edf4fb); font:14px/1.5 system-ui,sans-serif; }
-.neko-startup[hidden],body[data-neko-unified-enabled] .neko-startup { display:none !important; }
+.neko-startup[hidden] { display:none !important; }
 .neko-startup__inner { width:min(760px,100%); margin:0 auto; box-sizing:border-box; padding:clamp(22px,5vw,54px); }
 .neko-startup__header { display:flex; align-items:start; justify-content:space-between; gap:16px; margin-bottom:24px; }
 .neko-startup__header h1 { font-size:24px; line-height:1.3; margin:0; }
