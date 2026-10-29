@@ -185,6 +185,7 @@ class WorkbenchMainChat {
       memoryModel:this.readMemoryModel() };
   }
   readMemoryModel() {
+    if(process.env.NEKO_WORKBENCH_MEMORY_OFFICIAL_FREE==='1'&&!fs.existsSync(this.memoryConfigFile))return {useChatApi:false,officialFree:true,protocol:'openai-compatible',baseUrl:'https://www.lanlan.tech/text/v1',model:'free-model',requestTimeoutMs:90000,hasKey:false};
     let settings={useChatApi:true};
     if(fs.existsSync(this.memoryConfigFile))settings=JSON.parse(fs.readFileSync(this.memoryConfigFile,'utf8'));
     return {...settings,hasKey:this.memorySecretStore.has()};
@@ -192,6 +193,7 @@ class WorkbenchMainChat {
   async memoryModel() {
     const config=this.readMemoryModel(),settings=config.useChatApi?this.settings:config;
     this.shared.validateConfig(settings);
+    if(config.officialFree)return {...settings,apiKey:'free-access'};
     return {...settings,apiKey:await (config.useChatApi?this.secretStore:this.memorySecretStore).get()};
   }
   async configureMemory(input) {

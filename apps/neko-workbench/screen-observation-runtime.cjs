@@ -3,8 +3,8 @@ const { randomUUID } = require('node:crypto');
 const { imageParts } = require('./screen-vision.cjs');
 const silent = text => '[安静]'.startsWith(text.trim()) || text.trim().startsWith('[安静]');
 class ScreenObservation {
-  constructor({ observe, onState = () => {}, onReply = () => {}, isChatBusy = () => false, now = Date.now, intervalMs = 6000, maxRequests = 120 } = {}) {
-    this.observe = observe; this.onState = onState; this.onReply = onReply; this.isChatBusy = isChatBusy;
+  constructor({ observe, onState = () => {}, onReply = () => {}, onRecord = () => {}, isChatBusy = () => false, now = Date.now, intervalMs = 6000, maxRequests = 120 } = {}) {
+    this.observe = observe; this.onState = onState; this.onReply = onReply; this.onRecord = onRecord; this.isChatBusy = isChatBusy;
     this.now = now; this.intervalMs = intervalMs; this.maxRequests = maxRequests;
     this.generation = 0; this.phase = 'idle'; this.requests = 0; this.records = []; this.seq = 0; this.lastAt = 0;
     this.source = null; this.active = null; this.latest = null; this.question = ''; this.error = ''; this.reply = null; this.capability = 'unverified';
@@ -60,6 +60,7 @@ class ScreenObservation {
       if (!silent(result.text) && result.text !== this.records.at(-1)?.text) {
         const record = { id: active.id, text: result.text, question, capturedAt: frame.capturedAt, elapsedMs: this.now() - this.lastAt, usage: result.usage };
         this.records.push(record); this.records = this.records.slice(-30);
+        try { this.onRecord({id:record.id,question:record.question,text:record.text}); } catch {}
         this.reply = { id: active.id, text: result.text, streaming: false, source: 'screen' }; this.onReply(this.reply);
       } else this.onReply(null);
     } catch (error) {

@@ -10,7 +10,7 @@ const hash=v=>createHash('sha256').update(stable(v)).digest('hex');
 /** Native NEKO is the only memory provider; the hub is a durable delivery ledger. */
 export class WorkbenchMemory {
   constructor({directory,dataDir,repositoryRoot,getModel,getPersona,getLegacy,notify=()=>{},worker,autoSyncIntervalMs=30000}){
-    Object.assign(this,{directory,dataDir,getLegacy,notify});this.closed=false;this.activeSync=null;this.localTail=Promise.resolve();
+    Object.assign(this,{directory,dataDir,getLegacy,notify});this.closed=false;this.activeSync=null;this.localTail=Promise.resolve();this.activityTail=Promise.resolve();
     try{
     this.store=new EventStore(join(directory,'hub.sqlite'));
     this.settings={autoSync:true,nekoEnabled:true};
@@ -143,6 +143,19 @@ export class WorkbenchMemory {
     }catch(error){this.providerStates.neko='暂不可用';this.error='N.E.K.O. 记忆暂不可用，本次聊天继续，记录已保留待重试';this.publish();throw error;}
   }
   async recordTurn(){await this.localSync();void this.sync().catch(()=>{});}
+  async recordActivity({source,id,text}){
+    if(this.closed)throw Error('记忆服务已关闭');
+    if(!['project','screen'].includes(source)||typeof id!=='string'||!id||id.length>500||typeof text!=='string'||!text.trim()||text.length>4000)throw Error('活动摘要无效');
+    const task=this.activityTail.then(async()=>{
+      const itemId='activity:'+hash([source,id]);
+      const eventId='activity-event:'+hash([source,id]);
+      const event=this.event(itemId,{kind:'fact',text:text.trim(),visibility:'private',certainty:'inferred',evidenceRefs:[]},[],'upsert','diary',eventId);
+      if(event.value?.text!==text.trim())throw Error('活动记忆标识冲突');
+      await this.hub.add([event]);this.publish();
+    });
+    this.activityTail=task.catch(()=>{});
+    await task;if(!this.closed)void this.sync().catch(()=>{});
+  }
   async connect(){
     try{await this.hub.ready('neko');this.providerStates.neko='已连接';this.error='';}
     catch(error){this.providerStates.neko='待连接或待重试';this.error='N.E.K.O. 记忆尚未就绪，请检查组件与记忆模型设置';this.publish();throw error;}
@@ -173,7 +186,7 @@ export class WorkbenchMemory {
   }
   async close(){
     if(this.closed)return;this.closed=true;clearInterval(this.timer);
-    await this.worker.close();await Promise.allSettled([this.activeSync,this.localTail]);await this.hub.queue;
+    await this.activityTail;await this.worker.close();await Promise.allSettled([this.activeSync,this.localTail]);await this.hub.queue;
     this.store.close();
   }
 }
