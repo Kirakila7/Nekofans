@@ -151,7 +151,7 @@ body[data-neko-workspace-shell] [data-neko-companion-footer] { display:block !im
 .neko-workspace-form-error:not(:empty) { padding:6px 9px; border-radius:7px; background:#fbeeeb; }
 
 /* Startup is a temporary view over the existing work area, not a new session. */
-.neko-startup { position:fixed; z-index:40; box-sizing:border-box; overflow:auto; color:var(--nws-text); background:var(--dsw-alias-bg-base,#edf4fb); font:14px/1.5 system-ui,sans-serif; }
+.neko-startup { position:fixed; z-index:40; box-sizing:border-box; overflow:auto; container-type:inline-size; color:var(--nws-text); background:var(--dsw-alias-bg-base,#edf4fb); font:14px/1.5 system-ui,sans-serif; }
 .neko-startup[hidden],body[data-neko-unified-enabled] .neko-startup { display:none !important; }
 .neko-startup__inner { width:min(760px,100%); margin:0 auto; box-sizing:border-box; padding:clamp(22px,5vw,54px); }
 .neko-startup__header { display:flex; align-items:start; justify-content:space-between; gap:16px; margin-bottom:24px; }
@@ -179,3 +179,16 @@ body[data-neko-workspace-shell] [data-neko-companion-footer] { display:block !im
 .neko-startup button:focus-visible,.neko-startup input:focus-visible { outline:2px solid #4c89ad; outline-offset:2px; }
 .neko-startup__more { justify-self:start; font-size:12px !important; }
 @media(max-width:620px) { .neko-startup__header { flex-wrap:wrap; } .neko-startup__inner { padding:20px; } }
+/* The chooser lives inside a resizable work column, independent of the window. */
+@container (max-width:400px) {
+  .neko-startup__inner { padding:16px 12px; }
+  .neko-startup__header { flex-direction:column; align-items:flex-start; gap:10px; margin-bottom:16px; }
+  .neko-startup__header h1 { font-size:20px; }
+  .neko-startup__continue { white-space:nowrap; }
+  .neko-startup__toolbar { margin-top:16px; }
+  .neko-startup__project-header { gap:6px; padding:9px 8px; }
+  .neko-startup__project-header strong { flex:1; min-width:0; }
+  .neko-startup__provider { flex:none; }
+  .neko-startup__project-new { white-space:nowrap; margin:0 6px; padding:5px 6px; }
+  .neko-startup__session { padding:9px 8px; }
+}
