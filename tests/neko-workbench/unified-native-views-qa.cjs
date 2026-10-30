@@ -28,7 +28,7 @@ if (!process.versions.electron || process.env.NEKO_UNIFIED_NATIVE_QA_CHILD !== '
     } finally { fs.rmSync(dir, { recursive:true, force:true }); }
   }
 } else {
-  const { app, BrowserWindow, WebContentsView, session, ipcMain } = require('electron');
+  const { app, BrowserWindow, BaseWindow, WebContentsView, session, ipcMain } = require('electron');
   const assert = require('node:assert/strict');
   const dir = process.env.NEKO_UNIFIED_NATIVE_QA_DIR;
   if (!dir || !path.isAbsolute(dir)) throw Error('Missing isolated test directory');
@@ -72,12 +72,13 @@ if (!process.versions.electron || process.env.NEKO_UNIFIED_NATIVE_QA_CHILD !== '
     host.webContents.session.webRequest.onBeforeRequest((details, callback) => callback({ cancel: details.url !== preloadUrl && !['data:', 'about:', 'blob:'].includes(new URL(details.url).protocol) }));
     let saved = { enabled:false, side:'workspace', left:'coding', right:null, ratio:0.5 };
     const requests = [];
-    const controller = createSocialController({ WebContentsView, env:{}, openExternal:async () => { throw Error('External navigation prohibited'); }, copyText:() => {},
+    const controller = createSocialController({ WebContentsView, BaseWindow, env:{}, openExternal:async () => { throw Error('External navigation prohibited'); }, copyText:() => {},
       onState:(_host, state) => { if (!host.isDestroyed()) host.webContents.send('qa:community-state', state); } });
     ipcMain.handle('qa:workspace', (event, request) => {
       if (event.sender !== host.webContents) throw Error('Unexpected test sender');
       if (request.action === 'pane-layout') return { ...saved };
       if (request.action === 'set-pane-layout') return { ...(saved = validateLayout(request.layout)) };
+      if (request.action === 'video-platform') return { platform:'bilibili' };
       throw Error('Unsupported test request');
     });
     ipcMain.handle('qa:community', (event, request) => {
@@ -165,6 +166,30 @@ if (!process.versions.electron || process.env.NEKO_UNIFIED_NATIVE_QA_CHILD !== '
       assert.equal(await read("document.querySelector('#draft').value"), 'local coding draft');
       assert(requests.some(r=>r.action==='open' && r.slot==='right' && r.site==='community'));
       assert(requests.some(r=>r.action==='open' && r.slot==='side' && r.site==='bilibili'));
+      if(process.platform==='win32'){
+        const bounds={x:64,y:42,width:1000,height:700},holes=[{x:700,y:620,width:300,height:90},{x:950,y:580,width:100,height:34}];
+        const oldId=community.webContents.id;
+        await community.webContents.executeJavaScript("document.body.dataset.overlayTest='preserved'",true);
+        await controller.action(host,{action:'open',site:'community',slot:'side',bounds,holes});
+        const owned=BaseWindow.getAllWindows().filter(w=>w!==host&&w.getParentWindow()===host);
+        assert.equal(owned.length,1,'native child hosts the original social view');
+        assert(owned[0].contentView.children.includes(community),'same view is raised without reload');
+        assert.equal(community.webContents.id,oldId);assert.equal(await read("document.querySelector('#draft').value"),'local coding draft');
+        assert.equal(await community.webContents.executeJavaScript('document.body.dataset.overlayTest',true),'preserved');
+        owned[0].close();assert.equal(owned[0].isDestroyed(),false,'closing the shaped view cannot destroy the session');
+        await controller.action(host,{action:'layout',slot:'side',bounds,holes:[{...holes[0],x:650}]});
+        assert.equal(BaseWindow.getAllWindows().filter(w=>w!==host&&w.getParentWindow()===host).length,1,'resizing reuses the shaped window');
+        await controller.action(host,{action:'layout',slot:'side',bounds});
+        assert(host.contentView.children.includes(community),'the same view returns to the parent without reload');
+        assert.equal(community.webContents.id,oldId);assert.equal(BaseWindow.getAllWindows().filter(w=>w!==host&&w.getParentWindow()===host).length,0);
+        const videoId=video.webContents.id;
+        await controller.action(host,{action:'open',site:'bilibili',slot:'side',bounds,holes});
+        assert(BaseWindow.getAllWindows().some(w=>w!==host&&w.getParentWindow()===host&&w.contentView.children.includes(video)),'video uses the same shaped layer');
+        await controller.action(host,{action:'hide',slot:'side'});
+        assert.equal(BaseWindow.getAllWindows().filter(w=>w!==host&&w.getParentWindow()===host).length,0,'hiding video closes the owned layer');
+        await controller.action(host,{action:'open',site:'bilibili',slot:'side',bounds});
+        assert.equal(video.webContents.id,videoId);assert(host.contentView.children.includes(video),'show restores the existing video view');
+      }
       await read('window.__qaDisposeUnified()');
       await waitFor("!document.querySelector('[data-neko-unified-coding]')");
       assert.equal(await read("document.querySelector('#draft').value"), 'local coding draft');
@@ -212,6 +237,12 @@ if (!process.versions.electron || process.env.NEKO_UNIFIED_NATIVE_QA_CHILD !== '
       children = host.contentView.children;
       assert(children.includes(community) && children.includes(video), 'moving retains both original views');
       assert.deepEqual(community.getBounds(), side);
+      const obstruction={x:130,y:320,width:100,height:60};
+      await controller.action(host,{action:'layout',slot:'side',bounds:side,holes:[obstruction,{x:side.x+side.width-8,y:side.y,width:8,height:side.height}]});
+      assert(community.getBounds().y+community.getBounds().height<=obstruction.y,'without shaped windows the composer remains uncovered');
+      assert(community.getBounds().height>0,'a full-height divider does not hide the fallback view');
+      await controller.action(host,{action:'layout',slot:'side',bounds:side});
+      assert.deepEqual(community.getBounds(),side);
       assert.equal(await community.webContents.executeJavaScript('document.body.dataset.qa', true), 'kept');
       assert.equal(await video.webContents.executeJavaScript("sessionStorage.getItem('qa')", true), 'kept');
       assert.equal(hits.filter(x => x.partition === COMMUNITY_PARTITION).length, 1, 'moving does not reload community');

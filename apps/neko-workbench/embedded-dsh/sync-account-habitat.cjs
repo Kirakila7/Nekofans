@@ -1,0 +1,10 @@
+'use strict';
+const fs=require('node:fs'),path=require('node:path');
+const base=__dirname,file=path.join(base,'b0-skin/packages/dsh-client-ui-white-label/lib/client.js');
+const source=fs.readFileSync(path.join(base,'account-habitat-source.js'),'utf8');
+let code=fs.readFileSync(file,'utf8');
+const marker='// @neko-account-habitat:end';
+const end=code.indexOf(marker),start=code.lastIndexOf('/**\n * Copy these function declarations',end);
+if(start<0||end<start)throw Error('Account habitat source markers missing');
+code=code.slice(0,start)+source+code.slice(end);
+fs.writeFileSync(file,code);

@@ -1,5 +1,5 @@
 body[data-neko-workspace-shell] { --nws-bg:var(--dsw-alias-bg-layer-1,#fbfeff); --nws-border:var(--dsw-alias-border-l1,#c4dbe6); --nws-text:var(--dsw-alias-label-primary,#17303d); --nws-muted:var(--dsw-alias-label-secondary,#637d8c); --nws-hover:var(--dsw-alias-interactive-bg-hover,#ddedf4); }
-body:is([data-neko-workspace-collapsed],[data-neko-flex-workspace-collapsed]) [data-neko-collapsed-composer] { position:fixed !important; z-index:2147481000 !important; right:16px !important; bottom:16px !important; left:auto !important; top:auto !important; box-sizing:border-box !important; width:min(480px, calc(100vw - 96px)) !important; max-width:calc(100vw - 96px) !important; max-height:45vh; overflow:auto; background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:20px; box-shadow:0 8px 28px #17303d24; }
+body:is([data-neko-workspace-collapsed],[data-neko-flex-workspace-collapsed]) [data-neko-collapsed-composer] { position:fixed !important; z-index:2147481000 !important; right:16px !important; bottom:16px !important; left:auto !important; top:auto !important; margin:0 !important; box-sizing:border-box !important; width:min(480px, calc(100vw - 96px)) !important; max-width:calc(100vw - 96px) !important; max-height:45vh; overflow:auto; background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:20px; box-shadow:0 8px 28px #17303d24; }
 body:is([data-neko-workspace-collapsed],[data-neko-flex-workspace-collapsed]) [data-neko-collapsed-composer] .neko-gallery { display:none !important; }
 /* The native seat remains in its React tree. Hide its decorative landing hero
    only in compact mode; native project and mode controls return on focus. */
@@ -77,6 +77,7 @@ body[data-neko-workspace-shell] .neko-chatroom-preview { position:fixed; z-index
    geometry is supplied by the workspace shell and follows its left pane. */
 .neko-companion-dock[data-neko-companion-expanded] { position:fixed; left:var(--neko-companion-left); bottom:var(--neko-companion-bottom); width:var(--neko-companion-width); max-width:none; margin:0; z-index:52; }
 .neko-companion-dock[data-neko-companion-expanded] .neko-companion-form { width:100%; box-sizing:border-box; }
+.neko-companion-dock[hidden] { display:none !important; }
 .neko-companion-character { justify-self:center; width:76px; height:90px; position:relative; transform:translateX(var(--neko-companion-offset,0px)); cursor:grab; touch-action:none; user-select:none; -webkit-user-select:none; }
 .neko-companion-character[data-dragging="true"] { cursor:grabbing; }
 .neko-companion-menu { position:fixed; z-index:60; display:grid; gap:3px; min-width:160px; max-width:240px; box-sizing:border-box; padding:6px; color:var(--nws-text); background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:12px; box-shadow:0 8px 28px #17303d20; font:13px/1.5 system-ui; }
@@ -87,10 +88,10 @@ body[data-neko-workspace-shell] .neko-chatroom-preview { position:fixed; z-index
 .neko-companion-menu__status { max-width:220px; margin:3px 8px; color:var(--nws-muted); font-size:11px; overflow-wrap:anywhere; }
 .neko-companion-menu__status:empty { display:none; }
 .neko-side-rail__space { position:relative; width:calc(100% + 24px); overflow:hidden; }
-.neko-rail-companion { flex:none; width:44px; height:52px; padding:0; cursor:pointer; }
+.neko-rail-companion { flex:none; width:56px; height:70px; padding:0; cursor:pointer; }
 .neko-rail-companion[data-neko-rail-roam] { position:absolute; left:0; top:0; z-index:1; max-width:100%; max-height:100%; touch-action:none; cursor:grab; }
 .neko-rail-companion[data-dragging="true"] { cursor:grabbing; }
-.neko-rail-companion .neko-companion-character { width:min(40px, 100%); height:min(50px, 100%); transform:none; cursor:inherit; }
+.neko-rail-companion .neko-companion-character { width:min(54px, 100%); height:min(68px, 100%); transform:none; cursor:inherit; }
 .neko-rail-companion img.neko-companion-poster,.neko-rail-companion video.neko-companion-video { width:100%; height:100%; border-radius:0; object-fit:contain; }
 .neko-rail-companion [hidden] { display:none !important; }
 .neko-companion-character:focus-visible { outline:2px dashed #4c89ad; outline-offset:-3px; border-radius:12px; }
@@ -194,12 +195,12 @@ body[data-neko-workspace-shell] [data-neko-companion-footer] { display:block !im
 
 .neko-lobby-switch svg { width:24px; height:24px; }
 .neko-lobby-switch[data-connection="online"] { color:#2f7d5b; }
-.neko-lobby-panel { position:fixed; z-index:29; display:flex; flex-direction:column; box-sizing:border-box; padding:18px clamp(18px,4vw,60px) 18px; color:var(--nws-text); background:var(--dsw-alias-bg-base,#edf6fa); font:14px/1.6 system-ui,sans-serif; }
+.neko-lobby-panel { position:fixed; z-index:35; display:flex; flex-direction:column; box-sizing:border-box; container-type:inline-size; padding:12px; color:var(--nws-text); background:var(--dsw-alias-bg-base,#edf6fa); font:14px/1.6 system-ui,sans-serif; }
 .neko-lobby-panel[hidden],.neko-lobby-panel [hidden] { display:none !important; }
 .neko-lobby-panel button { color:inherit; background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:8px; padding:5px 10px; font:12px/1.5 system-ui; cursor:pointer; }
 .neko-lobby-panel button:disabled { opacity:.45; cursor:default; }
 .neko-lobby-panel button:focus-visible,.neko-lobby-log:focus-visible { outline:2px solid #4c89ad; outline-offset:1px; }
-.neko-lobby-header { display:flex; align-items:baseline; gap:10px; min-height:38px; flex:none; border-bottom:1px solid var(--nws-border); padding-bottom:8px; }
+.neko-lobby-header { display:flex; align-items:center; flex-wrap:wrap; gap:6px; min-height:38px; flex:none; border-bottom:1px solid var(--nws-border); padding-bottom:8px; }
 .neko-lobby-title { font-size:16px; max-width:30%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .neko-lobby-topic { flex:1; min-width:0; color:var(--nws-muted); font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .neko-lobby-online { color:var(--nws-muted); font-size:12px; white-space:nowrap; }
@@ -235,7 +236,7 @@ body[data-neko-workspace-shell] [data-neko-companion-footer] { display:block !im
 .neko-lobby-pending { color:var(--nws-muted); }
 .neko-lobby-error { margin:0 0 6px; font-size:12px; color:#bd5c4e; }
 .neko-lobby-modebar { display:flex; align-items:center; flex-wrap:wrap; gap:8px; flex:none; margin:4px 0 8px; font-size:12px; }
-.neko-lobby-modes { display:flex; gap:4px; }
+.neko-lobby-modes { display:flex; flex-wrap:wrap; gap:4px; }
 .neko-lobby-mode[aria-pressed="true"] { outline:2px solid #4c89ad; outline-offset:-2px; }
 .neko-lobby-reason { color:var(--nws-muted); }
 .neko-lobby-dots { display:flex; gap:10px; margin-left:auto; color:var(--nws-muted); }
@@ -253,6 +254,7 @@ body[data-neko-workspace-shell] [data-neko-companion-footer] { display:block !im
 .neko-lobby-picker__item[aria-selected="true"] { background:var(--nws-hover); }
 .neko-lobby-picker__item[data-offline="true"] { opacity:.6; }
 .neko-lobby-header__actions { display:flex; gap:6px; margin-left:auto; }
+.neko-lobby-members-toggle { display:none; }
 .neko-lobby-header__actions .neko-lobby-sign-out { margin-left:0; }
 .neko-lobby-middle { display:flex; flex:1; min-height:0; gap:14px; }
 .neko-lobby-stream { display:flex; flex-direction:column; flex:1; min-width:0; min-height:0; }
@@ -304,7 +306,13 @@ body[data-neko-workspace-shell] [data-neko-companion-footer] { display:block !im
 .neko-lobby-cat-api[data-ready="true"] { background:color-mix(in srgb,#3fa36f 12%,transparent); }
 .neko-lobby-dialog__error { margin:0; color:#bd5c4e; font-size:12px; }
 .neko-lobby-dialog__footer { display:flex; justify-content:flex-end; gap:8px; }
-@media(max-width:900px) { .neko-lobby-members { display:none; } }
+@container (max-width:540px) {
+  .neko-lobby-header__actions { flex-wrap:wrap; }
+  .neko-lobby-members-toggle { display:inline-flex; }
+  .neko-lobby-members { display:none; position:absolute; right:8px; top:54px; z-index:4; box-sizing:border-box; width:min(200px,calc(100% - 16px)); max-height:60%; padding:10px; border:1px solid var(--nws-border); border-radius:10px; background:var(--nws-bg); box-shadow:0 8px 24px #17303d30; }
+  .neko-lobby-panel[data-members-open] .neko-lobby-members { display:block; }
+  .neko-lobby-dialog { padding:8px; }
+}
 
 /* Interaction states: hover/press cues on enabled controls only, visible focus
    rings, and busy/disabled cues. Disabled (e.g. Codex 测试中) never gets hover. */

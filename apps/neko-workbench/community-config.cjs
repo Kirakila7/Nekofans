@@ -206,7 +206,7 @@ function installCommunityNavigation(target, { communityUrl, parent, openExternal
 
 function validateCommunityRequest(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)
-      || Object.keys(value).some(key => !['action', 'bounds', 'site', 'slot', 'requestId', 'home', 'videoUrl'].includes(key))
+      || Object.keys(value).some(key => !['action', 'bounds', 'holes', 'site', 'slot', 'requestId', 'home', 'videoUrl'].includes(key))
       || !['open', 'layout', 'hide', 'reload', 'back', 'copy-video-link', 'play-official', 'open-youtube-video', 'open-youtube-shorts'].includes(value.action)
       || (value.requestId !== undefined && (!['open', 'hide'].includes(value.action) || !Number.isSafeInteger(value.requestId) || value.requestId < 1))
       || (value.site !== undefined && (value.action !== 'open' || !['community', 'bilibili', 'youtube'].includes(value.site)))
@@ -221,7 +221,8 @@ function validateCommunityRequest(value) {
           Object.hasOwn(bounds, key) && Number.isFinite(bounds[key]) && Math.abs(bounds[key]) <= 1000000)
         || bounds.width <= 0 || bounds.height <= 0) throw new Error('社区布局无效');
   }
-  return { action: value.action, ...(value.site ? { site: value.site } : {}), ...(value.slot ? { slot: value.slot } : {}), ...(value.videoUrl ? { videoUrl: value.videoUrl } : {}), ...(value.home === true ? { home: true } : {}), ...(value.requestId !== undefined ? { requestId: value.requestId } : {}), ...(value.bounds ? { bounds: { ...value.bounds } } : {}) };
+  if(value.holes!==undefined && (!['open','layout'].includes(value.action) || !Array.isArray(value.holes) || value.holes.length>3 || value.holes.some(r=>!r||typeof r!=='object'||Array.isArray(r)||Object.keys(r).length!==4||!['x','y','width','height'].every(k=>Object.hasOwn(r,k)&&Number.isFinite(r[k])&&Math.abs(r[k])<=1000000)||r.width<=0||r.height<=0)))throw new Error('社区布局无效');
+  return { action: value.action, ...(value.site ? { site: value.site } : {}), ...(value.slot ? { slot: value.slot } : {}), ...(value.videoUrl ? { videoUrl: value.videoUrl } : {}), ...(value.home === true ? { home: true } : {}), ...(value.requestId !== undefined ? { requestId: value.requestId } : {}), ...(value.bounds ? { bounds: { ...value.bounds } } : {}), ...(value.holes ? {holes:value.holes.map(r=>({...r}))} : {}) };
 }
 
 function communityBounds(host, bounds) {
@@ -237,7 +238,7 @@ function communityBounds(host, bounds) {
 
 const LOAD_ERROR = '社区页面未能打开，请检查网络后重试';
 const CANCEL_ERROR = '社区已隐藏或工作台页面已离开';
-function createCommunityController({ WebContentsView, openExternal, copyText, env = process.env, site = 'community', youtubeAppId = YOUTUBE_APP_ID,
+function createCommunityController({ WebContentsView, BaseWindow, openExternal, copyText, env = process.env, site = 'community', youtubeAppId = YOUTUBE_APP_ID,
   onState = () => {}, onHide = () => {}, onExternalError } = {}) {
   if (!['community', 'bilibili', 'youtube'].includes(site)) throw new Error('未知内容入口');
   const isBilibili = site === 'bilibili';
@@ -287,17 +288,35 @@ function createCommunityController({ WebContentsView, openExternal, copyText, en
   function detach(record) {
     if (!record.attached) return;
     record.attached = false;
-    if (!record.host.isDestroyed()) record.host.contentView.removeChildView(record.view);
+    if(record.nativeOverlay){record.nativeOverlay.destroy();record.nativeOverlay=null;}
+    else if (!record.host.isDestroyed()) record.host.contentView.removeChildView(record.view);
   }
   function place(record) {
     if (current !== record || !record.wanted || !record.loaded || record.webContents.isDestroyed()) return false;
-    const bounds = communityBounds(record.host, record.bounds);
+    let bounds = communityBounds(record.host, record.bounds);
     if (isYoutube) {
       const scale = record.host.webContents.getZoomFactor();
       record.tooSmall = bounds.width / scale < YOUTUBE_MIN_SIZE || bounds.height / scale < YOUTUBE_MIN_SIZE;
       if (record.tooSmall) { muteWhileHidden(record); detach(record); return false; }
     }
     if (!bounds.width || !bounds.height) { detach(record); return false; }
+    const holes=(record.holes||[]).map(h=>communityBounds(record.host,h)).filter(h=>h.width>0&&h.height>0&&h.x<bounds.x+bounds.width&&h.x+h.width>bounds.x&&h.y<bounds.y+bounds.height&&h.y+h.height>bounds.y);
+    if(holes.length&&BaseWindow&&process.platform==='win32') {
+      try {
+        if(!record.nativeOverlay){
+          if(record.attached){record.host.contentView.removeChildView(record.view);record.attached=false;}
+          const {createNativeSocialWindow}=require('./native-social-window.cjs');
+          record.nativeOverlay=createNativeSocialWindow({BaseWindow,host:record.host,view:record.view});
+          record.nativeOverlay.attach();record.attached=true;
+        }
+        record.nativeOverlay.place(bounds,holes);return true;
+      }catch{
+        if(record.nativeOverlay){record.nativeOverlay.destroy();record.nativeOverlay=null;record.attached=false;}
+      }
+    } else if(record.nativeOverlay) {record.nativeOverlay.destroy();record.nativeOverlay=null;record.attached=false;}
+    // Preserve access to the original composer if shaped windows fail.
+    const controls=holes.filter(h=>!(h.width<=48&&h.height>100));
+    if(controls.length){const bottom=Math.max(bounds.y,Math.min(...controls.map(h=>h.y),bounds.y+bounds.height)-8);bounds={...bounds,height:bottom-bounds.y};if(!bounds.height){detach(record);return false;}}
     record.view.setBounds(bounds);
     if (!record.attached) { record.host.contentView.addChildView(record.view); record.attached = true; }
     restoreAudio(record);
@@ -336,6 +355,11 @@ function createCommunityController({ WebContentsView, openExternal, copyText, en
     listen(host, 'close', () => dispose(true));
     listen(host, 'closed', () => unbind(true));
     listen(host, 'resize', () => { if (current) place(current); });
+    listen(host, 'move', () => { if (current?.nativeOverlay) place(current); });
+    listen(host, 'hide', () => { if (current?.nativeOverlay) place(current); });
+    listen(host, 'show', () => { if (current?.nativeOverlay) place(current); });
+    listen(host, 'minimize', () => { if (current?.nativeOverlay) place(current); });
+    listen(host, 'restore', () => { if (current?.nativeOverlay) place(current); });
     listen(host.webContents, 'zoom-changed', () => { if (current) place(current); });
     listen(host.webContents, 'will-navigate', () => dispose(true));
     listen(host.webContents, 'did-start-navigation', (_event, _url, isInPlace, isMainFrame) => {
@@ -457,7 +481,7 @@ function createCommunityController({ WebContentsView, openExternal, copyText, en
       return { ok: true };
     }
     if (request.action === 'layout') {
-      if (current) { const wasSmall = current.tooSmall; current.bounds = request.bounds; place(current); if (isYoutube && wasSmall !== current.tooSmall && current.wanted) state(current, 'ready'); }
+      if (current) { const wasSmall = current.tooSmall; current.bounds = request.bounds; current.holes=request.holes||[]; place(current); if (isYoutube && wasSmall !== current.tooSmall && current.wanted) state(current, 'ready'); }
       return { ok: true };
     }
     if (request.action === 'back') {
@@ -530,7 +554,7 @@ function createCommunityController({ WebContentsView, openExternal, copyText, en
       // this on the view so a coalesced older legacy open cannot steal focus.
       record.managedBySlot = !!request.slot;
     }
-    if (request.bounds) record.bounds = request.bounds;
+    if (request.bounds) {record.bounds = request.bounds;record.holes=request.holes||[];}
     record.wanted = true;
     const epoch = record.epoch;
     if (request.action === 'open' && request.home === true && isBilibili) {
@@ -618,7 +642,7 @@ function createSocialController(options = {}) {
       if (oldSlot && oldSlot !== slot) { bump(oldSlot); slots.delete(oldSlot); }
       const entry = { site: next, requestId: request.requestId };
       slots.set(slot, entry); active = next;
-      const result = await controllers[next].action(host, { action: 'open', site: next, slot, bounds: request.bounds,
+      const result = await controllers[next].action(host, { action: 'open', site: next, slot, bounds: request.bounds, ...(request.holes ? {holes:request.holes} : {}),
         ...(request.home === true ? { home: true } : {}), ...(request.requestId !== undefined ? { requestId: request.requestId } : {}) });
       if (slotVersion.get(slot) !== version || siteVersion.get(next) !== siteTicket || slots.get(slot) !== entry) throw new Error(CANCEL_ERROR);
       return result;

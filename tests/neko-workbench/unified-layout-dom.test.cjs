@@ -103,7 +103,7 @@ test('sidebar switches between social views and yields to chat or a settings dia
   assert.equal(f.calls.filter(x=>x.action==='set-pane-layout').length,0);
   f.cleanup();
 });
-test('collapsed work composer remains above the native social view and restores it without reload', {skip:!JSDOM}, async t=>{
+test('collapsed work composer remains above the full-height native social view without reload', {skip:!JSDOM}, async t=>{
   for (const [selector, site] of [['.neko-community-yui','community'], ['.neko-side-rail__bilibili','bilibili']]) {
     const f=fixture(t); await sleep();
     f.d.querySelector(selector).click();
@@ -118,8 +118,12 @@ test('collapsed work composer remains above the native social view and restores 
     sidebar.getBoundingClientRect=()=>({left:64,top:0,right:1084,bottom:780,width:1020,height:780});
     f.d.dispatchEvent(new f.w.Event('neko-collapsed-composer-geometry'));
     await waitFor(()=>f.calls.some(x=>x.action==='layout'&&x.slot==='side'&&x.bounds.width===1020),'collapsed view bounds');
-    const reduced=f.calls.filter(x=>x.action==='layout'&&x.slot==='side').at(-1).bounds;
-    assert(reduced.y+reduced.height<=472,'native view stops before both floating controls');
+    const placement=f.calls.filter(x=>x.action==='layout'&&x.slot==='side').at(-1);
+    assert.equal(placement.bounds.y+placement.bounds.height,780,'social view reaches the bottom');
+    assert.equal(placement.holes.length,2,'only the composer and expand control are exposed');
+    assert(placement.holes.some(h=>h.x===497&&h.y===497&&h.width===506&&h.height===76));
+    assert(placement.holes.some(h=>h.x===997&&h.y===477&&h.width===46&&h.height===46));
+    assert.equal(f.d.body.hasAttribute('data-neko-workspace-collapsed'),true,'social layout does not expand the workspace');
     assert.equal(f.calls.filter(x=>x.action==='hide'&&x.slot==='side').length,0,'resize does not hide or cancel the view');
     f.d.body.removeAttribute('data-neko-workspace-collapsed'); frame.style.gridTemplateColumns='220px 800px 0px';
     sidebar.getBoundingClientRect=()=>({left:64,top:0,right:284,bottom:780,width:220,height:780});

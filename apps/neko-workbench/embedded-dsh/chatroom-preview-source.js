@@ -1,5 +1,4 @@
-// Chat rooms remain a visual preview; the home has a separate in-panel surface.
-// Navigation and lifetime are owned by workspace shell.
+// Room navigation and home lifetime are owned by the workspace shell.
 function createChatroomPreview(doc, avatar = () => '', options = {}) {
   const el = (tag, cls, text) => {
     const node = doc.createElement(tag);
@@ -35,7 +34,8 @@ function createChatroomPreview(doc, avatar = () => '', options = {}) {
     rooms.appendChild(row);
     return row;
   };
-  addRoom('公共聊天室', '一起交流与分享', '✦', 'is-public');
+  const publicRoom = addRoom('公共聊天室', '一起交流与分享', '✦', 'is-public', typeof options.onOpenLobby === 'function');
+  if (options.onOpenLobby) { publicRoom.setAttribute('aria-label', '打开公共聊天室'); publicRoom.addEventListener('click', options.onOpenLobby); }
   const home = addRoom('我的小窝', '进入 Yui 的家', '⌂', 'is-home', true);
   home.setAttribute('aria-label', '进入我的小窝，Yui 的家');
 

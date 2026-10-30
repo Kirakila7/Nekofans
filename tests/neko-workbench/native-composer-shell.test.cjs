@@ -4,6 +4,11 @@ const {createWorkspaceLayout}=require('../../apps/neko-workbench/workspace-layou
 const base=path.resolve(__dirname,'../../apps/neko-workbench');
 let JSDOM;try{({JSDOM}=require(path.join(process.env.NEKO_DOM_DEPS||'/private/tmp/neko-sidebar-dom-20261026','node_modules/jsdom')));}catch{}
 const tick=()=>new Promise(r=>setTimeout(r,20));
+test('shipped shell supplies native composer bindings for the active DSH session',()=>{
+ const client=fs.readFileSync(path.join(base,'embedded-dsh/b0-skin/packages/dsh-client-ui-white-label/lib/client.js'),'utf8');
+ const install=client.split('\n').find(line=>line.includes('ctx.effect(() => installWorkspaceShell('));
+ assert(install);assert.match(install,/nativeComposerBindings:\s*\{/);assert.match(install,/getMainSessionId/);assert.match(install,/subscribeSelection/);
+});
 test('floating input routes only to the currently retained DSH shell and preserves stale drafts',{skip:!JSDOM},async t=>{
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'neko-native-composer-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
  const dom=new JSDOM('<body><aside data-neko-side-rail><span class="neko-side-rail__theme"></span></aside><aside data-slot="sidebar"><div data-slot="settings.launcher"></div></aside><main data-neko-flex-coding><div data-composer-seat><textarea>native</textarea></div></main></body>',{runScripts:'outside-only',pretendToBeVisual:true});t.after(()=>dom.window.close());
@@ -16,18 +21,17 @@ test('floating input routes only to the currently retained DSH shell and preserv
  const stop=w.install({window:w,document:d,bridge,avatar:()=>'',locateSidebar:()=>({root:sidebar}),getDshSelection:()=>selection,hasDshActiveSession:()=>!!main,openDshFiles:(node,id)=>fileCalls.push(id),nativeComposerBindings:{getSelection:()=>selection,getMainSessionId:()=>main,getBinding:id=>id==='s1'?binding:null,getShell:()=>shell}});await tick();
  d.body.style.setProperty('--neko-flex-compact-width','450px');d.body.style.setProperty('--neko-flex-compact-right','16px');d.body.style.setProperty('--neko-flex-compact-bottom','16px');d.body.setAttribute('data-neko-flex-workspace-collapsed','');await tick();
  assert(placements.some(x=>x.action==='place'));assert.equal(states.at(-1).value,'original');assert.equal(states.at(-1).sessionToken,'s1');
- const lobbyButton=d.querySelector('.neko-lobby-switch'); assert(lobbyButton); lobbyButton.click(); await tick(); assert(placements.some(x=>x.action==='remove'),'opening lobby detaches native float');
- inputEvent({type:'files',sessionToken:'s1',revision:1});await tick();assert.equal(fileCalls.length,0,'files is blocked while lobby is open');
- inputEvent({type:'submit',value:'original',sessionToken:'s1',revision:1,submissionId:77}); await tick(); assert.equal(sends,0,'late submit is rejected while lobby is active'); assert(states.some(x=>x.settledSubmitId===77&&x.status.includes('公共大厅')));
+ const lobbyButton=d.querySelector('.neko-lobby-switch'); assert(lobbyButton); lobbyButton.click(); await tick(); assert(!placements.some(x=>x.action==='remove'),'opening lobby leaves the work input in place');
  inputEvent({type:'edit',value:'new text',sessionToken:'s1',revision:1,editId:1}); await tick(); assert.equal(draft.draft,'new text','pending draft may settle into same original session');
- lobbyButton.click(); await tick(); assert(placements.filter(x=>x.action==='place').length>=2,'closing lobby restores native float'); assert.equal(states.at(-1).value,'new text');
+ assert.equal(states.at(-1).value,'new text');
  inputEvent({type:'files',sessionToken:'s1',revision:1});await tick();assert.equal(fileCalls.length,0,'stale revision cannot open files');
- inputEvent({type:'files',sessionToken:'s1',revision:2});await new Promise(r=>setTimeout(r,80));assert.deepEqual(fileCalls,['s1']);assert(!d.body.hasAttribute('data-neko-flex-workspace-collapsed'),'files expands first');assert.equal(draft.draft,'new text');
- d.body.setAttribute('data-neko-flex-workspace-collapsed','');await tick();
  // Continue the original stale revision/session checks from revision 2.
  assert.equal(saves,1);assert(states.some(x=>x.settledEditId===1&&!x.editConflict&&x.revision===2));
  inputEvent({type:'submit',value:'new text',sessionToken:'s1',revision:1,submissionId:1});await tick();assert.equal(sends,0);assert(states.some(x=>x.settledSubmitId===1&&x.status.includes('变化')));
  inputEvent({type:'submit',value:'new text',sessionToken:'s1',revision:2,submissionId:2});await tick();assert.equal(sends,1);assert(states.some(x=>x.settledSubmitId===2&&x.status==='已交给工作区处理'));
+ inputEvent({type:'files',sessionToken:'s1',revision:2});await new Promise(r=>setTimeout(r,80));assert.deepEqual(fileCalls,['s1'],'files remains available while the lobby is open');assert(!d.body.hasAttribute('data-neko-flex-workspace-collapsed'),'files expands first');assert.equal(draft.draft,'new text');
+ d.body.setAttribute('data-neko-flex-workspace-collapsed','');await tick();const removals=placements.filter(x=>x.action==='remove').length;
+ lobbyButton.click(); await tick(); assert.equal(placements.filter(x=>x.action==='remove').length,removals,'returning from lobby leaves the work input in place');
  selection={sessionId:'s2'};main='s2';inputEvent({type:'edit',value:'overwrite',sessionToken:'s1',revision:2,editId:2});await tick();assert.equal(draft.draft,'new text');assert(states.some(x=>x.settledEditId===2&&x.editConflict));
  d.body.removeAttribute('data-neko-flex-workspace-collapsed');await tick();assert(placements.some(x=>x.action==='remove'));stop();assert.equal(inputEvent,null);assert.equal(listeners.size,0);
 });

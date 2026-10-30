@@ -1,4 +1,4 @@
-const {app,BrowserWindow,WebContentsView,ipcMain,screen,shell,Menu,Tray,nativeImage,dialog,nativeTheme,safeStorage,clipboard,desktopCapturer,systemPreferences} = require('electron');
+const {app,BrowserWindow,BaseWindow,WebContentsView,ipcMain,screen,shell,Menu,Tray,nativeImage,dialog,nativeTheme,safeStorage,clipboard,desktopCapturer,systemPreferences} = require('electron');
 const {spawn} = require('node:child_process');
 const {resolveRuntimePaths,prepareRuntimeDirectories,assertDshRuntime,buildDshPatch,buildDshLaunch}=require('./runtime-config.cjs');
 const {createDshLifecycle}=require('./dsh-lifecycle.cjs');
@@ -92,7 +92,7 @@ const nekoChat=new NekoChat();
 let communityAccount;
 const nativeDividerController=createNativeDividerController({WebContentsView,ipcMain});
 const nativeComposerController=createNativeComposerController({WebContentsView,ipcMain});
-const communityController=createSocialController({WebContentsView,openExternal:url=>shell.openExternal(url),copyText:text=>clipboard.writeText(text),
+const communityController=createSocialController({WebContentsView,BaseWindow,openExternal:url=>shell.openExternal(url),copyText:text=>clipboard.writeText(text),
   onHide:()=>communityAccount?.cancel(),
   onState:(host,value)=>{if(host===dshWindow&&!host.isDestroyed()&&isWorkbenchOrigin(host.webContents.getURL())){host.webContents.send('workbench:community-state',value);nativeDividerController.setEnabled(communityController.hasVisibleView);nativeDividerController.raise(value.status==='ready');nativeComposerController.setEnabled(communityController.hasVisibleView);nativeComposerController.raise();}},
   onExternalError:()=>dialog.showErrorBox('链接未打开','系统浏览器未能打开这个链接，请稍后重试。')});
@@ -247,6 +247,7 @@ async function workbenchAction(name){
   switch(name){
     case 'fish-settings':await openFishSettings();break;
     case 'screen-share':await openDsh();await screenShare.open();break;
+    case 'open-companion-chat':showInput();break;
     case 'chat-settings':editChatSettings();break;
     case 'open-visits':openVisits();break;
     case 'open-community':throw new Error('请使用工作台社区入口打开内嵌社区');
