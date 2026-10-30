@@ -20,9 +20,10 @@ test('actual dedicated native community IPC authenticates the current workbench 
   const route = between(source, "ipcMain.handle('workbench:community'", "ipcMain.handle('workbench:community-account'");
   assert(route.includes('assertWorkbenchCaller(event)'));
   let screenHides=0;
+  const social = { hasVisibleView:true, action: async (window, request) => { calls.push({ window, request }); return { ok: true }; } };
   vm.runInNewContext(validation + route, { URL, dshWindow: host, dshLaunchUrl: 'http://127.0.0.1:59099/?fixture=1', screenShare: { hide: () => screenHides++ },
     ipcMain: { handle: (name, fn) => handlers.set(name, fn) },
-    communityController: { hasVisibleView:true, action: async (window, request) => { calls.push({ window, request }); return { ok: true }; } },
+    communityController: social,
     nativeDividerController: { setEnabled:value=>dividerCalls.push(['enabled',value]), raise:value=>dividerCalls.push(['raise',value]), place:(window,request)=>{dividerCalls.push(['place',window,request]);return {ok:true};} },
     nativeComposerController: { setEnabled:value=>composerCalls.push(['enabled',value]), raise:()=>composerCalls.push(['raise']), place:(window,request)=>{composerCalls.push(['place',window,request]);return {ok:true};}, update:state=>{composerCalls.push(['update',state]);return {ok:true};} } });
   const handle = handlers.get('workbench:community'); assert.equal(typeof handle, 'function');
@@ -31,10 +32,16 @@ test('actual dedicated native community IPC authenticates the current workbench 
   assert.equal(calls[0].window, host); assert.equal(calls[0].request, request);
   assert.equal(screenHides,1,'opening community pauses the competing screen panel');
   assert.deepEqual(dividerCalls.slice(0,2),[['enabled',true],['raise',true]]);
-  assert.deepEqual(composerCalls.slice(0,2),[['enabled',true],['raise']]);
+  assert.deepEqual(composerCalls,[['raise']], 'opening the site does not change requested composer visibility');
   const composer = handlers.get('workbench:native-composer'), composerRequest = {action:'place',rect:{x:300,y:450,width:400,height:76}};
+  social.hasVisibleView = false; // The default chatroom has no site view.
   assert.equal(composer({sender:contents,senderFrame:contents.mainFrame},composerRequest).ok,true);
-  assert.equal(composerCalls[2][1],host);assert.equal(composerCalls[2][2],composerRequest);
+  assert.equal(composerCalls[1][1],host);assert.equal(composerCalls[1][2],composerRequest);
+  assert.deepEqual(composerCalls.slice(2),[['enabled',true],['raise']], 'the work composer is enabled even without a site view');
+  await handle({sender:contents,senderFrame:contents.mainFrame},{action:'hide'});
+  assert.deepEqual(composerCalls.at(-1),['raise'], 'hiding a site only adjusts stacking');
+  assert.equal(composer({sender:contents,senderFrame:contents.mainFrame},{action:'remove'}).ok,true);
+  assert.deepEqual(composerCalls.slice(-2),[['enabled',false],['raise']], 'explicit removal disables the composer');
   assert.throws(()=>composer({sender:{},senderFrame:contents.mainFrame},composerRequest),/工作台/);
   const divider=handlers.get('workbench:divider'), geometry={action:'place',id:'chat',rect:{x:320,y:0,width:12,height:500}};
   assert.equal(divider({sender:contents,senderFrame:contents.mainFrame},geometry).ok,true);
@@ -48,7 +55,7 @@ test('actual dedicated native community IPC authenticates the current workbench 
   assert.throws(()=>divider({sender:contents,senderFrame:contents.mainFrame},geometry),/工作台/);
   contents.mainFrame.url = 'http://127.0.0.1:59098/';
   await assert.rejects(handle({ sender: contents, senderFrame: contents.mainFrame }, request), /工作台/);
-  assert.equal(calls.length, 1);
+  assert.equal(calls.length, 2);
   const legacy = source.slice(source.indexOf('async function workbenchAction'), source.indexOf('function workbenchOptions'));
   const legacyAction = vm.runInNewContext(`${legacy};workbenchAction`, {});
   await assert.rejects(legacyAction('open-community'), /内嵌社区/);
@@ -80,6 +87,23 @@ test('workbench preload exposes only the named community bridge and removable st
   unsubscribeAccount(); assert.equal(listeners.size, 0);
   assert.throws(() => bridge.subscribeCommunityAccount(null), /callback must be a function/);
   assert.equal('invoke' in bridge, false); assert.equal('openURL' in bridge, false);
+});
+
+test('community status changes never disable a placed work composer', () => {
+  const source = fs.readFileSync(path.join(base, 'main.cjs'), 'utf8');
+  const factory = between(source, 'const communityController=createSocialController(', 'communityAccount=createCommunityAccount(');
+  const contents = {getURL: () => 'http://127.0.0.1:59099/', send: () => {}};
+  const host = {webContents: contents, isDestroyed: () => false}, calls = [], social = {hasVisibleView:true};
+  let options;
+  vm.runInNewContext(factory, {dshWindow:host, isWorkbenchOrigin:() => true, communityAccount:null,
+    createSocialController: value => {options=value;return social;}, WebContentsView: function(){},
+    shell:{openExternal(){}}, clipboard:{writeText(){}}, dialog:{showErrorBox(){}},
+    nativeDividerController:{setEnabled(){},raise(){}},
+    nativeComposerController:{setEnabled:value=>calls.push(['enabled',value]),raise:()=>calls.push(['raise'])}});
+  options.onState(host,{status:'ready'});
+  social.hasVisibleView=false;
+  options.onState(host,{status:'hidden'});
+  assert.deepEqual(calls,[['raise'],['raise']], 'site transitions must not override composer place/remove');
 });
 
 test('desktop identity IPC rejects remote and subframe callers and requires an open community', async () => {

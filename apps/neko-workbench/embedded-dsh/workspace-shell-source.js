@@ -57,7 +57,7 @@ function installWorkspaceShell(options = {}) {
     schedule();
   }
   doc.addEventListener('neko-flex-social-geometry', onFlexSocialGeometry);
-  const roomInert = new Set();
+  const roomInert = new Set(), roomMasked = new Set();
   const roomButton = roomPreview && button('', 'neko-side-rail__button neko-room-entry', () => setRoomActive(true));
   const workButton = roomPreview && button('', 'neko-side-rail__button neko-room-workspace', () => setRoomActive(false));
   if (roomPreview) {
@@ -72,7 +72,16 @@ function installWorkspaceShell(options = {}) {
     railTop.prepend(roomButton, workButton); doc.body.appendChild(roomPreview);
     doc.body.setAttribute('data-neko-chatroom-active', '');
   }
-  function releaseRoomInert() { for (const node of roomInert) if (node.hasAttribute('inert')) node.removeAttribute('inert'); roomInert.clear(); }
+  function unmaskRoomBranch(node) {
+    if (roomInert.delete(node)) node.removeAttribute('inert');
+    if (roomMasked.delete(node)) node.removeAttribute('data-neko-room-masked');
+  }
+  function releaseRoomInert() {
+    for (const node of roomInert) node.removeAttribute('inert');
+    roomInert.clear();
+    for (const node of roomMasked) node.removeAttribute('data-neko-room-masked');
+    roomMasked.clear();
+  }
   function protectRoomFooter(sidebar, account) {
     // Never inert the original main companion/account footer. Mark only the
     // branches that are wholly behind the preview and restore our marks later.
@@ -80,13 +89,14 @@ function installWorkspaceShell(options = {}) {
     // overlay is positioned elsewhere. Exempt only its path while it is open.
     const tools = sidebar.querySelector('nav[data-neko-tools="open"]');
     function visit(node) {
-      if (node === dock || node === account || node.hasAttribute('data-neko-companion-footer')) return;
-      if (tools && node === tools) { if (roomInert.delete(node)) node.removeAttribute('inert'); return; }
+      if (node === dock || node === account || node.hasAttribute('data-neko-companion-footer')) { unmaskRoomBranch(node); return; }
+      if (tools && node === tools) { unmaskRoomBranch(node); return; }
       if (node.contains(dock) || account && node.contains(account) || tools && node.contains(tools)) {
-        if (roomInert.delete(node)) node.removeAttribute('inert');
+        unmaskRoomBranch(node);
         for (const child of node.children) visit(child); return;
       }
       if (!node.hasAttribute('inert')) { node.setAttribute('inert', ''); roomInert.add(node); }
+      if (!node.hasAttribute('data-neko-room-masked')) { node.setAttribute('data-neko-room-masked', ''); roomMasked.add(node); }
     }
     for (const child of sidebar.children) visit(child);
   }
@@ -466,7 +476,9 @@ function installWorkspaceShell(options = {}) {
       const r = dock.getBoundingClientRect();
       visible = r.width > 0 && r.height > 0 && r.right > 0 && r.left < win.innerWidth && r.bottom > 0 && r.top < win.innerHeight;
     }
-    const needsRail = !visible;
+    // Social/video replaces the left content. Keep the same companion in the
+    // rail even when the original sidebar footer is still technically visible.
+    const needsRail = sideSocial || !visible;
     const changed = needsRail !== companionInRail || (needsRail && character.parentNode !== railCompanion);
     if (changed) {
       closeCompanionMenu(false);

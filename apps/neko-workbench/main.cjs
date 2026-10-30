@@ -94,7 +94,7 @@ const nativeDividerController=createNativeDividerController({WebContentsView,ipc
 const nativeComposerController=createNativeComposerController({WebContentsView,ipcMain});
 const communityController=createSocialController({WebContentsView,openExternal:url=>shell.openExternal(url),copyText:text=>clipboard.writeText(text),
   onHide:()=>communityAccount?.cancel(),
-  onState:(host,value)=>{if(host===dshWindow&&!host.isDestroyed()&&isWorkbenchOrigin(host.webContents.getURL())){host.webContents.send('workbench:community-state',value);nativeDividerController.setEnabled(communityController.hasVisibleView);nativeDividerController.raise(value.status==='ready');nativeComposerController.setEnabled(communityController.hasVisibleView);nativeComposerController.raise();}},
+  onState:(host,value)=>{if(host===dshWindow&&!host.isDestroyed()&&isWorkbenchOrigin(host.webContents.getURL())){host.webContents.send('workbench:community-state',value);nativeDividerController.setEnabled(communityController.hasVisibleView);nativeDividerController.raise(value.status==='ready');nativeComposerController.raise();}},
   onExternalError:()=>dialog.showErrorBox('链接未打开','系统浏览器未能打开这个链接，请稍后重试。')});
 communityAccount=createCommunityAccount({getBaseUrl:()=>state.neko.baseUrl,
   getCommunityUrl:()=>process.env.NEKO_WORKBENCH_COMMUNITY_URL,
@@ -782,7 +782,7 @@ ipcMain.handle('workbench:community',async(event,request)=>{
   assertWorkbenchCaller(event);
   if(request?.action==='open')screenShare.hide();
   try{return await communityController.action(dshWindow,request);}
-  finally{nativeDividerController.setEnabled(communityController.hasVisibleView);nativeDividerController.raise(request?.action==='open');nativeComposerController.setEnabled(communityController.hasVisibleView);nativeComposerController.raise();}
+  finally{nativeDividerController.setEnabled(communityController.hasVisibleView);nativeDividerController.raise(request?.action==='open');nativeComposerController.raise();}
 });
 ipcMain.handle('workbench:divider',(event,request)=>{assertWorkbenchCaller(event);return nativeDividerController.place(dshWindow,request);});
 ipcMain.handle('workbench:native-composer',(event,request)=>{
@@ -790,7 +790,10 @@ ipcMain.handle('workbench:native-composer',(event,request)=>{
   if(request?.action==='update')return nativeComposerController.update(request.state);
   if(request?.action==='place'||request?.action==='remove'){
     const result=nativeComposerController.place(dshWindow,request);
-    nativeComposerController.setEnabled(communityController.hasVisibleView);nativeComposerController.raise();return result;
+    // The work composer is also needed over the chatroom or home, where no
+    // community WebContentsView exists. Its own place/remove lifecycle owns
+    // visibility; site view changes only affect stacking order.
+    nativeComposerController.setEnabled(request.action==='place');nativeComposerController.raise();return result;
   }
   throw new Error('未知工作区浮窗操作');
 });

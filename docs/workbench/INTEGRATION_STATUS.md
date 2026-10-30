@@ -4,6 +4,8 @@ The daily artifact is built from this repository. `config/daily-release.json` is
 
 ## Pending source changes
 
+- The native workspace composer stays enabled on the default chatroom even without a visible embedded website; switching video views only changes layering. Hidden native sidebar branches are visually masked while the chatroom is open, with the account, companion and tools preserved. Targeted DOM tests cover restoration and routing; an isolated native window checks the no-video startup. Installed-app interaction remains to be verified.
+
 - Temporarily disable legacy multi-pane layout controls without overwriting saved layout preferences. The ordinary workbench defaults to a lower-right native floating composer with expandable, resizable project/session records; current-session file entry preserves draft synchronization and validates the session before opening DSH files. Isolated component tests cover preserved drafts, lounge safety, video/home integration and narrow-window recovery; real DSH file access and actual network playback remain separate checks.
 
 - The coding surface exposes a shortcut into the current DSH session’s native file tree. The floating workspace saves pending text, expands, checks the selected session again, then requests the native files tab. Unsupported or stale sessions fail closed; local fixture and Electron tests use simulated file services, not the user’s files. DSH native file APIs are internal and a real project directory interaction remains unverified.
@@ -12,7 +14,7 @@ The daily artifact is built from this repository. `config/daily-release.json` is
 
 - Project and session lists show opening, selection, error and partial-search feedback. Search expands matches without losing normal collapsed state; the chooser adjusts to narrow panes. Isolated DOM and Electron layout tests cover synthetic sessions and resizing. Real session transitions and the separate floating project-record view remain to be validated.
 
-- The main companion and its existing chat input follow the left pane width in the chatroom and local home while the project chooser remains on the right. The character stays within the left pane; switching to other surfaces restores the existing sidebar or rail placement. Isolated Electron fixtures cover resizing, two-way dragging, click vs drag, surface changes and draft retention; community and video transitions use simulated events, not live playback or login.
+- The main companion and its existing chat input follow the left pane width in the chatroom and local home while the project chooser remains on the right. On community, Bilibili and YouTube surfaces the companion returns to the narrow left rail even when the ordinary sidebar remains visible; returning restores its previous dock and draft. DOM tests cover these simulated surface transitions; they do not verify live playback or login.
 
 - The shared video slot offers Bilibili desktop and the official YouTube embed player, selected from the rail without replacing the coding draft or local home. Playlist, Shorts, size and navigation checks use isolated fixtures. Electron fixtures check the local home and floating workspace with synthetic Bilibili and YouTube pages; live playback and continuous Shorts navigation are not verified.
 
