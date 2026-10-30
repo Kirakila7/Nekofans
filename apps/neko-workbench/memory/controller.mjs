@@ -143,6 +143,26 @@ export class WorkbenchMemory {
     }catch(error){this.providerStates.neko='暂不可用';this.error='N.E.K.O. 记忆暂不可用，本次聊天继续，记录已保留待重试';this.publish();throw error;}
   }
   async recordTurn(){await this.localSync();void this.sync().catch(()=>{});}
+  /** A short lobby summary the user took part in. Raw lobby text never comes through here.
+   * The origin stays 'user'; the 'lobby:' item prefix and 'lobby-msg:' refs mark the source. */
+  async recordSharedExperience({id,text,occurredAt,evidenceRefs}={}){
+    if(this.closed)throw Error('记忆服务已关闭');
+    if(typeof id!=='string'||!/^[A-Za-z0-9_-]{1,120}$/.test(id))throw Error('大厅经历标识无效');
+    if(typeof text!=='string'||!text.trim()||text.length>2000)throw Error('大厅经历内容无效');
+    const at=typeof occurredAt==='number'?occurredAt:Date.parse(occurredAt);
+    if(!Number.isFinite(at))throw Error('大厅经历时间无效');
+    if(!Array.isArray(evidenceRefs)||!evidenceRefs.length||evidenceRefs.length>256||evidenceRefs.some(ref=>typeof ref!=='string'||!/^lobby-msg:[A-Za-z0-9_-]{1,120}$/.test(ref)))throw Error('大厅经历来源无效');
+    await this.localSync();if(this.closed)throw Error('记忆服务已关闭');
+    const itemId='lobby:'+id,eventId='lobby:'+hash([id,text.trim()]);
+    // One record per segment. A retry after restart may summarize differently;
+    // never fork the item into a conflict or revive a record the user deleted.
+    if(this.hub.snapshot().events.some(e=>e.itemId===itemId))return {itemId,eventId,created:false};
+    const event=this.event(itemId,{kind:'episode',text:text.trim(),visibility:'private',certainty:'inferred',evidenceRefs:[...new Set(evidenceRefs)]},[],'upsert','user',eventId);
+    event.occurredAt=new Date(at).toISOString();
+    await this.hub.add([event]);
+    void this.sync().catch(()=>{});this.publish();
+    return {itemId,eventId,created:true};
+  }
   async connect(){
     try{await this.hub.ready('neko');this.providerStates.neko='已连接';this.error='';}
     catch(error){this.providerStates.neko='待连接或待重试';this.error='N.E.K.O. 记忆尚未就绪，请检查组件与记忆模型设置';this.publish();throw error;}

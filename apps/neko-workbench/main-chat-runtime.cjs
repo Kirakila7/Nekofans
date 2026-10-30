@@ -16,7 +16,7 @@ async function loadSharedModules(repositoryRoot) {
     load('packages/chat-service/src/config.ts'), load('packages/chat-api/src/index.ts'),
     load('packages/conversation-store/src/index.ts'),
   ]);
-  return { ...chat, validateConfig: api.validateConfig, SqliteConversationStore: history.SqliteConversationStore };
+  return { ...chat, validateConfig: api.validateConfig, createChatApiProvider: api.createChatApiProvider, SqliteConversationStore: history.SqliteConversationStore };
 }
 
 function field(value, max) {
@@ -236,6 +236,18 @@ class WorkbenchMainChat {
     await this.memorySystem.localSync();
     if(this.memorySystem.settings.autoSync)void this.memorySystem.sync().catch(()=>{});
     return this.memories();
+  }
+  /** Lobby access to the companion's memory, chat-api backend only. Rechecked on every call,
+   * so a later switch to the local N.E.K.O. backend stops reads and writes at once. */
+  lobbyMemory() {
+    if (this.closed || this.backend !== 'chat-api' || !this.memorySystem) return null;
+    const ready = () => {
+      if (this.closed || this.backend !== 'chat-api' || !this.memorySystem) throw new Error('大厅记忆仅在聊天 API 模式可用');
+      return this.memorySystem;
+    };
+    return Object.freeze({ personaId: PERSONA,
+      recall: async (query, budget, signal) => ready().recall(PERSONA, query, budget, signal),
+      recordSharedExperience: async input => ready().recordSharedExperience(input) });
   }
   close() { this.closed = true; this.cancel(); return this.serial(async () => { await this.memorySystem?.close(); this.closeOpened(); this.listeners.clear(); }); }
 }

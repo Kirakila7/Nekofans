@@ -26,7 +26,7 @@ try{
   }});
   assert.deepEqual([...bridges.keys()].sort(),['nekoRoles','nekoWorkbench']);
   const bridge=bridges.get('nekoWorkbench'),roles=bridges.get('nekoRoles');
-  assert.deepEqual(Object.keys(bridge).sort(),['action','community','communityAccount','companion','fish','fishQq','getAccounts','getState','qqbot','screenShare','setAvatar','subscribe','subscribeCommunity','subscribeCommunityAccount','subscribeOffice','uploadAvatar','workspace']);assert(Object.isFrozen(bridge));
+  assert.deepEqual(Object.keys(bridge).sort(),['action','community','communityAccount','companion','fish','fishQq','getAccounts','getState','lobby','qqbot','screenShare','setAvatar','subscribe','subscribeCommunity','subscribeCommunityAccount','subscribeLobby','subscribeOffice','uploadAvatar','workspace']);assert(Object.isFrozen(bridge));
   assert.deepEqual(Object.keys(roles).sort(),['getState','selectRole','subscribe','updateRole','uploadAvatar']);assert(Object.isFrozen(roles));
 
   bridge.getState();bridge.setAvatar('yui');bridge.uploadAvatar();bridge.action('neko-settings');

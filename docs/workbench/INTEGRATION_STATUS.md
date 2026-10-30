@@ -15,6 +15,24 @@ Claude integration remains a proposal. Real supplier credentials, QQ/Bilibili bi
 
 Screen companion's optional private context uses confirmed legacy Chat API memories and recent Chat API messages; it does not yet recall the native N.E.K.O. memory added in Workbench PR #5.
 
+## Public lobby (频道), pending
+
+The workbench has a 频道 panel for the new N.E.K.O.Chat service (protocol: `N.E.K.O.Chat/docs/protocol.md`). It is uncommitted work on `feat/lobby-chat` and is not in the 0.28.0 daily artifact. Details are in `apps/neko-workbench/IMPLEMENTATION_v0.29.md`.
+
+- Modules: `lobby-config`, `lobby-auth`, `lobby-client`, `lobby-frames`, `lobby-sanitize`, `lobby-avatars`, `lobby-cat`, `lobby-experience`, `lobby-controller` (main process) and `lobby-composer.js` plus `createLobbyView` in the workspace shell (renderer). Wired through `workbench:lobby` IPC with `assertWorkbenchCaller`, and `lobby`/`subscribeLobby` in the preload.
+- Participation: off, assist (她帮你起草, user sends; default) or independent (her own cat messages by mention, owner-or-mention or free trigger). Both AI modes require the Chat API backend. Origin labels: `human`, `human_ai` (人＋AI 共同回复), cat (AI 独立发言).
+- Memory write-back: summaries of lobby segments the user took part in go to the native memory through `recordSharedExperience` (`lobby:` item ids, `lobby-msg:` refs, `inferred`). Independent mode reads no memory; assist reads recall only.
+- Isolation: companion chat keeps working when the lobby is unconfigured, offline, muted, failing to initialize or generating a suggestion.
+
+Verified only with synthetic fixtures: injected fetch, fake WebSocket, a loopback OAuth callback server on port 0, fake model providers, fake clocks and temporary memory directories. The N.E.K.O.Chat backend has its own tests and a two-user smoke script (`scripts/ws_smoke.py`) against fake auth; the workbench has not been run end-to-end against that backend in this step.
+
+Not verified:
+
+- Real OAuth sign-in against auth.project-neko.cn. The public client `neko-chat-desktop-prod` (and `-dev`) is not registered yet, and whether Hydra accepts arbitrary loopback ports is unconfirmed.
+- A production chat server. `NEKO_WORKBENCH_CHAT_URL` has no default, so the panel shows 频道服务未配置 until it is set.
+- Real model behaviour: suggestion quality, independent replies, prompt-injection resistance, and whether summaries keep other people's words attributed. The memory worker's own fact extraction from lobby summaries is also untested.
+- The Electron GUI with this panel; no QA instance was launched for this work.
+
 ## bigfish-pet intake
 
 The GitHub PR list was inspected on 2026-10-28. It contains 14 PRs: 12 merged, 1 open and 1 draft. Issue #2 is not a PR.

@@ -63,7 +63,10 @@
           const value=record.value;if(!value)continue;const edit=node('textarea'),draft=drafts.get(record.itemId);edit.value=draft?.text??value.text;edit.maxLength=30000;edit.setAttribute('aria-label','编辑记忆内容');
           edit.addEventListener('input',()=>drafts.set(record.itemId,{text:edit.value,revisionIds:[...revisionIds]}));
           if(draft){input.revisionIds=draft.revisionIds;if(JSON.stringify(draft.revisionIds)!==JSON.stringify(revisionIds))card.append(node('p','这条记忆已有新修订，你的编辑草稿已保留；请核对后重新编辑。'));}
-          card.append(node('p',(value.certainty==='user-confirmed'?'用户已确认':value.certainty==='inferred'?'模型推断 / 历史摘要':'待确认 / 历史经历')+' · '+(value.visibility==='private'?'私人':'给用户的日记')),edit,node('small','来源：'+(value.evidenceRefs.join('、')||'来源缺失')));
+          const source=record.itemId.startsWith('lobby:')?'大厅共同经历':value.certainty==='user-confirmed'?'用户已确认':value.certainty==='inferred'?'模型推断 / 历史摘要':'待确认 / 历史经历';
+          const lobbyRefs=(value.evidenceRefs||[]).filter(ref=>ref.startsWith('lobby-msg:')).length;
+          const refs=[...(value.evidenceRefs||[]).filter(ref=>!ref.startsWith('lobby-msg:')),...(lobbyRefs?['大厅消息'+(lobbyRefs>1?' ×'+lobbyRefs:'')]:[])].join('、')||'来源缺失';
+          card.append(node('p',source+' · '+(value.visibility==='private'?'私人':'给用户的日记')),edit,node('small','来源：'+refs));
           if(value.certainty!=='user-confirmed')controls.append(actionButton('确认',()=>mutate({...input,action:'event-confirm'})));
           controls.append(actionButton('保存更正',()=>mutate({...input,action:'event-update',text:edit.value})));
         }

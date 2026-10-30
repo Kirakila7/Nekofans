@@ -4,9 +4,10 @@ const {resolveRuntimePaths,prepareRuntimeDirectories,assertDshRuntime,buildDshPa
 const {createDshLifecycle}=require('./dsh-lifecycle.cjs');
 const {createSocialController}=require('./community-config.cjs');
 const {createCommunityAccount}=require('./community-account.cjs');
+const {WorkbenchSecretStore}=require('./main-chat-secret.cjs');
 const {createSubagentMotion,motionOptions}=require('./subagent-motion.cjs');
 const {createScreenShare}=require('./screen-share-controller.cjs');
-const {WorkbenchMainChat,trustedLocalCaller}=require('./main-chat-runtime.cjs');
+const {WorkbenchMainChat,trustedLocalCaller,PERSONA}=require('./main-chat-runtime.cjs');
 const {pathToFileURL}=require('node:url');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -80,6 +81,24 @@ communityAccount=createCommunityAccount({getBaseUrl:()=>state.neko.baseUrl,
   getCommunityUrl:()=>process.env.NEKO_WORKBENCH_COMMUNITY_URL,
   openExternal:url=>shell.openExternal(url),handoff:url=>communityController.handoff(dshWindow,url),
   onState:value=>{if(dshWindow&&!dshWindow.isDestroyed()&&isWorkbenchOrigin(dshWindow.webContents.getURL()))dshWindow.webContents.send('workbench:community-account-state',value);}});
+// Public lobby (频道). Optional and contained: a missing module, bad config or any lobby failure leaves a
+// no-op controller, so workbench:companion and the private chat never depend on it.
+const lobbyOffline=Object.freeze({request:async()=>({ok:false,error:'频道暂不可用',state:null}),snapshot:()=>null,refresh(){},processPending(){},dispose(){}});
+function createLobby(){
+  try{
+    const {createLobbyController}=require('./lobby-controller.cjs'),{providerGetter,readWorkbenchPersona}=require('./lobby-cat.cjs');
+    const chatApi=()=>mainChatRuntime?.backend==='chat-api'&&!mainChatRuntime.closed?mainChatRuntime:null;
+    return createLobbyController({env:process.env,dataDir:path.join(data,'lobby'),
+      secretStore:new WorkbenchSecretStore(path.join(data,'lobby','secrets','refresh-token.encrypted'),safeStorage),
+      openExternal:url=>shell.openExternal(url),
+      getChatProvider:()=>{const runtime=chatApi(),create=runtime?.shared?.createChatApiProvider;return create?providerGetter({runtime,createChatApiProvider:create})():null;},
+      getPersona:id=>{const runtime=chatApi();return runtime&&id===PERSONA?readWorkbenchPersona(path.join(runtime.personasDir,PERSONA+'.json')):null;},
+      recallMemory:async(query,budget,signal)=>{const memory=chatApi()?.lobbyMemory();return memory?memory.recall(query,budget,signal):[];},
+      recordSharedExperience:async entry=>{const memory=chatApi()?.lobbyMemory();if(!memory)throw new Error('大厅记忆仅在聊天 API 模式可用');return memory.recordSharedExperience(entry);},
+      onState:value=>{if(dshWindow&&!dshWindow.isDestroyed()&&isWorkbenchOrigin(dshWindow.webContents.getURL()))dshWindow.webContents.send('workbench:lobby-state',value);}});
+  }catch{return lobbyOffline;}
+}
+const lobbyController=createLobby();
 const pending=new Map(), petWindows=new Map(),renameWindows=new Map();
 const draggingPets=new Set(),petGeometry=new Map();
 const motionInputs=new Set();
@@ -141,6 +160,8 @@ async function channelAction(name,action){
   if(!['status','start','pause'].includes(action))throw Error('未知渠道操作');
   if(action==='pause')channelIntents[name]++;
   if(state.connection!=='ready')throw Error('工作台尚未连接，请稍后重试。');
+  // A start/pause supersedes any status read still in flight, so a late older reply cannot overwrite it.
+  if(action!=='status')channelRevisions[name]++;
   const revision=channelRevisions[name];
   const value=await rpc(name==='fish'?'fish-care':'qqbot-care',{action});
   if(action==='status')return revision===channelRevisions[name]?projectChannelState(name,value):{...state[name]};
@@ -235,7 +256,8 @@ async function refreshApiHistory(){
 }
 async function startMainChat(){
   mainChatRuntime=new WorkbenchMainChat({dataDir:data,repositoryRoot:path.resolve(base,'../..'),safeStorage,initialBackend:state.neko.enabled?'neko':'chat-api'});
-  await mainChatRuntime.start();mainChatRuntime.subscribe(applyMainChat);await refreshApiHistory();
+  await mainChatRuntime.start();mainChatRuntime.subscribe(value=>{applyMainChat(value);lobbyController.refresh();});await refreshApiHistory();
+  lobbyController.processPending();
 }
 function mainChatFailure(){state.mainChat={ready:false,backend:'chat-api',error:'聊天服务未能装配，请检查 Electron 的 Node 24 与 SQLite 支持',voiceStatus:'未接入'};state.actors[0].chatBackend='chat-api';notice(state.actors[0],state.mainChat.error);update();}
 function startApiPrompt(text){
@@ -673,6 +695,11 @@ function createWindows(){
 }
 ipcMain.handle('screen-share:call',(event,method,value)=>screenShare.action(event,method,value));
 ipcMain.handle('workbench:screen-share',async(event,method)=>{assertWorkbenchCaller(event);if(method==='hide'){screenShare.hide();return {ok:true};}throw new Error('未知屏幕操作');});
+ipcMain.handle('workbench:lobby',async(event,request)=>{
+  assertWorkbenchCaller(event);
+  if(request?.action==='open'){screenShare.hide();await communityController.action(dshWindow,{action:'hide'});}
+  return lobbyController.request(request);
+});
 ipcMain.handle('workbench:community',async(event,request)=>{
   assertWorkbenchCaller(event);
   if(request?.action==='open')screenShare.hide();
@@ -826,7 +853,7 @@ app.on('before-quit',event=>{
   if(shutdownComplete)return;
   event.preventDefault();
   if(shutdownStarted)return;
-  shutdownStarted=true;quitting=true;communityController.dispose();communityAccount.cancel();screenShare.dispose();catMotion.dispose();clearTimeout(nekoRetry);clearTimeout(rosterTimer);for(const timer of terminalTimers.values())clearTimeout(timer);terminalTimers.clear();nekoChat.close();save();
+  shutdownStarted=true;quitting=true;communityController.dispose();communityAccount.cancel();lobbyController.dispose();screenShare.dispose();catMotion.dispose();clearTimeout(nekoRetry);clearTimeout(rosterTimer);for(const timer of terminalTimers.values())clearTimeout(timer);terminalTimers.clear();nekoChat.close();save();
   const current=childLifecycle;
   Promise.allSettled([mainChatRuntime?.close(),current?.stop(),codexAccount.dispose(),codexWorkspace.dispose()]).finally(()=>{shutdownComplete=true;app.quit();});
 });
