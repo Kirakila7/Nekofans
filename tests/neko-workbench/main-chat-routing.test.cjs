@@ -9,11 +9,20 @@ test('chat-api routing survives repeated migration without moving its history to
   migrateChatRouting(state);migrateChatRouting(state);assert.equal(state.actors[0].chatBackend,'chat-api');assert.equal(state.actors[0].messages[0].text,'自己的对话');assert.equal(state.dshRoot.sessionId,'dsh-root');assert.equal(actorBySession(state,'dsh-root'),state.dshRoot);assert.notEqual(state.dshRoot,state.actors[0]);
 });
 
+test('account companion survives restart migration without replacing DSH root',()=>{
+  const main={id:'main',chatBackend:'deepseek-account',messages:[{role:'user',text:'自己的对话'}]};
+  const state={rootId:'dsh-root',neko:{enabled:false},dshRoot:{sessionId:'dsh-root'},actors:[main]};
+  migrateChatRouting(state);migrateChatRouting(state);
+  assert.equal(state.actors[0],main);assert.equal(main.chatBackend,'deepseek-account');
+  assert.equal(main.messages[0].text,'自己的对话');assert.equal(state.dshRoot.sessionId,'dsh-root');
+  assert.equal(actorBySession(state,'dsh-root'),state.dshRoot);
+});
+
 test('local IPC accepts only exact known main-frame file pages, and preload rejects unlisted methods',async()=>{
   const frame={url:'file:///fixture/index.html?view=chat-settings'},contents={mainFrame:frame,getURL:()=>frame.url},window={webContents:contents,isDestroyed:()=>false},event={sender:contents,senderFrame:frame};
   assert(trustedLocalCaller(event,window,frame.url));assert(!trustedLocalCaller({...event,senderFrame:{url:frame.url}},window,frame.url));assert(!trustedLocalCaller(event,window,'file:///fixture/index.html?view=memory'));assert(!trustedLocalCaller({...event,sender:{}},window,frame.url));
   let bridge;const calls=[];vm.runInNewContext(fs.readFileSync(path.resolve(__dirname,'../../apps/neko-workbench/preload.cjs'),'utf8'),{require:name=>{assert.equal(name,'electron');return{contextBridge:{exposeInMainWorld:(_name,value)=>bridge=value},ipcRenderer:{invoke:(...args)=>{calls.push(args);return Promise.resolve();},on(){},removeListener(){}}};}});
-  await bridge.call('chat-settings-read');await assert.rejects(bridge.call('read-file',{path:'private'}));assert.equal(calls.length,1);assert(Object.isFrozen(bridge));
+  await bridge.call('chat-settings-read');await bridge.call('chat-use-deepseek-account');await assert.rejects(bridge.call('read-file',{path:'private'}));assert.equal(calls.length,2);assert(Object.isFrozen(bridge));
 });
 
 test('switching backend during character fetch aborts the request and cannot start a late native socket',async()=>{

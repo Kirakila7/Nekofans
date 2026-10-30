@@ -11,9 +11,10 @@ const {createTaskSessionTracker}=require('./task-session-tracker.cjs');
 const {readDshWorkspaceCatalog}=require('./dsh-workspace-catalog.cjs');
 const {accountRoute}=require('./account-route.cjs');
 const {createChannelSessionPrivacy}=require('./channel-session-privacy.cjs');
+const {createCompanionAccountBridge}=require('./companion-account-bridge.cjs');
 const runtimePaths=resolveRuntimePaths();
 const runtime=runtimePaths.modulesDir;
-let createUserMessage,carrierKeyOf;
+let createUserMessage,createAssistantMessage,carrierKeyOf;
 exports.name='pet-lab-bridge';
 exports.inject=['agents','subagents','sessionQuery','sessionController','agentPresets','webApp','connection','llm','workingDirectory'];
 exports.apply=function(ctx){
@@ -24,6 +25,7 @@ exports.apply=function(ctx){
   const syncingParents=new Map();let lastRoster='';
   const options=accountRoute();
   const channelPrivacy=createChannelSessionPrivacy(runtimePaths.dataDir,{fishWorkspace:path.join(runtimePaths.workspaceDir,'fish-care')});
+  const companionAccount=createCompanionAccountBridge({ctx,route:options,createUserMessage: input=>{if(typeof createUserMessage!=='function')throw Error('DSH 尚未就绪');return createUserMessage(input);},createAssistantMessage: input=>{if(typeof createAssistantMessage!=='function')throw Error('DSH 尚未就绪');return createAssistantMessage(input);}});
   const emit=(method,params)=>process.stdout.write(JSON.stringify({method,params})+'\n');
   const qqbotState=value=>emit('qqbot-care-state',value);
   process.on('neko-qqbot-state',qqbotState);
@@ -179,7 +181,7 @@ exports.apply=function(ctx){
   async function dispatch(method,p){
     if(method==='init'){
       await ctx.get('loader')?.await();
-      ({createUserMessage}=await import(require('node:url').pathToFileURL(runtime+'/dsh-llm/lib/index.js').href));
+      ({createUserMessage,createAssistantMessage}=await import(require('node:url').pathToFileURL(runtime+'/dsh-llm/lib/index.js').href));
       ({carrierKeyOf}=await import(require('node:url').pathToFileURL(runtime+'/dsh-scope/lib/index.js').href));
       const sessionId=p.rootId||randomUUID();
       const setup=async agentCtx=>{await ctx.agentPresets.mount(agentCtx,'standard');};
@@ -191,6 +193,9 @@ exports.apply=function(ctx){
       return {sessionId:root.agent.id,provider:options.provider,model:options.model,uiUrl:ctx.connection.authenticatedUrl(ctx.webApp.getAdvertisedUrl())};
     }
     if(!root)throw new Error('DSH 尚未就绪');
+    if(method==='companion-account-status')return companionAccount.status();
+    if(method==='companion-account-chat')return companionAccount.send({requestId:p.requestId,text:p.text,context:p.context,history:p.history,maxTokens:p.maxTokens});
+    if(method==='companion-account-cancel')return companionAccount.cancel({requestId:p.requestId});
     if(method==='workspace-catalog')return readDshWorkspaceCatalog(ctx,p);
     if(method==='fish-care'){
       if(!['status','start','pause'].includes(p.action))throw new Error('未知养鱼操作');
@@ -232,6 +237,6 @@ exports.apply=function(ctx){
   const lines=readline.createInterface({input:process.stdin});
   lines.on('line',async line=>{let request;try{request=JSON.parse(line);const result=await dispatch(request.method,request.params||{});process.stdout.write(JSON.stringify({id:request.id,result})+'\n');}catch(error){process.stdout.write(JSON.stringify({id:request?.id,error:String(error?.message||error)})+'\n');}});
   lines.on('close',()=>{if(closing)return;closing=true;Promise.resolve().then(()=>typeof ctx.root?.dispose==='function'?ctx.root.dispose():ctx.dispose?.()).finally(()=>process.exit(0));});
-  ctx.on('dispose',()=>{closing=true;process.removeListener('neko-qqbot-state',qqbotState);taskSessions.dispose();lines.close();});
+  ctx.on('dispose',()=>{closing=true;companionAccount.dispose();process.removeListener('neko-qqbot-state',qqbotState);taskSessions.dispose();lines.close();});
   emit('ready',{version:2});
 };
