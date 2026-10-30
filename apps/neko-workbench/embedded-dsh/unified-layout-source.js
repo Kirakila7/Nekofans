@@ -463,7 +463,15 @@ function installUnifiedLayout(options = {}) {
   // Moving the existing documents changes bounds, not their data or sessions.
   const flexDivider = el('div', 'neko-unified-divider neko-flex-divider');
   flexDivider.hidden = true; flexDivider.tabIndex = 0; flexDivider.setAttribute('role','separator'); doc.body.appendChild(flexDivider);
-  let flexRects = null, flexNativeKeys = {}, flexDrag = null, flexMoving = null, flexActive = 'social', flexFooterHeight = 0, flexRestoringRoom = false;
+  let flexRects = null, flexNativeKeys = {}, flexDrag = null, flexMoving = null, flexActive = 'social', flexFooterHeight = 0, flexRestoringRoom = false, flexCompact = false;
+  function clearFlexCompact() {
+    if (!flexCompact && !doc.body.hasAttribute('data-neko-flex-workspace-collapsed')) return;
+    flexCompact = false;
+    doc.body.removeAttribute('data-neko-flex-workspace-collapsed');
+    for (const key of ['--neko-flex-compact-right','--neko-flex-compact-width','--neko-flex-compact-bottom']) doc.body.style.removeProperty(key);
+  }
+  function expandFlexWorkspace() { if (!flexCompact) return; clearFlexCompact(); schedule(); }
+  doc.addEventListener('neko-workspace-expand', expandFlexWorkspace);
   const flexTabs=el('nav','neko-flex-tabs'); flexTabs.hidden=true; flexTabs.setAttribute('aria-label','窗口较小时切换区域');
   const flexTabButtons={};
   for (const [name,label] of [['social','聊天室'],['bilibili','B站'],['coding','工作区']]) { const b=button(label,'',()=>{flexActive=name;schedule();}); b.setAttribute('aria-label','显示'+label); flexTabButtons[name]=b; flexTabs.appendChild(b); }
@@ -499,6 +507,7 @@ function installUnifiedLayout(options = {}) {
     if (key !== flexNativeKeys[id] && typeof bridge.divider === 'function') { flexNativeKeys[id]=key; void Promise.resolve(bridge.divider(request)).catch(()=>{}); }
   }
   function clearFlex() {
+    clearFlexCompact();
     if (!flexRects && !Object.keys(flexNativeKeys).length && flexTabs.hidden && !doc.body.hasAttribute('data-neko-flex-social-hidden')) return;
     flexRects=null; flexDrag=null; flexMoving=null; flexDivider.hidden=true; flexTabs.hidden=true; doc.body.removeAttribute('data-neko-flex-social-hidden'); for (const n of [...Object.values(flexHandles),...Object.values(flexDrops)]) n.hidden=true;
     doc.dispatchEvent(new win.CustomEvent('neko-flex-social-geometry', {detail:null}));
@@ -521,6 +530,9 @@ function installUnifiedLayout(options = {}) {
     const full={x:frameRect.left,y:frameRect.top,width:frameRect.width,height:frameRect.height};
     if (full.width<=0 || full.height<=0) { clearFlex(); return; }
     const flex=layout.flex;
+    // Compact mode is meaningful only for the right-hand B站/workspace pair.
+    // Leaving this arrangement restores the original panes and their state.
+    if (flexCompact && !(flex.slots[0] === 'social' && flex.slots[1] === 'bilibili' && flex.slots[2] === 'coding')) clearFlexCompact();
     const measuredFooter=doc.querySelector('[data-neko-companion-footer]')?.getBoundingClientRect().height || 0;
     if (measuredFooter > 0) flexFooterHeight = measuredFooter;
     const footerHeight=flexFooterHeight;
@@ -529,6 +541,7 @@ function installUnifiedLayout(options = {}) {
     const combine=(a,b,axis)=>axis==='x'?{width:a.width+b.width,height:Math.max(a.height,b.height)}:{width:Math.max(a.width,b.width),height:a.height+b.height};
     const stackMin=combine(secondMin,thirdMin,flex.stackAxis), totalMin=combine(firstMin,stackMin,flex.rootAxis);
     if (full.width < totalMin.width || full.height < totalMin.height) {
+      clearFlexCompact();
       // No positive split can keep all regions usable. Present one full-sized
       // region with explicit tabs; keep the saved arrangement and ratios intact.
       flexRects=null; divider.hidden=flexDivider.hidden=true; mobile.hidden=true; flexTabs.hidden=false;
@@ -556,8 +569,18 @@ function installUnifiedLayout(options = {}) {
     const stackSize=flex.stackAxis==='x'?stack.width:stack.height, stackDim=flex.stackAxis==='x'?'width':'height';
     const stackRatio=bounded(flex.stackRatio,stackSize,secondMin[stackDim],thirdMin[stackDim]);
     const [second, third]=splitFlex(stack, flex.stackAxis, stackRatio);
-    const rects=[first,second,third], byName=Object.fromEntries(flex.slots.map((name,i)=>[name,rects[i]])); flexRects={full,stack,byName};
-    for (const [name,node] of Object.entries(flexHandles)) { const r=byName[name]; node.hidden=false; Object.assign(node.style,{left:Math.round(r.x+r.width-30)+'px',top:Math.round(r.y+5)+'px'}); }
+    const rects=[first,second,third], byName=Object.fromEntries(flex.slots.map((name,i)=>[name,rects[i]]));
+    if (flexCompact) {
+      // Keep the original DSH document mounted. The companion shell turns its
+      // actual composer into a compact row and uses these viewport coordinates.
+      const geometry = { '--neko-flex-compact-right': `${Math.max(0, Math.round(win.innerWidth - (stack.x + stack.width) + 16))}px`, '--neko-flex-compact-width': `${Math.max(0, Math.min(480, Math.floor(stack.width - 32)))}px`, '--neko-flex-compact-bottom': `${Math.max(0, Math.round(win.innerHeight - (stack.y + stack.height) + 16))}px` };
+      for (const [key,value] of Object.entries(geometry)) if (doc.body.style.getPropertyValue(key) !== value) doc.body.style.setProperty(key,value);
+      // The trusted native composer is layered above the video WebContentsView;
+      // keep the video at the complete stack size instead of reserving a strip.
+      byName.bilibili={...stack};
+    }
+    flexRects={full,stack,byName};
+    for (const [name,node] of Object.entries(flexHandles)) { const r=byName[name]; node.hidden=flexCompact && name==='coding'; Object.assign(node.style,{left:Math.round(r.x+r.width-30)+'px',top:Math.round(r.y+5)+'px'}); }
     mobile.hidden=true;
     if (!sideSurface && !doc.body.hasAttribute('data-neko-chatroom-active')) activateFlexRoom();
     const social=byName.social; doc.dispatchEvent(new win.CustomEvent('neko-flex-social-geometry', {detail:social}));
@@ -567,7 +590,9 @@ function installUnifiedLayout(options = {}) {
     if (sideSurface === 'community') placePanel('side',social,'community');
     else { panels.side.node.hidden=true; closeView('side'); }
     placePanel('left',byName.bilibili,'bilibili');
-    flexHandle('unified',divider,full,flex.rootAxis,rootRatio); flexHandle('stack',flexDivider,stack,flex.stackAxis,stackRatio);
+    flexHandle('unified',divider,full,flex.rootAxis,rootRatio);
+    if (!flexCompact) flexHandle('stack',flexDivider,stack,flex.stackAxis,stackRatio);
+    else { flexDivider.hidden=true; if (flexNativeKeys.stack && typeof bridge.divider === 'function') void Promise.resolve(bridge.divider({action:'remove',id:'stack'})).catch(()=>{}); delete flexNativeKeys.stack; }
   }
   function flexEvent(event) {
     if (!layout.enabled || !layout.flex?.enabled || !flexRects || !['unified','stack'].includes(event?.id)) return;
@@ -577,10 +602,15 @@ function installUnifiedLayout(options = {}) {
     else if (event.type==='move' && flexDrag?.id===event.id && Number.isFinite(point)) { layout.flex={...layout.flex,[ratioKey]:flexClamp((point-flexDrag.origin)/flexDrag.size)}; schedule(); }
     else if (['end','cancel'].includes(event.type) && flexDrag?.id===event.id) {
       const old=flexDrag.started, value=event.type==='cancel'||event.click ? old : Number.isFinite(point)?flexClamp((point-flexDrag.origin)/flexDrag.size):layout.flex[ratioKey];
-      flexDrag=null; layout.flex={...layout.flex,[ratioKey]:value}; if (Math.abs(value-old)>=.01) void update(layout); else schedule();
+      const compact = event.type === 'end' && !event.click && event.id === 'stack' && layout.flex.slots[0] === 'social' && layout.flex.slots[1] === 'bilibili' && layout.flex.slots[2] === 'coding' && Number.isFinite(point) && point >= flexDrag.origin + flexDrag.size - 24;
+      if (event.type === 'end' && event.click) (event.id === 'unified' ? divider : flexDivider).focus();
+      flexDrag=null; layout.flex={...layout.flex,[ratioKey]:compact ? old : value};
+      if (compact) { flexCompact=true; doc.body.setAttribute('data-neko-flex-workspace-collapsed',''); schedule(); }
+      else if (Math.abs(value-old)>=.01) void update(layout); else schedule();
     } else if (event.type==='reset') { layout.flex={...layout.flex,[ratioKey]:.5}; void update(layout); }
     else if (event.type==='key') {
       const prev=axis==='x'?'ArrowLeft':'ArrowUp', next=axis==='x'?'ArrowRight':'ArrowDown';
+      if (event.key==='End' && event.id==='stack' && layout.flex.slots[0]==='social' && layout.flex.slots[1]==='bilibili' && layout.flex.slots[2]==='coding') { flexCompact=true; doc.body.setAttribute('data-neko-flex-workspace-collapsed',''); schedule(); return; }
       if ([prev,next,'Home','End'].includes(event.key)) { const step=event.shift?.05:.01, value=event.key==='Home'?.15:event.key==='End'?.85:flexClamp(layout.flex[ratioKey]+(event.key===prev?-step:step)); layout.flex={...layout.flex,[ratioKey]:value}; void update(layout); }
     }
   }
@@ -813,6 +843,7 @@ function installUnifiedLayout(options = {}) {
     closeSideSurface();
     disposed = true; revision++; hideAll(); clearCoding(); postNativeDivider(null); if (typeof unsubscribeNativeDivider === 'function') unsubscribeNativeDivider(); doc.body.removeAttribute('data-neko-unified-enabled');
     observer.disconnect(); overlayObserver.disconnect(); resize?.disconnect(); win.removeEventListener('resize', schedule); doc.removeEventListener('scroll', schedule, true); doc.removeEventListener('click', shortcut, true); doc.removeEventListener('neko-unified-open-community', visitCommunity); doc.removeEventListener('neko-collapsed-composer-geometry', schedule); doc.removeEventListener('keydown', escapeConfig);
+    doc.removeEventListener('neko-workspace-expand', expandFlexWorkspace);
     doc.removeEventListener('neko-chatroom-mode-change', roomModeChanged);
     doc.removeEventListener('neko-unified-open-config', openConfigFromSettings);
     clearFlex(); flexDivider.remove(); flexTabs.remove(); for (const node of [...Object.values(flexHandles),...Object.values(flexDrops)]) node.remove(); if (typeof unsubscribeFlex === 'function') unsubscribeFlex();

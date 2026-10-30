@@ -1,0 +1,90 @@
+'use strict';
+const path = require('node:path');
+
+// A trusted, isolated child view can be layered above site WebContentsViews.
+// This controller never sends a task: the host must bind each event to a real
+// DSH session and validate it before acting.
+function createNativeComposerController({ WebContentsView, ipcMain, baseDir = __dirname }) {
+  let host = null, view = null, rect = null, enabled = false, attached = false, ready = false, pendingSubmit = null, pendingEdit = null;
+  let state = { value: '', placeholder: '工作区未连接', enabled: false, busy: false, sessionToken: '', revision: 0 };
+  const listeners = [];
+  function unlisten() { for (const [obj, event, fn] of listeners.splice(0)) obj.removeListener(event, fn); }
+  function detach() { if (attached && host && !host.isDestroyed()) host.contentView.removeChildView(view); attached = false; }
+  function close() {
+    detach();
+    if (view && !view.webContents.isDestroyed()) view.webContents.close({ waitForBeforeUnload: false });
+    view = null; ready = false; rect = null; enabled = false; pendingSubmit = null; pendingEdit = null; state = { value: '', placeholder: '工作区未连接', enabled: false, busy: false, sessionToken: '', revision: 0 };
+    unlisten(); host = null;
+  }
+  function bind(window) {
+    if (host === window) return;
+    close(); host = window;
+    const on = (obj, event, fn) => { obj.on(event, fn); listeners.push([obj, event, fn]); };
+    on(window, 'hide', detach); on(window, 'minimize', detach); on(window, 'show', refresh); on(window, 'restore', refresh);
+    on(window, 'resize', () => { bounds(); }); on(window, 'closed', close);
+    on(window.webContents, 'will-navigate', close); on(window.webContents, 'destroyed', close); on(window.webContents, 'render-process-gone', close);
+  }
+  function bounds() {
+    if (!host || !rect || !view || host.isDestroyed()) return;
+    const zoom = host.webContents.getZoomFactor() || 1, [width, height] = host.getContentSize();
+    const x = Math.max(0, Math.min(width, Math.round(rect.x * zoom))), y = Math.max(0, Math.min(height, Math.round(rect.y * zoom)));
+    const right = Math.max(x, Math.min(width, Math.round((rect.x + rect.width) * zoom))), bottom = Math.max(y, Math.min(height, Math.round((rect.y + rect.height) * zoom)));
+    if (right <= x || bottom <= y) { detach(); return; }
+    view.setBounds({ x, y, width: right - x, height: bottom - y });
+  }
+  function publish() { if (ready && view && !view.webContents.isDestroyed()) view.webContents.send('neko-composer-state', state); }
+  function unavailable(child) {
+    if (view !== child) return;
+    detach(); view = null; ready = false;
+    if (rect && host && !host.isDestroyed() && !host.webContents.isDestroyed()) host.webContents.send('workbench:native-composer-event', { type: 'unavailable' });
+    if (!child.webContents.isDestroyed()) child.webContents.close({ waitForBeforeUnload: false });
+  }
+  function refresh() {
+    if (!host || host.isDestroyed() || !view || !ready || !enabled || !rect || host.isVisible?.() === false || host.isMinimized?.() === true) { detach(); return; }
+    if (!attached) { host.contentView.addChildView(view); attached = true; }
+    bounds(); publish();
+  }
+  function make() {
+    const child = new WebContentsView({ webPreferences: { preload: path.join(baseDir, 'native-composer-preload.cjs'), partition: 'persist:neko-workspace-composer', sandbox: true, contextIsolation: true, nodeIntegration: false } });
+    child.setBackgroundColor('#00000000'); view = child; ready = false;
+    child.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    child.webContents.on('will-navigate', event => event.preventDefault());
+    child.webContents.on('render-process-gone', () => unavailable(child));
+    void child.webContents.loadFile(path.join(baseDir, 'native-composer.html')).then(() => { if (view !== child) return; ready = true; refresh(); }).catch(() => unavailable(child));
+  }
+  function place(window, request) {
+    if (!request || !['place', 'remove'].includes(request.action)) throw Error('无效悬浮输入操作');
+    bind(window);
+    if (request.action === 'remove') { rect = null; detach(); return { ok: true }; }
+    const r = request.rect;
+    if (!r || Object.keys(r).sort().join(',') !== 'height,width,x,y' || !Object.values(r).every(n => Number.isFinite(n) && Math.abs(n) < 100000) || r.width < 100 || r.width > 1200 || r.height < 32 || r.height > 500) throw Error('无效悬浮输入位置');
+    rect = { ...r }; if (!view) make(); refresh(); return { ok: true };
+  }
+  function update(snapshot) {
+    if (!snapshot || typeof snapshot.value !== 'string' || snapshot.value.length > 30000 || typeof snapshot.sessionToken !== 'string' || snapshot.sessionToken.length > 512 || !Number.isSafeInteger(snapshot.revision) || snapshot.revision < 0) throw Error('无效工作会话状态');
+    if (snapshot.sessionToken !== state.sessionToken) { pendingSubmit = null; pendingEdit = null; }
+    if (pendingSubmit !== null && snapshot.settledSubmitId === pendingSubmit) pendingSubmit = null;
+    if (pendingEdit !== null && snapshot.settledEditId === pendingEdit) pendingEdit = null;
+    state = { value: snapshot.value, settledEditId: Number.isSafeInteger(snapshot.settledEditId) ? snapshot.settledEditId : null, editConflict: snapshot.editConflict === true, status: typeof snapshot.status === 'string' ? snapshot.status.slice(0, 160) : '', settledSubmitId: Number.isSafeInteger(snapshot.settledSubmitId) ? snapshot.settledSubmitId : null, placeholder: typeof snapshot.placeholder === 'string' ? snapshot.placeholder.slice(0, 120) : '发消息或创建任务…', enabled: snapshot.enabled === true, busy: snapshot.busy === true, sessionToken: snapshot.sessionToken, revision: snapshot.revision };
+    publish(); return { ok: true };
+  }
+  function input(event, message) {
+    if (!host || host.isDestroyed() || !view || !ready || !attached || !enabled || event.sender !== view.webContents || event.senderFrame !== view.webContents.mainFrame || !message || !['edit', 'submit', 'expand'].includes(message.type)) return;
+    if (message.type !== 'expand') {
+      const invalid = !state.enabled || !state.sessionToken || message.sessionToken !== state.sessionToken || message.revision !== state.revision || typeof message.value !== 'string' || message.value.length > 30000 || (message.type === 'edit' && (pendingEdit !== null || !Number.isSafeInteger(message.editId) || message.editId <= 0)) || (message.type === 'submit' && (state.busy || pendingSubmit !== null || !Number.isSafeInteger(message.submissionId) || message.submissionId <= 0 || !message.value.trim()));
+      if (invalid) {
+        // Never strand the user's draft when a session/revision changes before
+        // a send reaches us. An in-flight send cannot be acknowledged here.
+        if (message.type === 'edit' && pendingEdit === null && Number.isSafeInteger(message.editId) && message.editId > 0) view.webContents.send('neko-composer-state', { ...state, settledEditId: message.editId, editConflict: true, status: '原工作区草稿已变化，请展开工作区处理' });
+        if (message.type === 'submit' && pendingSubmit === null && Number.isSafeInteger(message.submissionId) && message.submissionId > 0) view.webContents.send('neko-composer-state', { ...state, settledSubmitId: message.submissionId, status: '工作会话已变化，请检查后重试' });
+        return;
+      }
+    }
+    if (message.type === 'submit') pendingSubmit = message.submissionId;
+    if (message.type === 'edit') pendingEdit = message.editId;
+    if (!host.webContents.isDestroyed()) host.webContents.send('workbench:native-composer-event', message.type === 'expand' ? { type: 'expand' } : { type: message.type, value: message.value, sessionToken: state.sessionToken, revision: state.revision, ...(message.type === 'submit' ? {submissionId:message.submissionId} : {editId:message.editId}) });
+  }
+  ipcMain.on('neko-composer-input', input);
+  return Object.freeze({ bind, place, update, setEnabled(value) { enabled = value === true; refresh(); }, raise() { if (attached) { detach(); refresh(); } }, dispose() { close(); ipcMain.removeListener('neko-composer-input', input); } });
+}
+module.exports = { createNativeComposerController };

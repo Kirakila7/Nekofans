@@ -5,14 +5,14 @@
 const DEFAULT_COMMUNITY_URL = 'https://community.project-neko.cn/feed';
 const OFFICIAL_AUTH_ORIGIN = 'https://auth.project-neko.cn';
 const COMMUNITY_PARTITION = 'persist:neko-community';
-const BILIBILI_URL = 'https://m.bilibili.com/';
-const BILIBILI_HOME_URL = 'https://www.bilibili.com/';
+const BILIBILI_URL = 'https://www.bilibili.com/';
+const BILIBILI_HOME_URL = BILIBILI_URL;
 const BILIBILI_PLAYER_ORIGIN = 'https://player.bilibili.com';
 const BILIBILI_PARTITION = 'persist:neko-bilibili';
-// The mobile site otherwise redirects desktop user agents to the desktop site.
-const BILIBILI_MOBILE_USER_AGENT = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36';
+// Fallback only if Electron cannot provide a parsable Chromium desktop UA.
+const BILIBILI_DESKTOP_USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
 // Retain Chromium's platform and version while removing Electron/app product
-// tokens; derive this before replacing the view's UA with the mobile one.
+// tokens. The same desktop identity is used throughout Bilibili navigation.
 function bilibiliDesktopUserAgent(value) {
   const parts = typeof value === 'string' && value.match(/^(Mozilla\/5\.0\s+\([^)]+\)\s+AppleWebKit\/[^\s]+\s+\(KHTML, like Gecko\)).*?\b(Chrome\/[0-9.]+).*?\b(Safari\/[0-9.]+)/);
   return parts ? `${parts[1]} ${parts[2]} ${parts[3]}` : null;
@@ -277,15 +277,13 @@ function createCommunityController({ WebContentsView, openExternal, copyText, en
       attached: false, popups: new Set(), responseCode: 0 };
     current = record;
     const contents = record.webContents;
-    record.desktopUserAgent = isBilibili ? bilibiliDesktopUserAgent(contents.getUserAgent?.()) : null;
-    function setBilibiliAgent(url) {
+    record.desktopUserAgent = isBilibili ? (bilibiliDesktopUserAgent(contents.getUserAgent?.()) || BILIBILI_DESKTOP_USER_AGENT) : null;
+    function setBilibiliAgent() {
       if (!isBilibili) return;
-      const player = bilibiliOfficialPlayerIdentity(parseWebUrl(url));
-      const homepage = url === BILIBILI_HOME_URL;
-      contents.setUserAgent((player || homepage) && record.desktopUserAgent ? record.desktopUserAgent : BILIBILI_MOBILE_USER_AGENT);
+      contents.setUserAgent(record.desktopUserAgent);
     }
     record.setBilibiliAgent = setBilibiliAgent;
-    if (isBilibili) contents.setUserAgent(BILIBILI_MOBILE_USER_AGENT);
+    if (isBilibili) setBilibiliAgent();
     record.cleanupNavigation = installCommunityNavigation(view, { communityUrl, parent: host, openExternal, onExternalError,
       classify: url => classify(url, communityUrl), allowAuthPopup: !isBilibili,
       onInternalNavigate: setBilibiliAgent,
@@ -387,7 +385,7 @@ function createCommunityController({ WebContentsView, openExternal, copyText, en
       const record = current;
       if (!record || !record.wanted || record.webContents.isDestroyed()) throw new Error('请先打开内容');
       if (canGoBack(record)) {
-        // Returning from the official player restores the mobile video page.
+        // Keep the desktop identity when returning from the official player.
         if (isBilibili && bilibiliOfficialPlayerIdentity(parseWebUrl(record.webContents.getURL()))) record.setBilibiliAgent(BILIBILI_URL);
         const history = record.webContents.navigationHistory;
         // goBack only starts navigation: do not publish the previous page as
@@ -592,7 +590,7 @@ function createSocialController(options = {}) {
     get view() { return controllers[active].view; } });
 }
 
-module.exports = { DEFAULT_COMMUNITY_URL, OFFICIAL_AUTH_ORIGIN, COMMUNITY_PARTITION, BILIBILI_URL, BILIBILI_HOME_URL, BILIBILI_PARTITION, BILIBILI_MOBILE_USER_AGENT, BILIBILI_PLAYER_ORIGIN,
+module.exports = { DEFAULT_COMMUNITY_URL, OFFICIAL_AUTH_ORIGIN, COMMUNITY_PARTITION, BILIBILI_URL, BILIBILI_HOME_URL, BILIBILI_PARTITION, BILIBILI_DESKTOP_USER_AGENT, BILIBILI_PLAYER_ORIGIN,
   resolveCommunityUrl, classifyCommunityNavigation, communityWebPreferences, communityWindowOptions,
   classifyBilibiliNavigation, bilibiliVideoShareUrl, bilibiliOfficialPlayerUrl, installCommunityNavigation, validateCommunityRequest, communityBounds,
   createCommunityController, createSocialController };

@@ -4,6 +4,7 @@ const {resolveRuntimePaths,prepareRuntimeDirectories,assertDshRuntime,buildDshPa
 const {createDshLifecycle}=require('./dsh-lifecycle.cjs');
 const {createSocialController}=require('./community-config.cjs');
 const {createNativeDividerController}=require('./native-divider-controller.cjs');
+const {createNativeComposerController}=require('./native-composer-controller.cjs');
 const {createCommunityAccount}=require('./community-account.cjs');
 const {WorkbenchSecretStore}=require('./main-chat-secret.cjs');
 const {createSubagentMotion,motionOptions}=require('./subagent-motion.cjs');
@@ -87,9 +88,10 @@ const localWindows=new WeakMap();
 const nekoChat=new NekoChat();
 let communityAccount;
 const nativeDividerController=createNativeDividerController({WebContentsView,ipcMain});
+const nativeComposerController=createNativeComposerController({WebContentsView,ipcMain});
 const communityController=createSocialController({WebContentsView,openExternal:url=>shell.openExternal(url),copyText:text=>clipboard.writeText(text),
   onHide:()=>communityAccount?.cancel(),
-  onState:(host,value)=>{if(host===dshWindow&&!host.isDestroyed()&&isWorkbenchOrigin(host.webContents.getURL())){host.webContents.send('workbench:community-state',value);nativeDividerController.setEnabled(communityController.hasVisibleView);nativeDividerController.raise(value.status==='ready');}},
+  onState:(host,value)=>{if(host===dshWindow&&!host.isDestroyed()&&isWorkbenchOrigin(host.webContents.getURL())){host.webContents.send('workbench:community-state',value);nativeDividerController.setEnabled(communityController.hasVisibleView);nativeDividerController.raise(value.status==='ready');nativeComposerController.setEnabled(communityController.hasVisibleView);nativeComposerController.raise();}},
   onExternalError:()=>dialog.showErrorBox('链接未打开','系统浏览器未能打开这个链接，请稍后重试。')});
 communityAccount=createCommunityAccount({getBaseUrl:()=>state.neko.baseUrl,
   getCommunityUrl:()=>process.env.NEKO_WORKBENCH_COMMUNITY_URL,
@@ -578,7 +580,7 @@ function popupMainMenu(){const w=petWindows.get('main');if(w){w.show();setTimeou
 async function openDsh(){
   if(dshWindow&&!dshWindow.isDestroyed()){dshWindow.show();app.focus({steal:true});dshWindow.focus();return;}
   dshWindow=new BrowserWindow({width:1100,height:780,minWidth:800,minHeight:560,title:'N.E.K.O. 工作台',backgroundColor:nativeTheme.shouldUseDarkColors?'#131C27':'#EDF3F8',show:false,webPreferences:{preload:path.join(base,'workbench-preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,partition:'persist:pet-dsh'}});
-  communityController.bindHost(dshWindow);nativeDividerController.bind(dshWindow);
+  communityController.bindHost(dshWindow);nativeDividerController.bind(dshWindow);nativeComposerController.bind(dshWindow);
   dshWindow.webContents.on('did-finish-load',()=>{if(isWorkbenchOrigin(dshWindow.webContents.getURL())&&typeof dshWindow.webContents.executeJavaScript==='function')void dshWindow.webContents.executeJavaScript(fs.readFileSync(path.join(base,'screen-share-host.js'),'utf8')).catch(()=>{});});
   dshWindow.on('close',event=>{if(!quitting){event.preventDefault();dshWindow.hide();}});
   dshWindow.webContents.on('will-navigate',(event,url)=>{if(!/^https?:/.test(url))event.preventDefault();});
@@ -774,9 +776,18 @@ ipcMain.handle('workbench:community',async(event,request)=>{
   assertWorkbenchCaller(event);
   if(request?.action==='open')screenShare.hide();
   try{return await communityController.action(dshWindow,request);}
-  finally{nativeDividerController.setEnabled(communityController.hasVisibleView);nativeDividerController.raise(request?.action==='open');}
+  finally{nativeDividerController.setEnabled(communityController.hasVisibleView);nativeDividerController.raise(request?.action==='open');nativeComposerController.setEnabled(communityController.hasVisibleView);nativeComposerController.raise();}
 });
 ipcMain.handle('workbench:divider',(event,request)=>{assertWorkbenchCaller(event);return nativeDividerController.place(dshWindow,request);});
+ipcMain.handle('workbench:native-composer',(event,request)=>{
+  assertWorkbenchCaller(event);
+  if(request?.action==='update')return nativeComposerController.update(request.state);
+  if(request?.action==='place'||request?.action==='remove'){
+    const result=nativeComposerController.place(dshWindow,request);
+    nativeComposerController.setEnabled(communityController.hasVisibleView);nativeComposerController.raise();return result;
+  }
+  throw new Error('未知工作区浮窗操作');
+});
 ipcMain.handle('workbench:community-account',async(event,action)=>{
   assertWorkbenchCaller(event);
   if(action!=='cancel'&&!communityController.isOpen)throw new Error('请先打开社区');
@@ -937,7 +948,7 @@ app.on('before-quit',event=>{
   if(shutdownComplete)return;
   event.preventDefault();
   if(shutdownStarted)return;
-  shutdownStarted=true;quitting=true;nativeDividerController.dispose();communityController.dispose();communityAccount.cancel();lobbyController.dispose();screenShare.dispose();catMotion.dispose();clearTimeout(nekoRetry);clearTimeout(rosterTimer);for(const timer of terminalTimers.values())clearTimeout(timer);terminalTimers.clear();nekoChat.close();save();
+  shutdownStarted=true;quitting=true;nativeComposerController.dispose();nativeDividerController.dispose();communityController.dispose();communityAccount.cancel();lobbyController.dispose();screenShare.dispose();catMotion.dispose();clearTimeout(nekoRetry);clearTimeout(rosterTimer);for(const timer of terminalTimers.values())clearTimeout(timer);terminalTimers.clear();nekoChat.close();save();
   const current=childLifecycle;
   Promise.allSettled([visitsController?.close(),mainChatRuntime?.close(),current?.stop(),codexAccount.dispose(),codexWorkspace.dispose()]).finally(()=>{shutdownComplete=true;app.quit();});
 });

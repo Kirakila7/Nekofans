@@ -84,6 +84,7 @@ test('before-quit disposes the lobby controller', () => {
     app: { on: (name, fn) => quitHandlers.set(name, fn), quit: () => calls.push('app.quit') },
     shutdownComplete: false, shutdownStarted: false, quitting: false,
     lobbyController: { dispose: () => calls.push('lobby.dispose') },
+    nativeComposerController: { dispose: () => calls.push('composer.dispose') },
     nativeDividerController: { dispose: () => calls.push('divider.dispose') },
     communityController: { dispose: () => calls.push('community.dispose') },
     communityAccount: { cancel: () => calls.push('community.cancel') },
@@ -97,7 +98,7 @@ test('before-quit disposes the lobby controller', () => {
   assert(quitHandlers.has('before-quit'));
   const event = { preventDefault: () => calls.push('prevent') };
   quitHandlers.get('before-quit')(event);
-  assert.deepEqual(calls.slice(0, 6), ['prevent', 'divider.dispose', 'community.dispose', 'community.cancel', 'lobby.dispose', 'screen.dispose'],
+  assert.deepEqual(calls.slice(0, 7), ['prevent', 'composer.dispose', 'divider.dispose', 'community.dispose', 'community.cancel', 'lobby.dispose', 'screen.dispose'],
     'lobby.dispose (which persists the open experience segment) runs before quit completes');
   quitHandlers.get('before-quit')(event);
   assert.equal(calls.filter(call => call === 'lobby.dispose').length, 1, 'a second before-quit does not dispose twice');

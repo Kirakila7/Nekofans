@@ -38,7 +38,7 @@ function installWorkspaceShell(options = {}) {
   communityButton.setAttribute('aria-label', 'Yui · N.E.K.O. 社区'); communityButton.title = 'N.E.K.O. 原生社区'; communityButton.appendChild(image(avatar('yui')));
   railTop.append(settingsButton, communityButton);
   // Lobby (频道): optional. Without bridge.lobby there is no button and no panel. It never touches the dock.
-  const lobby = typeof bridge.lobby === 'function' ? createLobbyView({ doc, bridge, el, button, image, avatar, composer: options.lobbyComposer || (typeof WORKBENCH_LOBBY_COMPOSER !== 'undefined' ? WORKBENCH_LOBBY_COMPOSER : null) || win.WorkbenchLobbyComposer || null, companion: () => state?.companion, onOpen: () => { hideSocial(); closeSettings(); }, onChange: () => renderOffice() }) : null;
+  const lobby = typeof bridge.lobby === 'function' ? createLobbyView({ doc, bridge, el, button, image, avatar, composer: options.lobbyComposer || (typeof WORKBENCH_LOBBY_COMPOSER !== 'undefined' ? WORKBENCH_LOBBY_COMPOSER : null) || win.WorkbenchLobbyComposer || null, companion: () => state?.companion, onOpen: () => { hideSocial(); closeSettings(); }, onChange: () => { renderOffice(); schedule(); } }) : null;
   if (lobby) { own(lobby.panel); railTop.appendChild(lobby.railButton); releases.push(lobby.dispose); }
   const leaveViews = () => { hideSocial(); lobby?.hide(); };
   // The room is a local visual preview. It never touches the work session or
@@ -506,6 +506,68 @@ function installWorkspaceShell(options = {}) {
   expandWorkspace.hidden = true; expandWorkspace.setAttribute('data-neko-workspace-expand-control', ''); doc.body.appendChild(expandWorkspace);
   const collapseNotice = own(el('p', 'neko-workspace-collapse-notice')); collapseNotice.setAttribute('role', 'status'); collapseNotice.hidden = true; doc.body.appendChild(collapseNotice);
   let collapsedComposer = null, collapseGeometry = '', collapseNoticeTimer = null;
+  let floatingComposer = null, floatingGeometry = '', floatingState = '', floatingRecoveryPending = false, floatingInitialized = false;
+  const hasNativeComposerBridge = typeof bridge.nativeComposer === 'function' && typeof bridge.subscribeNativeComposer === 'function';
+  function recoverFloatingComposer() {
+    if (disposed || floatingRecoveryPending || !doc.body.hasAttribute('data-neko-flex-workspace-collapsed')) return;
+    floatingRecoveryPending = true;
+    collapseNotice.textContent = '浮动输入暂不可用，已展开工作区'; collapseNotice.hidden = false;
+    if (collapseNoticeTimer) win.clearTimeout(collapseNoticeTimer);
+    collapseNoticeTimer = win.setTimeout(() => { collapseNotice.hidden = true; }, 3500);
+    doc.dispatchEvent(new win.Event('neko-workspace-expand'));
+  }
+  function floatingCall(request) {
+    if (!hasNativeComposerBridge) return;
+    try { Promise.resolve(bridge.nativeComposer(request)).then(result => { if (request.action === 'place' && result?.ok === false) recoverFloatingComposer(); }).catch(() => { if (request.action === 'place') recoverFloatingComposer(); }); }
+    catch { if (request.action === 'place') recoverFloatingComposer(); }
+  }
+  function updateFloatingComposer(state, extra = {}) {
+    if (!floatingInitialized || !hasNativeComposerBridge) return;
+    const available = layout?.officeMode === 'dsh' && state?.available === true;
+    const next = { value:typeof state?.draft === 'string' ? state.draft.slice(0, 30000) : '', enabled:available, busy:state?.phase != null && state.phase !== 'plain', sessionToken:typeof state?.sessionId === 'string' ? state.sessionId : '', revision:Number.isSafeInteger(state?.revision) && state.revision >= 0 ? state.revision : 0, placeholder:available ? '发消息或创建任务…' : '请先打开可用的工作会话', status:state?.reason || state?.status || '', ...extra };
+    const key = JSON.stringify(next); if (key === floatingState && !Object.keys(extra).length) return;
+    floatingState = key; floatingCall({action:'update',state:next});
+  }
+  if (typeof createNativeComposerAdapter === 'function' && options.nativeComposerBindings) {
+    floatingComposer = createNativeComposerAdapter({ ...options.nativeComposerBindings, onChange: state => updateFloatingComposer(state) });
+  }
+  if (hasNativeComposerBridge) {
+    try {
+      const off = bridge.subscribeNativeComposer(event => {
+        if (!floatingInitialized || !event || typeof event.type !== 'string') return;
+        if (event.type === 'expand') { if (doc.body.hasAttribute('data-neko-flex-workspace-collapsed')) doc.dispatchEvent(new win.Event('neko-workspace-expand')); return; }
+        if (event.type === 'unavailable') { recoverFloatingComposer(); return; }
+        if (!['edit','submit'].includes(event.type)) return;
+        const request = {sessionId:event.sessionToken, revision:event.revision, text:event.value};
+        let result;
+        if (!floatingComposer || layout?.officeMode !== 'dsh') result = {ok:false,code:'unavailable',state:floatingComposer?.snapshot()};
+        else if (event.type === 'edit') result = floatingComposer.write(request);
+        else if (lobby?.isOpen()) result = {ok:false,code:'lobby_open',state:floatingComposer.snapshot()};
+        else {
+          const state = floatingComposer.snapshot();
+          result = state.draft !== event.value ? {ok:false,code:'draft_changed',state} : floatingComposer.submit(request);
+        }
+        const state = result.state || floatingComposer?.snapshot();
+        if (event.type === 'edit') updateFloatingComposer(state, {settledEditId:event.editId, editConflict:!result.ok, status:result.ok ? '' : '原工作区草稿已变化，请展开工作区处理'});
+        else updateFloatingComposer(state, {settledSubmitId:event.submissionId, status:result.ok ? (state?.status || '已交给工作区处理') : result.code === 'already_submitted' ? '这条消息已交给工作区，请展开查看或重试' : result.code === 'lobby_open' ? '已切换到公共大厅，返回工作区后再发送' : '工作会话或草稿已变化，请检查后重试'});
+      });
+      if (typeof off === 'function') releases.push(off);
+    } catch { /* Missing bridge is handled as unavailable. */ }
+  }
+  function syncFloatingComposer() {
+    const flex = doc.body.hasAttribute('data-neko-flex-workspace-collapsed');
+    if (!flex || lobby?.isOpen()) { if (floatingGeometry) floatingCall({action:'remove'}); floatingGeometry = ''; floatingState = ''; floatingRecoveryPending = false; return; }
+    if (!hasNativeComposerBridge) { recoverFloatingComposer(); return; }
+    const style = doc.body.style;
+    const width = Math.min(480, parseFloat(style.getPropertyValue('--neko-flex-compact-width')) || 0);
+    const right = parseFloat(style.getPropertyValue('--neko-flex-compact-right')) || 0;
+    const bottom = parseFloat(style.getPropertyValue('--neko-flex-compact-bottom')) || 0;
+    if (width >= 100) {
+      const rect = {x:Math.max(0,Math.round(win.innerWidth-right-width)),y:Math.max(0,Math.round(win.innerHeight-bottom-76)),width:Math.round(width),height:76};
+      const key = JSON.stringify(rect); if (key !== floatingGeometry) { floatingInitialized = true; floatingGeometry = key; floatingCall({action:'place',rect}); }
+      updateFloatingComposer(floatingComposer?.snapshot());
+    }
+  }
   const collapseResize = win.ResizeObserver ? new win.ResizeObserver(() => schedule()) : null;
   function notifyCollapseGeometry() {
     const rect = node => { const r = node.getBoundingClientRect(); return [r.left,r.top,r.width,r.height].map(Math.round); };
@@ -517,9 +579,12 @@ function installWorkspaceShell(options = {}) {
     expandWorkspace.hidden = true; notifyCollapseGeometry();
   }
   function syncCollapsedComposer() {
-    if (!doc.body.hasAttribute('data-neko-workspace-collapsed')) { clearCollapsedComposer(); return; }
+    const flexCollapsed = doc.body.hasAttribute('data-neko-flex-workspace-collapsed');
+    syncFloatingComposer();
+    if (flexCollapsed) { clearCollapsedComposer(); return; }
+    if (!doc.body.hasAttribute('data-neko-workspace-collapsed') && !flexCollapsed) { clearCollapsedComposer(); return; }
     if (!layout) return;
-    const center = doc.querySelector('[data-neko-chat-center]');
+    const center = doc.querySelector(flexCollapsed ? '[data-neko-flex-coding]' : '[data-neko-chat-center]');
     const next = layout.officeMode === 'codex' ? (codexPaused() ? null : officeForm) : center?.querySelector('[data-composer-seat]');
     const editor = next?.querySelector('textarea, [contenteditable]:not([contenteditable="false"]), [role="textbox"]');
     if (!next || !editor || next.closest('[inert]')) {
@@ -890,7 +955,7 @@ function installWorkspaceShell(options = {}) {
       const py = unified && codeVisible ? Math.max(56, Math.ceil(codeRect.top)) : 56;
       const pw = unified && codeVisible ? Math.floor(codeRect.width) : Math.max(0, win.innerWidth - x);
       const ph = unified && codeVisible ? Math.max(0, Math.min(bottom, Math.floor(codeRect.bottom)) - py) : Math.max(0, bottom - 56);
-      startup.hidden = !startupOpen || !!lobby?.isOpen() || doc.body.hasAttribute('data-neko-workspace-collapsed') || (unified && !codeVisible);
+      startup.hidden = !startupOpen || !!lobby?.isOpen() || doc.body.hasAttribute('data-neko-workspace-collapsed') || doc.body.hasAttribute('data-neko-flex-workspace-collapsed') || (unified && !codeVisible);
       Object.assign(startup.style, { left: px + 'px', top: py + 'px', width: pw + 'px', height: ph + 'px' });
     }
     syncCollapsedComposer(); positionCompanionMenu();
@@ -911,7 +976,7 @@ function installWorkspaceShell(options = {}) {
     if (layout?.officeMode === 'codex') newOffice(); else showStartup();
   }
   function escape(event) { if (event.key !== 'Escape') return; if (!companionMenu.hidden) { event.preventDefault(); event.stopPropagation(); closeCompanionMenu(); } else if (!modal.hidden) { event.stopPropagation(); closeSettings(); } else if ((layout?.companionHistoryOpen || historyPeek) && dock.contains(doc.activeElement)) { event.preventDefault(); historyPeek = false; saveLayout({ companionHistoryOpen: false }); historyToggle.focus(); } }
-  const observer = new win.MutationObserver(records => { if (records.some(record => record.type !== 'attributes' || record.attributeName !== 'style' || record.target.matches?.('[data-neko-unified-coding]'))) schedule(); }); observer.observe(doc.body, { childList: true, subtree: true, attributes:true, attributeFilter:['data-neko-unified-enabled', 'data-neko-unified-coding', 'data-neko-side-social-active', 'data-neko-workspace-collapsed', 'data-neko-tools', 'style'] });
+  const observer = new win.MutationObserver(records => { if (records.some(record => record.type !== 'attributes' || record.attributeName !== 'style' || record.target.matches?.('[data-neko-unified-coding]') || record.target === doc.body && doc.body.hasAttribute('data-neko-flex-workspace-collapsed'))) schedule(); }); observer.observe(doc.body, { childList: true, subtree: true, attributes:true, attributeFilter:['data-neko-unified-enabled', 'data-neko-unified-coding', 'data-neko-side-social-active', 'data-neko-workspace-collapsed', 'data-neko-flex-workspace-collapsed', 'data-neko-flex-coding', 'data-neko-tools', 'style'] });
   // Observe only the dock's ancestors for inline style changes: watching every
   // style mutation would also watch our own drag/position updates.
   const ancestorObserver = new win.MutationObserver(schedule);
@@ -949,7 +1014,7 @@ function installWorkspaceShell(options = {}) {
   place();
   return () => {
     clearCollapsedComposer(); collapseResize?.disconnect(); if (collapseNoticeTimer) win.clearTimeout(collapseNoticeTimer);
-    if (disposed) return; disposed = true; stopNativeNew(); motion?.removeEventListener?.('change', syncCharacter); motion?.removeEventListener?.('change', syncRailWalking); doc.removeEventListener('visibilitychange', syncCharacter); doc.removeEventListener('visibilitychange', syncRailWalking); stopRailWalking(); if (railClickTimer !== null) win.clearTimeout(railClickTimer); if (railSpace) { if (railSpaceBeforeAria === null) railSpace.removeAttribute('aria-hidden'); else railSpace.setAttribute('aria-hidden', railSpaceBeforeAria); } if (characterVideo) { characterVideo.pause(); characterVideo.removeAttribute('src'); characterVideo.load(); } observer.disconnect(); ancestorObserver.disconnect(); intersection?.disconnect(); resize?.disconnect(); win.clearInterval(interval);
+    if (disposed) return; disposed = true; floatingComposer?.dispose(); if (floatingGeometry) floatingCall({action:'remove'}); stopNativeNew(); motion?.removeEventListener?.('change', syncCharacter); motion?.removeEventListener?.('change', syncRailWalking); doc.removeEventListener('visibilitychange', syncCharacter); doc.removeEventListener('visibilitychange', syncRailWalking); stopRailWalking(); if (railClickTimer !== null) win.clearTimeout(railClickTimer); if (railSpace) { if (railSpaceBeforeAria === null) railSpace.removeAttribute('aria-hidden'); else railSpace.setAttribute('aria-hidden', railSpaceBeforeAria); } if (characterVideo) { characterVideo.pause(); characterVideo.removeAttribute('src'); characterVideo.load(); } observer.disconnect(); ancestorObserver.disconnect(); intersection?.disconnect(); resize?.disconnect(); win.clearInterval(interval);
     win.removeEventListener('resize', place); doc.removeEventListener('scroll', schedule, true); doc.removeEventListener('click', nativeNew, true); doc.removeEventListener('keydown', escape, true);
     doc.removeEventListener('pointerdown', dismissCompanionMenu, true);
     doc.removeEventListener('neko-native-tools-navigate', showNativeToolsPage);
