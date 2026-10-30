@@ -91,8 +91,9 @@ const localWindows=new WeakMap();
 const nekoChat=new NekoChat();
 let communityAccount;
 const nativeDividerController=createNativeDividerController({WebContentsView,ipcMain});
-const nativeComposerController=createNativeComposerController({WebContentsView,ipcMain});
+const nativeComposerController=createNativeComposerController({WebContentsView,ipcMain,getOverlayParent:()=>communityController.overlayWindow});
 const communityController=createSocialController({WebContentsView,BaseWindow,openExternal:url=>shell.openExternal(url),copyText:text=>clipboard.writeText(text),
+  onOverlayClosing:window=>nativeComposerController.releaseParent(window),
   onHide:()=>communityAccount?.cancel(),
   onState:(host,value)=>{if(host===dshWindow&&!host.isDestroyed()&&isWorkbenchOrigin(host.webContents.getURL())){host.webContents.send('workbench:community-state',value);nativeDividerController.setEnabled(communityController.hasVisibleView);nativeDividerController.raise(value.status==='ready');nativeComposerController.setEnabled(communityController.hasVisibleView);nativeComposerController.raise();}},
   onExternalError:()=>dialog.showErrorBox('链接未打开','系统浏览器未能打开这个链接，请稍后重试。')});

@@ -4,12 +4,12 @@ const path = require('node:path');
 // A trusted, isolated child view can be layered above site WebContentsViews.
 // This controller never sends a task: the host must bind each event to a real
 // DSH session and validate it before acting.
-function createNativeComposerController({ WebContentsView, ipcMain, baseDir = __dirname }) {
-  let host = null, view = null, rect = null, enabled = false, attached = false, ready = false, pendingSubmit = null, pendingEdit = null;
+function createNativeComposerController({ WebContentsView, ipcMain, baseDir = __dirname, getOverlayParent = () => null }) {
+  let host = null, view = null, rect = null, enabled = false, attached = false, parent = null, ready = false, pendingSubmit = null, pendingEdit = null;
   let state = { value: '', placeholder: '工作区未连接', enabled: false, busy: false, sessionToken: '', revision: 0 };
   const listeners = [];
   function unlisten() { for (const [obj, event, fn] of listeners.splice(0)) obj.removeListener(event, fn); }
-  function detach() { if (attached && host && !host.isDestroyed()) host.contentView.removeChildView(view); attached = false; }
+  function detach() { if (attached && parent && !parent.isDestroyed()) parent.contentView.removeChildView(view); attached = false; parent = null; }
   function close() {
     detach();
     if (view && !view.webContents.isDestroyed()) view.webContents.close({ waitForBeforeUnload: false });
@@ -21,7 +21,7 @@ function createNativeComposerController({ WebContentsView, ipcMain, baseDir = __
     close(); host = window;
     const on = (obj, event, fn) => { obj.on(event, fn); listeners.push([obj, event, fn]); };
     on(window, 'hide', detach); on(window, 'minimize', detach); on(window, 'show', refresh); on(window, 'restore', refresh);
-    on(window, 'resize', () => { bounds(); }); on(window, 'closed', close);
+    on(window, 'resize', refresh); on(window, 'move', refresh); on(window, 'closed', close);
     on(window.webContents, 'will-navigate', close); on(window.webContents, 'destroyed', close); on(window.webContents, 'render-process-gone', close);
   }
   function bounds() {
@@ -30,7 +30,19 @@ function createNativeComposerController({ WebContentsView, ipcMain, baseDir = __
     const x = Math.max(0, Math.min(width, Math.round(rect.x * zoom))), y = Math.max(0, Math.min(height, Math.round(rect.y * zoom)));
     const right = Math.max(x, Math.min(width, Math.round((rect.x + rect.width) * zoom))), bottom = Math.max(y, Math.min(height, Math.round((rect.y + rect.height) * zoom)));
     if (right <= x || bottom <= y) { detach(); return; }
-    view.setBounds({ x, y, width: right - x, height: bottom - y });
+    // An owned video window is above every view in the root workbench. Put
+    // this trusted input after the video in that same native content view.
+    let target = host, offsetX = 0, offsetY = 0;
+    const overlay = getOverlayParent();
+    if (overlay && !overlay.isDestroyed() && overlay.isVisible() && typeof host.getContentBounds === 'function') {
+      const root = host.getContentBounds(), area = overlay.getContentBounds();
+      const localX = root.x + x - area.x, localY = root.y + y - area.y;
+      if (localX >= 0 && localY >= 0 && localX + right - x <= area.width && localY + bottom - y <= area.height) {
+        target = overlay; offsetX = area.x - root.x; offsetY = area.y - root.y;
+      }
+    }
+    if (!attached || parent !== target) { detach(); target.contentView.addChildView(view); attached = true; parent = target; }
+    view.setBounds({ x:x-offsetX, y:y-offsetY, width:right-x, height:bottom-y });
   }
   function publish() { if (ready && view && !view.webContents.isDestroyed()) view.webContents.send('neko-composer-state', state); }
   function unavailable(child) {
@@ -41,7 +53,6 @@ function createNativeComposerController({ WebContentsView, ipcMain, baseDir = __
   }
   function refresh() {
     if (!host || host.isDestroyed() || !view || !ready || !enabled || !rect || host.isVisible?.() === false || host.isMinimized?.() === true) { detach(); return; }
-    if (!attached) { host.contentView.addChildView(view); attached = true; }
     bounds(); publish();
   }
   function make() {
@@ -89,6 +100,6 @@ function createNativeComposerController({ WebContentsView, ipcMain, baseDir = __
     if (!host.webContents.isDestroyed()) host.webContents.send('workbench:native-composer-event', message.type === 'expand' ? { type: 'expand' } : { type: message.type, value: message.value, sessionToken: state.sessionToken, revision: state.revision, ...(message.type === 'submit' ? {submissionId:message.submissionId} : {editId:message.editId}) });
   }
   ipcMain.on('neko-composer-input', input);
-  return Object.freeze({ bind, place, update, setEnabled(value) { enabled = value === true; refresh(); }, raise() { if (attached) { detach(); refresh(); } }, dispose() { close(); ipcMain.removeListener('neko-composer-input', input); } });
+  return Object.freeze({ bind, place, update, setEnabled(value) { enabled = value === true; refresh(); }, raise() { if (rect) { detach(); refresh(); } }, releaseParent(window) { if (parent === window) detach(); }, dispose() { close(); ipcMain.removeListener('neko-composer-input', input); } });
 }
 module.exports = { createNativeComposerController };

@@ -559,8 +559,9 @@ function installWorkspaceShell(options = {}) {
   let collapsedComposer = null, collapsedPopover = false, collapseGeometry = '', collapseNoticeTimer = null;
   let floatingComposer = null, floatingGeometry = '', floatingState = '', floatingRecoveryPending = false, floatingInitialized = false;
   const hasNativeComposerBridge = typeof bridge.nativeComposer === 'function' && typeof bridge.subscribeNativeComposer === 'function';
+  const floatingCollapsed = () => doc.body.hasAttribute('data-neko-flex-workspace-collapsed') || sideSocial && doc.body.hasAttribute('data-neko-workspace-collapsed');
   function recoverFloatingComposer() {
-    if (disposed || floatingRecoveryPending || !doc.body.hasAttribute('data-neko-flex-workspace-collapsed')) return;
+    if (disposed || floatingRecoveryPending || !floatingCollapsed()) return;
     floatingRecoveryPending = true;
     collapseNotice.textContent = '浮动输入暂不可用，已展开工作区'; collapseNotice.hidden = false;
     if (collapseNoticeTimer) win.clearTimeout(collapseNoticeTimer);
@@ -586,15 +587,15 @@ function installWorkspaceShell(options = {}) {
     try {
       const off = bridge.subscribeNativeComposer(event => {
         if (!floatingInitialized || !event || typeof event.type !== 'string') return;
-        if (event.type === 'expand') { if (doc.body.hasAttribute('data-neko-flex-workspace-collapsed')) doc.dispatchEvent(new win.Event('neko-workspace-expand')); return; }
+        if (event.type === 'expand') { if (floatingCollapsed()) doc.dispatchEvent(new win.Event('neko-workspace-expand')); return; }
         if (event.type === 'files') {
           const sessionId = event.sessionToken;
           const current = floatingComposer?.snapshot();
-          if (!doc.body.hasAttribute('data-neko-flex-workspace-collapsed') || lobby?.isOpen() || !current?.available || current.sessionId !== sessionId || current.revision !== event.revision || nativeSelection()?.sessionId !== sessionId || !hasActiveDshSession()) { updateFloatingComposer(current, {status:'工作会话已变化，请展开工作区重试'}); return; }
+          if (!floatingCollapsed() || lobby?.isOpen() || !current?.available || current.sessionId !== sessionId || current.revision !== event.revision || nativeSelection()?.sessionId !== sessionId || !hasActiveDshSession()) { updateFloatingComposer(current, {status:'工作会话已变化，请展开工作区重试'}); return; }
           doc.dispatchEvent(new win.Event('neko-workspace-expand'));
           const frame = win.requestAnimationFrame || (fn => win.setTimeout(fn, 16));
           frame(() => frame(() => {
-            if (disposed || lobby?.isOpen() || doc.body.hasAttribute('data-neko-flex-workspace-collapsed') || nativeSelection()?.sessionId !== sessionId || !hasActiveDshSession()) return;
+            if (disposed || lobby?.isOpen() || floatingCollapsed() || nativeSelection()?.sessionId !== sessionId || !hasActiveDshSession()) return;
             try { if (typeof options.openDshFiles !== 'function') throw Error('missing file service'); options.openDshFiles(directoryButton, sessionId); }
             catch { collapseNotice.textContent = '项目目录暂不可用，请在工作区重试'; collapseNotice.hidden = false; if (collapseNoticeTimer) win.clearTimeout(collapseNoticeTimer); collapseNoticeTimer = win.setTimeout(() => { collapseNotice.hidden = true; }, 3500); }
           }));
@@ -607,6 +608,7 @@ function installWorkspaceShell(options = {}) {
         if (!floatingComposer || layout?.officeMode !== 'dsh') result = {ok:false,code:'unavailable',state:floatingComposer?.snapshot()};
         else if (event.type === 'edit') result = floatingComposer.write(request);
         else if (lobby?.isOpen()) result = {ok:false,code:'lobby_open',state:floatingComposer.snapshot()};
+        else if (!floatingCollapsed()) result = {ok:false,code:'unavailable',state:floatingComposer.snapshot()};
         else {
           const state = floatingComposer.snapshot();
           result = state.draft !== event.value ? {ok:false,code:'draft_changed',state} : floatingComposer.submit(request);
@@ -620,12 +622,13 @@ function installWorkspaceShell(options = {}) {
   }
   function syncFloatingComposer() {
     const flex = doc.body.hasAttribute('data-neko-flex-workspace-collapsed');
-    if (!flex || lobby?.isOpen()) { if (floatingGeometry) floatingCall({action:'remove'}); floatingGeometry = ''; floatingState = ''; floatingRecoveryPending = false; return; }
+    const single = sideSocial && doc.body.hasAttribute('data-neko-workspace-collapsed') && hasNativeComposerBridge;
+    if ((!flex && !single) || lobby?.isOpen()) { if (floatingGeometry) floatingCall({action:'remove'}); floatingGeometry = ''; floatingState = ''; floatingRecoveryPending = false; return; }
     if (!hasNativeComposerBridge) { recoverFloatingComposer(); return; }
     const style = doc.body.style;
-    const width = Math.min(480, parseFloat(style.getPropertyValue('--neko-flex-compact-width')) || 0);
-    const right = parseFloat(style.getPropertyValue('--neko-flex-compact-right')) || 0;
-    const bottom = parseFloat(style.getPropertyValue('--neko-flex-compact-bottom')) || 0;
+    const width = Math.min(480, single ? win.innerWidth - 96 : parseFloat(style.getPropertyValue('--neko-flex-compact-width')) || 0);
+    const right = single ? 16 : parseFloat(style.getPropertyValue('--neko-flex-compact-right')) || 0;
+    const bottom = single ? 16 : parseFloat(style.getPropertyValue('--neko-flex-compact-bottom')) || 0;
     if (width >= 100) {
       const rect = {x:Math.max(0,Math.round(win.innerWidth-right-width)),y:Math.max(0,Math.round(win.innerHeight-bottom-76)),width:Math.round(width),height:76};
       const key = JSON.stringify(rect); if (key !== floatingGeometry) { floatingInitialized = true; floatingGeometry = key; floatingCall({action:'place',rect}); }
@@ -650,6 +653,7 @@ function installWorkspaceShell(options = {}) {
     const flexCollapsed = doc.body.hasAttribute('data-neko-flex-workspace-collapsed');
     syncFloatingComposer();
     if (flexCollapsed) { clearCollapsedComposer(); return; }
+    if (sideSocial && hasNativeComposerBridge && doc.body.hasAttribute('data-neko-workspace-collapsed')) { clearCollapsedComposer(); return; }
     if (!doc.body.hasAttribute('data-neko-workspace-collapsed') && !flexCollapsed) { clearCollapsedComposer(); return; }
     if (!layout) return;
     const center = doc.querySelector(flexCollapsed ? '[data-neko-flex-coding]' : '[data-neko-chat-center]');

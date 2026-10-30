@@ -27,9 +27,9 @@ function localHoles(bounds, holes) {
 
 // A shaped owned window preserves the original DSH composer and its React
 // state; the existing social WebContentsView is reparented without navigating.
-function createNativeSocialWindow({BaseWindow,host,view}) {
+function createNativeSocialWindow({BaseWindow,host,view,onBeforeDestroy=()=>{}}) {
   if(typeof BaseWindow!=='function'||process.platform!=='win32')return null;
-  const window=new BaseWindow({parent:host,frame:false,show:false,skipTaskbar:true,resizable:false,focusable:true,hasShadow:false});
+  const window=new BaseWindow({parent:host,frame:false,thickFrame:false,roundedCorners:false,useContentSize:true,show:false,skipTaskbar:true,resizable:false,focusable:true,hasShadow:false});
   // Alt+F4 on a focused social view must not destroy the preserved WebContents.
   window.on('close',event=>event.preventDefault());
   let attached=false,closed=false;
@@ -42,13 +42,14 @@ function createNativeSocialWindow({BaseWindow,host,view}) {
       const shape=subtractRectangles(bounds.width,bounds.height,localHoles(bounds,holes));
       if(!shape.length)throw Error('Social view fully covered');
       const origin=host.getContentBounds();
-      window.setBounds({x:origin.x+bounds.x,y:origin.y+bounds.y,width:bounds.width,height:bounds.height});
+      window.setContentBounds({x:origin.x+bounds.x,y:origin.y+bounds.y,width:bounds.width,height:bounds.height});
       view.setBounds({x:0,y:0,width:bounds.width,height:bounds.height});
       window.setShape(shape);
       if(host.isVisible()&&!host.isMinimized())window.showInactive();else window.hide();
     },
     detach(){if(attached&&!window.isDestroyed()){window.contentView.removeChildView(view);attached=false;}},
-    destroy(){if(closed)return;this.detach();closed=true;if(!window.isDestroyed())window.destroy();},
+    destroy(){if(closed)return;try{onBeforeDestroy(window);}finally{this.detach();closed=true;if(!window.isDestroyed())window.destroy();}},
+    get window(){return window;},
   };
 }
 module.exports={subtractRectangles,localHoles,createNativeSocialWindow};

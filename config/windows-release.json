@@ -1,5 +1,5 @@
 {
-  "version": "0.28.18-windows.1",
+  "version": "0.28.18-windows.2",
   "platform": "win32-x64",
   "branch": "codex/windows-0.28.18",
   "baselineTag": "windows-0.28.18-baseline-20261030",

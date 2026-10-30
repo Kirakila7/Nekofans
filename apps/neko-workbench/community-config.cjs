@@ -239,7 +239,7 @@ function communityBounds(host, bounds) {
 const LOAD_ERROR = '社区页面未能打开，请检查网络后重试';
 const CANCEL_ERROR = '社区已隐藏或工作台页面已离开';
 function createCommunityController({ WebContentsView, BaseWindow, openExternal, copyText, env = process.env, site = 'community', youtubeAppId = YOUTUBE_APP_ID,
-  onState = () => {}, onHide = () => {}, onExternalError } = {}) {
+  onState = () => {}, onHide = () => {}, onOverlayClosing = () => {}, onExternalError } = {}) {
   if (!['community', 'bilibili', 'youtube'].includes(site)) throw new Error('未知内容入口');
   const isBilibili = site === 'bilibili';
   const isYoutube = site === 'youtube';
@@ -306,7 +306,7 @@ function createCommunityController({ WebContentsView, BaseWindow, openExternal, 
         if (!record.nativeOverlay) {
           if (record.attached) { record.host.contentView.removeChildView(record.view); record.attached=false; }
           const {createNativeSocialWindow}=require('./native-social-window.cjs');
-          record.nativeOverlay=createNativeSocialWindow({BaseWindow,host:record.host,view:record.view});
+          record.nativeOverlay=createNativeSocialWindow({BaseWindow,host:record.host,view:record.view,onBeforeDestroy:onOverlayClosing});
           record.nativeOverlay.attach(); record.attached=true;
         }
         record.nativeOverlay.place(bounds,holes); restoreAudio(record); return true;
@@ -583,7 +583,8 @@ function createCommunityController({ WebContentsView, BaseWindow, openExternal, 
     place(record); state(record, 'ready');
   }
   return Object.freeze({ action, handoff, bindHost, dispose: () => unbind(true),
-    get isOpen() { return !!current?.wanted; }, get view() { return current?.view || null; } });
+    get isOpen() { return !!current?.wanted; }, get view() { return current?.view || null; },
+    get overlayWindow() { return current?.nativeOverlay?.window || null; } });
 }
 
 // Each provider owns a single persistent view. Slot routing allows the two
@@ -709,6 +710,7 @@ function createSocialController(options = {}) {
     dispose() { ++generation; for (const slot of slots.keys()) bump(slot); slots.clear(); legacyVisible = false; Object.values(controllers).forEach(controller => controller.dispose()); },
     get hasVisibleView() { return controllers.community.isOpen || controllers.bilibili.isOpen || controllers.youtube.isOpen; },
     get isOpen() { return controllers.community.isOpen; },
+    get overlayWindow() { return controllers[active].overlayWindow; },
     get view() { return controllers[active].view; } });
 }
 
