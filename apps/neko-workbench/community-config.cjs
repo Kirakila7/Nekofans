@@ -9,6 +9,15 @@ const BILIBILI_URL = 'https://www.bilibili.com/';
 const BILIBILI_HOME_URL = BILIBILI_URL;
 const BILIBILI_PLAYER_ORIGIN = 'https://player.bilibili.com';
 const BILIBILI_PARTITION = 'persist:neko-bilibili';
+const YOUTUBE_PARTITION = 'persist:neko-youtube';
+const YOUTUBE_SAMPLE_ID = 'M7lc1UVf-VE';
+const YOUTUBE_ORIGIN = 'https://www.youtube.com';
+const YOUTUBE_SAMPLE_URL = `${YOUTUBE_ORIGIN}/embed/${YOUTUBE_SAMPLE_ID}`;
+const YOUTUBE_SHORTS_URL = `${YOUTUBE_ORIGIN}/shorts`;
+const YOUTUBE_MIN_SIZE = 200;
+// The daily macOS package uses this registered bundle identifier. Consumers
+// building a different app can supply their own identifier to the controller.
+const YOUTUBE_APP_ID = 'cn.neko.workbench.trial';
 // Fallback only if Electron cannot provide a parsable Chromium desktop UA.
 const BILIBILI_DESKTOP_USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
 // Retain Chromium's platform and version while removing Electron/app product
@@ -33,6 +42,41 @@ function parseWebUrl(value) {
     if (!['http:', 'https:'].includes(url.protocol) || !url.hostname || url.username || url.password) return null;
     return url;
   } catch { return null; }
+}
+
+// Convert only explicitly supported YouTube video links to the official
+// embedded player. Never forward tracking, timestamps or arbitrary params.
+function youtubeEmbedUrl(value) {
+  const url = parseWebUrl(value);
+  if (!url || url.protocol !== 'https:' || url.port) return null;
+  const lists = url.searchParams.getAll('list');
+  if (lists.length > 1 || (lists.length && !/^PL[A-Za-z0-9_-]{10,126}$/.test(lists[0]))) return null;
+  let id;
+  if (url.origin === 'https://youtu.be') id = /^\/([A-Za-z0-9_-]{11})\/?$/.exec(url.pathname)?.[1];
+  else if (['https://www.youtube.com', 'https://youtube.com', 'https://m.youtube.com'].includes(url.origin)) {
+    if (url.pathname === '/watch') {
+      const ids = url.searchParams.getAll('v');
+      if (ids.length !== 1) return null;
+      id = ids[0];
+    } else if (url.pathname === '/playlist' || url.pathname === '/embed') {
+      return lists.length ? `${YOUTUBE_ORIGIN}/embed?listType=playlist&list=${lists[0]}` : null;
+    } else id = /^\/(?:embed|shorts)\/([A-Za-z0-9_-]{11})\/?$/.exec(url.pathname)?.[1];
+  }
+  return typeof id === 'string' && /^[A-Za-z0-9_-]{11}$/.test(id) ? `${YOUTUBE_ORIGIN}/embed/${id}${lists.length ? '?list='+lists[0] : ''}` : null;
+}
+
+function classifyYoutubeNavigation(value) {
+  const target = parseWebUrl(value);
+  if (!target) return { kind: 'blocked' };
+  if (target.origin === YOUTUBE_ORIGIN && /^\/shorts(?:\/[A-Za-z0-9_-]{11})?\/?$/.test(target.pathname)) return { kind:'internal',url:target.href };
+  const embedded = youtubeEmbedUrl(target.href);
+  if (embedded) return { kind:'internal',url:embedded };
+  return { kind:'external',url:target.href };
+}
+
+function youtubeReferrer(appId = YOUTUBE_APP_ID) {
+  if (typeof appId !== 'string' || !/^[a-z0-9]+(?:[.-][a-z0-9]+)+$/i.test(appId)) throw new Error('YouTube 应用标识无效');
+  return `https://${appId.toLowerCase()}/`;
 }
 
 function resolveCommunityUrl(value = process.env.NEKO_WORKBENCH_COMMUNITY_URL) {
@@ -115,17 +159,24 @@ function communityWindowOptions({ show = false, parent } = {}) {
 
 function installCommunityNavigation(target, { communityUrl, parent, openExternal,
   classify = url => classifyCommunityNavigation(url, communityUrl), allowAuthPopup = true,
-  onExternalError = () => {}, onInternalPopup, onInternalNavigate = () => {}, onPopup = () => {}, canOpenPopup = () => true }) {
+  onExternalError = () => {}, onInternalPopup, onInternalNavigate = () => {}, rewriteInternal = false, blockExternalRedirect = false, onPopup = () => {}, canOpenPopup = () => true }) {
   const contents = target.webContents;
   const external = url => Promise.resolve().then(() => openExternal(url)).catch(onExternalError);
   const navigate = (event, value) => {
     const destination = classify(value);
-    if (destination.kind === 'internal') { onInternalNavigate(destination.url); return; }
+    if (destination.kind === 'internal') {
+      if (rewriteInternal && destination.url !== value) { event.preventDefault(); if (onInternalPopup) void onInternalPopup(destination.url); return; }
+      onInternalNavigate(destination.url); return;
+    }
     event.preventDefault();
     if (destination.kind === 'external') void external(destination.url);
   };
+  const redirect = (event, value) => {
+    if (blockExternalRedirect && classify(value).kind !== 'internal') { event.preventDefault(); return; }
+    navigate(event, value);
+  };
   contents.on('will-navigate', navigate);
-  contents.on('will-redirect', navigate);
+  contents.on('will-redirect', redirect);
   contents.setWindowOpenHandler(({ url }) => {
     if (!canOpenPopup()) return { action: 'deny' };
     const destination = classify(url);
@@ -147,7 +198,7 @@ function installCommunityNavigation(target, { communityUrl, parent, openExternal
   contents.on('did-create-window', childCreated);
   return () => {
     contents.removeListener('will-navigate', navigate);
-    contents.removeListener('will-redirect', navigate);
+    contents.removeListener('will-redirect', redirect);
     contents.removeListener('did-create-window', childCreated);
     if (!contents.isDestroyed()) contents.setWindowOpenHandler(() => ({ action: 'deny' }));
   };
@@ -155,12 +206,14 @@ function installCommunityNavigation(target, { communityUrl, parent, openExternal
 
 function validateCommunityRequest(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)
-      || Object.keys(value).some(key => !['action', 'bounds', 'site', 'slot', 'requestId', 'home'].includes(key))
-      || !['open', 'layout', 'hide', 'reload', 'back', 'copy-video-link', 'play-official'].includes(value.action)
+      || Object.keys(value).some(key => !['action', 'bounds', 'site', 'slot', 'requestId', 'home', 'videoUrl'].includes(key))
+      || !['open', 'layout', 'hide', 'reload', 'back', 'copy-video-link', 'play-official', 'open-youtube-video', 'open-youtube-shorts'].includes(value.action)
       || (value.requestId !== undefined && (!['open', 'hide'].includes(value.action) || !Number.isSafeInteger(value.requestId) || value.requestId < 1))
-      || (value.site !== undefined && (value.action !== 'open' || !['community', 'bilibili'].includes(value.site)))
+      || (value.site !== undefined && (value.action !== 'open' || !['community', 'bilibili', 'youtube'].includes(value.site)))
       || (value.slot !== undefined && !['side', 'left', 'right'].includes(value.slot))
-      || (value.home !== undefined && (value.home !== true || value.action !== 'open' || value.site !== 'bilibili'))) throw new Error('未知社区操作');
+      || (value.home !== undefined && (value.home !== true || value.action !== 'open' || value.site !== 'bilibili'))
+      || (value.videoUrl !== undefined && (value.action !== 'open-youtube-video' || !youtubeEmbedUrl(value.videoUrl)))
+      || (value.action === 'open-youtube-video' && value.videoUrl === undefined)) throw new Error('未知社区操作');
   if (value.action === 'open' || value.action === 'layout' || value.bounds !== undefined) {
     const bounds = value.bounds;
     if (!bounds || typeof bounds !== 'object' || Array.isArray(bounds)
@@ -168,7 +221,7 @@ function validateCommunityRequest(value) {
           Object.hasOwn(bounds, key) && Number.isFinite(bounds[key]) && Math.abs(bounds[key]) <= 1000000)
         || bounds.width <= 0 || bounds.height <= 0) throw new Error('社区布局无效');
   }
-  return { action: value.action, ...(value.site ? { site: value.site } : {}), ...(value.slot ? { slot: value.slot } : {}), ...(value.home === true ? { home: true } : {}), ...(value.requestId !== undefined ? { requestId: value.requestId } : {}), ...(value.bounds ? { bounds: { ...value.bounds } } : {}) };
+  return { action: value.action, ...(value.site ? { site: value.site } : {}), ...(value.slot ? { slot: value.slot } : {}), ...(value.videoUrl ? { videoUrl: value.videoUrl } : {}), ...(value.home === true ? { home: true } : {}), ...(value.requestId !== undefined ? { requestId: value.requestId } : {}), ...(value.bounds ? { bounds: { ...value.bounds } } : {}) };
 }
 
 function communityBounds(host, bounds) {
@@ -184,12 +237,14 @@ function communityBounds(host, bounds) {
 
 const LOAD_ERROR = '社区页面未能打开，请检查网络后重试';
 const CANCEL_ERROR = '社区已隐藏或工作台页面已离开';
-function createCommunityController({ WebContentsView, openExternal, copyText, env = process.env, site = 'community',
+function createCommunityController({ WebContentsView, openExternal, copyText, env = process.env, site = 'community', youtubeAppId = YOUTUBE_APP_ID,
   onState = () => {}, onHide = () => {}, onExternalError } = {}) {
-  if (!['community', 'bilibili'].includes(site)) throw new Error('未知内容入口');
+  if (!['community', 'bilibili', 'youtube'].includes(site)) throw new Error('未知内容入口');
   const isBilibili = site === 'bilibili';
-  const LOAD_ERROR = isBilibili ? 'B 站页面未能打开，请检查网络后重试' : '社区页面未能打开，请检查网络后重试';
-  const classify = (url, communityUrl) => isBilibili ? classifyBilibiliNavigation(url) : classifyCommunityNavigation(url, communityUrl);
+  const isYoutube = site === 'youtube';
+  const youtubeIdentity = isYoutube ? youtubeReferrer(youtubeAppId) : null;
+  const LOAD_ERROR = isYoutube ? 'YouTube 播放器未能打开，请检查网络后重试' : isBilibili ? 'B 站页面未能打开，请检查网络后重试' : '社区页面未能打开，请检查网络后重试';
+  const classify = (url, communityUrl) => isYoutube ? classifyYoutubeNavigation(url) : isBilibili ? classifyBilibiliNavigation(url) : classifyCommunityNavigation(url, communityUrl);
   let current = null, binding = null;
   function canGoBack(record) {
     if (record.backPending) return false;
@@ -209,7 +264,25 @@ function createCommunityController({ WebContentsView, openExternal, copyText, en
       bilibiliOfficialPlayerIdentity(parseWebUrl(record.webContents.getURL())));
   }
   function state(record, status, error) {
-    if (current === record && (record.wanted || status === 'hidden')) onState(record.host, { status, ...(record.requestId !== undefined ? { requestId: record.requestId } : {}), ...(isBilibili ? { canGoBack: canGoBack(record), canShare: canShare(record), canPlayOfficial: canPlayOfficial(record), isOfficialPlayer: isOfficialPlayer(record) } : {}), ...(error ? { error } : {}) });
+    if (current === record && (record.wanted || status === 'hidden')) onState(record.host, { status, ...(record.requestId !== undefined ? { requestId: record.requestId } : {}), ...(isBilibili || isYoutube ? { canGoBack: canGoBack(record) } : {}), ...(isBilibili ? { canShare: canShare(record), canPlayOfficial: canPlayOfficial(record), isOfficialPlayer: isOfficialPlayer(record) } : {}), ...(isYoutube ? { tooSmall: !!record.tooSmall } : {}), ...(error ? { error } : {}) });
+  }
+  // A detached video view can continue producing audio. Mute only while it is
+  // hidden and restore the exact previous WebContents mute state on reattach;
+  // this does not change the site's own volume or mute controls.
+  function muteWhileHidden(record) {
+    const contents = record.webContents;
+    if (!(isBilibili || isYoutube) || record.temporaryAudioMute || contents.isDestroyed() ||
+        typeof contents.isAudioMuted !== 'function' || typeof contents.setAudioMuted !== 'function') return;
+    record.previousAudioMute = contents.isAudioMuted();
+    contents.setAudioMuted(true);
+    record.temporaryAudioMute = true;
+  }
+  function restoreAudio(record) {
+    const contents = record.webContents;
+    if (!record.temporaryAudioMute || contents.isDestroyed()) return;
+    contents.setAudioMuted(record.previousAudioMute);
+    record.temporaryAudioMute = false;
+    delete record.previousAudioMute;
   }
   function detach(record) {
     if (!record.attached) return;
@@ -219,9 +292,15 @@ function createCommunityController({ WebContentsView, openExternal, copyText, en
   function place(record) {
     if (current !== record || !record.wanted || !record.loaded || record.webContents.isDestroyed()) return false;
     const bounds = communityBounds(record.host, record.bounds);
+    if (isYoutube) {
+      const scale = record.host.webContents.getZoomFactor();
+      record.tooSmall = bounds.width / scale < YOUTUBE_MIN_SIZE || bounds.height / scale < YOUTUBE_MIN_SIZE;
+      if (record.tooSmall) { muteWhileHidden(record); detach(record); return false; }
+    }
     if (!bounds.width || !bounds.height) { detach(record); return false; }
     record.view.setBounds(bounds);
     if (!record.attached) { record.host.contentView.addChildView(record.view); record.attached = true; }
+    restoreAudio(record);
     return true;
   }
   function dispose(notifyHidden = false) {
@@ -270,8 +349,8 @@ function createCommunityController({ WebContentsView, openExternal, copyText, en
     state(record, 'error', LOAD_ERROR);
   }
   function create(host, bounds, requestId) {
-    const communityUrl = isBilibili ? BILIBILI_URL : resolveCommunityUrl(env.NEKO_WORKBENCH_COMMUNITY_URL);
-    const view = new WebContentsView({ webPreferences: communityWebPreferences(isBilibili ? BILIBILI_PARTITION : COMMUNITY_PARTITION) });
+    const communityUrl = isYoutube ? YOUTUBE_SAMPLE_URL : isBilibili ? BILIBILI_URL : resolveCommunityUrl(env.NEKO_WORKBENCH_COMMUNITY_URL);
+    const view = new WebContentsView({ webPreferences: communityWebPreferences(isYoutube ? YOUTUBE_PARTITION : isBilibili ? BILIBILI_PARTITION : COMMUNITY_PARTITION) });
     const record = { host, view, webContents: view.webContents, communityUrl, bounds, requestId,
       epoch: 0, loadId: 0, loading: null, loaded: false, failed: false, wanted: true,
       attached: false, popups: new Set(), responseCode: 0 };
@@ -284,8 +363,8 @@ function createCommunityController({ WebContentsView, openExternal, copyText, en
     }
     record.setBilibiliAgent = setBilibiliAgent;
     if (isBilibili) setBilibiliAgent();
-    record.cleanupNavigation = installCommunityNavigation(view, { communityUrl, parent: host, openExternal, onExternalError,
-      classify: url => classify(url, communityUrl), allowAuthPopup: !isBilibili,
+    record.cleanupNavigation = installCommunityNavigation(view, { communityUrl, parent: host, openExternal, onExternalError, rewriteInternal:isYoutube, blockExternalRedirect:isYoutube,
+      classify: url => classify(url, communityUrl), allowAuthPopup: !isBilibili && !isYoutube,
       onInternalNavigate: setBilibiliAgent,
       canOpenPopup: () => current === record && record.wanted && !host.isDestroyed(),
       onPopup: child => { record.popups.add(child); child.once('closed', () => record.popups.delete(child)); },
@@ -306,7 +385,7 @@ function createCommunityController({ WebContentsView, openExternal, copyText, en
       if (responseCode >= 400) fail(record);
     });
     contents.on('did-navigate-in-page', (_event, _url, isMainFrame) => {
-      if (isBilibili && isMainFrame && current === record && record.wanted) {
+      if ((isBilibili || isYoutube) && isMainFrame && current === record && record.wanted) {
         if (record.backPending) { record.backPending = false; record.loaded = true; place(record); }
         state(record, 'ready');
       }
@@ -337,7 +416,7 @@ function createCommunityController({ WebContentsView, openExternal, copyText, en
     const navigation = Promise.resolve().then(async () => {
       if (current !== record || record.webContents.isDestroyed()) return false;
       record.setBilibiliAgent(url);
-      await record.webContents.loadURL(url);
+      await record.webContents.loadURL(url, isYoutube ? { httpReferrer: youtubeIdentity } : undefined);
       return true;
     });
     const loading = Promise.resolve().then(async () => {
@@ -371,14 +450,14 @@ function createCommunityController({ WebContentsView, openExternal, copyText, en
         if (record.loading) { if (wasWanted) state(record, 'hidden'); dispose(); }
         else {
           if (wasWanted) onHide();
-          record.epoch++; record.wanted = false; detach(record);
+          record.epoch++; record.wanted = false; muteWhileHidden(record); detach(record);
           if (wasWanted) state(record, 'hidden');
         }
       }
       return { ok: true };
     }
     if (request.action === 'layout') {
-      if (current) { current.bounds = request.bounds; place(current); }
+      if (current) { const wasSmall = current.tooSmall; current.bounds = request.bounds; place(current); if (isYoutube && wasSmall !== current.tooSmall && current.wanted) state(current, 'ready'); }
       return { ok: true };
     }
     if (request.action === 'back') {
@@ -414,6 +493,25 @@ function createCommunityController({ WebContentsView, openExternal, copyText, en
       if (current !== record || !record.wanted || epoch !== record.epoch) throw new Error(CANCEL_ERROR);
       place(record); state(record, 'ready');
       return { ok: true };
+    }
+    if (request.action === 'open-youtube-video') {
+      const record = current, url = youtubeEmbedUrl(request.videoUrl);
+      if (!isYoutube || !record || !record.wanted || !url || record.webContents.isDestroyed()) throw new Error('请先打开 YouTube 播放器并输入有效的视频链接');
+      if (record.loading) throw new Error('播放器正在加载，请稍后重试');
+      const epoch = record.epoch;
+      await load(record, url);
+      if (current !== record || !record.wanted || epoch !== record.epoch) throw new Error(CANCEL_ERROR);
+      place(record); state(record, 'ready');
+      return { ok: true };
+    }
+    if (request.action === 'open-youtube-shorts') {
+      const record = current;
+      if (!isYoutube || !record || !record.wanted || record.webContents.isDestroyed()) throw new Error('请先打开 YouTube');
+      if (record.loading) throw new Error('页面正在加载，请稍后重试');
+      const epoch = record.epoch;
+      await load(record, YOUTUBE_SHORTS_URL);
+      if (current !== record || !record.wanted || epoch !== record.epoch) throw new Error(CANCEL_ERROR);
+      place(record); state(record, 'ready'); return { ok:true };
     }
     if (request.action === 'open') {
       const projected = communityBounds(host, request.bounds);
@@ -452,7 +550,7 @@ function createCommunityController({ WebContentsView, openExternal, copyText, en
   async function handoff(host, value) {
     const record = current, url = parseWebUrl(value);
     // Proof-bearing navigation is only ever generated by the trusted main process.
-    if (isBilibili || !record || record.host !== host || !record.wanted || record.loading || host.isDestroyed()) throw new Error(CANCEL_ERROR);
+    if (isBilibili || isYoutube || !record || record.host !== host || !record.wanted || record.loading || host.isDestroyed()) throw new Error(CANCEL_ERROR);
     if (!url || url.origin !== new URL(DEFAULT_COMMUNITY_URL).origin || url.pathname !== '/feed'
         || new URL(record.communityUrl).origin !== url.origin) throw new Error('桌面身份交接地址无效');
     const epoch = record.epoch;
@@ -473,7 +571,7 @@ function createSocialController(options = {}) {
   const bump = slot => { const v = (slotVersion.get(slot) || 0) + 1; slotVersion.set(slot, v); return v; };
   const bumpSite = site => { const v = (siteVersion.get(site) || 0) + 1; siteVersion.set(site, v); return v; };
   const slotOf = site => [...slots].find(([, entry]) => entry.site === site)?.[0];
-  const controllers = Object.fromEntries(['community', 'bilibili'].map(site => [site,
+  const controllers = Object.fromEntries(['community', 'bilibili', 'youtube'].map(site => [site,
     createCommunityController({ ...options, site, onHide: site === 'community' ? options.onHide : undefined, onState: (host, value) => {
       const slot = slotOf(site);
       publish(host, { ...value, site, ...(slot ? { slot } : {}) });
@@ -585,12 +683,12 @@ function createSocialController(options = {}) {
     },
     bindHost(host) { Object.values(controllers).forEach(controller => controller.bindHost(host)); },
     dispose() { ++generation; for (const slot of slots.keys()) bump(slot); slots.clear(); legacyVisible = false; Object.values(controllers).forEach(controller => controller.dispose()); },
-    get hasVisibleView() { return controllers.community.isOpen || controllers.bilibili.isOpen; },
+    get hasVisibleView() { return controllers.community.isOpen || controllers.bilibili.isOpen || controllers.youtube.isOpen; },
     get isOpen() { return controllers.community.isOpen; },
     get view() { return controllers[active].view; } });
 }
 
-module.exports = { DEFAULT_COMMUNITY_URL, OFFICIAL_AUTH_ORIGIN, COMMUNITY_PARTITION, BILIBILI_URL, BILIBILI_HOME_URL, BILIBILI_PARTITION, BILIBILI_DESKTOP_USER_AGENT, BILIBILI_PLAYER_ORIGIN,
+module.exports = { DEFAULT_COMMUNITY_URL, OFFICIAL_AUTH_ORIGIN, COMMUNITY_PARTITION, BILIBILI_URL, BILIBILI_HOME_URL, BILIBILI_PARTITION, BILIBILI_DESKTOP_USER_AGENT, BILIBILI_PLAYER_ORIGIN, YOUTUBE_PARTITION, YOUTUBE_SAMPLE_URL, YOUTUBE_APP_ID, YOUTUBE_MIN_SIZE,
   resolveCommunityUrl, classifyCommunityNavigation, communityWebPreferences, communityWindowOptions,
-  classifyBilibiliNavigation, bilibiliVideoShareUrl, bilibiliOfficialPlayerUrl, installCommunityNavigation, validateCommunityRequest, communityBounds,
+  classifyBilibiliNavigation, bilibiliVideoShareUrl, bilibiliOfficialPlayerUrl, youtubeEmbedUrl, classifyYoutubeNavigation, youtubeReferrer, installCommunityNavigation, validateCommunityRequest, communityBounds,
   createCommunityController, createSocialController };
