@@ -33,18 +33,24 @@ function createNativeComposerController({ WebContentsView, ipcMain, baseDir = __
     view.setBounds({ x, y, width: right - x, height: bottom - y });
   }
   function publish() { if (ready && view && !view.webContents.isDestroyed()) view.webContents.send('neko-composer-state', state); }
+  function unavailable(child) {
+    if (view !== child) return;
+    detach(); view = null; ready = false;
+    if (rect && host && !host.isDestroyed() && !host.webContents.isDestroyed()) host.webContents.send('workbench:native-composer-event', { type: 'unavailable' });
+    if (!child.webContents.isDestroyed()) child.webContents.close({ waitForBeforeUnload: false });
+  }
   function refresh() {
     if (!host || host.isDestroyed() || !view || !ready || !enabled || !rect || host.isVisible?.() === false || host.isMinimized?.() === true) { detach(); return; }
     if (!attached) { host.contentView.addChildView(view); attached = true; }
     bounds(); publish();
   }
   function make() {
-    const child = new WebContentsView({ webPreferences: { preload: path.join(baseDir, 'native-composer-preload.cjs'), sandbox: true, contextIsolation: true, nodeIntegration: false } });
+    const child = new WebContentsView({ webPreferences: { preload: path.join(baseDir, 'native-composer-preload.cjs'), partition: 'persist:neko-workspace-composer', sandbox: true, contextIsolation: true, nodeIntegration: false } });
     child.setBackgroundColor('#00000000'); view = child; ready = false;
     child.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     child.webContents.on('will-navigate', event => event.preventDefault());
-    child.webContents.on('render-process-gone', () => { if (view === child) { detach(); view = null; ready = false; } if (!child.webContents.isDestroyed()) child.webContents.close({ waitForBeforeUnload: false }); });
-    void child.webContents.loadFile(path.join(baseDir, 'native-composer.html')).then(() => { if (view !== child) return; ready = true; refresh(); }).catch(() => { if (view === child) { detach(); view = null; ready = false; } if (!child.webContents.isDestroyed()) child.webContents.close({ waitForBeforeUnload: false }); });
+    child.webContents.on('render-process-gone', () => unavailable(child));
+    void child.webContents.loadFile(path.join(baseDir, 'native-composer.html')).then(() => { if (view !== child) return; ready = true; refresh(); }).catch(() => unavailable(child));
   }
   function place(window, request) {
     if (!request || !['place', 'remove'].includes(request.action)) throw Error('无效悬浮输入操作');

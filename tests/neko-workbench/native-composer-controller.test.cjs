@@ -13,11 +13,11 @@ class FakeContents extends EventEmitter {
   getZoomFactor() { return 1; }
 }
 class FakeView { constructor(opts) { this.webContents=new FakeContents(); this.opts=opts; FakeView.latest=this; } setBackgroundColor(x) { this.background=x; } setBounds(r) { this.bounds=r; } }
-function setup() {
+function setup(View = FakeView) {
   const ipcMain=new EventEmitter(), window=new EventEmitter();
   window.webContents=new FakeContents(); window.isDestroyed=()=>false; window.isVisible=()=>true; window.isMinimized=()=>false; window.getContentSize=()=>[1000,800];
   const children=[]; window.contentView={ addChildView(v) { children.push(v); }, removeChildView(v) { const i=children.indexOf(v); if(i>=0) children.splice(i,1); } };
-  const controller=createNativeComposerController({WebContentsView:FakeView,ipcMain}); return {controller,ipcMain,window,children};
+  const controller=createNativeComposerController({WebContentsView:View,ipcMain}); return {controller,ipcMain,window,children};
 }
 async function init(ctx) {ctx.controller.place(ctx.window,{action:'place',rect:{x:500,y:700,width:400,height:60}});ctx.controller.setEnabled(true);await Promise.resolve();}
 test('native composer overlays video, clips bounds, detaches, and disposes',async()=>{
@@ -59,4 +59,25 @@ test('edit acknowledgement serializes versioned writes and rejects stale writes 
  const first={type:'edit',value:'初稿',sessionToken:'s',revision:1,editId:1};t.ipcMain.emit('neko-composer-input',event,first);t.ipcMain.emit('neko-composer-input',event,{...first,editId:2});assert.equal(t.window.webContents.sent.length,1);
  t.controller.update({...current,value:'初稿',revision:2,settledEditId:1});t.ipcMain.emit('neko-composer-input',event,{...first,editId:3});assert.equal(t.window.webContents.sent.length,1);assert.equal(v.webContents.sent.at(-1)[1].editConflict,true);
  t.ipcMain.emit('neko-composer-input',event,{...first,revision:2,editId:4});assert.equal(t.window.webContents.sent.length,2);t.controller.dispose();
+});
+test('composer load failure notifies the host to recover the workspace', async()=>{
+ class FailLoad extends FakeView { constructor(options) { super(options); this.webContents.loadFile=()=>Promise.reject(Error('synthetic failure')); } }
+ const t=setup(FailLoad);await init(t);await new Promise(resolve=>setImmediate(resolve));const v=FakeView.latest;
+ assert.deepEqual(t.window.webContents.sent,[['workbench:native-composer-event',{type:'unavailable'}]]);
+ assert.equal(t.children.length,0);assert(v.webContents.closed);t.controller.dispose();
+});
+test('renderer crash sends one recovery notification and normal removal does not',async()=>{
+ const t=setup();await init(t);const v=FakeView.latest;v.webContents.emit('render-process-gone');
+ assert.deepEqual(t.window.webContents.sent,[['workbench:native-composer-event',{type:'unavailable'}]]);
+ assert.equal(t.children.length,0);assert(v.webContents.closed);v.webContents.emit('render-process-gone');assert.equal(t.window.webContents.sent.length,1);
+ t.controller.dispose();
+ const removed=setup();await init(removed);const removedView=FakeView.latest;removed.controller.place(removed.window,{action:'remove'});removedView.webContents.emit('render-process-gone');
+ assert.deepEqual(removed.window.webContents.sent,[]);removed.controller.dispose();
+});
+test('late load failure after removal or disposal does not report a visible composer failure',async()=>{
+ let rejectLoad;class DeferredView extends FakeView { constructor(options) { super(options);this.webContents.loadFile=()=>new Promise((_,reject)=>{rejectLoad=reject;}); } }
+ const removed=setup(DeferredView);removed.controller.place(removed.window,{action:'place',rect:{x:500,y:700,width:400,height:60}});removed.controller.place(removed.window,{action:'remove'});
+ rejectLoad(Error('synthetic late failure'));await new Promise(resolve=>setImmediate(resolve));assert.deepEqual(removed.window.webContents.sent,[]);removed.controller.dispose();
+ const disposed=setup(DeferredView);disposed.controller.place(disposed.window,{action:'place',rect:{x:500,y:700,width:400,height:60}});disposed.controller.dispose();
+ rejectLoad(Error('synthetic late failure'));await new Promise(resolve=>setImmediate(resolve));assert.deepEqual(disposed.window.webContents.sent,[]);
 });
