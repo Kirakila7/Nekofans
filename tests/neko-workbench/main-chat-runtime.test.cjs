@@ -10,7 +10,7 @@ function vault(){return {isEncryptionAvailable:()=>true,getSelectedStorageBacken
   decryptString:bytes=>{const raw=bytes.toString();if(!raw.startsWith('fixture-cipher:'))throw Error('bad fixture');return Buffer.from(raw.slice(15),'base64').toString();}};}
 function fixture(t){const directory=fs.mkdtempSync(path.join(os.tmpdir(),'neko-main-chat-'));const safeStorage=vault();const options={dataDir:directory,repositoryRoot:root,safeStorage,memoryWorker:{request:async()=>{throw Error('fixture native offline');},stop:async()=>{},close:async()=>{}}};const runtimes=[];
   t.after(async()=>{for(const runtime of runtimes)await runtime.close();fs.rmSync(directory,{recursive:true,force:true});});
-  const create=()=>{const runtime=new WorkbenchMainChat(options);runtimes.push(runtime);return runtime;};return {directory,options,safeStorage,create};}
+  const create=(extra={})=>{const runtime=new WorkbenchMainChat({...options,...extra});runtimes.push(runtime);return runtime;};return {directory,options,safeStorage,create};}
 function sse(res,text='你好'){res.writeHead(200,{'content-type':'text/event-stream'});res.write(`data: ${JSON.stringify({choices:[{delta:{content:text.slice(0,1)}}]})}\n\n`);res.end(`data: ${JSON.stringify({choices:[{delta:{content:text.slice(1)}}]})}\n\ndata: [DONE]\n\n`);}
 async function upstream(t){const requests=[];let handler=(_req,res)=>sse(res);const server=createServer((req,res)=>{let text='';req.on('data',chunk=>text+=chunk);req.on('end',()=>{const record={url:req.url,headers:req.headers,body:JSON.parse(text)};requests.push(record);handler(record,res);});});
   await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});
@@ -66,6 +66,34 @@ test('backend selection commits before changing memory and a failed encrypted sa
   const previous=fs.readFileSync(runtime.configFile);f.safeStorage.encryptString=()=>{throw Error('private key detail');};await assert.rejects(runtime.saveApi(config('https://other.invalid/v1')),/保存失败/);assert.equal(runtime.backend,'neko');assert.deepEqual(fs.readFileSync(runtime.configFile),previous);assert.equal(await runtime.secretStore.get(),'fixture-secret-only');
   fs.renameSync(runtime.configFile,runtime.configFile+'.saved');fs.mkdirSync(runtime.configFile);let cancellations=0;const cancel=runtime.opened.service.cancel.bind(runtime.opened.service);runtime.opened.service.cancel=()=>{cancellations++;return cancel();};
   await assert.rejects(runtime.selectBackend('chat-api'));assert.equal(runtime.backend,'neko');assert.equal(cancellations,0,'failed selection does not cancel the current backend');
+});
+
+test('account provider shares companion history and native memory wiring while keeping API credentials separate',async t=>{
+  const f=fixture(t),api=await upstream(t),inputs=[];
+  const provider={async *stream(input){inputs.push(input);yield {type:'delta',text:'账号回复'};yield {type:'complete',messageId:'account-answer'};}};
+  const runtime=f.create({accountProvider:provider});
+  await runtime.start();await runtime.saveApi(config(api.baseUrl));
+  assert.equal((await runtime.send('第一条')).status,'completed');
+  const originalConversation=runtime.opened.service.conversationId;
+  await runtime.selectBackend('deepseek-account');assert.equal(runtime.read().backend,'deepseek-account');
+  assert.equal(runtime.opened.service.conversationId,originalConversation);
+  assert.equal((await runtime.send('第二条')).text,'账号回复');
+  assert.equal(inputs.length,1);assert.equal(inputs[0].persona.id,'bigfish');
+  assert.deepEqual(inputs[0].messages.map(m=>m.text),['第一条','你好','第二条']);
+  assert.equal((await runtime.memories()).replication.mode,'neko');
+  assert.equal(await runtime.secretStore.get(),'fixture-secret-only');
+  await runtime.selectBackend('chat-api');assert.equal((await runtime.send('第三条')).status,'completed');
+  assert.equal(api.requests.length,2);assert.equal(runtime.opened.service.conversationId,originalConversation);
+});
+
+test('account backend without a provider fails closed without saving or sending a turn',async t=>{
+  const f=fixture(t),runtime=f.create();await runtime.start();
+  await assert.rejects(runtime.selectBackend('deepseek-account'),/尚未接入/);
+  assert.equal(runtime.read().backend,'chat-api');
+  fs.writeFileSync(runtime.configFile,JSON.stringify({backend:'deepseek-account',mainChat:runtime.settings}));
+  await runtime.close();const restored=f.create();await restored.start();
+  assert.equal(restored.read().backend,'deepseek-account');assert.equal(restored.read().ready,false);
+  await assert.rejects(restored.send('不应保存'),/尚未接入/);assert.deepEqual(await restored.history(),[]);
 });
 
 test('safeStorage refuses unavailable/basic_text backends and can repair/rollback unreadable ciphertext',async t=>{

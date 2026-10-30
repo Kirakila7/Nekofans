@@ -5,7 +5,9 @@ const { pathToFileURL } = require('node:url');
 const { WorkbenchSecretStore, atomicBytes } = require('./main-chat-secret.cjs');
 
 const PERSONA = 'bigfish';
-const BACKENDS = new Set(['chat-api', 'neko']);
+const BACKENDS = new Set(['chat-api', 'neko', 'deepseek-account']);
+const usesChatService = backend => backend === 'chat-api' || backend === 'deepseek-account';
+const unavailableAccountProvider = Object.freeze({ async *stream() { throw new Error('工作台账号聊天尚未接入'); } });
 const clone = value => structuredClone(value);
 const atomicJson = (file, value) => atomicBytes(file, Buffer.from(JSON.stringify(value, null, 2) + '\n'));
 const failure = () => new Error('聊天设置保存失败，请检查配置与系统加密存储后重试');
@@ -47,7 +49,7 @@ function parseApiInput(input, shared) {
 }
 
 class WorkbenchMainChat {
-  constructor({ dataDir, repositoryRoot, safeStorage, fetch: fetchImpl, initialBackend = 'chat-api', sharedModules, memoryWorker } = {}) {
+  constructor({ dataDir, repositoryRoot, safeStorage, fetch: fetchImpl, initialBackend = 'chat-api', sharedModules, memoryWorker, accountProvider } = {}) {
     this.dataDir = path.join(dataDir, 'main-chat');
     this.repositoryRoot = repositoryRoot;
     this.personasDir = path.join(this.dataDir, 'personas');
@@ -55,7 +57,8 @@ class WorkbenchMainChat {
     this.secretStore = new WorkbenchSecretStore(path.join(this.dataDir, 'secrets', 'chat-api-key.encrypted'), safeStorage);
     this.memorySecretStore = new WorkbenchSecretStore(path.join(this.dataDir, 'secrets', 'memory-api-key.encrypted'), safeStorage);
     this.memoryConfigFile = path.join(this.dataDir, 'memory-model.json');
-    this.memoryWorker = memoryWorker;
+    if (accountProvider != null && typeof accountProvider.stream !== 'function') throw new Error('工作台账号聊天接口无效');
+    this.memoryWorker = memoryWorker; this.accountProvider = accountProvider || null;
     this.fetch = fetchImpl; this.initialBackend = BACKENDS.has(initialBackend) ? initialBackend : 'chat-api';
     this.shared = sharedModules; this.opened = null; this.listeners = new Set(); this.tail = Promise.resolve();
     this.closed = false; this.backend = this.initialBackend; this.configError = '';
@@ -79,7 +82,7 @@ class WorkbenchMainChat {
         },getLegacy:async()=>this.opened?({items:await this.opened.memory?.list()||[],summaries:await this.opened.summaries?.list()||[],conversationId:this.opened.service.conversationId}):null,notify:()=>this.publish()});
       this.openNow();
       await this.memorySystem.localSync();
-      if(this.backend==='chat-api')void this.memorySystem.connect().catch(()=>{});
+      if(usesChatService(this.backend))void this.memorySystem.connect().catch(()=>{});
       return this.read();
     });
   }
@@ -100,6 +103,7 @@ class WorkbenchMainChat {
     if (this.closed) throw new Error('聊天服务已关闭');
     this.opened = this.shared.openMainChat({ settings: this.settings, personasDir: this.personasDir,
       dataDir: this.dataDir, secretStore: this.secretStore, ...(this.fetch ? { fetch: this.fetch } : {}),
+      ...(this.backend === 'deepseek-account' ? {provider:this.accountProvider || unavailableAccountProvider} : {}),
       memoryContext:(personaId,query,budget,signal)=>this.memorySystem.recall(personaId,query,budget,signal),
       localMemoryProcessing:false,
       onTurnSaved:()=>this.memorySystem.recordTurn() });
@@ -118,8 +122,8 @@ class WorkbenchMainChat {
     // Querying the macOS keychain can prompt/block. DSH startup does not need it.
     if (checkSecureStorage) this.secureStorageAvailable = this.secretStore.available();
     return clone({ backend: this.backend, settings: this.settings || null, hasKey: this.secretStore.has(),
-      secureStorageAvailable: this.secureStorageAvailable ?? null, ready: !!this.opened, error: this.configError,
-      memoryAvailable: this.backend === 'chat-api' && !!this.opened?.memory,
+      secureStorageAvailable: this.secureStorageAvailable ?? null, ready: !!this.opened && (this.backend !== 'deepseek-account' || !!this.accountProvider), error: this.configError || (this.backend === 'deepseek-account' && !this.accountProvider ? '工作台账号聊天尚未接入' : ''),
+      memoryAvailable: usesChatService(this.backend) && !!this.opened?.memory,
       memorySystem: this.memorySystem?.status(),
       voiceStatus: '未接入', chat: this.opened?.service.state() || { personaId: PERSONA, phase: 'idle' } });
   }
@@ -127,17 +131,32 @@ class WorkbenchMainChat {
   publish() { for (const listener of this.listeners) { try { listener(this.read()); } catch {} } }
   cancel() { return this.opened?.service.cancel() || false; }
   async send(text) {
-    if (this.closed || this.backend !== 'chat-api' || !this.opened) throw new Error('请先启用聊天 API');
+    if (this.closed || !usesChatService(this.backend) || !this.opened) throw new Error('请先启用聊天 API');
+    if (this.backend === 'deepseek-account' && !this.accountProvider) throw new Error('工作台账号聊天尚未接入');
     if (typeof text !== 'string' || !text.trim() || text.length > 8000) throw new Error('请输入 1～8000 字的消息');
     return this.opened.service.send(text);
   }
   selectBackend(backend) {
     return this.serial(async () => {
       if (this.closed || !BACKENDS.has(backend)) throw new Error('聊天方式无效');
+      if (backend === 'deepseek-account' && !this.accountProvider) throw new Error('工作台账号聊天尚未接入');
+      const previous = fs.existsSync(this.configFile) ? fs.readFileSync(this.configFile) : null;
+      const oldBackend = this.backend, oldError = this.configError;
       try { atomicJson(this.configFile, { backend, mainChat: this.settings }); }
       catch { throw new Error('聊天方式未能保存，请检查本机存储'); }
-      this.backend = backend; this.configError = ''; this.cancel();
-      if(backend==='chat-api')void this.memorySystem?.connect().catch(()=>{});
+      this.cancel();
+      try {
+        if ((oldBackend === 'deepseek-account') !== (backend === 'deepseek-account')) {
+          this.closeOpened(); this.backend = backend; this.openNow();
+        } else this.backend = backend;
+        this.configError = '';
+      } catch {
+        this.closeOpened(); this.backend = oldBackend; this.configError = oldError;
+        try { if (previous === null) fs.rmSync(this.configFile, {force:true}); else atomicBytes(this.configFile, previous); this.openNow(); }
+        catch { this.configError = '聊天配置恢复失败，请重新保存设置'; }
+        this.publish(); throw new Error('聊天方式未能启用，请检查本机存储');
+      }
+      if(usesChatService(backend))void this.memorySystem?.connect().catch(()=>{});
       this.publish(); return this.read();
     });
   }
@@ -179,7 +198,7 @@ class WorkbenchMainChat {
     finally { store.close(); }
   }
   async memories() {
-    if (this.closed || this.backend !== 'chat-api' || !this.opened?.memory) throw new Error('请在聊天 API 模式管理 N.E.K.O. 记忆');
+    if (this.closed || !usesChatService(this.backend) || !this.opened?.memory) throw new Error('请在主聊天模式管理 N.E.K.O. 记忆');
     const [items, summaries] = await Promise.all([this.opened.memory.list(), this.opened.summaries?.list() || []]);
     return { items: items.map(({ audioRef, ...item }) => item), summaries, replication:await this.memorySystem.view(),
       memoryModel:this.readMemoryModel() };
@@ -216,7 +235,7 @@ class WorkbenchMainChat {
   }
   async memoryAction(input) {
     if (!input || typeof input !== 'object' || Object.keys(input).some(key => !['action', 'id', 'text','mode','enabled','revisionIds','useChatApi','protocol','baseUrl','model','requestTimeoutMs','key'].includes(key))) throw new Error('记忆操作无效');
-    if (this.closed || this.backend !== 'chat-api' || !this.opened?.memory) throw new Error('记忆服务未就绪');
+    if (this.closed || !usesChatService(this.backend) || !this.opened?.memory) throw new Error('记忆服务未就绪');
     if(['configure-neko','sync'].includes(input.action)||String(input.action).startsWith('event-')){
       try{
         if(input.action==='configure-neko')await this.configureMemory(input);
