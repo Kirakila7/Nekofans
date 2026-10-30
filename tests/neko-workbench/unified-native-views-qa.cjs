@@ -149,9 +149,9 @@ if (!process.versions.electron || process.env.NEKO_UNIFIED_NATIVE_QA_CHILD !== '
       for (let attempt=0; attempt<100 && saved.side!=='bilibili'; attempt++) await new Promise(resolve => setTimeout(resolve, 25));
       assert.equal(saved.side, 'bilibili');
       await read("document.querySelector('.neko-unified-config .close').click()");
-      for (let attempt=0; attempt<100 && !host.contentView.children.some(v=>v.webContents?.getURL().startsWith('https://m.bilibili.com/')); attempt++) await new Promise(resolve => setTimeout(resolve, 25));
+      for (let attempt=0; attempt<100 && !host.contentView.children.some(v=>v.webContents?.getURL().startsWith('https://www.bilibili.com/')); attempt++) await new Promise(resolve => setTimeout(resolve, 25));
       const children = host.contentView.children;
-      const video = children.find(v=>v.webContents?.getURL().startsWith('https://m.bilibili.com/'));
+      const video = children.find(v=>v.webContents?.getURL().startsWith('https://www.bilibili.com/'));
       assert(video && children.includes(community), 'community and video views coexist after real UI interaction');
       const sidebar = await read(`(() => {const h=document.querySelector('[data-neko-unified-slot=side] header').getBoundingClientRect(),
         dock=document.querySelector('.neko-companion-dock').getBoundingClientRect(),slot=document.querySelector('[data-slot=sidebar]').getBoundingClientRect(),
@@ -196,8 +196,9 @@ if (!process.versions.electron || process.env.NEKO_UNIFIED_NATIVE_QA_CHILD !== '
       await controller.action(host, { action:'open', site:'bilibili', slot:'right', requestId:2, bounds:right });
       let children = host.contentView.children;
       const community = children.find(v => v.webContents?.getURL().startsWith('https://community.project-neko.cn/'));
-      const video = children.find(v => v.webContents?.getURL().startsWith('https://m.bilibili.com/'));
+      const video = children.find(v => v.webContents?.getURL().startsWith('https://www.bilibili.com/'));
       assert(community && video, 'both native child views must be attached'); assert.notEqual(community, video);
+      assert(!/Mobile|Electron/i.test(video.webContents.getUserAgent()), 'desktop homepage must use a sanitized desktop user agent');
       assert.deepEqual(community.getBounds(), left); assert.deepEqual(video.getBounds(), right);
       assert.equal(community.webContents.session, session.fromPartition(COMMUNITY_PARTITION));
       assert.equal(video.webContents.session, session.fromPartition(BILIBILI_PARTITION));

@@ -4,11 +4,13 @@ const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
 const { DEFAULT_COMMUNITY_URL, COMMUNITY_PARTITION, resolveCommunityUrl,
   classifyCommunityNavigation, createCommunityController, validateCommunityRequest,
-  communityBounds, createSocialController, BILIBILI_URL, BILIBILI_HOME_URL, BILIBILI_PARTITION, BILIBILI_MOBILE_USER_AGENT,
-  classifyBilibiliNavigation, bilibiliVideoShareUrl, bilibiliOfficialPlayerUrl } = require('../../apps/neko-workbench/community-config.cjs');
+  communityBounds, createSocialController, BILIBILI_URL, BILIBILI_HOME_URL, BILIBILI_PARTITION, BILIBILI_DESKTOP_USER_AGENT,
+  classifyBilibiliNavigation, bilibiliVideoShareUrl, bilibiliOfficialPlayerUrl,
+  youtubeEmbedUrl, classifyYoutubeNavigation, youtubeReferrer, YOUTUBE_PARTITION, YOUTUBE_SAMPLE_URL } = require('../../apps/neko-workbench/community-config.cjs');
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const bounds = { x: 300, y: 80, width: 800, height: 650 };
+const desktopUA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7871.212 Safari/537.36';
 function deferred() { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; }
 function fixture(env = {}, useSocial = false, extra = {}) {
   const views = [], external = [], states = [], errors = [], copied = [];
@@ -24,12 +26,14 @@ function fixture(env = {}, useSocial = false, extra = {}) {
     }
     setWindowOpenHandler(handler) { this.popup = handler; }
     setUserAgent(value) { this.userAgent = value; }
-    getUserAgent() { return this.userAgent || 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) TestApp/0.1 Chrome/150.0.7871.212 Electron/43.3.0 Safari/537.36'; }
+    getUserAgent() { return this.userAgent || (extra.rawUserAgent ?? 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) TestApp/0.1 Chrome/150.0.7871.212 Electron/43.3.0 Safari/537.36'); }
+    isAudioMuted() { return !!this.muted; }
+    setAudioMuted(value) { this.muted = value; (this.muteHistory ||= []).push(value); }
     isDestroyed() { return this.destroyed; }
     getURL() { return this.url; }
     focus() { this.focused = (this.focused || 0) + 1; }
-    async loadURL(url) {
-      this.loads.push(url); this.url = url;
+    async loadURL(url, options) {
+      this.loads.push(url); this.loadOptions = options; this.url = url;
       this.history.splice(++this.index); this.history.push(url);
       this.emit('did-start-navigation', {}, url, false, true);
       if (this.behavior) await this.behavior(url);
@@ -67,6 +71,134 @@ function fixture(env = {}, useSocial = false, extra = {}) {
   const open = (value = bounds) => action({ action: 'open', bounds: value });
   return { controller, views, external, states, errors, copied, failCopy: () => { copyError = new Error('private clipboard failure'); }, MockHost, Popup, host, action, open };
 }
+
+test('YouTube links are sanitized into official embed URLs and invalid or credentialed URLs are rejected', () => {
+  const id = 'M7lc1UVf-VE', expected = 'https://www.youtube.com/embed/'+id;
+  for (const value of [
+    'https://youtu.be/'+id+'?si=tracking',
+    'https://www.youtube.com/watch?v='+id+'&feature=share',
+    'https://m.youtube.com/shorts/'+id,
+    'https://www.youtube.com/embed/'+id,
+  ]) assert.equal(youtubeEmbedUrl(value), expected);
+  for (const value of [
+    'http://youtu.be/'+id, 'https://youtube.com.evil.invalid/watch?v='+id,
+    'https://user:secret@youtube.com/watch?v='+id, 'https://youtube.com:8443/watch?v='+id,
+    'https://youtube.com/watch?v='+id+'&v='+id, 'https://youtube.com/watch?v=short',
+    'https://youtube.com/embed/'+id+'/other', 'javascript:alert(1)',
+  ]) assert.equal(youtubeEmbedUrl(value), null);
+  assert.equal(classifyYoutubeNavigation(expected).kind, 'internal');
+  assert.deepEqual(classifyYoutubeNavigation('https://www.youtube.com/watch?v='+id+'&feature=share'), {kind:'internal',url:expected});
+  assert.equal(classifyYoutubeNavigation('https://www.youtube.com/shorts').kind, 'internal');
+  assert.equal(classifyYoutubeNavigation('https://www.youtube.com/shorts/'+id).kind, 'internal');
+  assert.equal(classifyYoutubeNavigation('https://www.youtube.com/shorts/'+id+'/extra').kind, 'external');
+  assert.equal(classifyYoutubeNavigation('https://www.youtube.com.evil.invalid/embed/'+id).kind, 'external');
+  assert.equal(youtubeReferrer('cn.neko.workbench.trial'), 'https://cn.neko.workbench.trial/');
+  assert.throws(() => youtubeReferrer('https://other.invalid'), /应用标识/);
+});
+
+test('YouTube playlist URLs use only the official playlist identity', () => {
+  const list='PL1234567890abcdefgh';
+  assert.equal(youtubeEmbedUrl('https://www.youtube.com/playlist?list='+list+'&si=private'),'https://www.youtube.com/embed?listType=playlist&list='+list);
+  assert.equal(youtubeEmbedUrl('https://www.youtube.com/watch?v=M7lc1UVf-VE&list='+list+'&si=private'),'https://www.youtube.com/embed/M7lc1UVf-VE?list='+list);
+  assert.equal(youtubeEmbedUrl('https://www.youtube.com/playlist?list='+list+'&list='+list),null);
+  assert.equal(youtubeEmbedUrl('https://evil.invalid/playlist?list='+list),null);
+  assert.equal(youtubeEmbedUrl('https://www.youtube.com/playlist?list=RDrandom'),null);
+  assert.equal(classifyYoutubeNavigation('https://www.youtube.com/embed?listType=playlist&list='+list).kind,'internal');
+});
+
+test('YouTube uses a dedicated sandboxed view and official app identity while coexisting with community', async () => {
+  const f = fixture({}, true);
+  await f.action({action:'open',site:'community',slot:'side',bounds});
+  await f.action({action:'open',site:'youtube',slot:'right',bounds});
+  assert.equal(f.views.length,2);
+  const youtube = f.views[1];
+  secure(youtube.options,YOUTUBE_PARTITION);
+  assert.equal(youtube.options.webPreferences.partition,YOUTUBE_PARTITION);
+  assert.notEqual(YOUTUBE_PARTITION,COMMUNITY_PARTITION);
+  assert.notEqual(YOUTUBE_PARTITION,BILIBILI_PARTITION);
+  assert.equal(youtube.webContents.loads.at(-1),YOUTUBE_SAMPLE_URL);
+  assert.deepEqual(youtube.webContents.loadOptions,{httpReferrer:'https://cn.neko.workbench.trial/'});
+  assert(f.host.children.has(f.views[0]));
+  assert(f.host.children.has(youtube));
+  await f.action({action:'open-youtube-video',slot:'right',videoUrl:'https://youtu.be/dQw4w9WgXcQ?si=private'});
+  assert.equal(youtube.webContents.loads.at(-1),'https://www.youtube.com/embed/dQw4w9WgXcQ');
+  assert.deepEqual(youtube.webContents.loadOptions,{httpReferrer:'https://cn.neko.workbench.trial/'});
+  assert.equal(f.views.length,2,'switching videos reuses the same view');
+  await assert.rejects(f.action({action:'open-youtube-video',slot:'right',videoUrl:'https://example.com/video'}), /未知社区操作/);
+  await assert.rejects(f.action({action:'open-youtube-video',slot:'side',videoUrl:'https://youtu.be/dQw4w9WgXcQ'}), /YouTube/);
+  f.controller.dispose();
+});
+
+test('YouTube Shorts and clicked official video links stay in the same isolated view', async () => {
+  const f=fixture({},true); await f.action({action:'open',site:'youtube',slot:'right',bounds});
+  const video=f.views[0],contents=video.webContents;
+  await f.action({action:'open-youtube-shorts',slot:'right'});
+  assert.equal(contents.loads.at(-1),'https://www.youtube.com/shorts');
+  assert.deepEqual(contents.loadOptions,{httpReferrer:'https://cn.neko.workbench.trial/'});
+  assert.equal(f.states.at(-1).canGoBack,true,'YouTube history should expose the return button');
+  await f.action({action:'back',slot:'right'});
+  assert.equal(contents.getURL(),YOUTUBE_SAMPLE_URL);
+  assert.equal(f.states.at(-1).status,'ready','in-page history must complete and reattach the player');
+  assert(f.host.children.has(video));
+  await f.action({action:'open-youtube-shorts',slot:'right'});
+  const prevent={prevented:false,preventDefault(){this.prevented=true;}};
+  contents.emit('will-navigate',prevent,'https://www.youtube.com/watch?v=dQw4w9WgXcQ&feature=shorts');
+  assert.equal(prevent.prevented,true); await tick();
+  assert.equal(contents.loads.at(-1),'https://www.youtube.com/embed/dQw4w9WgXcQ');
+  assert.equal(f.views.length,1); assert.deepEqual(f.external,[]);
+  assert.equal(contents.popup({url:'https://www.youtube.com/watch?v=M7lc1UVf-VE&feature=related'}).action,'deny'); await tick();
+  assert.equal(contents.loads.at(-1),YOUTUBE_SAMPLE_URL);
+  assert.deepEqual(f.external,[]);
+  const redirect={prevented:false,preventDefault(){this.prevented=true;}};
+  contents.emit('will-redirect',redirect,'https://accounts.google.com/signin'); await tick();
+  assert.equal(redirect.prevented,true); assert.deepEqual(f.external,[],'automatic redirect must not open a login window');
+  await assert.rejects(f.action({action:'open-youtube-shorts',slot:'side'}),/打开内容/);
+  await f.action({action:'open',site:'bilibili',slot:'right',bounds});
+  await assert.rejects(f.action({action:'open-youtube-shorts',slot:'right'}),/YouTube/);
+  f.controller.dispose();
+});
+
+test('YouTube is detached below its 200 by 200 minimum and restored without a reload', async () => {
+  const f = fixture({},true);
+  await f.action({action:'open',site:'youtube',slot:'right',bounds});
+  const video = f.views[0];
+  assert(f.host.children.has(video));
+  await f.action({action:'layout',slot:'right',bounds:{...bounds,width:199}});
+  assert(!f.host.children.has(video));
+  assert.equal(video.webContents.isAudioMuted(),true);
+  assert.equal(f.states.at(-1).tooSmall,true);
+  await f.action({action:'layout',slot:'right',bounds:{...bounds,width:240,height:210}});
+  assert(f.host.children.has(video));
+  assert.equal(video.webContents.isAudioMuted(),false);
+  assert.equal(f.states.at(-1).tooSmall,false);
+  assert.equal(video.webContents.loads.length,1);
+  f.controller.dispose();
+});
+
+test('switching video platforms or temporarily hiding a view silences it and restores the original mute state', async () => {
+  const f = fixture({},true);
+  await f.action({action:'open',site:'bilibili',slot:'right',bounds});
+  const bili=f.views[0].webContents;
+  assert.equal(bili.isAudioMuted(),false);
+  // Renderer may explicitly hide the old slot before opening the new site.
+  await f.action({action:'hide',slot:'right'});
+  assert.equal(bili.isAudioMuted(),true);
+  await f.action({action:'open',site:'youtube',slot:'right',bounds});
+  const youtube=f.views[1].webContents;
+  assert.equal(youtube.isAudioMuted(),false);
+  youtube.setAudioMuted(true); // The user had already muted this view.
+  await f.action({action:'open',site:'bilibili',slot:'right',bounds});
+  assert.equal(youtube.isAudioMuted(),true);
+  assert.equal(bili.isAudioMuted(),false);
+  await f.action({action:'open',site:'youtube',slot:'right',bounds});
+  assert.equal(bili.isAudioMuted(),true);
+  assert.equal(youtube.isAudioMuted(),true,'reopening preserves an existing mute');
+  assert.equal(f.views.length,2,'switching reuses both loaded pages');
+  await f.action({action:'hide',slot:'right'});
+  await f.action({action:'open',site:'youtube',slot:'right',bounds});
+  assert.equal(youtube.isAudioMuted(),true,'temporary overlay hide must preserve user mute');
+  f.controller.dispose();
+});
 
 test('identity handoff is confined to active official community and switches cancel it', async () => {
   let cancellations = 0;
@@ -165,9 +297,9 @@ function navigate(contents, type, url) {
   contents.emit(type, { preventDefault() { prevented = true; } }, url);
   return prevented;
 }
-function secure(options) {
+function secure(options, partition = COMMUNITY_PARTITION) {
   const { webPreferences } = options;
-  assert.equal(webPreferences.partition, COMMUNITY_PARTITION);
+  assert.equal(webPreferences.partition, partition);
   assert.notEqual(webPreferences.partition, 'persist:pet-dsh');
   assert.equal(webPreferences.nodeIntegration, false);
   assert.equal(webPreferences.contextIsolation, true);
@@ -299,6 +431,7 @@ test('official player URLs are reconstructed from supported Bilibili video ident
   const source = 'https://m.bilibili.com/video/BV1WYnd6DEAw?p=2&token=private#fragment';
   const player = 'https://player.bilibili.com/player.html?bvid=BV1WYnd6DEAw&p=2&autoplay=0';
   assert.equal(bilibiliOfficialPlayerUrl(source), player);
+  assert.equal(bilibiliOfficialPlayerUrl('https://www.bilibili.com/video/BV1WYnd6DEAw?p=2'), player);
   assert.equal(bilibiliVideoShareUrl(player), 'https://www.bilibili.com/video/BV1WYnd6DEAw?p=2');
   assert.equal(classifyBilibiliNavigation(player).kind, 'internal');
   for (const url of ['https://m.bilibili.com/', 'https://m.bilibili.com/video/av123',
@@ -324,19 +457,19 @@ test('official playback is user initiated, stays in the same isolated view, copi
   const contents = f.views[0].webContents;
   assert.equal(f.states.at(-1).canPlayOfficial, false);
   await assert.rejects(f.action({ action: 'play-official' }), /请先打开/);
-  await contents.loadURL('https://m.bilibili.com/video/BV1WYnd6DEAw?p=2&token=private');
+  await contents.loadURL('https://www.bilibili.com/video/BV1WYnd6DEAw?p=2&token=private');
   assert.equal(f.states.at(-1).canPlayOfficial, true);
   assert.deepEqual(await f.action({ action: 'play-official' }), { ok: true });
   assert.equal(contents.getURL(), 'https://player.bilibili.com/player.html?bvid=BV1WYnd6DEAw&p=2&autoplay=0');
-  assert.equal(contents.userAgent, 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7871.212 Safari/537.36');
+  assert.equal(contents.userAgent, desktopUA);
   assert.equal(f.views.length, 1); assert.equal(f.host.children.size, 1);
   assert.equal(f.states.at(-1).isOfficialPlayer, true); assert.equal(f.states.at(-1).canPlayOfficial, false);
   assert.equal(f.states.at(-1).canShare, true);
   await f.action({ action: 'copy-video-link' });
   assert.deepEqual(f.copied, ['https://www.bilibili.com/video/BV1WYnd6DEAw?p=2']);
   await f.action({ action: 'back' });
-  assert.match(contents.getURL(), /^https:\/\/m\.bilibili\.com\/video\/BV1WYnd6DEAw/);
-  assert.equal(contents.userAgent, BILIBILI_MOBILE_USER_AGENT);
+  assert.match(contents.getURL(), /^https:\/\/www\.bilibili\.com\/video\/BV1WYnd6DEAw/);
+  assert.equal(contents.userAgent, desktopUA);
   assert.equal(f.states.at(-1).canPlayOfficial, true);
   await f.action({ action: 'back' }); assert.equal(contents.getURL(), BILIBILI_URL);
   assert.equal(f.states.at(-1).canPlayOfficial, false);
@@ -459,7 +592,7 @@ test('native feed is an isolated child WebContentsView with no BrowserWindow or 
   f.controller.dispose();
 });
 
-test('Bilibili is an isolated single-pane mobile view with page history and preserved community', async () => {
+test('Bilibili is an isolated desktop view with page history and preserved community', async () => {
   const f = fixture({}, true); await f.open(); const community = f.views[0];
   community.webContents.scrollFixture = 240;
   await f.action({ action: 'open', site: 'bilibili', bounds });
@@ -472,13 +605,15 @@ test('Bilibili is an isolated single-pane mobile view with page history and pres
   assert.equal(bili.options.webPreferences.contextIsolation, true);
   assert.equal(bili.options.webPreferences.nodeIntegration, false);
   assert.equal('preload' in bili.options.webPreferences, false);
-  assert.equal(bili.webContents.userAgent, BILIBILI_MOBILE_USER_AGENT);
-  assert.equal(community.webContents.userAgent, undefined, 'mobile UA is restricted to the isolated Bilibili view');
+  assert.equal(BILIBILI_URL, 'https://www.bilibili.com/');
+  assert.equal(bili.webContents.userAgent, desktopUA);
+  assert.equal(community.webContents.userAgent, undefined, 'Bilibili UA is restricted to the isolated Bilibili view');
   assert.deepEqual(bili.webContents.loads, [BILIBILI_URL]);
   assert.equal(f.states.at(-1).site, 'bilibili'); assert.equal(f.states.at(-1).canGoBack, false);
-  assert.equal(bili.webContents.popup({ url: 'https://m.bilibili.com/video/BV1fixture' }).action, 'deny');
+  assert.equal(bili.webContents.popup({ url: 'https://www.bilibili.com/video/BV1fixture' }).action, 'deny');
   await tick();
-  assert.equal(bili.webContents.loads.at(-1), 'https://m.bilibili.com/video/BV1fixture');
+  assert.equal(bili.webContents.loads.at(-1), 'https://www.bilibili.com/video/BV1fixture');
+  assert.equal(bili.webContents.userAgent, desktopUA);
   assert.equal(f.states.at(-1).canGoBack, true);
   await f.action({ action: 'back' }); assert.equal(bili.webContents.getURL(), BILIBILI_URL);
   assert.equal(f.states.at(-1).canGoBack, false);
@@ -492,9 +627,10 @@ test('Bilibili is an isolated single-pane mobile view with page history and pres
 
 test('Bilibili navigation allows only explicit official HTTPS origins and never creates another window', async () => {
   const f = fixture({}, true); await f.action({ action: 'open', site: 'bilibili', bounds }); const contents = f.views[0].webContents;
-  for (const url of ['https://m.bilibili.com/video/BV1test', 'https://www.bilibili.com/', 'https://passport.bilibili.com/login']) {
+  for (const url of ['https://m.bilibili.com/video/BV1test', 'https://www.bilibili.com/', 'https://www.bilibili.com/video/BV1WYnd6DEAw', 'https://passport.bilibili.com/login']) {
     assert.equal(classifyBilibiliNavigation(url).kind, 'internal');
     assert.equal(navigate(contents, 'will-navigate', url), false);
+    assert.equal(contents.userAgent, desktopUA, 'all Bilibili navigation keeps the same desktop UA');
     assert.equal(contents.popup({ url }).action, 'deny');
   }
   for (const url of ['https://bilibili.com.evil.invalid/', 'https://m.bilibili.com:8443/', 'file:///tmp/test', 'javascript:alert(1)', 'https://user@bilibili.com/']) {
@@ -503,6 +639,15 @@ test('Bilibili navigation allows only explicit official HTTPS origins and never 
   }
   assert.throws(() => validateCommunityRequest({ action: 'open', site: 'https://evil.invalid', bounds }));
   assert.throws(() => validateCommunityRequest({ action: 'back', site: 'bilibili' }));
+  f.controller.dispose();
+});
+
+test('Bilibili desktop UA fallback remains desktop when Chromium UA cannot be parsed', async () => {
+  const f = fixture({}, true, { rawUserAgent: 'unparseable' });
+  await f.action({ action: 'open', site: 'bilibili', bounds });
+  assert.equal(f.views[0].webContents.userAgent, BILIBILI_DESKTOP_USER_AGENT);
+  assert(!BILIBILI_DESKTOP_USER_AGENT.includes('Mobile'));
+  assert(!BILIBILI_DESKTOP_USER_AGENT.includes('Electron'));
   f.controller.dispose();
 });
 

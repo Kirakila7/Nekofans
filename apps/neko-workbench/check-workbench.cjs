@@ -26,10 +26,10 @@ try{
   }});
   assert.deepEqual([...bridges.keys()].sort(),['nekoRoles','nekoWorkbench']);
   const bridge=bridges.get('nekoWorkbench'),roles=bridges.get('nekoRoles');
-  assert.deepEqual(Object.keys(bridge).sort(),['action','community','communityAccount','companion','divider','fish','fishQq','getAccounts','getState','qqbot','screenShare','setAvatar','subscribe','subscribeCommunity','subscribeCommunityAccount','subscribeDivider','subscribeOffice','uploadAvatar','workspace']);assert(Object.isFrozen(bridge));
+  assert.deepEqual(Object.keys(bridge).sort(),['action','community','communityAccount','companion','divider','fish','fishQq','getAccounts','getState','home','lobby','nativeComposer','qqbot','screenShare','setAvatar','subscribe','subscribeCommunity','subscribeCommunityAccount','subscribeDivider','subscribeHome','subscribeLobby','subscribeNativeComposer','subscribeOffice','uploadAvatar','workspace']);assert(Object.isFrozen(bridge));
   assert.deepEqual(Object.keys(roles).sort(),['getState','selectRole','subscribe','updateRole','uploadAvatar']);assert(Object.isFrozen(roles));
 
-  bridge.getState();bridge.setAvatar('yui');bridge.uploadAvatar();bridge.action('neko-settings');
+  bridge.getState();bridge.setAvatar('yui');bridge.uploadAvatar();bridge.action('neko-settings');bridge.home({action:'status'});
   const patch={name:'自定义结衣',avatarId:'gemini'};
   roles.getState();roles.selectRole('bigfish');roles.updateRole('yui',patch);roles.uploadAvatar('claude');
   // Object payloads cross a VM realm; compare serialized values while retaining undefined call arguments.
@@ -39,12 +39,13 @@ try{
     ['workbench:call','avatar','yui'],
     ['workbench:call','upload-avatar',undefined],
     ['workbench:call','action','neko-settings'],
+    ['workbench:home',{action:'status'}],
     ['workbench:roles','state'],
     ['workbench:roles','select',{id:'bigfish'}],
     ['workbench:roles','update',{id:'yui',patch}],
     ['workbench:roles','upload',{id:'claude'}]
   ]);
-  assert.equal(calls[6][2].patch,patch,'update forwards the supplied patch without changing it');
+  assert.equal(calls[7][2].patch,patch,'update forwards the supplied patch without changing it');
 
   const workbenchUpdates=[],roleUpdates=[],otherRoleUpdates=[];
   const stopWorkbench=bridge.subscribe(value=>workbenchUpdates.push(value));
@@ -68,11 +69,11 @@ try{
   assert.equal(roleUpdates.length,2);assert.equal(otherRoleUpdates.length,3);
   stopOtherRoles();assert.equal(listeners.size,0);
   emit('workbench:roles-state',roleState);assert.equal(otherRoleUpdates.length,3);
-  assert.equal(calls.length,8,'subscriptions must not invoke either command channel');
+  assert.equal(calls.length,recorded.length,'subscriptions must not invoke either command channel');
   const communityRequest={action:'open',bounds:{x:300,y:80,width:800,height:650}};
   bridge.community(communityRequest);
   assert.deepEqual(calls.at(-1),['workbench:community',communityRequest]);
-  assert.equal(calls.length,9,'community uses its dedicated channel rather than a generic action');
+  assert.equal(calls.length,recorded.length+1,'community uses its dedicated channel rather than a generic action');
   bridge.communityAccount('connect');assert.deepEqual(calls.at(-1),['workbench:community-account','connect']);
   bridge.communityAccount('cancel');assert.deepEqual(calls.at(-1),['workbench:community-account','cancel']);
   const dividerRequest={action:'place',id:'chat',rect:{x:300,y:0,width:12,height:600}};

@@ -2,7 +2,7 @@
 const {test}=require('node:test'),assert=require('node:assert/strict');
 const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
 const {pathToFileURL}=require('node:url');
-const {taskRecord,screenRecord,createProjectTracker}=require('../../apps/neko-workbench/activity-memory.cjs');
+const {taskRecord,screenRecord,createProjectTracker,isRootWorkSession}=require('../../apps/neko-workbench/activity-memory.cjs');
 const {ScreenObservation}=require('../../apps/neko-workbench/screen-observation-runtime.cjs');
 const {ScreenVision}=require('../../apps/neko-workbench/screen-vision.cjs');
 const {createCodexWorkspace}=require('../../apps/neko-workbench/codex-workspace.cjs');
@@ -28,7 +28,7 @@ test('task summary and completed screen observation reach durable NEKO memory an
  const original=sent.length;let record;
  const observation=new ScreenObservation({observe:async()=>({text:'屏幕显示构建成功'}),onRecord:r=>{record=r}});
  const image='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+X2Z8AAAAASUVORK5CYII=';
- observation.start({id:'window:1:0',name:'测试'},{});observation.frame({generation:observation.generation,seq:1,capturedAt:Date.now(),width:1,height:1,image});
+ observation.start({id:'window:1:0',name:'测试'},{},null,true);observation.frame({generation:observation.generation,seq:1,capturedAt:Date.now(),width:1,height:1,image});
  for(let i=0;i<30&&!record;i++)await new Promise(r=>setTimeout(r,10));
  assert(record);await memory.recordActivity(screenRecord(record));await memory.sync();assert(sent.length>original);assert(!JSON.stringify(sent).includes(image));
  const recalled=await memory.recall('bigfish','构建成功',300);assert(recalled.some(item=>item.text.includes('构建成功')));
@@ -42,7 +42,7 @@ test('official free model is selected only for the isolated deployment preset',a
  await runtime.start();const config=await runtime.memoryModel();assert.equal(config.model,'free-model');assert.equal(config.baseUrl,'https://www.lanlan.tech/text/v1');assert.equal(runtime.readMemoryModel().officialFree,true);await runtime.close();
 });
 test('DSH completed turns from distinct projects record only final text, never tool output or failures',()=>{
- const entries=[],tracker=createProjectTracker(v=>entries.push(v));
+ const entries=[],tracker=createProjectTracker(v=>entries.push(v),()=>true);
  for(const session of ['project-a','project-b']){
    tracker.accept(session,{type:'turn/start',seq:42});
    tracker.accept(session,{type:'user/message',data:{source:{kind:'user'},content:[{type:'text',text:'完成项目'}]}});
@@ -82,4 +82,36 @@ test('main companion chat sends completed conversation into same NEKO delivery l
  await runtime.start();await runtime.saveApi({protocol:'openai-compatible',baseUrl:'https://example.invalid/v1',model:'fixture',requestTimeoutMs:5000,maxOutputTokens:100,key:{action:'replace',value:'fixture'}});
  const reply=await runtime.send('主角色测试问题');assert.equal(reply.status,'completed');await runtime.memorySystem.sync();
  assert(delivered.some(e=>e.value?.text?.includes('主角色测试问题')&&e.value.text.includes('收到')));await runtime.close();
+});
+
+test('only verified root or task session events enter project memory',()=>{
+ const root={sessionId:'root'},state={dshRoot:root,actors:[{id:'task-1',kind:'task',sessionId:'task',metadataReady:true,metadataSource:'dsh-task-session'},{id:'sub-1',kind:'subagent',sessionId:'sub',metadataReady:true,metadataSource:'dsh-subagent-catalog',parentSessionId:'task'},{id:'pending',kind:'task',sessionId:'pending',metadataReady:false,metadataSource:'dsh-task-session'}]};
+ const records=[],tracker=createProjectTracker(v=>records.push(v),id=>isRootWorkSession(state,id));
+ const turn=id=>{tracker.accept(id,{type:'turn/start',seq:1});tracker.accept(id,{type:'assistant/message',data:{message:{content:'safe'}}});tracker.accept(id,{type:'turn/end',data:{reason:{kind:'completed'}}});};
+ for(const id of ['root','task','sub','pending','unknown'])turn(id);
+ assert.equal(records.length,2);
+ tracker.accept('task',{type:'turn/start',seq:5});tracker.accept('task',{type:'assistant/message',data:{message:{content:'late'}}});state.actors[0].kind='subagent';state.actors[0].parentSessionId='root';tracker.accept('task',{type:'turn/end',data:{reason:{kind:'completed'}}});assert.equal(records.length,2);
+});
+
+test('screen persistence requires fresh per-session opt-in and discards late results',async t=>{
+ const records=[],jobs=[],r=new ScreenObservation({intervalMs:1,onRecord:v=>records.push(v),observe:()=>new Promise(resolve=>jobs.push(resolve))});t.after(()=>r.stop());
+ const image='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+X2Z8AAAAASUVORK5CYII=';
+ const source={id:'window:1:0',name:'screen'},frame=()=>r.frame({generation:r.generation,seq:1,capturedAt:Date.now(),width:1,height:1,image});
+ r.start(source,{});frame();jobs.shift()({text:'default'});await new Promise(resolve=>setImmediate(resolve));assert.equal(records.length,0);
+ r.start(source,{},null,true);frame();jobs.shift()({text:'opted in'});await new Promise(resolve=>setImmediate(resolve));assert.equal(records.length,1);
+ r.start(source,{},null,true);frame();r.stop();jobs.shift()({text:'too late'});await new Promise(resolve=>setImmediate(resolve));assert.equal(records.length,1);
+ r.start(source,{});frame();jobs.shift()({text:'new session default'});await new Promise(resolve=>setImmediate(resolve));assert.equal(records.length,1);
+});
+
+
+test('buffers an unclassified start until task metadata confirms a human work session',()=>{
+ const state={dshRoot:{sessionId:'root'},actors:[]},records=[],tracker=createProjectTracker(v=>records.push(v),id=>isRootWorkSession(state,id));
+ tracker.accept('task',{type:'turn/start',seq:9});
+ state.actors.push({id:'task-x',kind:'task',sessionId:'task',metadataReady:true,metadataSource:'dsh-task-session'});
+ tracker.accept('task',{type:'user/message',data:{source:{kind:'user'},content:'do work'}});
+ tracker.accept('task',{type:'assistant/message',data:{message:{content:'done'}}});
+ tracker.accept('task',{type:'turn/end',data:{reason:{kind:'completed'}}});
+ assert.equal(records.length,1);assert.match(records[0].text,/done/);
+ tracker.accept('sub',{type:'turn/start',seq:1});state.actors.push({id:'sub',kind:'subagent',sessionId:'sub',metadataReady:true,metadataSource:'dsh-subagent-catalog',parentSessionId:'task'});
+ tracker.accept('sub',{type:'assistant/message',data:{message:{content:'must not save'}}});tracker.accept('sub',{type:'turn/end',data:{reason:{kind:'completed'}}});assert.equal(records.length,1);
 });

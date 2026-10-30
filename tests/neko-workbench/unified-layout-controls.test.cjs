@@ -9,7 +9,7 @@ const path = require('node:path');
 let JSDOM; try { ({ JSDOM } = require(path.join(process.env.NEKO_DOM_DEPS || '/private/tmp/neko-sidebar-dom-20261026', 'node_modules/jsdom'))); } catch {}
 const tick = () => new Promise(resolve => setTimeout(resolve, 45));
 const source = fs.readFileSync(path.join(__dirname, '../../apps/neko-workbench/embedded-dsh/unified-layout-source.js'), 'utf8');
-function fixture(t, initial = {}, { width = 800, failSave = false } = {}) {
+function fixture(t, initial = {}, { width = 800, failSave = false, videoPlatform = 'bilibili', videoPlatformRequest = null } = {}) {
   const dom = new JSDOM(`<body><aside data-neko-side-rail><div class="neko-workspace-rail-controls"></div><button class="neko-community-yui">社区</button><button class="neko-side-rail__bilibili">B站</button></aside><div id="frame" style="display:grid;grid-template-columns:220px ${width}px 0px"><div><aside data-slot="sidebar"><section class="neko-companion-dock"><textarea>pet draft</textarea></section><div data-slot="settings.launcher"></div></aside></div><div class="some_centerCol_HASH_42"><textarea id="draft">coding draft</textarea></div><div></div></div></body>`, { runScripts:'outside-only', pretendToBeVisual:true });
   t.after(() => dom.window.close());
   const w = dom.window, d = w.document;
@@ -19,7 +19,7 @@ function fixture(t, initial = {}, { width = 800, failSave = false } = {}) {
   let saved = { enabled:false, side:'workspace', left:'coding', right:null, ratio:0.5, ...initial }, listener = null, fail = failSave;
   const calls = [];
   const bridge = {
-    workspace: async r => { calls.push(r); if (r.action === 'pane-layout') return { ...saved }; if (r.action === 'set-pane-layout') { if (fail) throw Error('磁盘不可写'); saved = { ...r.layout }; return { ...saved }; } throw Error('bad request'); },
+    workspace: async r => { calls.push(r); if (r.action === 'video-platform') return videoPlatformRequest ? videoPlatformRequest() : { platform:videoPlatform }; if (r.action === 'pane-layout') return { ...saved }; if (r.action === 'set-pane-layout') { if (fail) throw Error('磁盘不可写'); saved = { ...r.layout }; return { ...saved }; } throw Error('bad request'); },
     community: async r => { calls.push(r); return { ok:true }; },
     subscribeCommunity: fn => { listener = fn; return () => { listener = null; }; },
   };
@@ -33,6 +33,95 @@ function fixture(t, initial = {}, { width = 800, failSave = false } = {}) {
 const q = (f, s) => f.d.querySelector(s);
 const key = (f, node, k, extra = {}) => node.dispatchEvent(new f.w.KeyboardEvent('keydown', { key:k, bubbles:true, cancelable:true, ...extra }));
 const two = { enabled:true, side:'workspace', left:'coding', right:'community', ratio:0.5 };
+
+test('three-pane video entry switches B站 and YouTube in one slot, preserves other regions and opens the entered video', { skip:!JSDOM }, async t => {
+  const f=fixture(t); let social=null;
+  f.d.addEventListener('neko-flex-social-geometry', event=>{ if (event.detail) social=event.detail; });
+  await tick(); q(f,'.neko-layout-entry').click();
+  [...f.d.querySelectorAll('.neko-flex-config button')].find(b=>b.textContent==='左侧聊天室 / 右侧上下').click();
+  await tick(); q(f,'.neko-unified-config .close').click(); await tick(); await tick();
+  const original=JSON.stringify(f.saved.flex), code=q(f,'#draft');
+  assert(f.calls.some(c=>c.action==='open'&&c.slot==='left'&&c.site==='bilibili'));
+  assert(social && social.width>0 && social.height>0); assert.equal(code.value,'coding draft');
+  const detail={platform:'youtube'};
+  f.d.dispatchEvent(new f.w.CustomEvent('neko-video-open',{detail})); await tick(); await tick();
+  assert.equal(detail.handled,true); assert.equal(JSON.stringify(f.saved.flex),original);
+  assert(f.calls.some(c=>c.action==='open'&&c.slot==='left'&&c.site==='youtube'));
+  assert.equal(code.value,'coding draft'); assert.equal(q(f,'.some_centerCol_HASH_42').getAttribute('data-neko-flex-coding'),'');
+  const panel=q(f,'[data-neko-unified-slot="left"]'), input=panel.querySelector('.neko-youtube-url');
+  assert.equal(panel.hidden,false); assert.match(panel.getAttribute('aria-label'),/YouTube/); assert.equal(input.hidden,false);
+  assert.equal([...panel.querySelectorAll('button')].find(b=>b.textContent==='返回工作区').hidden,true,'three-pane video has no inert return action');
+  assert(f.d.querySelector('.neko-flex-move[aria-label="拖动YouTube到其他区域"]'),'the drag handle names the selected provider');
+  q(f,'.neko-layout-entry').click(); await tick();
+  assert.match(q(f,'.neko-unified-config .summary').textContent,/YouTube/);
+  assert([...f.d.querySelectorAll('.neko-flex-slot option')].some(option=>option.value==='bilibili'&&option.textContent==='YouTube'));
+  q(f,'.neko-unified-config .close').click(); await tick(); await tick();
+  const send=panel.querySelector('.neko-youtube-open'); send.click();
+  assert.match(panel.querySelector('.status').textContent,/粘贴/);
+  assert(!f.calls.some(c=>c.action==='open-youtube-video'));
+  input.value=' https://www.youtube.com/watch?v=jNQXAC9IVRw '; key(f,input,'Enter'); await tick();
+  assert(f.calls.some(c=>c.action==='open-youtube-video'&&c.slot==='left'&&c.videoUrl==='https://www.youtube.com/watch?v=jNQXAC9IVRw'));
+  input.value='https://www.youtube.com/playlist?list=PL1234567890abcdefgh'; send.click(); await tick();
+  assert(f.calls.some(c=>c.action==='open-youtube-video'&&c.slot==='left'&&c.videoUrl==='https://www.youtube.com/playlist?list=PL1234567890abcdefgh'),'playlist is sent through the same video slot');
+  const shorts=panel.querySelector('.neko-youtube-shorts'); assert(shorts && !shorts.hidden);
+  shorts.click(); await tick();
+  assert(f.calls.some(c=>c.action==='open-youtube-shorts'&&c.slot==='left'),'Shorts must open in the existing video slot');
+  assert.equal(code.value,'coding draft'); assert.equal(JSON.stringify(f.saved.flex),original);
+  f.listener({slot:'left',site:'youtube',status:'ready',tooSmall:true});
+  assert.match(panel.querySelector('.status').textContent,/200\s*×\s*200/);
+  f.d.dispatchEvent(new f.w.CustomEvent('neko-video-open',{detail:{platform:'bilibili'}})); await tick(); await tick();
+  assert(f.calls.filter(c=>c.action==='open'&&c.slot==='left'&&c.site==='bilibili').length>=2);
+  assert(f.d.querySelector('.neko-flex-move[aria-label="拖动B站视频到其他区域"]'),'switching back restores the B站 label');
+  assert.equal(input.hidden,true); assert.equal(shorts.hidden,true); assert.equal(code.value,'coding draft'); assert.equal(JSON.stringify(f.saved.flex),original);
+  f.cleanup();
+});
+
+test('switching video while work is collapsed retains the floating work state', { skip:!JSDOM }, async t => {
+  const f=fixture(t); await tick(); q(f,'.neko-layout-entry').click();
+  [...f.d.querySelectorAll('.neko-flex-config button')].find(b=>b.textContent==='左侧聊天室 / 右侧上下').click();
+  await tick(); q(f,'.neko-unified-config .close').click(); await tick(); await tick();
+  const input=q(f,'#draft'), ratio=f.saved.flex.stackRatio;
+  key(f,q(f,'.neko-flex-divider'),'End'); await tick();
+  assert(f.d.body.hasAttribute('data-neko-flex-workspace-collapsed'));
+  const before=input.value;
+  for (const platform of ['youtube','bilibili']) {
+    f.d.dispatchEvent(new f.w.CustomEvent('neko-video-open',{detail:{platform}})); await tick(); await tick();
+    assert(f.d.body.hasAttribute('data-neko-flex-workspace-collapsed'),platform+' must keep the work composer collapsed');
+    assert(f.calls.some(c=>c.action==='open'&&c.slot==='left'&&c.site===platform),platform+' must occupy the same video slot');
+    assert.equal(input.value,before); assert.equal(f.saved.flex.stackRatio,ratio);
+  }
+  f.d.dispatchEvent(new f.w.Event('neko-workspace-expand')); await tick();
+  assert(!f.d.body.hasAttribute('data-neko-flex-workspace-collapsed'));
+  assert.equal(input.value,before); f.cleanup();
+});
+
+test('saved YouTube preference restores in the existing video slot, and a late preference cannot override a new selection', { skip:!JSDOM }, async t => {
+  const f=fixture(t,{}, {videoPlatform:'youtube'}); await tick();
+  q(f,'.neko-layout-entry').click(); [...f.d.querySelectorAll('.neko-flex-config button')].find(b=>b.textContent==='左侧聊天室 / 右侧上下').click();
+  await tick(); q(f,'.neko-unified-config .close').click(); await tick(); await tick();
+  assert(f.calls.some(c=>c.action==='open'&&c.slot==='left'&&c.site==='youtube'));
+  assert.equal(f.saved.flex.slots[1],'bilibili','legacy stored video slot remains compatible'); f.cleanup();
+
+  let resolvePreference; const pending=new Promise(resolve=>{resolvePreference=resolve;});
+  const g=fixture(t,{}, {videoPlatformRequest:()=>pending}); await tick();
+  q(g,'.neko-layout-entry').click(); [...g.d.querySelectorAll('.neko-flex-config button')].find(b=>b.textContent==='左侧聊天室 / 右侧上下').click();
+  await tick(); q(g,'.neko-unified-config .close').click(); await tick();
+  g.d.dispatchEvent(new g.w.CustomEvent('neko-video-open',{detail:{platform:'bilibili'}}));
+  resolvePreference({platform:'youtube'}); await tick(); await tick();
+  assert(!g.calls.some(c=>c.action==='open'&&c.site==='youtube'),'late persisted value must not undo the user selection');
+  assert(g.calls.some(c=>c.action==='open'&&c.site==='bilibili')); g.cleanup();
+});
+
+test('YouTube entry opens in the ordinary sidebar without replacing the workspace draft', { skip:!JSDOM }, async t => {
+  const f=fixture(t); await tick();
+  f.d.dispatchEvent(new f.w.CustomEvent('neko-video-open',{detail:{platform:'youtube'}})); await tick(); await tick();
+  assert(f.calls.some(c=>c.action==='open'&&c.slot==='side'&&c.site==='youtube'));
+  assert.equal(f.d.body.hasAttribute('data-neko-side-social-active'),true);
+  assert.equal(q(f,'#draft').value,'coding draft');
+  assert.equal(q(f,'[data-neko-unified-slot="side"] .neko-youtube-url').hidden,false);
+  assert.equal([...q(f,'[data-neko-unified-slot="side"]').querySelectorAll('button')].find(b=>b.textContent==='返回聊天室').hidden,false,'the functional sidebar return remains available');
+  f.cleanup();
+});
 
 test('divider exposes separator semantics and supports arrow, Shift, Home and End keys', { skip:!JSDOM }, async t => {
   const f = fixture(t, two); await tick(); await tick();
@@ -328,7 +417,8 @@ test('same-axis extreme ratios retain visible video and accommodate the chat foo
   const footer=f.d.createElement('div'); footer.setAttribute('data-neko-companion-footer',''); footer.getBoundingClientRect=()=>({height:260}); f.d.body.appendChild(footer);
   q(f,'.neko-layout-entry').click(); await tick();
   [...f.d.querySelectorAll('.neko-flex-config button')].find(b=>b.textContent==='上下排列').click(); await tick(); q(f,'.neko-unified-config .close').click(); await tick(); await tick();
-  key(f,q(f,'.neko-unified-divider'),'Home'); key(f,q(f,'.neko-flex-divider'),'End'); await tick(); await tick();
+  key(f,q(f,'.neko-unified-divider'),'Home'); await tick(); await tick();
+  for (let i=0; i<8; i++) { key(f,q(f,'.neko-flex-divider'),'ArrowDown',{shiftKey:true}); await tick(); }
   assert(social.height>=340, 'chat room leaves space for its current footer plus content');
   const video=f.calls.filter(c=>['open','layout'].includes(c.action)&&c.site==='bilibili'||c.action==='layout'&&c.slot==='left').at(-1);
   assert(video && video.bounds.height>=118, 'video retains a usable height beneath its header');

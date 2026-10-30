@@ -105,7 +105,7 @@ function createScreenShare({ WebContentsView, desktopCapturer, systemPreferences
           requireTarget(current.effective, value.contextConsent);
           consent = { ...target };
         }
-        selected = source; const result = runtime.start(source, target, consent); pendingGrant = true; return { ...result, vision: current };
+        selected = source; const result = runtime.start(source, target, consent, value?.memoryConsent === true); pendingGrant = true; return { ...result, vision: current };
       }
       case 'pause': pause(); return snapshot();
       case 'stop': pendingGrant = false; selected = null; runtime.stop(); return snapshot();

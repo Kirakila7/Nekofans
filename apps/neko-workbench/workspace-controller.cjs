@@ -58,12 +58,13 @@ function companionSnapshot(state) {
   const messages = (main?.messages || []).filter(m => ['user', 'assistant', 'error'].includes(m.role)).slice(-40).map((m, i) => ({ id: String(m.id || m.requestId || m.time || i), role: m.role, text: String(m.text || '').slice(0, 8000) }));
   const backend = main?.chatBackend || runtime.backend || 'chat-api';
   const chat = runtime.chat || {};
-  const failed = backend === 'chat-api' && chat.phase === 'error';
+  const workbenchStatus = backend === 'deepseek-account' ? (state.connection === 'ready' ? 'ready' : state.connection === 'starting' ? 'starting' : 'unavailable') : null;
+  const failed = ['chat-api', 'deepseek-account'].includes(backend) && chat.phase === 'error';
   const reply = main?.chatReply;
   if (reply?.text && !messages.some(m => m.role === 'assistant' && m.text === reply.text)) messages.push({ id: reply.id || 'stream', role: 'assistant', text: String(reply.text).slice(-16000), streaming: !!reply.streaming, partial: failed });
-  return { name: main?.name || '主 agent', backend, ready: backend === 'neko' ? state.neko?.connection === 'ready' : !!runtime.ready && !!runtime.hasKey && !!runtime.settings?.baseUrl && !!runtime.settings?.model,
+  return { name: main?.name || '主 agent', backend, workbenchStatus, ready: backend === 'neko' ? state.neko?.connection === 'ready' : backend === 'deepseek-account' ? !!runtime.ready && workbenchStatus === 'ready' : !!runtime.ready && !!runtime.hasKey && !!runtime.settings?.baseUrl && !!runtime.settings?.model,
     working: !!main?.active, messages,
-    error: String((failed && chat.errorMessage) || runtime.error || (backend === 'neko' && state.neko?.error) || '').slice(0, 240),
+    error: String((failed && chat.errorMessage) || runtime.error || (backend === 'neko' && state.neko?.error) || (workbenchStatus === 'starting' ? '工作台正在连接…' : workbenchStatus === 'unavailable' ? '工作台未连接，请重连后再聊天。' : '') || '').slice(0, 240),
     failedText: failed ? String(chat.lastUserMessage || '').slice(0, 8000) : '' };
 }
 module.exports = { createWorkspaceController, companionSnapshot };

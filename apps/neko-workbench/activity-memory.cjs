@@ -26,10 +26,26 @@ function content(value) {
   if(!value||typeof value!=='object')return '';
   return value.type==='text' ? String(value.text||'') : content(value.content||value.message?.content||value.blocks);
 }
-function createProjectTracker(onCompleted) {
-  const turns=new Map();
-  return {accept(session,event){
+function isRootWorkSession(state, session) {
+  if (!session || !state) return false;
+  if (state.dshRoot?.sessionId === session) return true;
+  const actor = state.actors?.find(a => a.sessionId === session && a.id !== 'main');
+  return actor?.kind === 'task' && actor.metadataReady === true && actor.metadataSource === 'dsh-task-session' && !actor.parentSessionId;
+}
+function createProjectTracker(onCompleted, allowed = () => false) {
+  const turns=new Map(), pending=new Map();
+  function accept(session,event) {
     if(!session||!event||typeof event.type!=='string')return;
+    if(!allowed(session)){
+      turns.delete(session);
+      if(event.type==='turn/start'){
+        if(pending.size>=500)pending.delete(pending.keys().next().value);
+        pending.set(session,{type:'turn/start',id:event.id,seq:event.seq});
+      } else if(event.type==='turn/end') pending.delete(session);
+      return;
+    }
+    const start=pending.get(session);
+    if(start){pending.delete(session);accept(session,start);}
     if(event.type==='turn/start'){
       if(turns.size>=500)turns.delete(turns.keys().next().value);
       turns.set(session,{turn:String(event.id||event.seq||randomUUID()),task:'',result:''});return;
@@ -44,6 +60,7 @@ function createProjectTracker(onCompleted) {
         if(value)onCompleted(value);
       }
     }
-  }};
+  }
+  return {accept};
 }
-module.exports={excerpt,taskRecord,screenRecord,createProjectTracker};
+module.exports={excerpt,taskRecord,screenRecord,createProjectTracker,isRootWorkSession};

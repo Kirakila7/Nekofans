@@ -4,6 +4,22 @@ The daily artifact is built from this repository. `config/daily-release.json` is
 
 ## Pending source changes
 
+- The coding surface exposes a shortcut into the current DSH session’s native file tree. The floating workspace saves pending text, expands, checks the selected session again, then requests the native files tab. Unsupported or stale sessions fail closed; local fixture and Electron tests use simulated file services, not the user’s files. DSH native file APIs are internal and a real project directory interaction remains unverified.
+
+- In workbench-account companion chat, a starting or disconnected DSH bridge no longer appears ready. The input keeps its draft and offers an explicit reconnect when disconnected; pressing send during disconnection does not restart or transmit anything. The bridge becoming ready does not confirm account login, quota or a real model reply, which must be checked separately.
+
+- Project and session lists show opening, selection, error and partial-search feedback. Search expands matches without losing normal collapsed state; the chooser adjusts to narrow panes. Isolated DOM and Electron layout tests cover synthetic sessions and resizing. Real session transitions and the separate floating project-record view remain to be validated.
+
+- The main companion and its existing chat input follow the left pane width in the chatroom and local home while the project chooser remains on the right. The character stays within the left pane; switching to other surfaces restores the existing sidebar or rail placement. Isolated Electron fixtures cover resizing, two-way dragging, click vs drag, surface changes and draft retention; community and video transitions use simulated events, not live playback or login.
+
+- The shared video slot offers Bilibili desktop and the official YouTube embed player, selected from the rail without replacing the coding draft or local home. Playlist, Shorts, size and navigation checks use isolated fixtures. Electron fixtures check the local home and floating workspace with synthetic Bilibili and YouTube pages; live playback and continuous Shorts navigation are not verified.
+
+- The chatroom’s 我的小窝 opens a local block-building home with camera rotation, zoom and a theme-matched landscape. It stores a separate workbench-local world and can read a fixed allowlist of locally available Yui textures, falling back to installed Minecraft materials or basic materials. Original saves and texture assets are not distributed or modified, and synchronization is not implemented. Isolated Electron checks cover building, removal, camera, layout and reopening with a synthetic local store; interaction with a real community account or synchronized home remains unverified.
+
+- In the social / Bilibili / coding three-pane layout, dragging the workspace to the right or bottom edge opens a trusted native floating composer above a full-size desktop Bilibili view. The DSH input adapter checks the retained current session and preserves unsynchronized drafts; unsupported rich drafts require expanding the workspace. Local Electron fixtures cover the video overlay, lobby transitions and recovery. An isolated real DSH session dispatched synthetic input to a local stub in queue mode, without contacting a provider; real backend responses and Bilibili playback remain unverified.
+
+- Lobby suggestions filter recalled memories to entries with exclusively lobby-message provenance. Open and in-flight shared experiences are retained on shutdown; temporary memory-write failures remain pending. Synthetic tests verify isolation, retry and deduplication; a synthetic summary was written and recalled through the real local N.E.K.O. worker. On Windows pending text inherits the data-directory ACL and owner-only access remains unverified. Real OAuth and production chat service are not configured.
+
 - Local draft: completed DSH/Codex workbench task excerpts and opted-in screen observation text can enter the main persona's native N.E.K.O. memory ledger. Project and screen events are private inferred facts; raw images and tool output are not included. The result is a bounded excerpt rather than a semantic summary, and capture is limited to observed successful turns. Codex remains disabled in the shipping UI. A direct Python runtime and the official free model can be selected with explicit deployment environment variables. Real chat extraction and recall with the official free service still need end-to end validation.
 - Windows local test build: listener read-only guard now rejects symlink/junction parents as well as linked target files. Synthetic tests pass for real Windows junctions and hard links, and for a mocked symbolic-link result; the current user cannot create a real file symlink. This check is not atomic with subsequent tool execution. Windows configuration files inherit the data-directory ACL; the inspected test directory grants read access to the local CodexSandboxUsers group, so POSIX 0600 assertions do not prove owner-only access. These changes are local and need further review before release.
 
@@ -23,6 +39,8 @@ The daily artifact is built from this repository. `config/daily-release.json` is
 - A workbench-styled control in the DSH coding area exposes the existing native Plugins, Automation and More navigation, preserving native handlers and plugin contributions. DOM checks verify the adapter; real-window positioning and native service behavior still need verification.
 
 ## Included local workbench changes
+
+- Experimental companion chat can use the signed-in DeepSeek workbench account through the host model service without creating DSH task sessions or requiring a separate API key. New unconfigured profiles default to the account; existing configured backends are preserved. The account mode does not support lobby companion replies or shared-experience memory; it does not silently fall back to an API key. Isolated mock-provider and real-host tests do not establish real account connectivity, real model replies, or N.E.K.O. memory processing; those remain to be verified on the user's device.
 
 - Each workbench opening starts with the chatroom sidebar and a single coding area. Community and Bilibili replace the sidebar content while the coding area remains visible; previously saved multi-pane data is retained without activating it.
 - The left rail opens a static chatroom preview by default in the existing sidebar. A separate rail control returns to workspace navigation; companion and account controls remain mounted. Any configured native community or Bilibili sidebar view is temporarily hidden and restored when returning to workspace, without changing the saved layout or the main panels. The preview does not connect to a chat service or show real members or messages.
@@ -48,6 +66,24 @@ The daily artifact is built from this repository. `config/daily-release.json` is
 Claude integration remains a proposal. Real supplier credentials, QQ/Bilibili binding and community identity sync are not established by synthetic test success.
 
 Screen companion's optional private context recalls native N.E.K.O. memory and recent Chat API messages only after consent for the exact visual provider and model.
+
+## Public lobby (频道), pending
+
+The workbench has a 频道 panel for the new N.E.K.O.Chat service (protocol: `N.E.K.O.Chat/docs/protocol.md`). This source change is not in the existing 0.28.0 daily artifact. Details are in `apps/neko-workbench/IMPLEMENTATION_v0.29.md`.
+
+- Modules: `lobby-config`, `lobby-auth`, `lobby-client`, `lobby-frames`, `lobby-sanitize`, `lobby-avatars`, `lobby-cat`, `lobby-experience`, `lobby-controller` (main process) and `lobby-composer.js` plus `createLobbyView` in the workspace shell (renderer). Wired through `workbench:lobby` IPC with `assertWorkbenchCaller`, and `lobby`/`subscribeLobby` in the preload.
+- Participation: off, assist (她帮你起草, user sends; default) or independent (her own cat messages by mention, owner-or-mention or free trigger). Both AI modes require the Chat API backend. Origin labels: `human`, `human_ai` (人＋AI 共同回复), cat (AI 独立发言).
+- Memory write-back: summaries of lobby segments the user took part in go to the native memory through `recordSharedExperience` (`lobby:` item ids, `lobby-msg:` refs, `inferred`). Independent mode reads no memory; assist reads recall only.
+- Isolation: companion chat keeps working when the lobby is unconfigured, offline, muted, failing to initialize or generating a suggestion.
+
+Verified only with synthetic fixtures: injected fetch, fake WebSocket, a loopback OAuth callback server on port 0, fake model providers, fake clocks and temporary memory directories. The N.E.K.O.Chat backend has its own tests and a two-user smoke script (`scripts/ws_smoke.py`) against fake auth; the workbench has not been run end-to-end against that backend in this step.
+
+Not verified:
+
+- Real OAuth sign-in against auth.project-neko.cn. Registration of `neko-chat-desktop-{env}` is in Project-N-E-K-O/neko-auth-platform#304 (open, not deployed): a public PKCE client with fixed callbacks `http://127.0.0.1:48921/oauth/callback`, `:48922` and `:48923`, consent required (no auto-consent), gated by `CHAT_INTEGRATION_ENABLED`, which defaults to `false`. The workbench now tries those three ports by default; `NEKO_WORKBENCH_CHAT_OAUTH_PORTS` overrides them. Sign-in cannot complete against the official platform until that client is enabled in production.
+- A production chat server. `NEKO_WORKBENCH_CHAT_URL` has no default, so the panel shows 频道服务未配置 until it is set.
+- Real model behaviour: suggestion quality, independent replies, prompt-injection resistance, and whether summaries keep other people's words attributed. The local worker smoke used a synthetic prewritten summary; it did not test live model summarization.
+- The Electron GUI with this panel; no QA instance was launched for this work.
 
 ## bigfish-pet intake
 

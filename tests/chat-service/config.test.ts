@@ -9,7 +9,7 @@ import type { AddressInfo } from "node:net";
 
 import { MemorySecretStore } from "../../packages/chat-api/src/index.ts";
 import { openMainChat, parseMainChatConfig } from "../../packages/chat-service/src/index.ts";
-import type { MainChatState } from "../../packages/app-contracts/src/chat.ts";
+import type { ChatStreamInput, MainChatState } from "../../packages/app-contracts/src/chat.ts";
 
 test("parseMainChatConfig: defaults and type errors", () => {
   const defaults = parseMainChatConfig({});
@@ -156,6 +156,44 @@ test("openMainChat: an unconfigured app starts and reports not_configured at sen
     const result = await opened.service.send("在吗");
     assert.deepEqual(result, { status: "error", code: "not_configured", message: "聊天 API 还没配置好（地址、模型或密钥）" });
     assert.equal(opened.service.state().phase, "error");
+  } finally {
+    opened.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("injected provider receives the same persona, history and native memory and saves completed turns", async () => {
+  const { dir, personasDir, dataDir } = tempPersonas(BIGFISH);
+  const inputs: ChatStreamInput[] = [];
+  const saved: string[][] = [];
+  const provider = { async *stream(input: ChatStreamInput) {
+    inputs.push(input);
+    yield { type: "delta" as const, text: "你好" };
+    yield { type: "complete" as const, messageId: `reply-${inputs.length}` };
+  } };
+  const secretStore = new MemorySecretStore();
+  secretStore.get = async () => { throw new Error("the injected provider must not read an API key"); };
+  const options = {
+    settings: parseMainChatConfig({}), personasDir, dataDir, secretStore, provider,
+    localMemoryProcessing: false,
+    memoryContext: async () => [{ kind: "preference" as const, text: "喜欢茶", visibility: "private" as const,
+      certainty: "user-confirmed" as const, evidenceRefs: ["fixture"] }],
+    onTurnSaved: async (user: { text: string }, assistant: { text: string }) => { saved.push([user.text, assistant.text]); },
+  };
+  let opened = openMainChat(options);
+  try {
+    const firstId = opened.service.conversationId;
+    assert.equal((await opened.service.send("第一句")).status, "completed");
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(saved, [["第一句", "你好"]]);
+    assert.match(inputs[0].persona.prompt, /你是大肥鱼/);
+    assert.equal(inputs[0].memoryContext?.[0].text, "喜欢茶");
+    assert.deepEqual(inputs[0].messages.map(m => m.text), ["第一句"]);
+    opened.close();
+    opened = openMainChat(options);
+    assert.equal(opened.service.conversationId, firstId);
+    assert.equal((await opened.service.send("第二句")).status, "completed");
+    assert.deepEqual(inputs[1].messages.map(m => [m.role, m.text]), [["user", "第一句"], ["assistant", "你好"], ["user", "第二句"]]);
   } finally {
     opened.close();
     rmSync(dir, { recursive: true, force: true });

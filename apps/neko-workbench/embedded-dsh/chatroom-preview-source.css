@@ -11,6 +11,20 @@
 .neko-chatroom-preview__rooms { display:grid; gap:4px; }
 .neko-chatroom-preview__room { display:flex; align-items:center; gap:10px; padding:9px 8px; border:1px solid transparent; border-radius:10px; }
 .neko-chatroom-preview__room:first-child { background:#ffffff80; border-color:#dce7f3; }
+.neko-chatroom-preview__room:is(button) { width:100%; background:transparent; color:inherit; font:inherit; text-align:left; cursor:pointer; }
+.neko-chatroom-preview__room:is(button):hover { background:#ffffff80; border-color:#dce7f3; }
+.neko-chatroom-preview__room:is(button):focus-visible { outline:2px solid #6e9ac5; outline-offset:2px; }
+.neko-chatroom-preview__room:is(button):disabled { cursor:wait; opacity:.7; }
+.neko-chatroom-preview__home-status { margin:0 8px 4px; color:#627d98; font-size:11px; line-height:1.5; }
+.neko-chatroom-preview__home-status[hidden] { display:none; }
+.neko-chatroom-preview__room-view[hidden], .neko-chatroom-preview__home-view[hidden] { display:none; }
+.neko-chatroom-preview__home-view { min-height:100%; display:flex; flex-direction:column; gap:8px; }
+.neko-chatroom-preview__home-header { display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
+.neko-chatroom-preview__home-header h2 { margin:0; font-size:16px; }
+.neko-chatroom-preview__home-back, .neko-chatroom-preview__home-retry { border:1px solid #cbdbee; border-radius:8px; padding:5px 8px; color:#4c6d8e; background:#ffffffa6; font:inherit; cursor:pointer; }
+.neko-chatroom-preview__home-back:focus-visible, .neko-chatroom-preview__home-retry:focus-visible { outline:2px solid #6e9ac5; outline-offset:2px; }
+.neko-chatroom-preview__home-storage { width:100%; margin:0; color:#71879d; font-size:11px; }
+.neko-chatroom-preview__home-stage { min-height:240px; flex:1; position:relative; overflow:hidden; border-radius:10px; }
 .neko-chatroom-preview__room-icon { width:34px; height:34px; flex:none; display:grid; place-items:center; border-radius:11px; color:#6d9bc5; background:#e3f1fc; font-size:19px; }
 .neko-chatroom-preview__room-icon.is-home { color:#a183be; background:#f0eafb; }
 .neko-chatroom-preview__room-copy { min-width:0; display:grid; gap:2px; }

@@ -1,0 +1,456 @@
+{
+  "_comment": "Shared protocol samples (docs/protocol.md v1). Byte-identical in N.E.K.O.Chat/tests/fixtures and neko-workbench/tests/neko-workbench/fixtures. server/rest are produced by the real backend code (tests/test_protocol_fixtures.py); client is what the workbench sends. Synthetic ids and text only.",
+  "client": {
+    "auth": {
+      "type": "auth",
+      "token": "fixture-access-token-not-a-secret",
+      "client": {
+        "name": "neko-workbench",
+        "version": "0.0.0-fixture"
+      }
+    },
+    "auth_resume": {
+      "type": "auth",
+      "token": "fixture-access-token-not-a-secret",
+      "last_event_seq": 1240
+    },
+    "auth_refresh": {
+      "type": "auth.refresh",
+      "token": "fixture-refreshed-token-not-a-secret"
+    },
+    "message_send_human": {
+      "type": "message.send",
+      "text": "合成消息",
+      "origin": "human",
+      "reply_to_id": "00000000-0000-4000-8000-000000000010",
+      "client_message_id": "00000000-0000-4000-8000-000000000021"
+    },
+    "message_send_human_ai": {
+      "type": "message.send",
+      "text": "一起来玩吧",
+      "origin": "human_ai",
+      "assist_cat_id": "00000000-0000-4000-8000-000000000004",
+      "client_message_id": "00000000-0000-4000-8000-000000000022"
+    },
+    "cat_message_send": {
+      "type": "cat.message.send",
+      "cat_id": "00000000-0000-4000-8000-000000000004",
+      "in_reply_to": "00000000-0000-4000-8000-000000000010",
+      "trigger": "mention",
+      "text": "喵～我来啦",
+      "client_message_id": "00000000-0000-4000-8000-000000000023"
+    },
+    "typing_human": {
+      "type": "typing",
+      "kind": "human"
+    },
+    "typing_cat": {
+      "type": "typing",
+      "kind": "cat",
+      "cat_id": "00000000-0000-4000-8000-000000000004"
+    },
+    "cat_status": {
+      "type": "cat.status",
+      "cat_id": "00000000-0000-4000-8000-000000000004",
+      "state": "ready"
+    },
+    "ping": {
+      "type": "ping",
+      "t": 1730000000000
+    }
+  },
+  "server": {
+    "hello": {
+      "type": "hello",
+      "user_id": "00000000-0000-4000-8000-000000000002",
+      "token_expires_at": 1730003600000,
+      "last_event_seq": 1240
+    },
+    "ack": {
+      "type": "ack",
+      "client_message_id": "00000000-0000-4000-8000-000000000020",
+      "message_id": "00000000-0000-4000-8000-000000000010",
+      "seq": 4,
+      "duplicate": false
+    },
+    "ack_duplicate": {
+      "type": "ack",
+      "client_message_id": "00000000-0000-4000-8000-000000000020",
+      "message_id": "00000000-0000-4000-8000-000000000010",
+      "seq": 4,
+      "duplicate": true
+    },
+    "error": {
+      "type": "error",
+      "code": "rate_limited",
+      "ref": "00000000-0000-4000-8000-000000000020",
+      "retry_after_ms": 5000
+    },
+    "error_plain": {
+      "type": "error",
+      "code": "slow_mode"
+    },
+    "message_new_human": {
+      "type": "message.new",
+      "message": {
+        "id": "00000000-0000-4000-8000-000000000010",
+        "seq": 4,
+        "channel_id": "00000000-0000-4000-8000-000000000001",
+        "created_at": 1730000004000,
+        "deleted": false,
+        "text": "大家好 <@c:00000000-0000-4000-8000-000000000004>",
+        "origin": "human",
+        "label": "李四",
+        "author": {
+          "kind": "human",
+          "user_id": "00000000-0000-4000-8000-000000000003",
+          "name": "李四",
+          "display_name": "李四",
+          "avatar": {
+            "kind": "image",
+            "url": "https://community.example.test/static/avatars/00000000-0000-4000-8000-000000000003.png"
+          }
+        },
+        "mentions": [
+          {
+            "kind": "cat",
+            "id": "00000000-0000-4000-8000-000000000004"
+          }
+        ],
+        "reply_to": null,
+        "cat_depth": 0
+      },
+      "event_seq": 1231
+    },
+    "message_new_human_ai": {
+      "type": "message.new",
+      "message": {
+        "id": "00000000-0000-4000-8000-000000000011",
+        "seq": 5,
+        "channel_id": "00000000-0000-4000-8000-000000000001",
+        "created_at": 1730000005000,
+        "deleted": false,
+        "text": "一起来玩吧",
+        "origin": "human_ai",
+        "label": "人＋AI 共同回复 · 张三与大肥鱼",
+        "author": {
+          "kind": "human",
+          "user_id": "00000000-0000-4000-8000-000000000002",
+          "name": "张三",
+          "display_name": "张三",
+          "avatar": {
+            "kind": "hue",
+            "hue": 211,
+            "text": "张"
+          },
+          "assist_cat": {
+            "cat_id": "00000000-0000-4000-8000-000000000004",
+            "name": "大肥鱼"
+          }
+        },
+        "mentions": [],
+        "reply_to": {
+          "id": "00000000-0000-4000-8000-000000000010",
+          "seq": 4,
+          "origin": "human",
+          "label": "李四"
+        },
+        "cat_depth": 0
+      },
+      "event_seq": 1232
+    },
+    "message_new_cat": {
+      "type": "message.new",
+      "message": {
+        "id": "00000000-0000-4000-8000-000000000012",
+        "seq": 6,
+        "channel_id": "00000000-0000-4000-8000-000000000001",
+        "created_at": 1730000006000,
+        "deleted": false,
+        "text": "喵～我来啦",
+        "origin": "cat",
+        "label": "AI 独立发言 · 张三的大肥鱼",
+        "author": {
+          "kind": "cat",
+          "cat_id": "00000000-0000-4000-8000-000000000004",
+          "owner_user_id": "00000000-0000-4000-8000-000000000002",
+          "owner_name": "张三",
+          "name": "大肥鱼",
+          "display_name": "张三的大肥鱼",
+          "avatar_key": "fish-blue"
+        },
+        "mentions": [],
+        "reply_to": {
+          "id": "00000000-0000-4000-8000-000000000011",
+          "seq": 5,
+          "origin": "human_ai",
+          "label": "人＋AI 共同回复 · 张三与大肥鱼"
+        },
+        "cat_depth": 1
+      },
+      "event_seq": 1233
+    },
+    "message_deleted": {
+      "type": "message.deleted",
+      "message_id": "00000000-0000-4000-8000-000000000013",
+      "seq": 7,
+      "deleted_by": "00000000-0000-4000-8000-000000000003",
+      "event_seq": 1235
+    },
+    "cat_updated_retired": {
+      "type": "cat.updated",
+      "cat": {
+        "id": "00000000-0000-4000-8000-000000000004",
+        "owner_user_id": "00000000-0000-4000-8000-000000000002",
+        "owner_name": "张三",
+        "name": "大肥鱼",
+        "display_name": "张三的大肥鱼",
+        "avatar_key": "fish-blue",
+        "reply_mode": "mention",
+        "enabled": false,
+        "admin_disabled": false,
+        "deleted": false
+      },
+      "event_seq": 1236
+    },
+    "channel_updated": {
+      "type": "channel.updated",
+      "channel": {
+        "id": "00000000-0000-4000-8000-000000000001",
+        "name": "大厅",
+        "topic": "欢迎",
+        "slow_mode_seconds": 10,
+        "cats_enabled": true,
+        "cat_free_mode_allowed": false,
+        "last_seq": 7
+      },
+      "event_seq": 1237
+    },
+    "member_updated_state": {
+      "type": "member.updated",
+      "user_id": "00000000-0000-4000-8000-000000000003",
+      "changes": {
+        "role": "member",
+        "muted_until": 1730000600000,
+        "banned_at": null
+      },
+      "event_seq": 1238
+    },
+    "member_updated_profile": {
+      "type": "member.updated",
+      "user_id": "00000000-0000-4000-8000-000000000003",
+      "changes": {
+        "display_name": "李四",
+        "avatar": {
+          "kind": "image",
+          "url": "https://community.example.test/static/avatars/00000000-0000-4000-8000-000000000003.png"
+        }
+      },
+      "event_seq": 1239
+    },
+    "cat_updated": {
+      "type": "cat.updated",
+      "cat": {
+        "id": "00000000-0000-4000-8000-000000000004",
+        "owner_user_id": "00000000-0000-4000-8000-000000000002",
+        "owner_name": "张三",
+        "name": "大肥鱼",
+        "display_name": "张三的大肥鱼",
+        "avatar_key": "fish-blue",
+        "reply_mode": "mention",
+        "enabled": true,
+        "admin_disabled": false
+      },
+      "event_seq": 1240
+    },
+    "presence_snapshot": {
+      "type": "presence.snapshot",
+      "members": [
+        {
+          "user_id": "00000000-0000-4000-8000-000000000002",
+          "online": true
+        },
+        {
+          "cat_id": "00000000-0000-4000-8000-000000000004",
+          "online": true
+        }
+      ]
+    },
+    "presence_join": {
+      "type": "presence.join",
+      "user_id": "00000000-0000-4000-8000-000000000003"
+    },
+    "presence_join_cat": {
+      "type": "presence.join",
+      "user_id": "00000000-0000-4000-8000-000000000002",
+      "cat_id": "00000000-0000-4000-8000-000000000004"
+    },
+    "presence_leave": {
+      "type": "presence.leave",
+      "user_id": "00000000-0000-4000-8000-000000000003"
+    },
+    "presence_leave_cat": {
+      "type": "presence.leave",
+      "user_id": "00000000-0000-4000-8000-000000000002",
+      "cat_id": "00000000-0000-4000-8000-000000000004"
+    },
+    "typing_human": {
+      "type": "typing",
+      "user_id": "00000000-0000-4000-8000-000000000002",
+      "kind": "human"
+    },
+    "typing_cat": {
+      "type": "typing",
+      "user_id": "00000000-0000-4000-8000-000000000002",
+      "kind": "cat",
+      "cat_id": "00000000-0000-4000-8000-000000000004"
+    },
+    "resync_required": {
+      "type": "resync.required"
+    },
+    "pong": {
+      "type": "pong",
+      "t": 1730000000000,
+      "last_event_seq": 1240
+    }
+  },
+  "rest": {
+    "lobby": {
+      "id": "00000000-0000-4000-8000-000000000001",
+      "name": "大厅",
+      "topic": "欢迎",
+      "slow_mode_seconds": 10,
+      "cats_enabled": true,
+      "cat_free_mode_allowed": false,
+      "last_seq": 7
+    },
+    "history": {
+      "messages": [
+        {
+          "id": "00000000-0000-4000-8000-000000000010",
+          "seq": 4,
+          "channel_id": "00000000-0000-4000-8000-000000000001",
+          "created_at": 1730000004000,
+          "deleted": false,
+          "text": "大家好 <@c:00000000-0000-4000-8000-000000000004>",
+          "origin": "human",
+          "label": "李四",
+          "author": {
+            "kind": "human",
+            "user_id": "00000000-0000-4000-8000-000000000003",
+            "name": "李四",
+            "display_name": "李四",
+            "avatar": {
+              "kind": "image",
+              "url": "https://community.example.test/static/avatars/00000000-0000-4000-8000-000000000003.png"
+            }
+          },
+          "mentions": [
+            {
+              "kind": "cat",
+              "id": "00000000-0000-4000-8000-000000000004"
+            }
+          ],
+          "reply_to": null,
+          "cat_depth": 0
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000011",
+          "seq": 5,
+          "channel_id": "00000000-0000-4000-8000-000000000001",
+          "created_at": 1730000005000,
+          "deleted": false,
+          "text": "一起来玩吧",
+          "origin": "human_ai",
+          "label": "人＋AI 共同回复 · 张三与大肥鱼",
+          "author": {
+            "kind": "human",
+            "user_id": "00000000-0000-4000-8000-000000000002",
+            "name": "张三",
+            "display_name": "张三",
+            "avatar": {
+              "kind": "hue",
+              "hue": 211,
+              "text": "张"
+            },
+            "assist_cat": {
+              "cat_id": "00000000-0000-4000-8000-000000000004",
+              "name": "大肥鱼"
+            }
+          },
+          "mentions": [],
+          "reply_to": {
+            "id": "00000000-0000-4000-8000-000000000010",
+            "seq": 4,
+            "origin": "human",
+            "label": "李四"
+          },
+          "cat_depth": 0
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000012",
+          "seq": 6,
+          "channel_id": "00000000-0000-4000-8000-000000000001",
+          "created_at": 1730000006000,
+          "deleted": false,
+          "text": "喵～我来啦",
+          "origin": "cat",
+          "label": "AI 独立发言 · 张三的大肥鱼",
+          "author": {
+            "kind": "cat",
+            "cat_id": "00000000-0000-4000-8000-000000000004",
+            "owner_user_id": "00000000-0000-4000-8000-000000000002",
+            "owner_name": "张三",
+            "name": "大肥鱼",
+            "display_name": "张三的大肥鱼",
+            "avatar_key": "fish-blue"
+          },
+          "mentions": [],
+          "reply_to": {
+            "id": "00000000-0000-4000-8000-000000000011",
+            "seq": 5,
+            "origin": "human_ai",
+            "label": "人＋AI 共同回复 · 张三与大肥鱼"
+          },
+          "cat_depth": 1
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000013",
+          "seq": 7,
+          "channel_id": "00000000-0000-4000-8000-000000000001",
+          "created_at": 1730000007000,
+          "deleted": true,
+          "text": null,
+          "origin": "human",
+          "label": "李四",
+          "author": {
+            "kind": "human",
+            "user_id": "00000000-0000-4000-8000-000000000003",
+            "name": "李四",
+            "display_name": "李四",
+            "avatar": {
+              "kind": "image",
+              "url": "https://community.example.test/static/avatars/00000000-0000-4000-8000-000000000003.png"
+            }
+          },
+          "mentions": [],
+          "reply_to": null,
+          "cat_depth": 0
+        }
+      ],
+      "next_before_seq": null,
+      "has_more": false
+    },
+    "cat": {
+      "id": "00000000-0000-4000-8000-000000000004",
+      "owner_user_id": "00000000-0000-4000-8000-000000000002",
+      "owner_name": "张三",
+      "name": "大肥鱼",
+      "display_name": "张三的大肥鱼",
+      "avatar_key": "fish-blue",
+      "reply_mode": "mention",
+      "enabled": true,
+      "admin_disabled": false
+    }
+  }
+}

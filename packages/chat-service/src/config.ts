@@ -12,7 +12,7 @@ import type { ChatProtocol, SecretStore } from "../../chat-api/src/index.ts";
 import { SqliteConversationStore } from "../../conversation-store/src/index.ts";
 import { SqliteMemoryStore, extractMemoryProposals, type PersonaMemory } from "../../memory-store/src/index.ts";
 import { DEFAULT_PERSONA_ID, PersonaStore } from "../../persona-store/src/index.ts";
-import type { MemoryProvider } from "../../app-contracts/src/chat.ts";
+import type { ChatProvider, MemoryProvider } from "../../app-contracts/src/chat.ts";
 import { MainChatService } from "./service.ts";
 import { SqliteSummaryStore } from "../../memory-store/src/summaries.ts";
 import type { PersonaSummaries } from "../../app-contracts/src/summary.ts";
@@ -69,6 +69,8 @@ export interface OpenMainChatOptions {
   /** Holds conversations.sqlite, memories.sqlite and secrets/; created when missing. */
   dataDir: string;
   fetch?: typeof globalThis.fetch;
+  /** Optional trusted provider, assembled by the host. Its lifecycle remains with the caller. */
+  provider?: ChatProvider;
   /** Default: DPAPI file at <dataDir>/secrets/chat-api-key.dpapi. */
   secretStore?: SecretStore;
   memory?: MemoryProvider;
@@ -103,7 +105,7 @@ export function openMainChat(opts: OpenMainChatOptions): OpenedMainChat {
     // with no dependency on the N.E.K.O. service or any other character's data.
     if (!opts.memory) localMemory = new SqliteMemoryStore(join(dataDir, "memories.sqlite"));
     const memory = opts.memory ?? localMemory;
-    const provider = createChatApiProvider({
+    const provider = opts.provider ?? createChatApiProvider({
       config: {
         protocol: settings.protocol,
         baseUrl: settings.baseUrl,

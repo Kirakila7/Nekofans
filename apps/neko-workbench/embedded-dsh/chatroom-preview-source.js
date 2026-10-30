@@ -1,6 +1,6 @@
-// A visual placeholder only: this component does not connect to a service or
-// create a conversation. Navigation and lifetime are owned by workspace shell.
-function createChatroomPreview(doc, avatar = () => '') {
+// Chat rooms remain a visual preview; the home has a separate in-panel surface.
+// Navigation and lifetime are owned by workspace shell.
+function createChatroomPreview(doc, avatar = () => '', options = {}) {
   const el = (tag, cls, text) => {
     const node = doc.createElement(tag);
     if (cls) node.className = cls;
@@ -24,17 +24,20 @@ function createChatroomPreview(doc, avatar = () => '') {
   const label = el('div', 'neko-chatroom-preview__label', '聊天室');
   label.appendChild(el('span', '', '示意'));
   const rooms = el('div', 'neko-chatroom-preview__rooms');
-  const addRoom = (name, description, symbol, kind) => {
-    const row = el('div', 'neko-chatroom-preview__room');
+  const addRoom = (name, description, symbol, kind, interactive = false) => {
+    const row = el(interactive ? 'button' : 'div', 'neko-chatroom-preview__room');
+    if (interactive) row.type = 'button';
     const icon = el('span', 'neko-chatroom-preview__room-icon ' + kind, symbol);
     icon.setAttribute('aria-hidden', 'true');
     const copy = el('span', 'neko-chatroom-preview__room-copy');
     copy.append(el('strong', '', name), el('small', '', description));
     row.append(icon, copy);
     rooms.appendChild(row);
+    return row;
   };
   addRoom('公共聊天室', '一起交流与分享', '✦', 'is-public');
-  addRoom('我的小窝', '与伙伴们相聚', '⌂', 'is-home');
+  const home = addRoom('我的小窝', '进入 Yui 的家', '⌂', 'is-home', true);
+  home.setAttribute('aria-label', '进入我的小窝，Yui 的家');
 
   const empty = el('div', 'neko-chatroom-preview__empty');
   const illustration = el('div', 'neko-chatroom-preview__illustration');
@@ -47,6 +50,45 @@ function createChatroomPreview(doc, avatar = () => '') {
   illustration.append(portrait, el('span', '', '✧'));
   empty.append(illustration, el('strong', '', '期待在这里相遇'), el('p', '', '这里是聊天室的简化展示，聊天功能尚未开放。'));
 
-  panel.append(heading, introduction, search, label, rooms, empty);
+  const room = el('div', 'neko-chatroom-preview__room-view');
+  room.append(heading, introduction, search, label, rooms, empty);
+  const homeView = el('section', 'neko-chatroom-preview__home-view');
+  homeView.hidden = true;
+  homeView.setAttribute('aria-label', 'Yui 的家');
+  const header = el('div', 'neko-chatroom-preview__home-header');
+  const back = el('button', 'neko-chatroom-preview__home-back', '‹ 返回聊天室');
+  back.type = 'button';
+  const title = el('h2', '', 'Yui 的家');
+  const storage = el('p', 'neko-chatroom-preview__home-storage', '工作台本地存档 · 尚未同步');
+  header.append(back, title, storage);
+  const status = el('p', 'neko-chatroom-preview__home-status');
+  status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite');
+  const retry = el('button', 'neko-chatroom-preview__home-retry', '重试');
+  retry.type = 'button'; retry.hidden = true;
+  const stage = el('div', 'neko-chatroom-preview__home-stage');
+  stage.dataset.nekoHomeStage = '';
+  homeView.append(header, status, retry, stage);
+  let mounted = false, mounting = false, disposed = false, releaseHome = null;
+  const mount = async () => {
+    if (mounted || mounting || disposed) return;
+    mounting = true; retry.hidden = true; status.hidden = false;
+    status.textContent = '正在准备家园…'; homeView.setAttribute('aria-busy', 'true');
+    try {
+      if (typeof options.mountHome !== 'function') throw new Error('家园暂不可用，请稍后重试。');
+      const release = await options.mountHome(stage);
+      if (disposed) { if (typeof release === 'function') release(); return; }
+      releaseHome = typeof release === 'function' ? release : null;
+      mounted = true; status.hidden = true;
+    } catch (error) {
+      if (!disposed) { status.textContent = error?.message || '家园暂不可用，请稍后重试。'; retry.hidden = false; }
+    } finally {
+      mounting = false; homeView.removeAttribute('aria-busy');
+    }
+  };
+  home.addEventListener('click', () => { room.hidden = true; homeView.hidden = false; back.focus(); void mount(); });
+  back.addEventListener('click', () => { homeView.hidden = true; room.hidden = false; home.focus(); });
+  retry.addEventListener('click', () => { void mount(); });
+  panel.disposeHome = () => { disposed = true; releaseHome?.(); releaseHome = null; };
+  panel.append(room, homeView);
   return panel;
 }
