@@ -7,8 +7,15 @@ const css=fs.readFileSync(path.join(base,'workspace-shell-source.css'),'utf8');
 // bundle's own exports intact; the page CSP has no unsafe-eval, so this is plain text wrapping.
 const composer=fs.readFileSync(path.join(base,'../lobby-composer.js'),'utf8');
 const composerBlock='const WORKBENCH_LOBBY_COMPOSER = (function (module, globalThis) {\n'+composer+'\nreturn globalThis.WorkbenchLobbyComposer;\n})(undefined, {});\n';
-const block='// @neko-workspace-shell:start\nconst WORKSPACE_SHELL_CSS = '+JSON.stringify(css)+';\n'+composerBlock+source+'\n// @neko-workspace-shell:end\n';
+const preview=fs.readFileSync(path.join(base,'chatroom-preview-source.js'),'utf8');
+const previewCss=fs.readFileSync(path.join(base,'chatroom-preview-source.css'),'utf8');
+const block='// @neko-workspace-shell:start\nconst WORKSPACE_SHELL_CSS = '+JSON.stringify(css)+' + '+JSON.stringify(previewCss)+';\n'+composerBlock+preview+'\n'+source+'\n// @neko-workspace-shell:end\n';
 let code=fs.readFileSync(file,'utf8');
 if(code.includes('// @neko-workspace-shell:start'))code=code.replace(/\/\/ @neko-workspace-shell:start[\s\S]*?\/\/ @neko-workspace-shell:end\n/,()=>block);
 else code=code.replace('// @neko-side-rail:start',()=>block+'\n// @neko-side-rail:start');
+// Account styles are embedded separately in the same client bundle.
+const accountCss=fs.readFileSync(path.join(base,'account-habitat-source.css'),'utf8');
+const accountPattern=/^const ACCOUNT_HABITAT_CSS = (?:"(?:[^"\\]|\\.)*");$/m;
+if(!accountPattern.test(code)) throw new Error('Missing account habitat CSS constant');
+code=code.replace(accountPattern,()=> 'const ACCOUNT_HABITAT_CSS = '+JSON.stringify(accountCss)+';');
 fs.writeFileSync(file,code);

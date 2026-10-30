@@ -1,0 +1,3 @@
+# Keep upstream SDK bytes identical to their pinned SHA-256 and browser SRI.
+livekit-client.umd.js -text
+trtc.js -text

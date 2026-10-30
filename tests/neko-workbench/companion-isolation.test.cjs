@@ -253,7 +253,7 @@ async function runIsolationHarness(scenario) {
     static fromWebContents(wc) { return windows.find(window => window.webContents === wc); }
   }
   class Tray extends EventEmitter { setTitle() {} setToolTip() {} popUpContextMenu() {} }
-  const electron = { app, BrowserWindow: Window, ipcMain: { handle: (name, fn) => handlers.set(name, fn) },
+  const electron = { app, BrowserWindow: Window, ipcMain: { handle: (name, fn) => handlers.set(name, fn), on: () => {}, removeListener: () => {} },
     screen: { getPrimaryDisplay: () => ({ workArea: { x: 0, y: 0, width: 1440, height: 1000 } }) },
     shell: { openExternal: async () => {}, openPath: async () => {} }, Menu: { buildFromTemplate: template => ({ template, popup() {} }), setApplicationMenu() {} }, Tray,
     nativeImage: { createEmpty: () => ({}) }, dialog: { showErrorBox() {}, showMessageBox: async () => {}, showOpenDialog: async () => ({ canceled: true, filePaths: [] }) },

@@ -120,6 +120,46 @@ test('switch to Bilibili during identity handoff fences the late navigation', as
   assert.equal(f.host.children.has(f.views[1]), true);
   f.controller.dispose();
 });
+
+test('community account handoff remains available alongside Bilibili and is cancelled only when community closes', async () => {
+  let cancellations = 0;
+  const f = fixture({}, true, { onHide: () => { cancellations++; } });
+  const url = DEFAULT_COMMUNITY_URL + '#native_sync=' + 's'.repeat(43) + '&native_delegate=' + 'd'.repeat(43);
+  await f.action({ action: 'open', site: 'community', slot: 'left', requestId: 1, bounds });
+  await f.action({ action: 'open', site: 'bilibili', slot: 'right', requestId: 2, bounds });
+  assert.equal(f.controller.isOpen, true, 'Bilibili is active but community is still open');
+  await f.controller.handoff(f.host, url);
+  assert.equal(f.views[0].webContents.loads.at(-1), url);
+  await f.action({ action: 'hide', slot: 'right', requestId: 2 });
+  assert.equal(cancellations, 0, 'hiding Bilibili must not cancel community identity');
+  assert.equal(f.controller.isOpen, true);
+  const gate = deferred();
+  f.views[0].webContents.behavior = () => gate.promise;
+  const pending = f.controller.handoff(f.host, url);
+  const cancelled = assert.rejects(pending, /隐藏|未能打开/);
+  await tick();
+  await f.action({ action: 'hide', slot: 'left', requestId: 1 });
+  gate.resolve(); await cancelled;
+  assert.equal(cancellations, 1);
+  assert.equal(f.controller.isOpen, false);
+  f.controller.dispose();
+});
+
+test('opening Bilibili in another slot does not cancel an in-flight community handoff', async () => {
+  const f = fixture({}, true);
+  const url = DEFAULT_COMMUNITY_URL + '#native_sync=' + 's'.repeat(43) + '&native_delegate=' + 'd'.repeat(43);
+  await f.action({ action: 'open', site: 'community', slot: 'left', bounds });
+  const gate = deferred();
+  f.views[0].webContents.behavior = () => gate.promise;
+  const pending = f.controller.handoff(f.host, url);
+  await tick();
+  await f.action({ action: 'open', site: 'bilibili', slot: 'right', bounds });
+  gate.resolve(); await pending;
+  assert.equal(f.controller.isOpen, true);
+  assert(f.host.children.has(f.views[0]));
+  assert(f.host.children.has(f.views[1]));
+  f.controller.dispose();
+});
 function navigate(contents, type, url) {
   let prevented = false;
   contents.emit(type, { preventDefault() { prevented = true; } }, url);
@@ -137,6 +177,117 @@ function secure(options) {
   assert.equal(webPreferences.allowRunningInsecureContent, false);
   assert.equal('preload' in webPreferences, false);
 }
+
+test('community and Bilibili occupy independent slots and moving one reuses its exact view', async () => {
+  const f = fixture({}, true);
+  const left = { x: 300, y: 80, width: 390, height: 650 };
+  const right = { x: 700, y: 80, width: 390, height: 650 };
+  const side = { x: 60, y: 80, width: 230, height: 650 };
+  await f.action({ action: 'open', site: 'community', slot: 'left', requestId: 1, bounds: left });
+  await f.action({ action: 'open', site: 'bilibili', slot: 'right', requestId: 2, bounds: right });
+  assert.equal(f.views.length, 2); assert.equal(f.host.children.size, 2);
+  const [community, video] = f.views;
+  assert.equal(community.options.webPreferences.partition, COMMUNITY_PARTITION);
+  assert.equal(video.options.webPreferences.partition, BILIBILI_PARTITION);
+  assert.deepEqual(community.bounds, left); assert.deepEqual(video.bounds, right);
+  assert(f.states.some(value => value.site === 'community' && value.slot === 'left' && value.status === 'ready'));
+  assert(f.states.some(value => value.site === 'bilibili' && value.slot === 'right' && value.status === 'ready'));
+  const adjusted = { ...right, width: 350 };
+  await f.action({ action: 'layout', slot: 'right', bounds: adjusted });
+  assert.deepEqual(community.bounds, left); assert.deepEqual(video.bounds, adjusted);
+  await f.action({ action: 'open', site: 'community', slot: 'side', requestId: 3, bounds: side });
+  assert.equal(f.views.length, 2); assert.equal(f.host.children.size, 2);
+  assert.deepEqual(community.bounds, side); assert.equal(community.webContents.loads.length, 1);
+  assert.deepEqual(await f.action({ action: 'hide', slot: 'left', requestId: 1 }), { ok: true });
+  assert.deepEqual(await f.action({ action: 'hide', slot: 'side', requestId: 1 }), { ok: true, stale: true });
+  assert.equal(f.host.children.size, 2);
+  await f.action({ action: 'hide', slot: 'side', requestId: 3 });
+  assert.equal(f.host.children.has(community), false); assert.equal(f.host.children.has(video), true);
+  await f.action({ action: 'hide' }); assert.equal(f.host.children.size, 0);
+});
+
+test('opening, moving and refreshing split views never steals the DSH focus', async () => {
+  const f = fixture({}, true); f.host.focused = true;
+  await f.action({ action: 'open', site: 'community', slot: 'left', bounds });
+  await f.action({ action: 'open', site: 'bilibili', slot: 'right', bounds });
+  const [community, video] = f.views;
+  assert.equal(community.webContents.focused || 0, 0);
+  assert.equal(video.webContents.focused || 0, 0);
+  await f.action({ action: 'reload', slot: 'right' });
+  await f.action({ action: 'open', site: 'community', slot: 'side', bounds });
+  assert.equal(community.webContents.focused || 0, 0);
+  assert.equal(video.webContents.focused || 0, 0);
+  await f.action({ action: 'open', site: 'bilibili', bounds });
+  assert.equal(video.webContents.focused, 1, 'legacy single-pane open retains its focus behaviour');
+});
+
+test('a coalesced old single-pane open does not steal focus after being moved into a slot', async () => {
+  const f = fixture({}, true), gate = deferred(); f.host.focused = true;
+  const first = f.action({ action: 'open', site: 'community', bounds });
+  const view = f.views[0]; view.webContents.behavior = () => gate.promise;
+  await tick();
+  const moved = f.action({ action: 'open', site: 'community', slot: 'left', bounds });
+  gate.resolve(); await Promise.all([first, moved]);
+  assert.equal(view.webContents.focused || 0, 0);
+  assert.equal(f.host.children.size, 1);
+});
+
+test('replacing a slot during loading cancels only its old view and retains other slots', async () => {
+  const f = fixture({}, true), gate = deferred();
+  const first = f.action({ action: 'open', site: 'community', slot: 'left', bounds });
+  const firstRejected = assert.rejects(first, /社区已隐藏|未能打开/);
+  f.views[0].webContents.behavior = () => gate.promise;
+  await tick();
+  await f.action({ action: 'open', site: 'bilibili', slot: 'left', bounds });
+  await firstRejected;
+  assert.equal(f.host.children.size, 1); assert.equal(f.host.children.has(f.views[1]), true);
+  gate.resolve(); await tick(); assert.equal(f.host.children.has(f.views[0]), false);
+  for (const slot of ['middle', '', null, 1]) assert.throws(() => validateCommunityRequest({ action: 'hide', slot }));
+});
+
+test('a new slot assignment supersedes an in-flight legacy hide without closing either new view', async () => {
+  const f = fixture({}, true);
+  await f.action({ action: 'open', site: 'community', slot: 'left', requestId: 1, bounds });
+  await f.action({ action: 'open', site: 'bilibili', slot: 'right', requestId: 2, bounds });
+  const staleHide = f.action({ action: 'hide' });
+  const side = { x: 70, y: 80, width: 220, height: 600 };
+  const reopened = f.action({ action: 'open', site: 'community', slot: 'side', requestId: 3, bounds: side });
+  assert.deepEqual(await staleHide, { ok: true, stale: true });
+  await reopened;
+  assert.equal(f.host.children.size, 2);
+  assert.equal(f.host.children.has(f.views[0]), true); assert.equal(f.host.children.has(f.views[1]), true);
+  assert.deepEqual(f.views[0].bounds, side);
+  const before = f.views[0].bounds;
+  assert.deepEqual(await f.action({ action: 'layout', bounds: { x: 2, y: 3, width: 900, height: 500 } }), { ok: true, stale: true });
+  assert.deepEqual(f.views[0].bounds, before);
+});
+
+test('a new slot assignment wins over a legacy open awaiting slot cleanup', async () => {
+  const f = fixture({}, true);
+  await f.action({ action: 'open', site: 'community', slot: 'left', bounds });
+  await f.action({ action: 'open', site: 'bilibili', slot: 'right', bounds });
+  const staleOpen = f.action({ action: 'open', site: 'bilibili', bounds });
+  const canceled = assert.rejects(staleOpen, /社区已隐藏/);
+  const side = { x: 70, y: 80, width: 220, height: 600 };
+  await f.action({ action: 'open', site: 'community', slot: 'side', bounds: side });
+  await canceled;
+  assert.equal(f.host.children.size, 2);
+  assert.deepEqual(f.views[0].bounds, side);
+});
+
+test('later slot wins if the same site is assigned while exiting a legacy view', async () => {
+  const f = fixture({}, true);
+  await f.action({ action: 'open', site: 'bilibili', bounds });
+  const first = f.action({ action: 'open', site: 'community', slot: 'left', bounds });
+  const canceled = assert.rejects(first, /社区已隐藏/);
+  const right = { x: 700, y: 80, width: 390, height: 650 };
+  await f.action({ action: 'open', site: 'community', slot: 'right', bounds: right });
+  await canceled;
+  assert.equal(f.host.children.size, 1);
+  assert.deepEqual(f.views[1].bounds, right);
+  assert.deepEqual(await f.action({ action: 'hide', slot: 'left' }), { ok: true });
+  assert.equal(f.host.children.has(f.views[1]), true);
+});
 
 test('only official Bilibili video URLs become clean public links', () => {
   assert.equal(bilibiliVideoShareUrl('https://m.bilibili.com/video/BV1WYnd6DEAw?p=2&token=secret&share_source=copy#fragment'), 'https://www.bilibili.com/video/BV1WYnd6DEAw?p=2');

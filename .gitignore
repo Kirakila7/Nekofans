@@ -30,6 +30,7 @@ secrets/
 /app-config.json
 /dsh-pets.json
 /workspaces/
+/fish-care/
 
 # Generated portable packages and local runtime payloads
 /dist/

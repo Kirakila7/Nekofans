@@ -16,7 +16,12 @@ async function fixture(t){
   if(pathname.endsWith('/messages'))return new Response('event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"text":"看到了"}}\n\nevent: message_stop\ndata: {"type":"message_stop"}\n\n');
   return new Response('data: {"choices":[{"delta":{"content":"看"}}]}\n\ndata: {"choices":[{"delta":{"content":"到了"},"finish_reason":"stop"}],"usage":{"prompt_tokens":12,"completion_tokens":3}}\n\ndata: [DONE]\n\n');
  };
- const chat=new WorkbenchMainChat({dataDir:directory,repositoryRoot:root,safeStorage});await chat.start();
+ // Vision consent tests exercise the legacy memory.list boundary directly;
+ // prevent the independent native memory worker and its background sync from
+ // racing the per-test read gates or starting a real local service.
+ const memoryWorker={request:async()=>{throw Error('fixture memory worker offline');},stop:async()=>{},close:async()=>{}};
+ const chat=new WorkbenchMainChat({dataDir:directory,repositoryRoot:root,safeStorage,memoryWorker});await chat.start();
+ clearInterval(chat.memorySystem.timer);
  const baseUrl='https://vision.example.test/v1';
  await chat.saveApi({protocol:'openai-compatible',baseUrl,model:'fixture-vision',requestTimeoutMs:2000,maxOutputTokens:256,key:{action:'replace',value:'fixture-private'}});
  const vision=new ScreenVision({dataDir:directory,repositoryRoot:root,safeStorage,getChat:()=>chat,fetch:fakeFetch});

@@ -17,19 +17,19 @@
     const off=pet.onState(state=>render(state.mainChat));
     pet.call('chat-settings-read').then(render,()=>{if(!disposed)status.textContent='聊天设置暂不可用';});
     form.addEventListener('submit',async event=>{
-      event.preventDefault();if(!loaded||button.disabled)return;button.disabled=true;status.textContent='正在保存…';
+      event.preventDefault();if(!loaded||button.disabled)return;button.disabled=true;button.setAttribute('aria-busy','true');status.textContent='正在保存…';
       const secret=get('apiKey').value;
       const key=get('clearKey').checked?{action:'clear'}:secret.trim()?{action:'replace',value:secret}:{action:'keep'};
       if(deepseekPresetSelected&&hasSavedKey&&key.action==='keep'){
         let savedOrigin='',targetOrigin='';try{savedOrigin=new URL(savedBaseUrl).origin;targetOrigin=new URL(get('baseUrl').value).origin;}catch{}
-        if(!savedOrigin||savedOrigin!==targetOrigin){status.textContent='当前已保存其他服务商的密钥，请输入 DeepSeek API Key，或先勾选清除旧密钥。';button.disabled=false;return;}
+        if(!savedOrigin||savedOrigin!==targetOrigin){status.textContent='当前已保存其他服务商的密钥，请输入 DeepSeek API Key，或先勾选清除旧密钥。';button.disabled=false;button.removeAttribute('aria-busy');return;}
       }
       try{
         const result=await pet.call('chat-settings-save',{protocol:get('protocol').value,baseUrl:get('baseUrl').value,model:get('model').value,
           requestTimeoutMs:Number(get('requestTimeoutMs').value),maxOutputTokens:Number(get('maxOutputTokens').value),key});
         if(disposed)return;get('apiKey').value='';get('clearKey').checked=false;render(result);savedBaseUrl=get('baseUrl').value;deepseekPresetSelected=false;status.textContent=result.hasKey?'设置已保存；发送一条消息可测试连接。':'设置已保存；请先填写 API Key 再发送消息。';
       }catch{if(!disposed)status.textContent='保存失败，请检查地址、模型和系统加密存储';}
-      finally{if(!disposed)button.disabled=false;}
+      finally{if(!disposed){button.disabled=false;button.removeAttribute('aria-busy');}}
     });
     return ()=>{disposed=true;off?.();};
   }
@@ -39,14 +39,14 @@
     let generation=0,disposed=false,lastBackend,lastPhase,lastMemory,modelLoaded=false;const drafts=new Map();
     const syncStatus=host.querySelector('.memory-sync-status'),reuse=host.querySelector('.memory-reuse-chat'),modelForm=host.querySelector('.memory-model-form'),custom=host.querySelector('.memory-custom-model');
     const node=(tag,text,className)=>{const el=document.createElement(tag);if(text!==undefined)el.textContent=text;if(className)el.className=className;return el;};
-    const actionButton=(text,action)=>{const button=node('button',text);button.type='button';button.addEventListener('click',async()=>{if(button.disabled)return;button.disabled=true;try{await action();}catch{if(!disposed)status.textContent='操作未完成，请刷新后重试';}finally{if(!disposed)button.disabled=false;}});return button;};
+    const actionButton=(text,action)=>{const button=node('button',text);button.type='button';button.addEventListener('click',async()=>{if(button.disabled)return;button.disabled=true;button.setAttribute('aria-busy','true');try{await action();}catch{if(!disposed)status.textContent='操作未完成，请刷新后重试';}finally{if(!disposed){button.disabled=false;button.removeAttribute('aria-busy');}}});return button;};
     async function mutate(input){const result=await pet.call('chat-memory-action',input);if(result?.ok!==false&&input.id)drafts.delete(input.id);await refresh();if(result?.ok===false)status.textContent=result.message||'操作未完成，仍使用原有设置';}
-    host.querySelector('.sync-memory').addEventListener('click',async event=>{const button=event.currentTarget;button.disabled=true;status.textContent='正在处理记忆…';try{await mutate({action:'sync'});}catch{status.textContent='记忆处理未完成，记录已保留';}finally{if(!disposed)button.disabled=false;}});
+    host.querySelector('.sync-memory').addEventListener('click',async event=>{const button=event.currentTarget;button.disabled=true;button.setAttribute('aria-busy','true');status.textContent='正在处理记忆…';try{await mutate({action:'sync'});}catch{status.textContent='记忆处理未完成，记录已保留';}finally{if(!disposed){button.disabled=false;button.removeAttribute('aria-busy');}}});
     reuse.addEventListener('change',()=>{custom.disabled=reuse.checked;});custom.disabled=true;
     modelForm.addEventListener('submit',async event=>{
-      event.preventDefault();const button=modelForm.querySelector('button');if(button.disabled)return;button.disabled=true;status.textContent='正在连接记忆组件…';const get=name=>modelForm.elements.namedItem(name);
+      event.preventDefault();const button=modelForm.querySelector('button');if(button.disabled)return;button.disabled=true;button.setAttribute('aria-busy','true');status.textContent='正在连接记忆组件…';const get=name=>modelForm.elements.namedItem(name);
       try{const secret=get('apiKey').value;await mutate({action:'configure-neko',enabled:true,useChatApi:reuse.checked,...(reuse.checked?{}:{protocol:get('protocol').value,baseUrl:get('baseUrl').value,model:get('model').value,requestTimeoutMs:Number(get('requestTimeoutMs').value),key:secret.trim()?{action:'replace',value:secret}:{action:'keep'}})});get('apiKey').value='';}
-      catch{if(!disposed)status.textContent='记忆组件尚未就绪，请检查组件安装和模型设置';}finally{if(!disposed)button.disabled=false;}
+      catch{if(!disposed)status.textContent='记忆组件尚未就绪，请检查组件安装和模型设置';}finally{if(!disposed){button.disabled=false;button.removeAttribute('aria-busy');}}
     });
     function renderReplication(replication,model){
       host.querySelector('.memory-system').hidden=!replication;if(!replication)return;

@@ -26,7 +26,7 @@ if(!process.argv.includes('--entry-harness')){
       static fromWebContents(contents){return windows.find(window=>window.webContents===contents);}
     }
     class Tray extends EventEmitter{setTitle(){}setToolTip(){}popUpContextMenu(){}}
-    const electron={app,BrowserWindow:Window,ipcMain:{handle:(name,fn)=>handlers.set(name,fn)},screen:{getPrimaryDisplay:()=>({workArea:{x:0,y:0,width:1440,height:1000}})},
+    const electron={app,BrowserWindow:Window,ipcMain:Object.assign(new EventEmitter(),{handle:(name,fn)=>handlers.set(name,fn)}),screen:{getPrimaryDisplay:()=>({workArea:{x:0,y:0,width:1440,height:1000}})},
       shell:{openExternal:()=>Promise.resolve(),openPath:()=>Promise.resolve()},Menu:{buildFromTemplate:template=>({template,popup(){menus.push(template);}}),setApplicationMenu(){}},Tray,
       nativeImage:{createEmpty:()=>({})},dialog:{showErrorBox(){},showMessageBox:()=>Promise.resolve(),showOpenDialog:()=>Promise.resolve({canceled:true})},nativeTheme:{shouldUseDarkColors:false},
       safeStorage:{isEncryptionAvailable:()=>true,getSelectedStorageBackend:()=> 'keychain',encryptString:value=>Buffer.from('cipher:'+Buffer.from(value).toString('base64')),decryptString:bytes=>Buffer.from(bytes.toString().slice(7),'base64').toString()}};

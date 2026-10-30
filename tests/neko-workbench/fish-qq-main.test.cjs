@@ -17,6 +17,14 @@ if (!process.argv.includes('--main-harness')) {
       }));
   });
 
+  test('a slow startup status cannot invalidate a newer start request', async () => {
+    await new Promise((resolve, reject) => execFile(process.execPath, [__filename, '--main-harness', '--startup-race'],
+      { timeout: 15000, maxBuffer: 2e6, windowsHide: true }, (error, stdout, stderr) => {
+        if (error) return reject(new Error(stdout + '\n' + stderr));
+        assert.match(stdout, /Fish\/QQ startup race passed/); resolve();
+      }));
+  });
+
   test('workbench preload exposes unified channel actions and a removable state subscription', async () => {
     const vm = require('node:vm');
     const exposed = {}, calls = [], renderer = new EventEmitter();
@@ -52,7 +60,8 @@ async function runMainHarness() {
   const data = path.join(temporary, 'data'), modules = path.join(temporary, 'modules'), cli = path.join(temporary, 'dsh');
   fs.mkdirSync(data);
   // Restored selection is a preference, never permission to start on launch.
-  fs.writeFileSync(path.join(data, 'state.json'), JSON.stringify({ preferences: { fishQqSelection: { fish: false, qqbot: true } } }));
+  const startupRace = process.argv.includes('--startup-race');
+  fs.writeFileSync(path.join(data, 'state.json'), JSON.stringify({ preferences: { fishQqSelection: startupRace ? { fish: true, qqbot: false } : { fish: false, qqbot: true } } }));
   fs.writeFileSync(cli, 'fixture');
   for (const name of ['dsh-llm', 'dsh-scope']) {
     fs.mkdirSync(path.join(modules, name, 'lib'), { recursive: true });
@@ -61,7 +70,9 @@ async function runMainHarness() {
   Object.assign(process.env, { NEKO_WORKBENCH_DATA_DIR: data, NEKO_WORKBENCH_WORKSPACE: path.join(temporary, 'work'),
     NEKO_WORKBENCH_DSH_CLI: cli, NEKO_WORKBENCH_DSH_MODULES: modules, PET_OPEN_WORKBENCH: '1', PET_WORKBENCH_ONLY: '0' });
   const handlers = new Map(), windows = [], menus = [], requests = [], broadcasts = [];
-  let stopped = false, holdQqStart = false, pendingQqStart = null, holdStatus = false;
+  let stopped = false, holdQqStart = false, pendingQqStart = null, holdStatus = startupRace;
+  let holdFishStart = startupRace, holdFishPause = false;
+  const pendingFishStart = [], pendingFishPause = [];
   const pendingStatuses = [];
   const paused = name => ({ enabled: false, phase: 'paused', reason: 'fixture paused',
     ...(name === 'qqbot' ? { bound: false, connected: false, scopeConfigured: false } : {}) });
@@ -91,7 +102,10 @@ async function runMainHarness() {
           pendingStatuses.push({ request, value: { ...channels[name] } });
           return;
         }
-        if (action === 'pause') channels[name] = paused(name);
+        if (action === 'pause') {
+          channels[name] = paused(name);
+          if (name === 'fish' && holdFishPause) { pendingFishPause.push({request,value:{...channels[name]}}); return; }
+        }
         if (action === 'start') {
           if (name === 'qqbot' && holdQqStart) {
             pendingQqStart = request;
@@ -101,6 +115,7 @@ async function runMainHarness() {
           }
           channels[name] = name === 'fish' ? { enabled: false, phase: 'login-required', reason: 'fish login required' }
             : { enabled: true, phase: 'bound', reason: 'bound, gateway not connected', bound: true, connected: false, scopeConfigured: true };
+          if (name === 'fish' && holdFishStart) { pendingFishStart.push({request,value:{...channels[name]}}); return; }
         }
         return reply(request, channels[name]);
       }
@@ -129,7 +144,7 @@ async function runMainHarness() {
     static fromWebContents(wc) { return windows.find(w => w.webContents === wc); }
   }
   class Tray extends EventEmitter { setTitle() {} setToolTip() {} popUpContextMenu() {} }
-  const electron = { app, BrowserWindow: Window, ipcMain: { handle: (name, handler) => handlers.set(name, handler) },
+  const electron = { app, BrowserWindow: Window, ipcMain: Object.assign(new EventEmitter(), { handle: (name, handler) => handlers.set(name, handler) }),
     screen: { getPrimaryDisplay: () => ({ workArea: { x: 0, y: 0, width: 1600, height: 1000 } }) },
     shell: { openExternal: async () => {}, openPath: async () => {} },
     Menu: { buildFromTemplate: template => ({ template, popup() { menus.push(template); } }), setApplicationMenu() {} },
@@ -153,6 +168,20 @@ async function runMainHarness() {
   const eventsText = () => fs.existsSync(eventsFile) ? fs.readFileSync(eventsFile, 'utf8') : '';
   try {
     require('../../apps/neko-workbench/main.cjs');
+    if (startupRace) {
+      await wait(() => handlers.has('pet:call') && windows.length > 0);
+      const pet = windows.find(window => window.options.title !== 'N.E.K.O. 工作台');
+      const petCall = (method, value) => handlers.get('pet:call')(event(pet), method, value);
+      await wait(async () => (await petCall('state')).connection === 'ready' && pendingStatuses.some(item => item.request.method === 'fish-care'));
+      await petCall('menu');
+      const start = menus.at(-1).find(item => item.label === '开始养鱼').click();
+      await wait(() => pendingFishStart.length === 1);
+      const old = pendingStatuses.find(item => item.request.method === 'fish-care');
+      reply(old.request, old.value); await new Promise(resolve => setImmediate(resolve));
+      const fresh = pendingFishStart.shift(); reply(fresh.request, fresh.value); await start;
+      assert.equal((await petCall('state')).fish.phase, 'login-required', 'older startup status must not supersede an issued start');
+      app.quit(); await wait(() => stopped); console.log('Fish/QQ startup race passed'); return;
+    }
     await wait(() => handlers.has('workbench:call') && windows.some(window => window.options.title === 'N.E.K.O. 工作台'));
     const pet = windows.find(window => window.options.title !== 'N.E.K.O. 工作台');
     const workbench = windows.find(window => window.options.title === 'N.E.K.O. 工作台');
@@ -259,6 +288,43 @@ async function runMainHarness() {
     assert.equal((await get()).qqbot.phase, 'paused', 'a cancelled start result cannot revive displayed state');
     assert.equal((await get()).fishQq.qqbot.phase, 'paused');
     assert.deepEqual((await get()).fishQq.selection, { fish: false, qqbot: true });
+
+    // Control exact reply order rather than relying on wall-clock timings.
+    // A newer start must beat an earlier pause even if the older pause replies
+    // first, after both requests have already been issued.
+    holdFishPause = true; holdFishStart = true;
+    const oldPause = call('fish', 'pause'); await wait(() => pendingFishPause.length === 1);
+    const newerStart = call('fish', 'start'); await wait(() => pendingFishStart.length === 1);
+    let item = pendingFishPause.shift(); reply(item.request, item.value); await oldPause;
+    item = pendingFishStart.shift(); reply(item.request, item.value); await newerStart;
+    assert.equal((await get()).fish.phase, 'login-required', 'an earlier pause reply must not invalidate an issued newer start');
+
+    const oldPauseLate = call('fish', 'pause'); await wait(() => pendingFishPause.length === 1);
+    const newerStartFirst = call('fish', 'start'); await wait(() => pendingFishStart.length === 1);
+    item = pendingFishStart.shift(); reply(item.request, item.value); await newerStartFirst;
+    item = pendingFishPause.shift(); reply(item.request, item.value); await oldPauseLate;
+    assert.equal((await get()).fish.phase, 'login-required', 'a late pause must not invalidate a newer start');
+
+    // Conversely, a newer pause must not be undone by an earlier start.
+    const oldStartFirst = call('fish', 'start'); await wait(() => pendingFishStart.length === 1);
+    const newerPause = call('fish', 'pause'); await wait(() => pendingFishPause.length === 1);
+    item = pendingFishStart.shift(); reply(item.request, item.value); await oldStartFirst;
+    item = pendingFishPause.shift(); reply(item.request, item.value); await newerPause;
+    assert.equal((await get()).fish.phase, 'paused', 'an earlier start reply must not invalidate an issued newer pause');
+
+    holdFishPause = false;
+    const oldStart = call('fish', 'start'); await wait(() => pendingFishStart.length === 1);
+    await call('fish', 'pause'); item = pendingFishStart.shift(); reply(item.request, item.value); await oldStart;
+    assert.equal((await get()).fish.phase, 'paused', 'a late start must not invalidate a newer pause');
+
+    // A newer unsolicited runtime notification is authoritative even if an
+    // earlier RPC later returns a different state.
+    const startBeforePush = call('fish', 'start'); await wait(() => pendingFishStart.length === 1);
+    emit('fish-care-state', {enabled:true,phase:'running',reason:'newer runtime notification'});
+    await wait(async () => (await get()).fish.phase === 'running');
+    item = pendingFishStart.shift(); reply(item.request, item.value); await startBeforePush;
+    assert.equal((await get()).fish.phase, 'running', 'an older RPC reply must not overwrite a newer runtime notification');
+    holdFishStart = false;
     app.quit();
     await wait(() => stopped);
     console.log('Fish/QQ main passed');
