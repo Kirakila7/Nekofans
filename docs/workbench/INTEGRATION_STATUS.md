@@ -4,6 +4,8 @@ The daily artifact is built from this repository. `config/daily-release.json` is
 
 ## Pending source changes
 
+- The coding surface exposes a shortcut into the current DSH session’s native file tree. The floating workspace saves pending text, expands, checks the selected session again, then requests the native files tab. Unsupported or stale sessions fail closed; local fixture and Electron tests use simulated file services, not the user’s files. DSH native file APIs are internal and a real project directory interaction remains unverified.
+
 - In workbench-account companion chat, a starting or disconnected DSH bridge no longer appears ready. The input keeps its draft and offers an explicit reconnect when disconnected; pressing send during disconnection does not restart or transmit anything. The bridge becoming ready does not confirm account login, quota or a real model reply, which must be checked separately.
 
 - Project and session lists show opening, selection, error and partial-search feedback. Search expands matches without losing normal collapsed state; the chooser adjusts to narrow panes. Isolated DOM and Electron layout tests cover synthetic sessions and resizing. Real session transitions and the separate floating project-record view remain to be validated.

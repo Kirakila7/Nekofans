@@ -144,6 +144,30 @@ function installWorkspaceShell(options = {}) {
   const startupStatus = el('p', 'neko-startup__status', '正在读取本地工作会话…'); startupStatus.setAttribute('role', 'status'); startupStatus.setAttribute('aria-live', 'polite');
   const startupProjects = el('div', 'neko-startup__projects');
   startupInner.append(startupHead, startupSearch, startupToolbar, startupStatus, startupProjects); startup.appendChild(startupInner); doc.body.appendChild(startup);
+  // A lightweight shortcut into DSH's own session-scoped file tree. It never
+  // enumerates paths itself or changes the selected session or draft.
+  const directoryControl = own(el('div', 'neko-workspace-directory'));
+  const directoryButton = button('', 'neko-workspace-directory__button', () => {
+    let message = '';
+    if (lobby?.isOpen()) message = '请先返回工作区，再查看项目目录';
+    else if (layout?.officeMode !== 'dsh') message = '当前工作界面暂不支持项目目录';
+    else if (startupOpen || !hasActiveDshSession()) message = '请先打开工作会话，再查看项目目录';
+    else if (typeof options.openDshFiles !== 'function') message = '项目目录暂不可用';
+    else {
+      try { options.openDshFiles(directoryButton); }
+      catch { message = '项目目录暂未打开，请重试'; }
+    }
+    directoryStatus.textContent = message;
+    directoryStatus.hidden = !message;
+  });
+  directoryButton.title = '打开当前项目目录'; directoryButton.setAttribute('aria-label', '打开当前项目目录');
+  const directoryIcon = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  directoryIcon.setAttribute('viewBox', '0 0 24 24'); directoryIcon.setAttribute('aria-hidden', 'true');
+  const folderPath = doc.createElementNS('http://www.w3.org/2000/svg', 'path');
+  for (const [name, value] of Object.entries({ d:'M3.5 6h6l2 2h9v10.5h-17z', fill:'none', stroke:'currentColor', 'stroke-width':'1.7', 'stroke-linejoin':'round' })) folderPath.setAttribute(name, value);
+  directoryIcon.appendChild(folderPath); directoryButton.appendChild(directoryIcon);
+  const directoryStatus = el('span', 'neko-workspace-directory__status'); directoryStatus.hidden = true; directoryStatus.setAttribute('role', 'status'); directoryStatus.setAttribute('aria-live', 'polite');
+  directoryControl.append(directoryStatus, directoryButton); directoryControl.hidden = true; doc.body.appendChild(directoryControl);
   function stopNativeNew() { nativeNewPending = false; if (nativeNewTimer !== null) win.clearTimeout(nativeNewTimer); nativeNewTimer = null; }
   function beginNativeNew() {
     stopNativeNew(); nativeNewBefore = nativeSelection()?.sessionId || null; nativeNewPending = true;
@@ -552,6 +576,19 @@ function installWorkspaceShell(options = {}) {
       const off = bridge.subscribeNativeComposer(event => {
         if (!floatingInitialized || !event || typeof event.type !== 'string') return;
         if (event.type === 'expand') { if (doc.body.hasAttribute('data-neko-flex-workspace-collapsed')) doc.dispatchEvent(new win.Event('neko-workspace-expand')); return; }
+        if (event.type === 'files') {
+          const sessionId = event.sessionToken;
+          const current = floatingComposer?.snapshot();
+          if (!doc.body.hasAttribute('data-neko-flex-workspace-collapsed') || lobby?.isOpen() || !current?.available || current.sessionId !== sessionId || current.revision !== event.revision || nativeSelection()?.sessionId !== sessionId || !hasActiveDshSession()) { updateFloatingComposer(current, {status:'工作会话已变化，请展开工作区重试'}); return; }
+          doc.dispatchEvent(new win.Event('neko-workspace-expand'));
+          const frame = win.requestAnimationFrame || (fn => win.setTimeout(fn, 16));
+          frame(() => frame(() => {
+            if (disposed || lobby?.isOpen() || doc.body.hasAttribute('data-neko-flex-workspace-collapsed') || nativeSelection()?.sessionId !== sessionId || !hasActiveDshSession()) return;
+            try { if (typeof options.openDshFiles !== 'function') throw Error('missing file service'); options.openDshFiles(directoryButton, sessionId); }
+            catch { collapseNotice.textContent = '项目目录暂不可用，请在工作区重试'; collapseNotice.hidden = false; if (collapseNoticeTimer) win.clearTimeout(collapseNoticeTimer); collapseNoticeTimer = win.setTimeout(() => { collapseNotice.hidden = true; }, 3500); }
+          }));
+          return;
+        }
         if (event.type === 'unavailable') { recoverFloatingComposer(); return; }
         if (!['edit','submit'].includes(event.type)) return;
         const request = {sessionId:event.sessionToken, revision:event.revision, text:event.value};
@@ -1021,7 +1058,21 @@ function installWorkspaceShell(options = {}) {
       const ph = unified && codeVisible ? Math.max(0, Math.min(bottom, Math.floor(codeRect.bottom)) - py) : Math.max(0, bottom - 56);
       startup.hidden = !startupOpen || !!lobby?.isOpen() || doc.body.hasAttribute('data-neko-workspace-collapsed') || doc.body.hasAttribute('data-neko-flex-workspace-collapsed') || (unified && !codeVisible);
       Object.assign(startup.style, { left: px + 'px', top: py + 'px', width: pw + 'px', height: ph + 'px' });
-    }
+      // Position above the composer so the native send/model controls retain
+      // their hit targets, and follow the actual coding pane during resizing.
+      const visible = !lobby?.isOpen() && !doc.body.hasAttribute('data-neko-workspace-collapsed') && !doc.body.hasAttribute('data-neko-flex-workspace-collapsed') && (!unified || codeVisible) && pw >= 100 && ph >= 100;
+      directoryControl.hidden = !visible;
+      if (visible) {
+        const composer = startupOpen ? null : doc.querySelector('[data-neko-chat-center] [data-composer-card]');
+        const composerRect = composer?.getBoundingClientRect();
+        const top = composerRect?.height > 0 && composerRect.top > py + 40 ? composerRect.top - 40 : py + ph - 48;
+        const left = Math.round(px + pw - 44) + 'px', y = Math.round(Math.max(py + 4, Math.min(py + ph - 40, top))) + 'px';
+        if (directoryControl.style.left !== left) directoryControl.style.left = left;
+        if (directoryControl.style.top !== y) directoryControl.style.top = y;
+        const statusWidth = Math.max(0, Math.min(220, pw - 8)) + 'px';
+        if (directoryStatus.style.maxWidth !== statusWidth) directoryStatus.style.maxWidth = statusWidth;
+      }
+    } else directoryControl.hidden = true;
     syncCollapsedComposer(); positionCompanionMenu();
   }
   function schedule() { if (!disposed && !queued) { queued = true; Promise.resolve().then(() => { queued = false; place(); positionCompanionMenu(); }); } }
@@ -1065,7 +1116,7 @@ function installWorkspaceShell(options = {}) {
       let lastSessionId = nativeSelection()?.sessionId || null;
       const releaseSelection = options.subscribeDshSelection(() => {
         const nextSessionId = nativeSelection()?.sessionId || null;
-        if (nextSessionId !== lastSessionId) { lastSessionId = nextSessionId; renderCatalog(); }
+        if (nextSessionId !== lastSessionId) { lastSessionId = nextSessionId; directoryStatus.textContent = ''; directoryStatus.hidden = true; renderCatalog(); }
         schedule();
       });
       if (typeof releaseSelection === 'function') releases.push(releaseSelection);

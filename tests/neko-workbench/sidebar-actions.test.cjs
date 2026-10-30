@@ -18,6 +18,17 @@ function bundle() {
   });
 }
 
+test('native project files only target the current DSH session and fail closed', () => {
+  const api=bundle(), button={}, calls=[];let attach, dispose, selected='s1', main='s1', target={sessionId:'s1'};
+  const ctx={ uiWorkspace:{selection:{getSnapshot:()=>({sessionId:selected})},get mainReference(){return {sessionId:main}}},inject(names,callback){assert.deepEqual(Array.from(names),['sidebarRight']);attach=callback;} };
+  const opener=api.createNativeFilesOpener(ctx);assert.throws(()=>opener(button),/文件目录暂不可用/);
+  const sidebar={commandTarget(element){assert.equal(element,button);return target;},openTabFromTarget(kind,captured){calls.push([kind,captured]);}};
+  attach({sidebarRight:sidebar,effect(effect){dispose=effect();}});opener(button,'s1');assert.deepEqual(calls,[['files',target]]);
+  assert.throws(()=>opener(button,'stale'),/请先打开工作会话/);main='other';assert.throws(()=>opener(button),/请先打开工作会话/);main='s1';
+  target={sessionId:'different'};assert.throws(()=>opener(button),/工作会话已切换/);target=undefined;assert.throws(()=>opener(button),/工作会话已切换/);
+  dispose();assert.throws(()=>opener(button),/文件目录暂不可用/);assert(!Array.from(api.inject).includes('sidebarRight'));
+});
+
 class Styles {
   values = new Map();
   getPropertyValue(name) { return this.values.get(name)?.value || ''; }

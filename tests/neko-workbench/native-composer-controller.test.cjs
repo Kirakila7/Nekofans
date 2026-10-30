@@ -81,3 +81,12 @@ test('late load failure after removal or disposal does not report a visible comp
  const disposed=setup(DeferredView);disposed.controller.place(disposed.window,{action:'place',rect:{x:500,y:700,width:400,height:60}});disposed.controller.dispose();
  rejectLoad(Error('synthetic late failure'));await new Promise(resolve=>setImmediate(resolve));assert.deepEqual(disposed.window.webContents.sent,[]);
 });
+
+test('files event is authorized only for the current clean session and trusted view',async()=>{
+ const t=setup();await init(t);const v=FakeView.latest,event={sender:v.webContents,senderFrame:v.webContents.mainFrame},current={value:'draft',enabled:true,busy:false,sessionToken:'s1',revision:3};t.controller.update(current);
+ for(const m of [{type:'files',sessionToken:'s2',revision:3},{type:'files',sessionToken:'s1',revision:2}])t.ipcMain.emit('neko-composer-input',event,m);
+ assert.match(v.webContents.sent.at(-1)[1].status,/会话或草稿已变化/,'a stale directory action provides visible feedback');
+ t.ipcMain.emit('neko-composer-input',{sender:v.webContents,senderFrame:{}},{type:'files',sessionToken:'s1',revision:3});assert.equal(t.window.webContents.sent.length,0);
+ t.ipcMain.emit('neko-composer-input',event,{type:'files',sessionToken:'s1',revision:3});assert.deepEqual(t.window.webContents.sent[0],['workbench:native-composer-event',{type:'files',sessionToken:'s1',revision:3}]);
+ t.ipcMain.emit('neko-composer-input',event,{type:'edit',value:'new',sessionToken:'s1',revision:3,editId:1});t.ipcMain.emit('neko-composer-input',event,{type:'files',sessionToken:'s1',revision:3});assert.equal(t.window.webContents.sent.length,2);t.controller.dispose();
+});

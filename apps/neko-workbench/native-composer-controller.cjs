@@ -69,7 +69,11 @@ function createNativeComposerController({ WebContentsView, ipcMain, baseDir = __
     publish(); return { ok: true };
   }
   function input(event, message) {
-    if (!host || host.isDestroyed() || !view || !ready || !attached || !enabled || event.sender !== view.webContents || event.senderFrame !== view.webContents.mainFrame || !message || !['edit', 'submit', 'expand'].includes(message.type)) return;
+    if (!host || host.isDestroyed() || !view || !ready || !attached || !enabled || event.sender !== view.webContents || event.senderFrame !== view.webContents.mainFrame || !message || !['edit', 'submit', 'expand', 'files'].includes(message.type)) return;
+    if (message.type === 'files') {
+      if (!state.enabled || !state.sessionToken || message.sessionToken !== state.sessionToken || message.revision !== state.revision || pendingEdit !== null || pendingSubmit !== null) { view.webContents.send('neko-composer-state', { ...state, status:'工作会话或草稿已变化，请展开工作区重试' }); return; }
+      host.webContents.send('workbench:native-composer-event', {type:'files',sessionToken:state.sessionToken,revision:state.revision}); return;
+    }
     if (message.type !== 'expand') {
       const invalid = !state.enabled || !state.sessionToken || message.sessionToken !== state.sessionToken || message.revision !== state.revision || typeof message.value !== 'string' || message.value.length > 30000 || (message.type === 'edit' && (pendingEdit !== null || !Number.isSafeInteger(message.editId) || message.editId <= 0)) || (message.type === 'submit' && (state.busy || pendingSubmit !== null || !Number.isSafeInteger(message.submissionId) || message.submissionId <= 0 || !message.value.trim()));
       if (invalid) {
