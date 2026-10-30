@@ -10,7 +10,10 @@ const composerBlock='const WORKBENCH_LOBBY_COMPOSER = (function (module, globalT
 const preview=fs.readFileSync(path.join(base,'chatroom-preview-source.js'),'utf8');
 const previewCss=fs.readFileSync(path.join(base,'chatroom-preview-source.css'),'utf8');
 const nativeComposer=fs.readFileSync(path.join(base,'native-composer-source.js'),'utf8');
-const block='// @neko-workspace-shell:start\nconst WORKSPACE_SHELL_CSS = '+JSON.stringify(css)+' + '+JSON.stringify(previewCss)+';\n'+composerBlock+preview+'\n'+nativeComposer+'\n'+source+'\n// @neko-workspace-shell:end\n';
+const home=fs.readFileSync(path.join(base,'yui-home-ui-source.js'),'utf8');
+const homeTextures=fs.readFileSync(path.join(base,'yui-home-textures-source.js'),'utf8');
+const homeCss=fs.readFileSync(path.join(base,'yui-home-ui-source.css'),'utf8');
+const block='// @neko-workspace-shell:start\nconst WORKSPACE_SHELL_CSS = '+JSON.stringify(css)+' + '+JSON.stringify(previewCss)+' + '+JSON.stringify(homeCss)+';\n'+composerBlock+homeTextures+'\n'+home+'\n'+preview+'\n'+nativeComposer+'\n'+source+'\n// @neko-workspace-shell:end\n';
 let code=fs.readFileSync(file,'utf8');
 if(code.includes('// @neko-workspace-shell:start'))code=code.replace(/\/\/ @neko-workspace-shell:start[\s\S]*?\/\/ @neko-workspace-shell:end\n/,()=>block);
 else code=code.replace('// @neko-side-rail:start',()=>block+'\n// @neko-side-rail:start');

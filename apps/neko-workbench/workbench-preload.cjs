@@ -18,6 +18,8 @@ contextBridge.exposeInMainWorld('nekoWorkbench',Object.freeze({
   lobby:request=>ipcRenderer.invoke('workbench:lobby',request),
   subscribeLobby:callback=>{if(typeof callback!=='function')throw new TypeError('callback must be a function');const listener=(_event,state)=>callback(state);ipcRenderer.on('workbench:lobby-state',listener);return()=>ipcRenderer.removeListener('workbench:lobby-state',listener);},
   community:request=>ipcRenderer.invoke('workbench:community',request),
+  home:request=>ipcRenderer.invoke('workbench:home',request),
+  subscribeHome:callback=>{if(typeof callback!=='function')throw new TypeError('callback must be a function');const listener=(_event,state)=>callback(state);ipcRenderer.on('workbench:home-state',listener);return()=>ipcRenderer.removeListener('workbench:home-state',listener);},
   divider:request=>ipcRenderer.invoke('workbench:divider',request),
   subscribeDivider:callback=>{if(typeof callback!=='function')throw new TypeError('callback must be a function');const listener=(_event,state)=>callback(state);ipcRenderer.on('workbench:divider-event',listener);return()=>ipcRenderer.removeListener('workbench:divider-event',listener);},
   nativeComposer:request=>ipcRenderer.invoke('workbench:native-composer',request),

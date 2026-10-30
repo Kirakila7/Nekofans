@@ -5,6 +5,7 @@ const {createDshLifecycle}=require('./dsh-lifecycle.cjs');
 const {createSocialController}=require('./community-config.cjs');
 const {createNativeDividerController}=require('./native-divider-controller.cjs');
 const {createNativeComposerController}=require('./native-composer-controller.cjs');
+const {createYuiHomeIpc}=require('./yui-home-ipc.cjs');
 const {createCommunityAccount}=require('./community-account.cjs');
 const {WorkbenchSecretStore}=require('./main-chat-secret.cjs');
 const {createSubagentMotion,motionOptions}=require('./subagent-motion.cjs');
@@ -765,6 +766,9 @@ function createWindows(){
   tray=new Tray(nativeImage.createEmpty());tray.setTitle('🐾');tray.setToolTip('N.E.K.O. 桌宠');
   tray.on('right-click',()=>tray.popUpContextMenu(mainMenu()));tray.on('click',()=>showInput());
 }
+const yuiHomeIpc=createYuiHomeIpc({assertCaller:assertWorkbenchCaller,userDataDirectory:runtimePaths.userDataDir,
+  publish:value=>{if(dshWindow&&!dshWindow.isDestroyed()&&isWorkbenchOrigin(dshWindow.webContents.getURL()))dshWindow.webContents.send('workbench:home-state',value);}});
+ipcMain.handle('workbench:home',yuiHomeIpc);
 ipcMain.handle('screen-share:call',(event,method,value)=>screenShare.action(event,method,value));
 ipcMain.handle('workbench:screen-share',async(event,method)=>{assertWorkbenchCaller(event);if(method==='hide'){screenShare.hide();return {ok:true};}throw new Error('未知屏幕操作');});
 ipcMain.handle('workbench:lobby',async(event,request)=>{
