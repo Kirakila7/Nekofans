@@ -106,3 +106,10 @@ test('changing session while submission is pending protects the old session text
  submit(x);assert.equal(x.events.filter(e=>e.type==='submit').length,1);
  const saved=JSON.parse([...records.values()][0]);assert.equal(saved.sessionToken,'s1');assert.equal(saved.value,'旧会话任务');
 });
+
+test('files waits for draft confirmation and fails closed on conflicts or absent session',{skip:!JSDOM},t=>{
+ const x=setup(t),files=x.w.document.getElementById('files');type(x,'内容');files.click();assert.deepEqual(x.events.map(e=>e.type),['edit']);
+ x.snap(2,'内容',{settledEditId:x.events[0].editId});assert.deepEqual(x.events.map(e=>e.type),['edit','files']);assert.equal(x.events[1].sessionToken,'s1');assert.equal(x.events[1].revision,2);
+ const y=setup(t);type(y,'未同步');y.snap(2,'其他',{settledEditId:y.events[0].editId,editConflict:true});assert(y.w.document.getElementById('files').disabled);y.w.document.getElementById('files').click();assert.equal(y.events.length,1);
+ const z=setup(t,{initial:{enabled:false,sessionToken:''}});assert(z.w.document.getElementById('files').disabled);z.w.document.getElementById('files').click();assert.equal(z.events.length,0);
+});

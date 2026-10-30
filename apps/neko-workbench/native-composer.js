@@ -1,8 +1,8 @@
 'use strict';
 (() => {
-  const api = window.nativeComposer, form = document.getElementById('composer'), message = document.getElementById('message'), send = document.getElementById('send'), expand = document.getElementById('expand'), copy = document.getElementById('copy'), status = document.getElementById('status');
+  const api = window.nativeComposer, form = document.getElementById('composer'), message = document.getElementById('message'), send = document.getElementById('send'), expand = document.getElementById('expand'), files = document.getElementById('files'), copy = document.getElementById('copy'), status = document.getElementById('status');
   let state = { value:'', enabled:false, busy:false, sessionToken:'', revision:0 }, composing = false, dirty = false, conflict = false, blockedDraft = false, submitUnknown = false;
-  let pendingEdit = null, pendingSubmit = null, submitQueued = false, expandQueued = false, confirmExpand = false, expandTimer = null, editSequence = 0, submitSequence = 0;
+  let pendingEdit = null, pendingSubmit = null, submitQueued = false, expandQueued = false, expandAction = 'expand', confirmExpand = false, expandTimer = null, editSequence = 0, submitSequence = 0;
   let draftOwner = '', recoveryOwner = '', storageFailed = false;
   const recoveryKey = token => 'neko.workspace.pending-draft.v1:' + encodeURIComponent(token);
   function readRecovery(token) {
@@ -34,6 +34,7 @@
     message.readOnly = blockedDraft || conflict || submitQueued || pendingSubmit !== null || (expandQueued && !composing);
     message.placeholder = state.placeholder || '工作区未连接';
     copy.hidden = !(blockedDraft || conflict);
+    files.disabled = message.disabled || conflict || blockedDraft || pendingSubmit !== null || submitQueued || expandQueued;
     send.disabled = message.disabled || state.busy || conflict || blockedDraft || submitQueued || pendingSubmit !== null || !message.value.trim();
   }
   function sendEdit() {
@@ -71,9 +72,10 @@
   function finishExpand() {
     if (!expandQueued || composing || dirty || pendingEdit !== null || pendingSubmit !== null || submitQueued || conflict || blockedDraft) return;
     expandQueued = false; if (expandTimer !== null) clearTimeout(expandTimer); expandTimer = null;
-    api.send({type:'expand'});
+    api.send(expandAction === 'files' ? {type:'files',sessionToken:state.sessionToken,revision:state.revision} : {type:'expand'}); expandAction = 'expand';
   }
-  function requestExpand() {
+  function requestExpand(action = 'expand') {
+    if (action === 'files' && (blockedDraft || conflict || !state.enabled || !state.sessionToken)) return;
     if (blockedDraft || conflict) {
       const saved = readRecovery(recoveryOwner || draftOwner);
       if (!saved || saved.value !== message.value) {
@@ -85,8 +87,8 @@
       // record until the native draft is observed to contain the same text.
       api.send({type:'expand'}); return;
     }
-    if (!composing && !dirty && pendingEdit === null && pendingSubmit === null && !submitQueued) { api.send({type:'expand'}); return; }
-    expandQueued = true; status.textContent = '正在保存输入，完成后展开工作区'; status.hidden = false;
+    if (!composing && !dirty && pendingEdit === null && pendingSubmit === null && !submitQueued) { api.send(action === 'files' ? {type:'files',sessionToken:state.sessionToken,revision:state.revision} : {type:'expand'}); return; }
+    expandAction = action; expandQueued = true; status.textContent = '正在保存输入，完成后展开工作区'; status.hidden = false;
     if (expandTimer !== null) clearTimeout(expandTimer);
     expandTimer = setTimeout(() => {
       if (!expandQueued) return;
@@ -104,7 +106,8 @@
     event.preventDefault(); if (composing || send.disabled) return;
     submitQueued = true; refresh(); sendEdit(); sendSubmit();
   });
-  expand.addEventListener('click', requestExpand);
+  expand.addEventListener('click', () => requestExpand('expand'));
+  files.addEventListener('click', () => requestExpand('files'));
   copy.addEventListener('click', () => { message.focus(); message.select(); status.textContent = '草稿已选中，请按 ⌘C 复制'; status.hidden = false; });
   api.onState(next => {
     if (!next || typeof next.value !== 'string' || typeof next.sessionToken !== 'string' || !Number.isSafeInteger(next.revision)) return;
