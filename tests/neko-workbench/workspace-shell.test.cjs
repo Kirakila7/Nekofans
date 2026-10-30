@@ -6,6 +6,8 @@ const {createWorkspaceController,companionSnapshot}=require('../../apps/neko-wor
 const {createCodexWorkspace}=require('../../apps/neko-workbench/codex-workspace.cjs');
 const base=path.resolve(__dirname,'../../apps/neko-workbench');
 const tick=()=>new Promise(r=>setTimeout(r,15));
+// Child-process fixtures reply asynchronously; wait for the observable condition instead of a fixed delay.
+const until=async(check,ms=3000)=>{const end=Date.now()+ms;while(!check()&&Date.now()<end)await tick();};
 function temp(t){const p=fs.mkdtempSync(path.join(os.tmpdir(),'neko-workspace-test-'));t.after(()=>fs.rmSync(p,{recursive:true,force:true}));return p;}
 test('three seats persist independent names, avatars, platform and project scopes without changing sessions',t=>{
  const p=path.join(temp(t),'layout.json'),s=createWorkspaceLayout(p);assert.equal(s.get().seats.length,3);assert.equal(s.get().companionHistoryOpen,false);
@@ -48,10 +50,10 @@ function nativeFixture(t,mode='normal'){
 }
 test('Codex browsing is read-only; explicit send retains native defaults and requires per-operation approval',async t=>{
  const f=nativeFixture(t);assert.equal((await f.c.list()).sessions.length,2);await f.c.read('one');assert.equal(f.c.snapshot().items[1].text,'native reply');assert(!f.messages().some(m=>/resume|start/.test(m.method)));
- await f.c.send({id:'one',cwd:f.dir,message:'work'});await tick();assert.equal(f.c.snapshot().approvals.length,1);assert(!f.messages().some(m=>m.id===900),'no automatic approval');
+ await f.c.send({id:'one',cwd:f.dir,message:'work'});await until(()=>f.c.snapshot().approvals.length>0);assert.equal(f.c.snapshot().approvals.length,1);assert(!f.messages().some(m=>m.id===900),'no automatic approval');
  const start=f.messages().find(m=>m.method==='thread/resume');assert.deepEqual(Object.keys(start.params).sort(),['excludeTurns','threadId']);
  const turn=f.messages().find(m=>m.method==='turn/start');assert.deepEqual(Object.keys(turn.params).sort(),['input','threadId']);
- const key=f.c.snapshot().approvals[0].key;f.c.approve(key,'decline');await tick();assert.deepEqual(f.messages().find(m=>m.id===900).result,{decision:'decline'});await f.c.stop();assert(f.messages().some(m=>m.method==='turn/interrupt'));
+ const key=f.c.snapshot().approvals[0].key;f.c.approve(key,'decline');await until(()=>f.messages().some(m=>m.id===900));assert.deepEqual(f.messages().find(m=>m.id===900).result,{decision:'decline'});await f.c.stop();assert(f.messages().some(m=>m.method==='turn/interrupt'));
  await assert.rejects(f.c.send({cwd:'/unknown',message:'work'}));await assert.rejects(f.c.read('secret-id'));
 });
 test('a turn completing before the start reply never leaves a phantom working task',async t=>{
