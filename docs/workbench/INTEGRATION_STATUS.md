@@ -4,6 +4,8 @@ The daily artifact is built from this repository. `config/daily-release.json` is
 
 ## Pending source changes
 
+- The main companion and its existing chat input follow the left pane width in the chatroom and local home while the project chooser remains on the right. The character stays within the left pane; switching to other surfaces restores the existing sidebar or rail placement. Isolated Electron fixtures cover resizing, two-way dragging, click vs drag, surface changes and draft retention; community and video transitions use simulated events, not live playback or login.
+
 - The shared video slot offers Bilibili desktop and the official YouTube embed player, selected from the rail without replacing the coding draft or local home. Playlist, Shorts, size and navigation checks use isolated fixtures. Electron fixtures check the local home and floating workspace with synthetic Bilibili and YouTube pages; live playback and continuous Shorts navigation are not verified.
 
 - The chatroom’s 我的小窝 opens a local block-building home with camera rotation, zoom and a theme-matched landscape. It stores a separate workbench-local world and can read a fixed allowlist of locally available Yui textures, falling back to installed Minecraft materials or basic materials. Original saves and texture assets are not distributed or modified, and synchronization is not implemented. Isolated Electron checks cover building, removal, camera, layout and reopening with a synthetic local store; interaction with a real community account or synchronized home remains unverified.

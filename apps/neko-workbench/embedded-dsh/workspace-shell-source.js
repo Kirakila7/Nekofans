@@ -216,7 +216,7 @@ function installWorkspaceShell(options = {}) {
   function setCompanionOffset(value) {
     const width = dock.clientWidth || dock.getBoundingClientRect().width;
     const spriteWidth = character.offsetWidth || 76;
-    const limit = Math.max(0, Math.floor(Math.min(48, (width - spriteWidth) / 2 - 8)));
+    const limit = Math.max(0, Math.floor(dock.hasAttribute('data-neko-companion-expanded') ? (width - spriteWidth) / 2 - 8 : Math.min(48, (width - spriteWidth) / 2 - 8)));
     companionOffset = Math.round(Math.max(-limit, Math.min(limit, Number.isFinite(value) ? value : 0)));
     character.style.setProperty('--neko-companion-offset', companionOffset + 'px');
     character.setAttribute('aria-valuemin', String(-Math.floor(limit))); character.setAttribute('aria-valuemax', String(Math.floor(limit))); character.setAttribute('aria-valuenow', String(companionOffset));
@@ -236,6 +236,14 @@ function installWorkspaceShell(options = {}) {
   });
   const finishCompanionDrag = event => { if (!companionDrag || companionDrag.pointerId !== event.pointerId) return; suppressCompanionClick = companionDrag.moved || event.type !== 'pointerup'; companionDrag = null; character.removeAttribute('data-dragging'); try { character.releasePointerCapture(event.pointerId); } catch {} };
   character.addEventListener('pointerup', finishCompanionDrag); character.addEventListener('pointercancel', finishCompanionDrag); character.addEventListener('lostpointercapture', finishCompanionDrag);
+  // A failed capture or release outside the window must not leave the pet
+  // stuck in drag mode. Keep ordinary clicks and drag suppression unchanged.
+  function finishCompanionOnBlur() { if (companionDrag) finishCompanionDrag({ pointerId: companionDrag.pointerId, type: 'blur' }); }
+  function finishCompanionOnUnpressedMove(event) { if (companionDrag && event.pointerType === 'mouse' && event.buttons === 0) finishCompanionDrag({ pointerId: event.pointerId, type: 'pointercancel' }); }
+  win.addEventListener('pointerup', finishCompanionDrag, true);
+  win.addEventListener('pointercancel', finishCompanionDrag, true);
+  win.addEventListener('pointermove', finishCompanionOnUnpressedMove, true);
+  win.addEventListener('blur', finishCompanionOnBlur);
   character.addEventListener('dragstart', event => event.preventDefault());
   character.addEventListener('click', event => {
     if (companionInRail) return;
@@ -899,7 +907,31 @@ function installWorkspaceShell(options = {}) {
     if (nativeBrowser) { markNative(nativeBrowser, 'data-neko-session-browser-original'); if (sessionBrowser.parentNode !== nativeBrowser.parentNode || sessionBrowser.nextSibling !== nativeBrowser) nativeBrowser.before(sessionBrowser); }
     const account = doc.querySelector('[data-slot="settings.launcher"]');
     if (account?.parentElement) markNative(account.parentElement, 'data-neko-companion-footer');
-    if (account && (dock.parentNode !== account.parentNode || dock.nextSibling !== account)) account.before(dock);
+    // The native sidebar is only a narrow navigation strip inside the much
+    // wider chat track. Portal the companion out of that strip while the room
+    // is shown: otherwise its ancestors clip both the sprite and pointer hits.
+    // The real center-column edge is the boundary, not the window edge.
+    const sidebar = doc.querySelector('[data-slot="sidebar"]');
+    const centerRect = doc.querySelector('[data-neko-chat-center]')?.getBoundingClientRect();
+    const railRect = rail?.getBoundingClientRect();
+    const sidebarRect = sidebar?.getBoundingClientRect();
+    const left = Math.max(0, railRect?.width > 0 ? railRect.right : sidebarRect?.left || 0);
+    const right = Math.min(win.innerWidth, centerRect && centerRect.left > left ? centerRect.left : 0);
+    const expanded = !!account && roomActive && !sideSocial &&
+      !doc.body.hasAttribute('data-neko-flex-mode') &&
+      !doc.body.hasAttribute('data-neko-flex-social-hidden') &&
+      !sidebar?.closest('[data-sidebar-collapsed="true"]') && right - left >= 80;
+    if (expanded) {
+      const accountRect = account.getBoundingClientRect();
+      const bottom = accountRect.height > 0 && accountRect.top > 60 ? accountRect.top : win.innerHeight;
+      const geometry = { '--neko-companion-left': `${Math.round(left)}px`, '--neko-companion-width': `${Math.max(0, Math.floor(right - left))}px`, '--neko-companion-bottom': `${Math.max(0, Math.round(win.innerHeight - bottom))}px` };
+      for (const [name, value] of Object.entries(geometry)) if (doc.body.style.getPropertyValue(name) !== value) doc.body.style.setProperty(name, value);
+      if (!dock.hasAttribute('data-neko-companion-expanded')) dock.setAttribute('data-neko-companion-expanded', '');
+      if (dock.parentNode !== doc.body) { dockIntersecting = null; doc.body.appendChild(dock); }
+    } else {
+      dock.removeAttribute('data-neko-companion-expanded');
+      if (account && (dock.parentNode !== account.parentNode || dock.nextSibling !== account)) { dockIntersecting = null; account.before(dock); }
+    }
     if (roomPreview && (roomActive || sideSocial)) {
       const sidebar = doc.querySelector('[data-slot="sidebar"]');
       if (sidebar && !initialRoomResolved) {
@@ -1016,7 +1048,7 @@ function installWorkspaceShell(options = {}) {
   return () => {
     clearCollapsedComposer(); collapseResize?.disconnect(); if (collapseNoticeTimer) win.clearTimeout(collapseNoticeTimer);
     if (disposed) return; disposed = true; floatingComposer?.dispose(); if (floatingGeometry) floatingCall({action:'remove'}); stopNativeNew(); motion?.removeEventListener?.('change', syncCharacter); motion?.removeEventListener?.('change', syncRailWalking); doc.removeEventListener('visibilitychange', syncCharacter); doc.removeEventListener('visibilitychange', syncRailWalking); stopRailWalking(); if (railClickTimer !== null) win.clearTimeout(railClickTimer); if (railSpace) { if (railSpaceBeforeAria === null) railSpace.removeAttribute('aria-hidden'); else railSpace.setAttribute('aria-hidden', railSpaceBeforeAria); } if (characterVideo) { characterVideo.pause(); characterVideo.removeAttribute('src'); characterVideo.load(); } observer.disconnect(); ancestorObserver.disconnect(); intersection?.disconnect(); resize?.disconnect(); win.clearInterval(interval);
-    win.removeEventListener('resize', place); doc.removeEventListener('scroll', schedule, true); doc.removeEventListener('click', nativeNew, true); doc.removeEventListener('keydown', escape, true);
+    win.removeEventListener('resize', place); win.removeEventListener('pointerup', finishCompanionDrag, true); win.removeEventListener('pointercancel', finishCompanionDrag, true); win.removeEventListener('pointermove', finishCompanionOnUnpressedMove, true); win.removeEventListener('blur', finishCompanionOnBlur); doc.removeEventListener('scroll', schedule, true); doc.removeEventListener('click', nativeNew, true); doc.removeEventListener('keydown', escape, true);
     doc.removeEventListener('pointerdown', dismissCompanionMenu, true);
     doc.removeEventListener('neko-native-tools-navigate', showNativeToolsPage);
     doc.removeEventListener('neko-side-surface-change', sideSurfaceChanged);
