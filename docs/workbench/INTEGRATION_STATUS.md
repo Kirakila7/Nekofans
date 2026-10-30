@@ -1,8 +1,12 @@
-# Local test workbench 0.28.18 (source, pending installation)
+# Local test workbench 0.28.34 (source, pending installation)
 
 The daily artifact is built from this repository. `config/daily-release.json` is the version authority; every app includes `Contents/Resources/WORKBENCH_BUILD.json` with the source commit and SHA-256 of every shipped source file. Historical QA checkouts and profiles are not release inputs.
 
 ## Pending source changes
+
+- The workbench filters obsolete per-port local DSH authentication cookies from requests to the active loopback service, preserving current authentication and all stored cookies, to avoid oversized headers after repeated restarts.
+
+- Startup shows the chatroom and expanded project records. Office mode keeps the project list and work area in place with an adjustable divider. The rail opens a fixed chatroom/Bilibili/work scene, with a project and session chooser confined to the work area. DOM fixtures cover switching, selection, preserved drafts and the fixed dividers; installed-app behavior and real Bilibili playback require separate verification.
 
 - The native workspace composer stays enabled on the default chatroom even without a visible embedded website; switching video views only changes layering. Hidden native sidebar branches are visually masked while the chatroom is open, with the account, companion and tools preserved. Targeted DOM tests cover restoration and routing; an isolated native window checks the no-video startup. Installed-app interaction remains to be verified.
 

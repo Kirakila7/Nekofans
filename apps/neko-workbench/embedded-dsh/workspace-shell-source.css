@@ -329,6 +329,10 @@ body[data-neko-workspace-shell] [data-neko-companion-footer] { display:block !im
 .neko-workspace-directory__button:hover { background:var(--nws-hover); }
 .neko-workspace-directory__button:focus-visible { outline:2px solid #4c89ad; outline-offset:2px; }
 .neko-workspace-directory__status { position:absolute; right:0; bottom:42px; box-sizing:border-box; width:max-content; max-width:min(220px,70vw); padding:7px 10px; border:1px solid var(--nws-border); border-radius:8px; background:var(--nws-bg); color:var(--nws-text); font:12px/1.4 system-ui,sans-serif; }
+.neko-scene-projects { position:fixed; z-index:41; width:100px; height:36px; border:1px solid var(--nws-border); border-radius:9px; background:var(--nws-bg); color:var(--nws-text); font:12px system-ui,sans-serif; cursor:pointer; }
+.neko-scene-projects[hidden] { display:none !important; }
+.neko-scene-projects:hover { background:var(--nws-hover); }
+.neko-scene-projects:focus-visible { outline:2px solid #4c89ad; outline-offset:2px; }
 .neko-startup { position:fixed; z-index:40; box-sizing:border-box; overflow:auto; container-type:inline-size; color:var(--nws-text); background:var(--dsw-alias-bg-base,#edf4fb); font:14px/1.5 system-ui,sans-serif; }
 .neko-startup[hidden] { display:none !important; }
 .neko-startup__inner { width:min(760px,100%); margin:0 auto; box-sizing:border-box; padding:clamp(22px,5vw,54px); }
