@@ -43,7 +43,18 @@ body[data-neko-side-rail-layout] .neko-workspace-rail-controls { gap: 7px; paddi
 .neko-side-rail__button[aria-busy="true"] { opacity: .55; cursor: progress; }
 .neko-side-rail__button[aria-expanded="true"], .neko-side-rail__button[aria-pressed="true"] { background: var(--dsw-alias-interactive-bg-active, #d0e5ef); color: var(--dsw-alias-brand-primary, #246b91); }
 .neko-side-rail__button svg { display: block; width: 22px; height: 22px; }
+.neko-side-rail__button svg[hidden] { display: none !important; }
 .neko-side-rail__button img { display: block; width: 36px; height: 36px; object-fit: contain; border-radius: 10px; }
+.neko-side-rail__video-menu {
+  position: fixed; z-index: 220; left: 60px; width: 156px; box-sizing: border-box;
+  padding: 5px; border: 1px solid var(--dsw-alias-border-l1, #c4dbe6); border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-1, #fbfeff); color: inherit; box-shadow: 0 8px 24px #17303d24;
+  font: 13px/1.4 system-ui, sans-serif;
+}
+.neko-side-rail__video-menu[hidden] { display: none !important; }
+.neko-side-rail__video-menu button { display: flex; width: 100%; align-items: center; justify-content: space-between; padding: 8px 10px; border: 0; border-radius: 8px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.neko-side-rail__video-menu button:hover,.neko-side-rail__video-menu button:focus-visible { background: var(--dsw-alias-interactive-bg-hover, #ddedf4); outline: none; }
+.neko-side-rail__video-menu button[aria-checked="true"]::after { content: '✓'; color: var(--dsw-alias-brand-primary, #246b91); }
 .neko-side-rail__notice {
   position: absolute; bottom: 60px; left: 72px; width: 190px; padding: 10px 12px; margin: 0;
   border: 1px solid var(--dsw-alias-border-l1, #c4dbe6); border-radius: 10px;

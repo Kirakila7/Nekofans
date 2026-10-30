@@ -4,6 +4,8 @@ The daily artifact is built from this repository. `config/daily-release.json` is
 
 ## Pending source changes
 
+- The shared video slot offers Bilibili desktop and the official YouTube embed player, selected from the rail without replacing the coding draft or local home. Playlist, Shorts, size and navigation checks use isolated fixtures. Electron fixtures check the local home and floating workspace with synthetic Bilibili and YouTube pages; live playback and continuous Shorts navigation are not verified.
+
 - The chatroom’s 我的小窝 opens a local block-building home with camera rotation, zoom and a theme-matched landscape. It stores a separate workbench-local world and can read a fixed allowlist of locally available Yui textures, falling back to installed Minecraft materials or basic materials. Original saves and texture assets are not distributed or modified, and synchronization is not implemented. Isolated Electron checks cover building, removal, camera, layout and reopening with a synthetic local store; interaction with a real community account or synchronized home remains unverified.
 
 - In the social / Bilibili / coding three-pane layout, dragging the workspace to the right or bottom edge opens a trusted native floating composer above a full-size desktop Bilibili view. The DSH input adapter checks the retained current session and preserves unsynchronized drafts; unsupported rich drafts require expanding the workspace. Local Electron fixtures cover the video overlay, lobby transitions and recovery. An isolated real DSH session dispatched synthetic input to a local stub in queue mode, without contacting a provider; real backend responses and Bilibili playback remain unverified.

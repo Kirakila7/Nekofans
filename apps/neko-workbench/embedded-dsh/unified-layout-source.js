@@ -15,8 +15,8 @@ function installUnifiedLayout(options = {}) {
   // Human-readable name of what a slot currently shows; the sidebar's
   // "workspace" is DSH's native navigation, not a second coding surface.
   const describe = (slot, value) => slot === 'side'
-    ? ({ workspace: '工作区导航', community: '社区', bilibili: 'B站视频' })[value] || '工作区导航'
-    : ({ coding: '工作区', community: '社区', bilibili: 'B站视频' })[value] || '空';
+    ? ({ workspace: '工作区导航', community: '社区', bilibili: videoSite === 'youtube' ? 'YouTube' : 'B站视频' })[value] || '工作区导航'
+    : ({ coding: '工作区', community: '社区', bilibili: videoSite === 'youtube' ? 'YouTube' : 'B站视频' })[value] || '空';
   const trigger = button('▤', 'neko-side-rail__button neko-layout-entry', toggleConfig);
   trigger.title = '配置界面布局'; trigger.setAttribute('aria-label', '配置界面布局'); trigger.setAttribute('aria-expanded', 'false');
   trigger.setAttribute('aria-haspopup', 'dialog'); trigger.setAttribute('aria-controls', 'neko-unified-config');
@@ -106,11 +106,17 @@ function installUnifiedLayout(options = {}) {
   let startupSaved = null;
   // Social surfaces temporarily occupy the existing sidebar track.  This is
   // navigation, not a saved pane layout; the right-hand work session stays put.
-  let sideSurface = null, sideHome = false;
+  let sideSurface = null, sideHome = false, videoSite = 'bilibili', videoSelectionRevision = 0;
+  if (typeof bridge.workspace === 'function') {
+    const initialRevision = videoSelectionRevision;
+    Promise.resolve().then(() => bridge.workspace({action:'video-platform'})).then(value => {
+      if (!disposed && initialRevision === videoSelectionRevision && ['bilibili','youtube'].includes(value?.platform)) { videoSite = value.platform; renderConfig(); updateVideoLabels(); schedule(); }
+    }).catch(() => {});
+  }
   function announceSideSurface(surface) {
     for (const [selector, name] of [['.neko-community-yui','community'],['.neko-side-rail__bilibili','bilibili']]) {
       const entry = doc.querySelector(selector);
-      if (entry) entry.setAttribute('aria-pressed', String(surface === name));
+      if (entry) entry.setAttribute('aria-pressed', String(surface === name || name === 'bilibili' && surface === 'youtube'));
     }
     doc.dispatchEvent(new win.CustomEvent('neko-side-surface-change', { detail: { surface } }));
   }
@@ -122,12 +128,13 @@ function installUnifiedLayout(options = {}) {
     announceSideSurface('hidden'); schedule();
   }
   function openSideSurface(site, { home = false } = {}) {
-    if (disposed || !['community', 'bilibili'].includes(site)) return;
+    if (disposed || !['community', 'bilibili', 'youtube'].includes(site)) return;
     if (layout.enabled && layout.flex?.enabled) {
-      if (site === 'bilibili') {
+      if (site === 'bilibili' || site === 'youtube') {
+        videoSite = site;
         if (sideSurface) closeSideSurface();
         if (!flexTabs.hidden) flexActive='bilibili';
-        showNotice('B站视频已在三面板中打开'); schedule(); return;
+        schedule(); return;
       }
       if (!flexTabs.hidden) flexActive='social';
       if (sideSurface === 'community') { schedule(); return; }
@@ -169,6 +176,18 @@ function installUnifiedLayout(options = {}) {
     const reload = button('刷新', '', () => action(slot, 'reload'));
     const play = button('官方播放', '', () => action(slot, 'play-official'));
     const share = button('分享', '', () => action(slot, 'copy-video-link'));
+    const youtubeInput = el('input', 'neko-youtube-url'); youtubeInput.type = 'url'; youtubeInput.placeholder = '粘贴视频或播放列表链接'; youtubeInput.setAttribute('aria-label','YouTube 视频或播放列表链接');
+    const youtubeOpen = button('打开视频', 'neko-youtube-open', () => {
+      const videoUrl = youtubeInput.value.trim();
+      if (!videoUrl) { panelNote(slot, '请先粘贴 YouTube 视频链接', 'error'); youtubeInput.focus(); return; }
+      panelNote(slot, '正在打开视频…', 'loading');
+      void Promise.resolve(bridge.community({action:'open-youtube-video',slot,videoUrl})).catch(() => { if (!disposed) panelNote(slot, '视频未能打开，请检查链接或网络', 'error'); });
+    });
+    youtubeInput.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); youtubeOpen.click(); } });
+    const youtubeShorts = button('刷短视频', 'neko-youtube-shorts', () => {
+      panelNote(slot, '正在打开 YouTube Shorts…', 'loading');
+      void Promise.resolve(bridge.community({action:'open-youtube-shorts',slot})).catch(() => { if (!disposed) panelNote(slot, '短视频未能打开，请检查网络后重试', 'error'); });
+    });
     const account = button('连接桌面身份', 'neko-unified-account', () => accountAction(slot));
     account.title = '复用本机 N.E.K.O. 社区账号；未登录时在系统浏览器完成官方授权';
     const leave = button('返回工作区', '', () => {
@@ -178,7 +197,7 @@ function installUnifiedLayout(options = {}) {
         doc.querySelector('.neko-room-entry')?.click();
         return;
       }
-      if (layout.flex?.enabled) { showNotice('B站视频已在三面板中打开'); return; }
+      if (layout.flex?.enabled) { showNotice('视频已在三面板中打开'); return; }
       // If the other main pane already holds coding, close this optional
       // content instead of swapping it into that pane.
       const other = slot === 'left' ? 'right' : 'left';
@@ -186,9 +205,9 @@ function installUnifiedLayout(options = {}) {
     });
     back.setAttribute('aria-label', '返回上一页'); reload.setAttribute('aria-label', '刷新当前页面');
     if (slot === 'side') leave.textContent = '返回聊天室';
-    play.hidden = share.hidden = account.hidden = true; header.append(name, back, reload, play, share, account, leave);
+    play.hidden = share.hidden = account.hidden = youtubeInput.hidden = youtubeOpen.hidden = youtubeShorts.hidden = true; header.append(name, back, reload, play, share, account, leave, youtubeShorts, youtubeInput, youtubeOpen);
     const status = el('p', 'status'); status.setAttribute('role', 'status'); node.append(header, status); doc.body.appendChild(node);
-    panels[slot] = { node, header, name, titleText, note, back, reload, play, share, account, leave, status, site: null, noteTimer: null };
+    panels[slot] = { node, header, name, titleText, note, back, reload, play, share, account, leave, youtubeInput, youtubeOpen, youtubeShorts, status, site: null, noteTimer: null };
   }
   for (const slot of ['side', 'left', 'right']) makePanel(slot);
   // kind: 'loading' | 'error' | 'ok'. 'ok' notes clear themselves; load and
@@ -260,12 +279,12 @@ function installUnifiedLayout(options = {}) {
     toggle.textContent = layout.enabled ? '关闭自定义布局（恢复单栏）' : '启用自定义布局';
     toggle.setAttribute('aria-pressed', String(layout.enabled));
     restore.hidden = !startupSaved;
-    summary.textContent = layout.flex?.enabled ? '三面板：' + layout.flex.slots.map(x => ({social:'聊天室',bilibili:'B站',coding:'工作区'})[x]).join(' / ') : summaryText(); config.dataset.enabled = String(layout.enabled);
+    summary.textContent = layout.flex?.enabled ? '三面板：' + layout.flex.slots.map(x => ({social:'聊天室',bilibili:videoSite === 'youtube' ? 'YouTube' : 'B站',coding:'工作区'})[x]).join(' / ') : summaryText(); config.dataset.enabled = String(layout.enabled);
     flexSlots.replaceChildren();
     if (layout.flex?.enabled) for (let i=0; i<3; i++) {
       const row = el('label', 'neko-flex-slot'); row.appendChild(el('span', '', ['独立区域','内层第一格','内层第二格'][i]));
       const select = el('select'); select.setAttribute('aria-label', '选择'+['独立区域','内层第一格','内层第二格'][i]);
-      for (const [value,name] of [['social','聊天室'],['bilibili','B站视频'],['coding','工作区']]) { const option=el('option','',name); option.value=value; option.selected=layout.flex.slots[i]===value; select.appendChild(option); }
+      for (const [value,name] of [['social','聊天室'],['bilibili',videoSite === 'youtube' ? 'YouTube' : 'B站视频'],['coding','工作区']]) { const option=el('option','',name); option.value=value; option.selected=layout.flex.slots[i]===value; select.appendChild(option); }
       select.addEventListener('change', () => { const slots=[...layout.flex.slots], j=slots.indexOf(select.value); [slots[i],slots[j]]=[slots[j],slots[i]]; void update({...layout, flex:{...layout.flex,slots}}); });
       row.appendChild(select); flexSlots.appendChild(row);
     }
@@ -277,6 +296,7 @@ function installUnifiedLayout(options = {}) {
       if (targetCurrent[key].textContent !== shown) targetCurrent[key].textContent = shown;
     }
     const value = target === 'side' && layout.side === 'workspace' ? 'coding' : layout[target] ?? 'none';
+    contentButtons.bilibili.textContent = videoSite === 'youtube' ? 'YouTube' : 'B站视频';
     for (const key of Object.keys(contentButtons)) contentButtons[key].setAttribute('aria-pressed', String(key === value));
     contentButtons.coding.textContent = target === 'side' ? '工作区导航' : '工作区';
     const other = target === 'left' ? 'right' : 'left';
@@ -431,9 +451,11 @@ function installUnifiedLayout(options = {}) {
   function placePanel(slot, rect, site, splitGutter = false) {
     const p = panels[slot]; if (!rect || rect.width < 80 || rect.height < 80 || !site) { p.node.hidden = true; closeView(slot); return; }
     p.node.hidden = false;
-    const title = site === 'community' ? 'N.E.K.O. 社区' : 'B站视频';
+    const title = site === 'community' ? 'N.E.K.O. 社区' : site === 'youtube' ? 'YouTube' : 'B站视频';
     if (p.titleText.textContent !== title) { p.titleText.textContent = title; p.node.setAttribute('aria-label', `${SLOT_NAMES[slot]}：${title}`); }
     p.play.hidden = p.share.hidden = site !== 'bilibili';
+    p.youtubeInput.hidden = p.youtubeOpen.hidden = p.youtubeShorts.hidden = site !== 'youtube';
+    p.leave.hidden = !!layout.flex?.enabled && slot !== 'side';
     p.account.hidden = site !== 'community' || typeof bridge.communityAccount !== 'function';
     const boundsStyle = { left: `${Math.round(rect.x)}px`, top: `${Math.round(rect.y)}px`, width: `${Math.round(rect.width)}px`, height: `${Math.round(rect.height)}px` };
     for (const [key, value] of Object.entries(boundsStyle)) if (p.node.style[key] !== value) p.node.style[key] = value;
@@ -489,6 +511,14 @@ function installUnifiedLayout(options = {}) {
     handle.addEventListener('dragend', () => { flexMoving=null; for (const drop of Object.values(flexDrops)) drop.hidden=true; schedule(); });
     zone.addEventListener('dragover', event => { if (flexMoving) { event.preventDefault(); if (event.dataTransfer) event.dataTransfer.dropEffect='move'; } });
     zone.addEventListener('drop', event => { if (!flexMoving) return; event.preventDefault(); const slots=[...layout.flex.slots], from=slots.indexOf(flexMoving), to=slots.indexOf(name); [slots[from],slots[to]]=[slots[to],slots[from]]; flexMoving=null; for (const drop of Object.values(flexDrops)) drop.hidden=true; void update({...layout,flex:{...layout.flex,slots}}); });
+  }
+  function updateVideoLabels() {
+    const label = videoSite === 'youtube' ? 'YouTube' : 'B站视频';
+    flexTabButtons.bilibili.textContent = videoSite === 'youtube' ? 'YouTube' : 'B站';
+    flexTabButtons.bilibili.setAttribute('aria-label', '显示' + label);
+    flexHandles.bilibili.title = '拖动' + label + '到其他区域';
+    flexHandles.bilibili.setAttribute('aria-label', flexHandles.bilibili.title);
+    flexDrops.bilibili.querySelector('strong').textContent = label;
   }
   const flexClamp = value => Math.max(.15, Math.min(.85, Number.isFinite(value) ? value : .5));
   function splitFlex(rect, axis, ratio) {
@@ -558,7 +588,7 @@ function installUnifiedLayout(options = {}) {
       for (const [key,value] of Object.entries({x:single.x,y:single.y,width:single.width,height:single.height})) geo.center.style.setProperty('--neko-flex-'+key,Math.round(value)+'px');
       panels.right.node.hidden=true; closeView('right');
       if (flexActive==='social' && sideSurface==='community') placePanel('side',single,'community'); else { panels.side.node.hidden=true; closeView('side'); }
-      if (flexActive==='bilibili') placePanel('left',single,'bilibili'); else { panels.left.node.hidden=true; closeView('left'); }
+      if (flexActive==='bilibili') placePanel('left',single,videoSite); else { panels.left.node.hidden=true; closeView('left'); }
       return;
     }
     flexTabs.hidden=true; doc.body.removeAttribute('data-neko-flex-social-hidden');
@@ -589,7 +619,7 @@ function installUnifiedLayout(options = {}) {
     panels.right.node.hidden=true; closeView('right');
     if (sideSurface === 'community') placePanel('side',social,'community');
     else { panels.side.node.hidden=true; closeView('side'); }
-    placePanel('left',byName.bilibili,'bilibili');
+    placePanel('left',byName.bilibili,videoSite);
     flexHandle('unified',divider,full,flex.rootAxis,rootRatio);
     if (!flexCompact) flexHandle('stack',flexDivider,stack,flex.stackAxis,stackRatio);
     else { flexDivider.hidden=true; if (flexNativeKeys.stack && typeof bridge.divider === 'function') void Promise.resolve(bridge.divider({action:'remove',id:'stack'})).catch(()=>{}); delete flexNativeKeys.stack; }
@@ -692,7 +722,7 @@ function installUnifiedLayout(options = {}) {
     } else postNativeDivider(null);
     for (const slot of ['side', 'left', 'right']) {
       const value = layout[slot];
-      const site = value === 'community' || value === 'bilibili' ? value : null;
+      const site = value === 'community' ? 'community' : value === 'bilibili' ? videoSite : null;
       if (suspended || slot === 'side' && doc.body.hasAttribute('data-neko-chatroom-active')) { panels[slot].node.hidden = true; closeView(slot); }
       else placePanel(slot, rects[slot], site, two && !narrow);
     }
@@ -782,11 +812,19 @@ function installUnifiedLayout(options = {}) {
   }) : null;
   function shortcut(event) {
     const item = event.target.closest?.('.neko-community-yui, .neko-side-rail__bilibili'); if (!item) return;
+    if (item.hasAttribute('data-neko-video-entry')) return;
     event.preventDefault(); event.stopImmediatePropagation();
     const bili = item.classList.contains('neko-side-rail__bilibili');
     openSideSurface(bili ? 'bilibili' : 'community', { home:bili });
   }
   doc.addEventListener('click', shortcut, true);
+  function videoOpen(event) {
+    const detail = event.detail;
+    if (disposed || !detail || !['bilibili','youtube'].includes(detail.platform)) return;
+    ++videoSelectionRevision; videoSite = detail.platform; detail.handled = true; renderConfig(); updateVideoLabels();
+    openSideSurface(videoSite, {home:videoSite === 'bilibili'}); detail.promise = Promise.resolve();
+  }
+  doc.addEventListener('neko-video-open', videoOpen);
   // A companion's community visit must not invoke the legacy single-pane
   // route, which would hide all currently assigned native views. Save the
   // destination first; the visible companion menu is allowed to close before
@@ -822,7 +860,8 @@ function installUnifiedLayout(options = {}) {
     const p = panels[state.slot];
     if (state.status === 'loading') panelNote(state.slot, '正在加载…', 'loading');
     if (state.status === 'ready') { panelNote(state.slot, ''); if (state.site === 'community') p.account.disabled = false; }
-    if (state.status === 'error') panelNote(state.slot, '页面未能打开，请检查网络后点「刷新」', 'error');
+    if (state.tooSmall) panelNote(state.slot, '请扩大视频区域（至少 200 × 200）', 'error');
+    else if (state.status === 'error') panelNote(state.slot, '页面未能打开，请检查网络后点「刷新」', 'error');
     if (typeof state.canGoBack === 'boolean') p.back.disabled = !state.canGoBack;
     if (typeof state.canShare === 'boolean') p.share.disabled = !state.canShare;
     if (typeof state.canPlayOfficial === 'boolean') p.play.disabled = !state.canPlayOfficial || !!state.isOfficialPlayer;
@@ -848,6 +887,7 @@ function installUnifiedLayout(options = {}) {
     doc.removeEventListener('neko-unified-open-config', openConfigFromSettings);
     clearFlex(); flexDivider.remove(); flexTabs.remove(); for (const node of [...Object.values(flexHandles),...Object.values(flexDrops)]) node.remove(); if (typeof unsubscribeFlex === 'function') unsubscribeFlex();
     doc.removeEventListener('neko-side-surface-close', closeSideSurface);
+    doc.removeEventListener('neko-video-open', videoOpen);
     doc.removeEventListener('visibilitychange', visibilityChanged); win.removeEventListener('focus', visibilityChanged); if (recoveryTimer) win.clearTimeout(recoveryTimer); if (noticeTimer) win.clearTimeout(noticeTimer);
     for (const p of Object.values(panels)) if (p.noteTimer) win.clearTimeout(p.noteTimer);
     if (frame) (win.cancelAnimationFrame || win.clearTimeout)(frame); if (typeof unsubscribe === 'function') unsubscribe(); if (typeof unsubscribeAccount === 'function') unsubscribeAccount();

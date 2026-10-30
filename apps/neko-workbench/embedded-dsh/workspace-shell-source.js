@@ -102,7 +102,7 @@ function installWorkspaceShell(options = {}) {
   }
   function sideSurfaceChanged(event) {
     const surface = event.detail?.surface;
-    if (surface === 'community' || surface === 'bilibili') {
+    if (surface === 'community' || surface === 'bilibili' || surface === 'youtube') {
       sideSocial = true;
       setRoomActive(false, { closeSocial: false });
       roomButton?.setAttribute('aria-pressed', 'false'); workButton?.setAttribute('aria-pressed', 'false');
