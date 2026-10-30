@@ -377,3 +377,10 @@ body[data-neko-workspace-shell] [data-neko-companion-footer] { display:block !im
 }
 /* Keep the last project row reachable beside the fixed directory shortcut. */
 .neko-startup__inner { padding-bottom:64px; }
+
+/* Project history uses the existing session chooser while the work area is compact. */
+.neko-floating-records-control { position:fixed; right:112px; z-index:2147481001; padding:7px 12px; border:1px solid var(--nws-border); border-radius:9px; background:var(--nws-bg); color:var(--nws-text); font:12px system-ui,sans-serif; cursor:pointer; box-shadow:0 4px 14px #17303d19; }
+.neko-floating-records-control[hidden] { display:none !important; }
+.neko-floating-records-control:focus-visible { outline:2px solid #4c89ad; outline-offset:2px; }
+.neko-startup[data-neko-floating-records] { z-index:2147481001; resize:both; overflow:auto; min-width:min(260px,calc(100vw - 96px)); min-height:160px; max-width:calc(100vw - 96px); max-height:calc(100vh - 160px); border:1px solid var(--nws-border); border-radius:14px; box-shadow:0 8px 28px #17303d24; }
+.neko-startup[data-neko-floating-records] .neko-startup__inner { padding:16px 14px 28px; }

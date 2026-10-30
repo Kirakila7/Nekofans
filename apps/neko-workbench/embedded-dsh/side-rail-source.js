@@ -62,7 +62,7 @@ function installWorkbenchSideRail(options = {}) {
   chatDivider.tabIndex = 0; chatDivider.setAttribute('role', 'separator'); chatDivider.setAttribute('aria-orientation', 'vertical');
   chatDivider.setAttribute('aria-label', '调整左侧内容和工作区宽度');
   chatDivider.title = '拖动调整宽度 · 双击恢复 3:1 · 方向键调整';
-  let preferredRatio = .75, restoreRatio = .75, chatFrame = null, chatCenter = null, oldChatGrid = null, chatDrag = null, lastChatGeometry = null;
+  let preferredRatio = 1, restoreRatio = .75, chatFrame = null, chatCenter = null, oldChatGrid = null, chatDrag = null, lastChatGeometry = null;
   let nativeDividerKey = '';
   function postNativeDivider(rect) {
     if (typeof bridge.divider !== 'function') return;
@@ -103,7 +103,7 @@ function installWorkbenchSideRail(options = {}) {
     if (oldChatGrid?.value) chatFrame.style.setProperty('--neko-chat-sidebar-grid', oldChatGrid.value, oldChatGrid.priority);
     else chatFrame.style.removeProperty('--neko-chat-sidebar-grid');
     chatFrame = null; chatCenter = null; oldChatGrid = null; lastChatGeometry = null; chatDivider.hidden = true;
-    if (doc.body.hasAttribute('data-neko-workspace-collapsed')) { doc.body.removeAttribute('data-neko-workspace-collapsed'); preferredRatio = restoreRatio; }
+    if (doc.body.hasAttribute('data-neko-workspace-collapsed')) doc.body.removeAttribute('data-neko-workspace-collapsed');
     postNativeDivider(null);
     win.dispatchEvent(new win.Event('resize'));
   }

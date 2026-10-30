@@ -4,6 +4,8 @@ The daily artifact is built from this repository. `config/daily-release.json` is
 
 ## Pending source changes
 
+- Temporarily disable legacy multi-pane layout controls without overwriting saved layout preferences. The ordinary workbench defaults to a lower-right native floating composer with expandable, resizable project/session records; current-session file entry preserves draft synchronization and validates the session before opening DSH files. Isolated component tests cover preserved drafts, lounge safety, video/home integration and narrow-window recovery; real DSH file access and actual network playback remain separate checks.
+
 - The coding surface exposes a shortcut into the current DSH session’s native file tree. The floating workspace saves pending text, expands, checks the selected session again, then requests the native files tab. Unsupported or stale sessions fail closed; local fixture and Electron tests use simulated file services, not the user’s files. DSH native file APIs are internal and a real project directory interaction remains unverified.
 
 - In workbench-account companion chat, a starting or disconnected DSH bridge no longer appears ready. The input keeps its draft and offers an explicit reconnect when disconnected; pressing send during disconnection does not restart or transmit anything. The bridge becoming ready does not confirm account login, quota or a real model reply, which must be checked separately.

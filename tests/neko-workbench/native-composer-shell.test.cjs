@@ -9,7 +9,7 @@ test('floating input routes only to the currently retained DSH shell and preserv
  const dom=new JSDOM('<body><aside data-neko-side-rail><span class="neko-side-rail__theme"></span></aside><aside data-slot="sidebar"><div data-slot="settings.launcher"></div></aside><main data-neko-flex-coding><div data-composer-seat><textarea>native</textarea></div></main></body>',{runScripts:'outside-only',pretendToBeVisual:true});t.after(()=>dom.window.close());
  const w=dom.window,d=w.document,sidebar=d.querySelector('[data-slot="sidebar"]');sidebar.getBoundingClientRect=()=>({left:64,top:0,right:304,bottom:800,width:240,height:800});
  const store=createWorkspaceLayout(path.join(dir,'layout.json')),states=[],placements=[];let inputEvent,selection={sessionId:'s1'},main='s1',draft={draft:'original',draftRev:1,phase:'plain',attachmentIds:[],occurrences:[]},sends=0,saves=0;
- const fileCalls=[];d.addEventListener('neko-workspace-expand',()=>d.body.removeAttribute('data-neko-flex-workspace-collapsed'));
+ const fileCalls=[];d.addEventListener('neko-workspace-expand',()=>{d.body.removeAttribute('data-neko-flex-workspace-collapsed');d.body.removeAttribute('data-neko-workspace-collapsed')});
  const listeners=new Set(),shell={state:{getSnapshot:()=>({...draft}),subscribe:fn=>{listeners.add(fn);return()=>listeners.delete(fn)}},actions:{setDraft(value){draft={...draft,draft:value,draftRev:draft.draftRev+1};for(const fn of listeners)fn()},persistDraft(){saves++},submit(){sends++}}},binding={sessionId:'s1',session:{sessionId:'s1'}};
  const bridge={lobby:async()=>({state:{connection:'unconfigured'}}),getState:async()=>({workspaceRoot:'/p',workspaceRevision:0,companion:{ready:true,messages:[]}}),companion:async()=>({}),workspace:async r=>r.action==='state'?{...store.get(),codexAvailable:false}:r.action==='codex-state'?{items:[],approvals:[]}:r.action==='catalog'?{sessions:[],projects:[],providers:{dsh:'ready'}}:null,nativeComposer:async r=>{if(r.action==='update')states.push(r.state);else placements.push(r);return {ok:true}},subscribeNativeComposer:fn=>{inputEvent=fn;return()=>{inputEvent=null}}};
  w.eval(fs.readFileSync(path.join(base,'embedded-dsh/native-composer-source.js'),'utf8')+'\n'+fs.readFileSync(path.join(base,'embedded-dsh/workspace-shell-source.js'),'utf8')+'\nwindow.install=installWorkspaceShell');
@@ -29,5 +29,11 @@ test('floating input routes only to the currently retained DSH shell and preserv
  inputEvent({type:'submit',value:'new text',sessionToken:'s1',revision:1,submissionId:1});await tick();assert.equal(sends,0);assert(states.some(x=>x.settledSubmitId===1&&x.status.includes('变化')));
  inputEvent({type:'submit',value:'new text',sessionToken:'s1',revision:2,submissionId:2});await tick();assert.equal(sends,1);assert(states.some(x=>x.settledSubmitId===2&&x.status==='已交给工作区处理'));
  selection={sessionId:'s2'};main='s2';inputEvent({type:'edit',value:'overwrite',sessionToken:'s1',revision:2,editId:2});await tick();assert.equal(draft.draft,'new text');assert(states.some(x=>x.settledEditId===2&&x.editConflict));
- d.body.removeAttribute('data-neko-flex-workspace-collapsed');await tick();assert(placements.some(x=>x.action==='remove'));stop();assert.equal(inputEvent,null);assert.equal(listeners.size,0);
+ d.body.removeAttribute('data-neko-flex-workspace-collapsed');await tick();assert(placements.some(x=>x.action==='remove'));
+ selection={sessionId:'s1'};main='s1';d.body.setAttribute('data-neko-workspace-collapsed','');await tick();
+ inputEvent({type:'files',sessionToken:'s1',revision:2});await new Promise(r=>setTimeout(r,80));assert.deepEqual(fileCalls,['s1','s1'],'normal collapsed files expands and opens same session');
+ d.body.setAttribute('data-neko-workspace-collapsed','');await tick();const before=placements.filter(x=>x.action==='remove').length;
+ Object.defineProperty(w,'innerWidth',{value:300,configurable:true});w.dispatchEvent(new w.Event('resize'));await tick();
+ assert(!d.body.hasAttribute('data-neko-workspace-collapsed'),'narrow window restores usable workspace');assert(placements.filter(x=>x.action==='remove').length>before,'stale native float is removed');assert.equal(draft.draft,'new text');
+ stop();assert.equal(inputEvent,null);assert.equal(listeners.size,0);
 });
