@@ -47,7 +47,7 @@ macOS 的 DSH 默认路径来自已安装的 DeepSeek Harness；其他安装位�
 | `NEKO_WORKBENCH_CHAT_URL` | 频道服务（N.E.K.O.Chat）地址；必须是无凭据的 HTTPS，只有 `127.0.0.1`、`localhost`、`[::1]` 允许 HTTP。暂无默认生产地址，未设置时频道面板显示「频道服务未配置」 |
 | `NEKO_WORKBENCH_CHAT_CLIENT_ID` | 频道 OAuth 公共客户端，默认 `neko-chat-desktop-prod`，须匹配 `neko-chat-desktop-<小写字母>` |
 | `NEKO_WORKBENCH_CHAT_AUTH_URL` | 频道登录的认证服务，默认官方社区认证地址；只有频道地址也是本机回环时才允许回环 HTTP |
-| `NEKO_WORKBENCH_CHAT_OAUTH_PORTS` | 可选：登录回调端口，逗号分隔的 1024–65535 端口，最多 8 个；不设时使用系统分配的端口 |
+| `NEKO_WORKBENCH_CHAT_OAUTH_PORTS` | 可选：登录回调端口，逗号分隔的 1024–65535 端口，最多 8 个；依次尝试；不设时使用官方认证平台登记的 `48921,48922,48923` |
 
 `NEKO_WORKBENCH_DSH_MODULES_DIR`、`NEKO_WORKBENCH_WORKSPACE_DIR` 是对应路径的兼容别名，以上原名优先。所有路径覆盖都要求绝对路径。
 

@@ -10,6 +10,9 @@ const DEFAULT_CHAT_CLIENT_ID = 'neko-chat-desktop-prod';
 const CHAT_CLIENT_ID_PATTERN = /^neko-chat-desktop-[a-z]+$/;
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]']);
 const MAX_OAUTH_PORTS = 8;
+// Must match CHAT_DESKTOP_REDIRECT_URIS registered in neko-auth-platform: Hydra
+// compares redirect URIs exactly, so an OS-chosen port would be rejected.
+const DEFAULT_CHAT_OAUTH_PORTS = Object.freeze([48921, 48922, 48923]);
 const CREDENTIAL_KEY = /^(?:token|access[-_]?token|api[-_]?key|authorization|password|passwd|secret|credentials?|signature)$/i;
 
 const CHAT_URL_ERROR = '频道服务地址必须是不含账号凭据的 HTTPS 地址（仅本机地址可用 HTTP）';
@@ -67,10 +70,10 @@ function resolveChatAuthUrl(value = process.env.NEKO_WORKBENCH_CHAT_AUTH_URL, ch
   return url.origin;
 }
 
-// Optional fixed loopback callback ports (when the auth server does not accept
-// arbitrary RFC 8252 loopback ports). null means "let the OS pick" (port 0).
+// Fixed loopback callback ports, tried in order. Unset uses the ports the
+// official auth platform registers; the override is for other deployments.
 function resolveChatOAuthPorts(value = process.env.NEKO_WORKBENCH_CHAT_OAUTH_PORTS) {
-  if (value == null || value === '') return null;
+  if (value == null || value === '') return DEFAULT_CHAT_OAUTH_PORTS;
   if (typeof value !== 'string') throw new Error(OAUTH_PORTS_ERROR);
   const parts = value.split(',').map(part => part.trim());
   if (parts.length > MAX_OAUTH_PORTS) throw new Error(OAUTH_PORTS_ERROR);

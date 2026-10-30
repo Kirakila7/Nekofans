@@ -59,7 +59,7 @@ Verified only with synthetic fixtures: injected fetch, fake WebSocket, a loopbac
 
 Not verified:
 
-- Real OAuth sign-in against auth.project-neko.cn. The public client `neko-chat-desktop-prod` (and `-dev`) is not registered yet, and whether Hydra accepts arbitrary loopback ports is unconfirmed.
+- Real OAuth sign-in against auth.project-neko.cn. Registration of `neko-chat-desktop-{env}` is in Project-N-E-K-O/neko-auth-platform#304 (open, not deployed): a public PKCE client with fixed callbacks `http://127.0.0.1:48921/oauth/callback`, `:48922` and `:48923`, consent required (no auto-consent), gated by `CHAT_INTEGRATION_ENABLED`, which defaults to `false`. The workbench now tries those three ports by default; `NEKO_WORKBENCH_CHAT_OAUTH_PORTS` overrides them. Sign-in cannot complete against the official platform until that client is enabled in production.
 - A production chat server. `NEKO_WORKBENCH_CHAT_URL` has no default, so the panel shows 频道服务未配置 until it is set.
 - Real model behaviour: suggestion quality, independent replies, prompt-injection resistance, and whether summaries keep other people's words attributed. The memory worker's own fact extraction from lobby summaries is also untested.
 - The Electron GUI with this panel; no QA instance was launched for this work.

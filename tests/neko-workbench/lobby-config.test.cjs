@@ -85,8 +85,9 @@ test('auth URL may use loopback http only when the chat URL is loopback too', ()
 });
 
 test('OAuth callback ports are optional, comma separated, unprivileged and unique', () => {
-  assert.equal(C.resolveChatOAuthPorts(undefined), null);
-  assert.equal(C.resolveChatOAuthPorts(''), null);
+  assert.deepEqual(C.resolveChatOAuthPorts(undefined), [48921, 48922, 48923]);
+  assert.deepEqual(C.resolveChatOAuthPorts(''), [48921, 48922, 48923]);
+  assert.ok(Object.isFrozen(C.resolveChatOAuthPorts(undefined)));
   assert.deepEqual(C.resolveChatOAuthPorts('53682'), [53682]);
   assert.deepEqual(C.resolveChatOAuthPorts('53682, 53683,53684'), [53682, 53683, 53684]);
   assert.ok(Object.isFrozen(C.resolveChatOAuthPorts('53682')));
@@ -113,7 +114,7 @@ test('the socket base is derived as wss for https and ws for loopback http, keep
 test('resolveChatConfig combines every variable for production and the local QA fixture', () => {
   assert.deepEqual({ ...C.resolveChatConfig({ NEKO_WORKBENCH_CHAT_URL: 'https://chat.example.test' }) }, {
     configured: true, chatUrl: 'https://chat.example.test/', wsUrl: 'wss://chat.example.test/ws',
-    authUrl: OFFICIAL_AUTH_ORIGIN, clientId: 'neko-chat-desktop-prod', oauthPorts: null });
+    authUrl: OFFICIAL_AUTH_ORIGIN, clientId: 'neko-chat-desktop-prod', oauthPorts: [48921, 48922, 48923] });
   const qa = C.resolveChatConfig({ NEKO_WORKBENCH_CHAT_URL: 'http://127.0.0.1:8091', NEKO_WORKBENCH_CHAT_AUTH_URL: 'http://127.0.0.1:8094',
     NEKO_WORKBENCH_CHAT_CLIENT_ID: 'neko-chat-desktop-dev', NEKO_WORKBENCH_CHAT_OAUTH_PORTS: '53682,53683' });
   assert.deepEqual({ ...qa, oauthPorts: [...qa.oauthPorts] }, {
