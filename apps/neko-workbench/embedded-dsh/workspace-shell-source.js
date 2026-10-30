@@ -110,7 +110,9 @@ function installWorkspaceShell(options = {}) {
     } else if (surface === 'hidden' && sideSocial) {
       sideSocial = false;
       setRoomActive(roomSelection, { closeSocial: false });
-    }
+    } else return;
+    closeCompanionMenu(false);
+    schedule();
   }
   doc.addEventListener('neko-side-surface-change', sideSurfaceChanged);
   function showWorkspaceFromLayout() { setRoomActive(false); }
@@ -335,6 +337,7 @@ function installWorkspaceShell(options = {}) {
   }
   const railCompanion = own(button('', 'neko-side-rail__button neko-rail-companion', () => {
     if (suppressRailClick) { suppressRailClick = false; return; }
+    if (sideSocial) { Promise.resolve(bridge.action('open-companion-chat')).catch(showError); return; }
     toggleCompanionMenu(railCompanion);
   }));
   railCompanion.hidden = true; railCompanion.title = '点击互动 · 拖动位置 · 方向键移动';
@@ -345,7 +348,7 @@ function installWorkspaceShell(options = {}) {
     if (!railSpace) return null;
     const space = railSpace.getBoundingClientRect(), pet = railCompanion.getBoundingClientRect();
     if (space.width <= 0 || space.height <= 0) return null;
-    return { space, x: Math.max(0, space.width - (pet.width || Math.min(44, space.width))), y: Math.max(0, space.height - (pet.height || Math.min(52, space.height))) };
+    return { space, x: Math.max(0, space.width - (pet.width || Math.min(56, space.width))), y: Math.max(0, space.height - (pet.height || Math.min(70, space.height))) };
   }
   function stopRailWalking() { if (railWalkTimer !== null) win.clearTimeout(railWalkTimer); railWalkTimer = null; }
   function setRailPosition(x, y, duration = 0) {
@@ -456,6 +459,14 @@ function installWorkspaceShell(options = {}) {
   doc.addEventListener('pointerdown', dismissCompanionMenu, true);
   function syncCompanionPlacement(rail) {
     if (!rail) return;
+    // Social pages own the sidebar; keep chat mounted and move this same fish
+    // into the rail instead of leaving a second chat surface below the page.
+    if (dock.hidden !== sideSocial) dock.hidden = sideSocial;
+    const railLabel = sideSocial ? '大肥鱼，点击聊天，可拖动，方向键移动' : '大肥鱼互动菜单，可拖动，方向键移动';
+    if (railCompanion.getAttribute('aria-label') !== railLabel) railCompanion.setAttribute('aria-label', railLabel);
+    railCompanion.title = sideSocial ? '点击聊天 · 拖动位置 · 方向键移动' : '点击互动 · 拖动位置 · 方向键移动';
+    if (sideSocial) railCompanion.removeAttribute('aria-haspopup');
+    else if (railCompanion.getAttribute('aria-haspopup') !== 'menu') railCompanion.setAttribute('aria-haspopup', 'menu');
     const connected = dock.isConnected;
     let visible = connected && dockIntersecting !== false;
     for (let node = dock; visible && node && node !== doc.body; node = node.parentElement) {
@@ -466,7 +477,7 @@ function installWorkspaceShell(options = {}) {
       const r = dock.getBoundingClientRect();
       visible = r.width > 0 && r.height > 0 && r.right > 0 && r.left < win.innerWidth && r.bottom > 0 && r.top < win.innerHeight;
     }
-    const needsRail = !visible;
+    const needsRail = sideSocial || !visible;
     const changed = needsRail !== companionInRail || (needsRail && character.parentNode !== railCompanion);
     if (changed) {
       closeCompanionMenu(false);
@@ -545,7 +556,7 @@ function installWorkspaceShell(options = {}) {
   const expandWorkspace = own(button('展开工作区', 'neko-workspace-expand-control', () => doc.dispatchEvent(new win.Event('neko-workspace-expand'))));
   expandWorkspace.hidden = true; expandWorkspace.setAttribute('data-neko-workspace-expand-control', ''); doc.body.appendChild(expandWorkspace);
   const collapseNotice = own(el('p', 'neko-workspace-collapse-notice')); collapseNotice.setAttribute('role', 'status'); collapseNotice.hidden = true; doc.body.appendChild(collapseNotice);
-  let collapsedComposer = null, collapseGeometry = '', collapseNoticeTimer = null;
+  let collapsedComposer = null, collapsedPopover = false, collapseGeometry = '', collapseNoticeTimer = null;
   let floatingComposer = null, floatingGeometry = '', floatingState = '', floatingRecoveryPending = false, floatingInitialized = false;
   const hasNativeComposerBridge = typeof bridge.nativeComposer === 'function' && typeof bridge.subscribeNativeComposer === 'function';
   function recoverFloatingComposer() {
@@ -628,7 +639,11 @@ function installWorkspaceShell(options = {}) {
     if (key !== collapseGeometry) { collapseGeometry = key; doc.dispatchEvent(new win.Event('neko-collapsed-composer-geometry')); }
   }
   function clearCollapsedComposer() {
-    if (collapsedComposer) { collapseResize?.unobserve(collapsedComposer); collapsedComposer.removeAttribute('data-neko-collapsed-composer'); collapsedComposer = null; }
+    if (collapsedComposer) {
+      collapseResize?.unobserve(collapsedComposer);
+      if (collapsedPopover) { try { collapsedComposer.hidePopover(); } catch {} collapsedComposer.removeAttribute('popover'); }
+      collapsedComposer.removeAttribute('data-neko-collapsed-composer'); collapsedComposer = null; collapsedPopover = false;
+    }
     expandWorkspace.hidden = true; notifyCollapseGeometry();
   }
   function syncCollapsedComposer() {
@@ -647,7 +662,15 @@ function installWorkspaceShell(options = {}) {
       collapseNoticeTimer = win.setTimeout(() => { collapseNotice.hidden = true; }, 3500);
       doc.dispatchEvent(new win.Event('neko-workspace-expand')); return;
     }
-    if (next !== collapsedComposer) { clearCollapsedComposer(); collapsedComposer = next; next.setAttribute('data-neko-collapsed-composer', ''); collapseResize?.observe(next); }
+    if (next !== collapsedComposer) {
+      clearCollapsedComposer(); collapsedComposer = next; next.setAttribute('data-neko-collapsed-composer', '');
+      // Promote the existing React input above its clipped coding column.
+      if (!next.hasAttribute('popover') && typeof next.showPopover === 'function') {
+        try { next.setAttribute('popover', 'manual'); next.showPopover(); collapsedPopover = true; }
+        catch { next.removeAttribute('popover'); }
+      }
+      collapseResize?.observe(next);
+    }
     expandWorkspace.hidden = false;
     const r = next.getBoundingClientRect();
     const top = Math.max(12, Math.round(r.top - 42));

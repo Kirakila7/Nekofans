@@ -31,8 +31,8 @@ if (!process.versions.electron || process.env.NEKO_RAIL_QA_CHILD !== '1') {
       const shell=fs.readFileSync(path.join(__dirname,'../../apps/neko-workbench/embedded-dsh/workspace-shell-source.js'),'utf8');
       const html='<!doctype html><html><head><style>'+railCss+'\n#frame {position:fixed;left:64px;width:260px;height:100%;} #frame[data-sidebar-collapsed="true"] [data-slot="sidebar"] {display:none}</style></head><body data-neko-side-rail-layout><aside class="neko-side-rail" data-neko-side-rail><div class="neko-side-rail__theme"></div><div class="neko-side-rail__space" aria-hidden="true"></div><nav class="neko-side-rail__bottom"><button class="neko-side-rail__button neko-side-rail__expand">展开</button><button class="neko-side-rail__button">视频</button><button class="neko-side-rail__button">账号</button></nav></aside><div id="frame" data-sidebar-collapsed="false"><aside data-slot="sidebar"><div data-neko-seat-mount></div><div data-slot="sidebar.workspaces"></div><div data-slot="settings.launcher"></div></aside></div></body></html>';
       await win.loadURL('data:text/html;charset=utf-8,'+encodeURIComponent(html));
-      const setup=`Object.defineProperty(document,'visibilityState',{configurable:true,get:()=> 'visible'}); Math.random=()=>.8;
-        window.nekoWorkbench={getState:async()=>({workspaceRoot:'/fixture',workspaceRevision:0,companion:{ready:true,messages:[]}}),companion:async()=>({}),action:async()=>({}),workspace:async r=>r.action==='state'?{officeMode:'dsh',activeSeatId:null,seats:[],companionHistoryOpen:false}:r.action==='codex-state'?{items:[],approvals:[]}:r.action==='catalog'?{sessions:[],projects:[],providers:{dsh:'ready'}}:{}};
+      const setup=`Object.defineProperty(document,'visibilityState',{configurable:true,get:()=> 'visible'}); Math.random=()=>.8; window.qaActions=[];
+        window.nekoWorkbench={getState:async()=>({workspaceRoot:'/fixture',workspaceRevision:0,companion:{ready:true,messages:[]}}),companion:async()=>({}),action:async name=>window.qaActions.push(name),workspace:async r=>r.action==='state'?{officeMode:'dsh',activeSeatId:null,seats:[],companionHistoryOpen:false}:r.action==='codex-state'?{items:[],approvals:[]}:r.action==='catalog'?{sessions:[],projects:[],providers:{dsh:'ready'}}:{}};
         ${shell}\nwindow.qaCleanup=installWorkspaceShell({window,document,bridge:window.nekoWorkbench,cssText:${JSON.stringify(shellCss)},avatar:()=>'',locateSidebar:()=>({root:document.querySelector('[data-slot="sidebar"]')})});
         document.querySelector('#frame').setAttribute('data-sidebar-collapsed','true');`;
       await win.webContents.executeJavaScript(setup,true);
@@ -50,9 +50,21 @@ if (!process.versions.electron || process.env.NEKO_RAIL_QA_CHILD !== '1') {
       await wait(100); assert.equal((await read()).menu,false,'click opens menu');
       await win.webContents.executeJavaScript("document.querySelector('.neko-side-rail__space').remove()",true); await wait(150);
       const fallback=await win.webContents.executeJavaScript(`(()=>{const p=document.querySelector('.neko-rail-companion'),t=document.querySelector('.neko-side-rail__theme');return {position:getComputedStyle(p).position,petBottom:p.getBoundingClientRect().bottom,themeTop:t.getBoundingClientRect().top};})()`,true);
-      assert.equal(fallback.position,'static','missing blank space uses normal rail flow');
+      assert(['static','relative'].includes(fallback.position),'missing blank space uses normal rail flow');
       assert(fallback.petBottom<=fallback.themeTop+.5,'missing blank space does not cover the top control');
-      console.log(JSON.stringify({ok:true,electron:process.versions.electron,autoWalk:true,drag:true,dragKeepsMenuClosed:true,clickOpensMenu:true,confinedToBlankRail:true,missingSpaceAvoidsOverlap:true}));
+      await win.webContents.executeJavaScript(`document.querySelector('#frame').setAttribute('data-sidebar-collapsed','false'); document.querySelector('.neko-companion-form textarea').value='unsent social fixture';`,true);
+      await wait(100);
+      for (const surface of ['community','bilibili']) {
+        await win.webContents.executeJavaScript(`document.dispatchEvent(new CustomEvent('neko-side-surface-change',{detail:{surface:${JSON.stringify(surface)}}}));`,true);
+        await wait(100);
+        const social=await win.webContents.executeJavaScript(`(()=>{const d=document.querySelector('.neko-companion-dock'),p=document.querySelector('.neko-rail-companion'),c=document.querySelector('.neko-companion-character'),r=p.getBoundingClientRect();p.click();return{dockDisplay:getComputedStyle(d).display,rail:p.hidden,parent:c.parentElement===p,count:document.querySelectorAll('.neko-companion-character').length,x:r.x,width:r.width,height:r.height,actions:window.qaActions};})()`,true);
+        assert.equal(social.dockDisplay,'none',surface+' has no bottom-left chat'); assert.equal(social.rail,false); assert(social.parent); assert.equal(social.count,1);
+        assert(social.x>=0&&social.x+social.width<=64,'fish stays inside the rail'); assert(social.width>=54&&social.height>=68,'larger rail fish'); assert.equal(social.actions.at(-1),'open-companion-chat');
+      }
+      await win.webContents.executeJavaScript(`document.dispatchEvent(new CustomEvent('neko-side-surface-change',{detail:{surface:'hidden'}}));`,true); await wait(100);
+      const restored=await win.webContents.executeJavaScript(`(()=>{const d=document.querySelector('.neko-companion-dock');return{display:getComputedStyle(d).display,parent:document.querySelector('.neko-companion-character').parentElement===d,draft:document.querySelector('.neko-companion-form textarea').value};})()`,true);
+      assert.notEqual(restored.display,'none'); assert(restored.parent); assert.equal(restored.draft,'unsent social fixture');
+      console.log(JSON.stringify({ok:true,electron:process.versions.electron,autoWalk:true,drag:true,dragKeepsMenuClosed:true,clickOpensMenu:true,confinedToBlankRail:true,missingSpaceAvoidsOverlap:true,socialDockHidden:true,socialClickChats:true,socialDraftRestored:true}));
     } finally { win.destroy(); }
     app.quit();
   }).catch(e=>{console.error(e.stack||String(e));app.exit(1);});

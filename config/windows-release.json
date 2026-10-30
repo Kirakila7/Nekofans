@@ -1,0 +1,9 @@
+{
+  "version": "0.28.18-windows.1",
+  "platform": "win32-x64",
+  "branch": "codex/windows-0.28.18",
+  "baselineTag": "windows-0.28.18-baseline-20261030",
+  "upstreamCommit": "ec32201615c51b0b6814328d54ebeb8a71576245",
+  "deployment": "local-source",
+  "runtime": "existing-electron-dsh-node-python"
+}
