@@ -9,7 +9,7 @@ function installWorkspaceShell(options = {}) {
   const avatar = id => options.avatar?.(id) || '';
   const style = el('style'); style.dataset.nekoWorkspaceShell = ''; style.textContent = options.cssText || ''; doc.head.appendChild(style);
   let disposed = false, queued = false, layout = null, state = null, catalog = null, selectedProject = '', selectedId = null, searchText = '', layoutVersion = -1, listLoading = false, sending = false, socialOpen = false;
-  let startupOpen = true, startupSearchText = '', catalogError = '', startupError = '', startupOpening = false, startupOpeningMessage = '';
+  let startupOpen = true, startupSearchText = '', catalogError = '', startupError = '', startupOpening = false, startupOpeningMessage = '', floatingRecordsOpen = false;
   let sidebarOpening = null, sidebarOpenError = '';
   let nativeNewPending = false, nativeNewTimer = null, nativeNewBefore = null;
   let office = { status: 'idle', thread: null, items: [], approvals: [], error: '' };
@@ -175,7 +175,7 @@ function installWorkspaceShell(options = {}) {
   }
   function nativeSelection() { try { const value = options.getDshSelection?.(); return value && typeof value === 'object' ? value : null; } catch { return null; } }
   function hasActiveDshSession() { try { return layout?.officeMode === 'dsh' && options.hasDshActiveSession?.() === true; } catch { return false; } }
-  function closeStartup() { startupOpen = false; startup.hidden = true; }
+  function closeStartup() { startupOpen = false; floatingRecordsOpen = false; startup.hidden = true; }
   function showStartup() { startupOpen = true; renderStartup(); schedule(); }
   function showNativeToolsPage() { closeStartup(); }
   doc.addEventListener('neko-native-tools-navigate', showNativeToolsPage);
@@ -204,7 +204,7 @@ function installWorkspaceShell(options = {}) {
       const projectNew = button('新会话', 'neko-startup__project-new', async () => {
         if (startupOpening) return;
         startupOpening = true; startupOpeningMessage = '正在打开项目…'; startupError = ''; renderStartup();
-        try { await openProject(group); }
+        try { const wasFloating = floatingRecordsOpen; await openProject(group); if (wasFloating) doc.dispatchEvent(new win.Event('neko-workspace-expand')); }
         catch (error) { startupError = error?.message || '项目未能打开，请重试'; }
         finally { startupOpening = false; startupOpeningMessage = ''; renderStartup(); }
       });
@@ -217,7 +217,7 @@ function installWorkspaceShell(options = {}) {
         const item = button('', 'neko-startup__session', async () => {
           if (startupOpening) return;
           startupOpening = true; startupOpeningMessage = '正在打开会话…'; startupError = ''; renderStartup();
-          try { if (await openSession(row)) closeStartup(); }
+          try { const wasFloating = floatingRecordsOpen; if (await openSession(row)) { closeStartup(); if (wasFloating) doc.dispatchEvent(new win.Event('neko-workspace-expand')); } }
           catch (error) { startupError = error?.message || '会话未能打开，请重试'; }
           finally { startupOpening = false; startupOpeningMessage = ''; renderStartup(); }
         });
@@ -544,12 +544,25 @@ function installWorkspaceShell(options = {}) {
   // workspace is collapsed. A CSS marker changes its presentation only.
   const expandWorkspace = own(button('展开工作区', 'neko-workspace-expand-control', () => doc.dispatchEvent(new win.Event('neko-workspace-expand'))));
   expandWorkspace.hidden = true; expandWorkspace.setAttribute('data-neko-workspace-expand-control', ''); doc.body.appendChild(expandWorkspace);
+  const floatingRecords = own(button('项目记录', 'neko-floating-records-control', () => {
+    floatingRecordsOpen = !floatingRecordsOpen;
+    floatingRecords.setAttribute('aria-expanded', String(floatingRecordsOpen));
+    if (floatingRecordsOpen) { startupOpen = true; renderStartup(); }
+    schedule();
+  }));
+  floatingRecords.hidden = true; floatingRecords.setAttribute('aria-expanded', 'false');
+  floatingRecords.setAttribute('aria-controls', 'neko-floating-projects'); startup.id = 'neko-floating-projects'; doc.body.appendChild(floatingRecords);
   const collapseNotice = own(el('p', 'neko-workspace-collapse-notice')); collapseNotice.setAttribute('role', 'status'); collapseNotice.hidden = true; doc.body.appendChild(collapseNotice);
   let collapsedComposer = null, collapseGeometry = '', collapseNoticeTimer = null;
   let floatingComposer = null, floatingGeometry = '', floatingState = '', floatingRecoveryPending = false, floatingInitialized = false;
+  let nativeRecordsOpen = false, nativeRecordsWidth = 480, nativeRecordsHeight = 360, nativeOpening = false, nativeRecordsOffset = 0;
+  function nativeRecordRows() { return (catalog?.sessions || []).filter(row => row && typeof row.id === 'string' && typeof row.title === 'string' && ['dsh','codex'].includes(row.provider)); }
+  const nativeRecordId = row => row.provider + ':' + row.id;
+
+
   const hasNativeComposerBridge = typeof bridge.nativeComposer === 'function' && typeof bridge.subscribeNativeComposer === 'function';
   function recoverFloatingComposer() {
-    if (disposed || floatingRecoveryPending || !doc.body.hasAttribute('data-neko-flex-workspace-collapsed')) return;
+    if (disposed || floatingRecoveryPending || !(doc.body.hasAttribute('data-neko-flex-workspace-collapsed') || doc.body.hasAttribute('data-neko-workspace-collapsed'))) return;
     floatingRecoveryPending = true;
     collapseNotice.textContent = '浮动输入暂不可用，已展开工作区'; collapseNotice.hidden = false;
     if (collapseNoticeTimer) win.clearTimeout(collapseNoticeTimer);
@@ -564,7 +577,9 @@ function installWorkspaceShell(options = {}) {
   function updateFloatingComposer(state, extra = {}) {
     if (!floatingInitialized || !hasNativeComposerBridge) return;
     const available = layout?.officeMode === 'dsh' && state?.available === true;
-    const next = { value:typeof state?.draft === 'string' ? state.draft.slice(0, 30000) : '', enabled:available, busy:state?.phase != null && state.phase !== 'plain', sessionToken:typeof state?.sessionId === 'string' ? state.sessionId : '', revision:Number.isSafeInteger(state?.revision) && state.revision >= 0 ? state.revision : 0, placeholder:available ? '发消息或创建任务…' : '请先打开可用的工作会话', status:state?.reason || state?.status || '', ...extra };
+    const allRecords = nativeRecordRows();
+    const records = allRecords.slice(nativeRecordsOffset,nativeRecordsOffset + 100).map(row => ({ id:nativeRecordId(row), title:row.title, project:row.cwd?.split(/[\\/]/).filter(Boolean).at(-1) || '未指定项目', enabled:row.provider === 'dsh' }));
+    const next = { records, recordsOpen:nativeRecordsOpen, recordsHasMore:nativeRecordsOffset + 100 < allRecords.length || catalog?.nextDshOffset != null, recordsLoading:listLoading, recordsStatus:listLoading ? '正在读取工作会话…' : catalogError || (!allRecords.length ? '暂无工作会话' : nativeRecordsOffset ? '显示较早记录；刷新可返回最新记录' : ''), value:typeof state?.draft === 'string' ? state.draft.slice(0, 30000) : '', enabled:available, busy:state?.phase != null && state.phase !== 'plain', sessionToken:typeof state?.sessionId === 'string' ? state.sessionId : '', revision:Number.isSafeInteger(state?.revision) && state.revision >= 0 ? state.revision : 0, placeholder:available ? '发消息或创建任务…' : '请先打开可用的工作会话', status:state?.reason || state?.status || '', ...extra };
     const key = JSON.stringify(next); if (key === floatingState && !Object.keys(extra).length) return;
     floatingState = key; floatingCall({action:'update',state:next});
   }
@@ -575,18 +590,39 @@ function installWorkspaceShell(options = {}) {
     try {
       const off = bridge.subscribeNativeComposer(event => {
         if (!floatingInitialized || !event || typeof event.type !== 'string') return;
-        if (event.type === 'expand') { if (doc.body.hasAttribute('data-neko-flex-workspace-collapsed')) doc.dispatchEvent(new win.Event('neko-workspace-expand')); return; }
+        if (event.type === 'expand') { if (doc.body.hasAttribute('data-neko-flex-workspace-collapsed') || doc.body.hasAttribute('data-neko-workspace-collapsed')) doc.dispatchEvent(new win.Event('neko-workspace-expand')); return; }
         if (event.type === 'files') {
           const sessionId = event.sessionToken;
           const current = floatingComposer?.snapshot();
-          if (!doc.body.hasAttribute('data-neko-flex-workspace-collapsed') || lobby?.isOpen() || !current?.available || current.sessionId !== sessionId || current.revision !== event.revision || nativeSelection()?.sessionId !== sessionId || !hasActiveDshSession()) { updateFloatingComposer(current, {status:'工作会话已变化，请展开工作区重试'}); return; }
+          if (!(doc.body.hasAttribute('data-neko-flex-workspace-collapsed') || doc.body.hasAttribute('data-neko-workspace-collapsed')) || lobby?.isOpen() || !current?.available || current.sessionId !== sessionId || current.revision !== event.revision || nativeSelection()?.sessionId !== sessionId || !hasActiveDshSession()) { updateFloatingComposer(current, {status:'工作会话已变化，请展开工作区重试'}); return; }
           doc.dispatchEvent(new win.Event('neko-workspace-expand'));
           const frame = win.requestAnimationFrame || (fn => win.setTimeout(fn, 16));
           frame(() => frame(() => {
-            if (disposed || lobby?.isOpen() || doc.body.hasAttribute('data-neko-flex-workspace-collapsed') || nativeSelection()?.sessionId !== sessionId || !hasActiveDshSession()) return;
+            if (disposed || lobby?.isOpen() || (doc.body.hasAttribute('data-neko-flex-workspace-collapsed') || doc.body.hasAttribute('data-neko-workspace-collapsed')) || nativeSelection()?.sessionId !== sessionId || !hasActiveDshSession()) return;
             try { if (typeof options.openDshFiles !== 'function') throw Error('missing file service'); options.openDshFiles(directoryButton, sessionId); }
             catch { collapseNotice.textContent = '项目目录暂不可用，请在工作区重试'; collapseNotice.hidden = false; if (collapseNoticeTimer) win.clearTimeout(collapseNoticeTimer); collapseNoticeTimer = win.setTimeout(() => { collapseNotice.hidden = true; }, 3500); }
           }));
+          return;
+        }
+        if (event.type === 'records-toggle') { nativeRecordsOpen = event.open === true; floatingGeometry = ''; updateFloatingComposer(floatingComposer?.snapshot()); schedule(); return; }
+        if (event.type === 'records-refresh') { void refreshCatalog(true, 0, { resetRecordsOnSuccess: true }); return; }
+        if (event.type === 'records-more') {
+          if (listLoading) return;
+          if (nativeRecordsOffset + 100 < nativeRecordRows().length) { nativeRecordsOffset += 100; updateFloatingComposer(floatingComposer?.snapshot()); }
+          else if (catalog?.nextDshOffset != null) { const nextOffset = catalog.nextDshOffset, advance = Math.min(nativeRecordsOffset + 100, nativeRecordRows().length); void refreshCatalog(true,nextOffset).then(() => { if (advance < nativeRecordRows().length) nativeRecordsOffset = advance; updateFloatingComposer(floatingComposer?.snapshot()); }); }
+          return;
+        }
+        if (event.type === 'records-resize') { nativeRecordsWidth = Math.max(280,Math.min(1100,nativeRecordsWidth + (event.dx || 0))); nativeRecordsHeight = Math.max(160,Math.min(950,nativeRecordsHeight + event.delta)); floatingGeometry = ''; schedule(); return; }
+        if (event.type === 'record-open') {
+          const current = floatingComposer?.snapshot(), row = nativeRecordRows().find(item => nativeRecordId(item) === event.id && item.provider === 'dsh');
+          // A revision changed after the child request or an existing draft is
+          // present: refuse the switch until the user has handled that draft.
+          const selection = nativeSelection();
+          const unbound = !!selection && !current?.sessionId && !selection.sessionId && event.sessionToken === '' && event.revision === 0;
+          const sameCleanSession = current?.available && current.sessionId === event.sessionToken && current.revision === event.revision && !current.draft && current.phase === 'plain';
+          if (lobby?.isOpen() || nativeOpening || !row || !(unbound || sameCleanSession) || typeof options.openDshSession !== 'function') { const status = !selection ? '工作会话状态暂不可读取，请展开工作区重试' : current?.draft ? '请先处理当前草稿，再切换工作会话' : '工作会话状态已变化或暂不可用，请检查后重试'; updateFloatingComposer(current, {settledRecordOpenId:event.openId,status}); return; }
+          nativeOpening = true;
+          Promise.resolve(openSession(row, { preserveSocial:true })).then(opened => { updateFloatingComposer(floatingComposer?.snapshot(), {settledRecordOpenId:event.openId}); if (!opened) return; nativeRecordsOpen = false; closeStartup(); doc.dispatchEvent(new win.Event('neko-workspace-expand')); }).catch(() => updateFloatingComposer(floatingComposer?.snapshot(), {settledRecordOpenId:event.openId,status:'会话未能打开，请重试'})).finally(() => { nativeOpening = false; schedule(); });
           return;
         }
         if (event.type === 'unavailable') { recoverFloatingComposer(); return; }
@@ -607,19 +643,31 @@ function installWorkspaceShell(options = {}) {
       if (typeof off === 'function') releases.push(off);
     } catch { /* Missing bridge is handled as unavailable. */ }
   }
+  function floatingBounds() {
+    const flex = doc.body.hasAttribute('data-neko-flex-workspace-collapsed');
+    if (!flex && !doc.body.hasAttribute('data-neko-workspace-collapsed')) return null;
+    const style = doc.body.style;
+    const right = flex ? parseFloat(style.getPropertyValue('--neko-flex-compact-right')) || 0 : 16;
+    const bottom = flex ? parseFloat(style.getPropertyValue('--neko-flex-compact-bottom')) || 0 : 16;
+    // Keep a usable strip for main-agent chat alongside the floating work area.
+    const limitWidth = Math.max(0, Math.min(win.innerWidth-right-240, flex ? parseFloat(style.getPropertyValue('--neko-flex-compact-width')) || 0 : win.innerWidth));
+    const width = Math.min(nativeRecordsOpen ? nativeRecordsWidth : 480, limitWidth);
+    const height = nativeRecordsOpen ? Math.min(nativeRecordsHeight,Math.max(76,win.innerHeight-bottom-32)) : 76;
+    return width >= 100 ? {x:Math.max(0,Math.round(win.innerWidth-right-width)),y:Math.max(0,Math.round(win.innerHeight-bottom-height)),width:Math.round(width),height:Math.round(height)} : null;
+  }
   function syncFloatingComposer() {
     const flex = doc.body.hasAttribute('data-neko-flex-workspace-collapsed');
-    if (!flex || lobby?.isOpen()) { if (floatingGeometry) floatingCall({action:'remove'}); floatingGeometry = ''; floatingState = ''; floatingRecoveryPending = false; return; }
-    if (!hasNativeComposerBridge) { recoverFloatingComposer(); return; }
-    const style = doc.body.style;
-    const width = Math.min(480, parseFloat(style.getPropertyValue('--neko-flex-compact-width')) || 0);
-    const right = parseFloat(style.getPropertyValue('--neko-flex-compact-right')) || 0;
-    const bottom = parseFloat(style.getPropertyValue('--neko-flex-compact-bottom')) || 0;
-    if (width >= 100) {
-      const rect = {x:Math.max(0,Math.round(win.innerWidth-right-width)),y:Math.max(0,Math.round(win.innerHeight-bottom-76)),width:Math.round(width),height:76};
-      const key = JSON.stringify(rect); if (key !== floatingGeometry) { floatingInitialized = true; floatingGeometry = key; floatingCall({action:'place',rect}); }
-      updateFloatingComposer(floatingComposer?.snapshot());
+    const collapsed = doc.body.hasAttribute('data-neko-workspace-collapsed');
+    if ((!flex && !collapsed) || lobby?.isOpen()) { if (floatingGeometry) floatingCall({action:'remove'}); floatingGeometry = ''; floatingState = ''; floatingRecoveryPending = false; return; }
+    if (!hasNativeComposerBridge) { if (flex) recoverFloatingComposer(); return; }
+    const rect = floatingBounds();
+    if (!rect) {
+      if (floatingGeometry) floatingCall({action:'remove'});
+      floatingGeometry = ''; floatingState = '';
+      recoverFloatingComposer(); return;
     }
+    const key = JSON.stringify(rect); if (key !== floatingGeometry) { floatingInitialized = true; floatingGeometry = key; floatingCall({action:'place',rect}); }
+    updateFloatingComposer(floatingComposer?.snapshot());
   }
   const collapseResize = win.ResizeObserver ? new win.ResizeObserver(() => schedule()) : null;
   function notifyCollapseGeometry() {
@@ -629,12 +677,12 @@ function installWorkspaceShell(options = {}) {
   }
   function clearCollapsedComposer() {
     if (collapsedComposer) { collapseResize?.unobserve(collapsedComposer); collapsedComposer.removeAttribute('data-neko-collapsed-composer'); collapsedComposer = null; }
-    expandWorkspace.hidden = true; notifyCollapseGeometry();
+    expandWorkspace.hidden = true; floatingRecords.hidden = true; notifyCollapseGeometry();
   }
   function syncCollapsedComposer() {
     const flexCollapsed = doc.body.hasAttribute('data-neko-flex-workspace-collapsed');
     syncFloatingComposer();
-    if (flexCollapsed) { clearCollapsedComposer(); return; }
+    if (flexCollapsed || (doc.body.hasAttribute('data-neko-workspace-collapsed') && hasNativeComposerBridge)) { clearCollapsedComposer(); return; }
     if (!doc.body.hasAttribute('data-neko-workspace-collapsed') && !flexCollapsed) { clearCollapsedComposer(); return; }
     if (!layout) return;
     const center = doc.querySelector(flexCollapsed ? '[data-neko-flex-coding]' : '[data-neko-chat-center]');
@@ -648,10 +696,12 @@ function installWorkspaceShell(options = {}) {
       doc.dispatchEvent(new win.Event('neko-workspace-expand')); return;
     }
     if (next !== collapsedComposer) { clearCollapsedComposer(); collapsedComposer = next; next.setAttribute('data-neko-collapsed-composer', ''); collapseResize?.observe(next); }
-    expandWorkspace.hidden = false;
+    expandWorkspace.hidden = false; floatingRecords.hidden = false;
+    floatingRecords.setAttribute('aria-expanded', String(floatingRecordsOpen));
     const r = next.getBoundingClientRect();
     const top = Math.max(12, Math.round(r.top - 42));
     if (expandWorkspace.style.top !== `${top}px`) expandWorkspace.style.top = `${top}px`;
+    if (floatingRecords.style.top !== `${top}px`) floatingRecords.style.top = `${top}px`;
     notifyCollapseGeometry();
   }
   const modalCard = el('section', 'neko-workspace-modal__card'), modalHeader = el('header'), modalTitle = el('h2');
@@ -763,12 +813,16 @@ function installWorkspaceShell(options = {}) {
     listStatus.textContent = notices.join(' · ');
     renderStartup();
   }
-  async function refreshCatalog(force = false, dshOffset = 0) {
+  async function refreshCatalog(force = false, dshOffset = 0, { resetRecordsOnSuccess = false } = {}) {
     if (disposed || listLoading) return;
-    listLoading = true; catalogError = ''; renderCatalog();
-    try { const next = await call({ action: 'catalog', force, dshOffset }); if (!disposed) catalog = next; }
+    // The native catalog replaces its accumulated pages when refreshed from
+    // offset zero. Do not invalidate a history page while it is being viewed.
+    if (!dshOffset && nativeRecordsOffset > 0 && nativeRecordsOpen && !resetRecordsOnSuccess) return;
+    const resetRecords = !dshOffset && nativeRecordsOffset > 0;
+    listLoading = true; catalogError = ''; renderCatalog(); updateFloatingComposer(floatingComposer?.snapshot());
+    try { const next = await call({ action: 'catalog', force, dshOffset }); if (!disposed) { catalog = next; if (resetRecords) nativeRecordsOffset = 0; } }
     catch (error) { catalogError = '工作会话读取失败，请刷新重试'; showError(error); }
-    finally { listLoading = false; if (!disposed) renderCatalog(); }
+    finally { listLoading = false; if (!disposed) { renderCatalog(); updateFloatingComposer(floatingComposer?.snapshot()); } }
   }
   function sessionPatch(row) {
     // Keep the selected sidebar agent compatible with the chosen session.
@@ -789,9 +843,9 @@ function installWorkspaceShell(options = {}) {
     } else if (group.provider === 'codex') { selectedProject = group.cwd; newOffice(); }
     else throw Error('不支持的工作平台');
   }
-  async function openSession(row) {
+  async function openSession(row, { preserveSocial = false } = {}) {
     if (row.provider === 'codex' && codexPaused()) { showError(Error('Codex 测试中，暂不可用')); return false; }
-    leaveViews(); closeSettings();
+    if (!preserveSocial) leaveViews(); closeSettings();
     const patch = sessionPatch(row);
     if (row.provider === 'dsh') {
       if (!await saveLayout(patch)) throw Error('无法切换 DSH 工作界面，请重试');
@@ -903,7 +957,6 @@ function installWorkspaceShell(options = {}) {
         modalBody.appendChild(palette);
         modalBody.append(el('h3', '', '常用设置'));
         const common = el('div', 'neko-workspace-common');
-        common.append(button('界面布局', 'neko-workspace-setting-link', () => { closeSettings(); doc.dispatchEvent(new win.CustomEvent('neko-unified-open-config', {detail:{returnFocus:settingsButton}})); }));
         common.append(button('主 agent 聊天设置', 'neko-workspace-setting-link', () => { closeSettings(); Promise.resolve(bridge.action('chat-settings')).catch(showError); }), button('账号、隐私 / 高级设置', 'neko-workspace-setting-link', () => { closeSettings(); options.openNativeSettings?.(); }));
         modalBody.appendChild(common);
         const more = el('details', 'neko-workspace-more-settings'); const summary = el('summary', '', '更多工具与连接'); more.appendChild(summary);
@@ -992,7 +1045,9 @@ function installWorkspaceShell(options = {}) {
     if (expanded) {
       const accountRect = account.getBoundingClientRect();
       const bottom = accountRect.height > 0 && accountRect.top > 60 ? accountRect.top : win.innerHeight;
-      const geometry = { '--neko-companion-left': `${Math.round(left)}px`, '--neko-companion-width': `${Math.max(0, Math.floor(right - left))}px`, '--neko-companion-bottom': `${Math.max(0, Math.round(win.innerHeight - bottom))}px` };
+      const floating = hasNativeComposerBridge ? floatingBounds() : null;
+      const safeRight = floating ? Math.min(right, floating.x - 12) : right;
+      const geometry = { '--neko-companion-left': `${Math.round(left)}px`, '--neko-companion-width': `${Math.max(0, Math.floor(safeRight - left))}px`, '--neko-companion-bottom': `${Math.max(0, Math.round(win.innerHeight - bottom))}px` };
       for (const [name, value] of Object.entries(geometry)) if (doc.body.style.getPropertyValue(name) !== value) doc.body.style.setProperty(name, value);
       if (!dock.hasAttribute('data-neko-companion-expanded')) dock.setAttribute('data-neko-companion-expanded', '');
       if (dock.parentNode !== doc.body) { dockIntersecting = null; doc.body.appendChild(dock); }
@@ -1056,8 +1111,17 @@ function installWorkspaceShell(options = {}) {
       const py = unified && codeVisible ? Math.max(56, Math.ceil(codeRect.top)) : 56;
       const pw = unified && codeVisible ? Math.floor(codeRect.width) : Math.max(0, win.innerWidth - x);
       const ph = unified && codeVisible ? Math.max(0, Math.min(bottom, Math.floor(codeRect.bottom)) - py) : Math.max(0, bottom - 56);
-      startup.hidden = !startupOpen || !!lobby?.isOpen() || doc.body.hasAttribute('data-neko-workspace-collapsed') || doc.body.hasAttribute('data-neko-flex-workspace-collapsed') || (unified && !codeVisible);
-      Object.assign(startup.style, { left: px + 'px', top: py + 'px', width: pw + 'px', height: ph + 'px' });
+      const floatRecords = doc.body.hasAttribute('data-neko-workspace-collapsed');
+      startup.toggleAttribute('data-neko-floating-records', floatRecords);
+      if (floatRecords) {
+        startup.hidden = !floatingRecordsOpen || !!lobby?.isOpen();
+        Object.assign(startup.style, { left: 'auto', top: 'auto', right: '16px', bottom: '120px' });
+        if (!startup.dataset.nekoFloatingSized) { startup.style.width = 'min(480px, calc(100vw - 96px))'; startup.style.height = 'min(520px, calc(100vh - 160px))'; startup.dataset.nekoFloatingSized = ''; }
+      } else {
+        floatingRecordsOpen = false; startup.removeAttribute('data-neko-floating-sized'); startup.style.right = ''; startup.style.bottom = '';
+        startup.hidden = !startupOpen || !!lobby?.isOpen() || doc.body.hasAttribute('data-neko-flex-workspace-collapsed') || (unified && !codeVisible);
+        Object.assign(startup.style, { left: px + 'px', top: py + 'px', width: pw + 'px', height: ph + 'px' });
+      }
       // Position above the composer so the native send/model controls retain
       // their hit targets, and follow the actual coding pane during resizing.
       const visible = !lobby?.isOpen() && !doc.body.hasAttribute('data-neko-workspace-collapsed') && !doc.body.hasAttribute('data-neko-flex-workspace-collapsed') && (!unified || codeVisible) && pw >= 100 && ph >= 100;

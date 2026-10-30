@@ -24,11 +24,11 @@ function pointer(w, target, type, x) {
   const e = new w.MouseEvent(type,{bubbles:true,button:0,clientX:x}); Object.defineProperty(e,'pointerId',{value:8}); target.dispatchEvent(e);
 }
 
-test('chatroom starts 3:1, drags widely, retains its session ratio and keeps coding draft', {skip:!JSDOM}, async t => {
+test('chatroom starts collapsed, drags widely, retains its session ratio and keeps coding draft', {skip:!JSDOM}, async t => {
   const f = fixture(t); f.d.body.setAttribute('data-neko-chatroom-active',''); await tick(f.w);
   const handle = f.d.querySelector('.neko-chat-sidebar-divider'); assert(!handle.hidden);
-  assert.equal(f.frame.style.getPropertyValue('--neko-chat-sidebar-grid'), '750px minmax(0px, 1fr) 0px');
-  assert.equal(handle.getAttribute('aria-valuenow'),'75');
+  assert.equal(f.frame.style.getPropertyValue('--neko-chat-sidebar-grid'), '1000px minmax(0px, 1fr) 0px');
+  assert.equal(handle.getAttribute('aria-valuenow'),'100');
   assert(f.center.hasAttribute('data-neko-chat-center'));
   pointer(f.w,handle,'pointerdown',814); pointer(f.w,handle,'pointermove',264); await tick(f.w);
   assert.equal(f.frame.style.getPropertyValue('--neko-chat-sidebar-grid'), '200px minmax(0px, 1fr) 0px');
@@ -40,7 +40,7 @@ test('chatroom starts 3:1, drags widely, retains its session ratio and keeps cod
   f.d.body.setAttribute('data-neko-chatroom-active',''); await tick(f.w); assert.equal(handle.getAttribute('aria-valuenow'),'20');
   f.cleanup(); assert(!f.d.querySelector('.neko-chat-sidebar-divider'));
   const again=f.w.install({document:f.d,window:f.w,bridge:{action:async()=>{}},openBilibiliHome:async()=>{}}); await tick(f.w);
-  assert.equal(f.d.querySelector('.neko-chat-sidebar-divider').getAttribute('aria-valuenow'),'75','a fresh workbench uses the requested 3:1 default'); again();
+  assert.equal(f.d.querySelector('.neko-chat-sidebar-divider').getAttribute('aria-valuenow'),'100','a fresh workbench starts with the work area collapsed'); again();
 });
 
 test('width adapts on resize, keyboard and reset, and cancelled drags do not persist', {skip:!JSDOM}, async t => {
@@ -87,4 +87,12 @@ test('community and B站 retain the left width when replacing the chatroom', {sk
   f.d.body.removeAttribute('data-neko-chatroom-active'); await tick(f.w);
   assert(h.hidden); assert(!f.frame.hasAttribute('data-neko-chat-sidebar-grid'));
   assert.equal(f.d.querySelector('textarea').value,'unsent draft'); f.cleanup();
+});
+
+test('default collapse survives temporary geometry loss and social navigation', {skip:!JSDOM}, async t => {
+  const f=fixture(t);f.d.body.setAttribute('data-neko-chatroom-active','');await tick(f.w);assert(f.d.body.hasAttribute('data-neko-workspace-collapsed'));
+  f.d.body.removeAttribute('data-neko-chatroom-active');await tick(f.w);assert(!f.d.body.hasAttribute('data-neko-workspace-collapsed'));
+  f.d.body.setAttribute('data-neko-side-social-active','community');await tick(f.w);assert(f.d.body.hasAttribute('data-neko-workspace-collapsed'));
+  f.d.dispatchEvent(new f.w.Event('neko-workspace-expand'));await tick(f.w);assert(!f.d.body.hasAttribute('data-neko-workspace-collapsed'));
+  f.d.body.removeAttribute('data-neko-side-social-active');await tick(f.w);f.d.body.setAttribute('data-neko-chatroom-active','');await tick(f.w);assert(!f.d.body.hasAttribute('data-neko-workspace-collapsed'));assert.equal(f.d.querySelector('.neko-chat-sidebar-divider').getAttribute('aria-valuenow'),'75');f.cleanup();
 });

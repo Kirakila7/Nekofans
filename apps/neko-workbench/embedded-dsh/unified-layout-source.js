@@ -3,12 +3,15 @@
 function installUnifiedLayout(options = {}) {
   const doc = options.document || document, win = options.window || window;
   const bridge = options.bridge || win.nekoWorkbench;
-  if (!doc?.body || typeof bridge?.workspace !== 'function' || typeof bridge?.community !== 'function' || doc.querySelector('[data-neko-unified-config]')) return () => {};
+  if (!doc?.body || typeof bridge?.workspace !== 'function' || typeof bridge?.community !== 'function' || doc.querySelector('[data-neko-unified-style]')) return () => {};
   const rail = doc.querySelector('[data-neko-side-rail]');
   if (!rail) return () => {};
   const el = (tag, cls, text) => { const n = doc.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; };
   const button = (label, cls, fn) => { const b = el('button', cls, label); b.type = 'button'; if (fn) b.addEventListener('click', fn); return b; };
   const style = el('style'); style.dataset.nekoUnifiedStyle = ''; style.textContent = options.cssText || ''; doc.head.appendChild(style);
+  // Keep the legacy multi-pane engine for compatibility, but do not expose it
+  // in the daily UI while the compact floating work area is in use.
+  const allowLegacyMultiPane = options.allowLegacyMultiPane === true;
   const SLOT_NAMES = { side: '侧栏', left: '左面板', right: '右面板' };
   const MIN_RATIO = 0.25, MAX_RATIO = 0.75;
   const clampRatio = value => Math.max(MIN_RATIO, Math.min(MAX_RATIO, Number.isFinite(value) ? value : 0.5));
@@ -21,7 +24,7 @@ function installUnifiedLayout(options = {}) {
   trigger.title = '配置界面布局'; trigger.setAttribute('aria-label', '配置界面布局'); trigger.setAttribute('aria-expanded', 'false');
   trigger.setAttribute('aria-haspopup', 'dialog'); trigger.setAttribute('aria-controls', 'neko-unified-config');
   const container = doc.querySelector('.neko-workspace-rail-controls') || rail;
-  container.appendChild(trigger);
+  if (allowLegacyMultiPane) container.appendChild(trigger);
   let configReturnFocus = trigger;
   const config = el('section', 'neko-unified-config'); config.dataset.nekoUnifiedConfig = ''; config.hidden = true; config.id = 'neko-unified-config';
   config.setAttribute('role', 'dialog'); config.setAttribute('aria-labelledby', 'neko-unified-config-title'); config.setAttribute('aria-describedby', 'neko-unified-config-help');
@@ -64,7 +67,7 @@ function installUnifiedLayout(options = {}) {
   const flexClose = button('退出三面板', 'toggle', () => void update({ ...layout, enabled:false, flex:{...layout.flex, enabled:false} }));
   flexControls.append(el('strong', '', '三面板布局'), flexPresets, el('p', 'flex-hint', '选择预设并用下方选项交换区域。拖动分隔线调整大小。'), flexSlots, flexClose);
   config.append(close, title, explanation, summary, flexControls, toggle, restore, el('strong', '', '显示区域'), targets, el('strong', '', '显示内容'), contents, hint, swap, info);
-  doc.body.appendChild(config);
+  if (allowLegacyMultiPane) doc.body.appendChild(config);
   // Escape closes the dialog from anywhere, but only returns focus to ▤ when
   // focus was inside the dialog (or nowhere); a focused DSH input keeps it.
   function escapeConfig(event) {
@@ -311,7 +314,7 @@ function installUnifiedLayout(options = {}) {
   }
   function focusFirst() { (targetButtons[target] || close).focus?.(); }
   async function setConfig(open, returnFocus = false) {
-    if (disposed || config.hidden === !open) return;
+    if (!allowLegacyMultiPane || disposed || config.hidden === !open) return;
     config.hidden = !open; suspended = open && layout.enabled; renderConfig();
     if (open) { info.textContent = ''; clearNotice(); focusFirst(); }
     else if (returnFocus) {
@@ -330,6 +333,7 @@ function installUnifiedLayout(options = {}) {
   function clean(next) { return { enabled: !!next.enabled, side: next.side, left: next.left, right: next.right, ratio: next.ratio, ...(next.flex ? { flex: { ...next.flex, slots: [...next.flex.slots] } } : {}) }; }
   let confirmed = null;
   function applySaved(saved) {
+    if (!allowLegacyMultiPane) saved = { enabled:false, side:'workspace', left:null, right:'coding', ratio:clampRatio(saved?.ratio) };
     const enabling = !layout.enabled && saved.enabled;
     layout = clean(saved); confirmed = { ...layout }; renderConfig();
     if (enabling) options.hideLegacy?.();
@@ -340,6 +344,7 @@ function installUnifiedLayout(options = {}) {
     suspended = !config.hidden && layout.enabled; schedule();
   }
   async function update(next, raise = false) {
+    if (!allowLegacyMultiPane) return;
     const ticket = ++revision;
     try {
       const saved = await bridge.workspace({ action: 'set-pane-layout', layout: clean(next) });
@@ -872,7 +877,7 @@ function installUnifiedLayout(options = {}) {
     // Keep the durable layout intact. Each newly opened workbench starts with
     // the chatroom sidebar and one coding area; restoration is a user action.
     const previous = clean(saved);
-    startupSaved = previous.enabled ? previous : null;
+    startupSaved = allowLegacyMultiPane && previous.enabled ? previous : null;
     layout = confirmed = { enabled:false, side:'workspace', left:null, right:'coding', ratio:previous.ratio };
     renderConfig();
     observe(); schedule();

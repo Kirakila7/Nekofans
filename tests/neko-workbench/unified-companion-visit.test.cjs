@@ -22,7 +22,7 @@ function fixture(t, initial) {
     subscribeCommunity: fn => { listener = fn; return () => { listener = null; }; },
   };
   w.eval(source + '\nwindow.startUnified=installUnifiedLayout;');
-  const cleanup = w.startUnified({document:d,window:w,bridge,hideLegacy:()=>legacyClosed++,cssText:''});
+  const cleanup = w.startUnified({document:d,window:w,bridge,hideLegacy:()=>legacyClosed++,cssText:'',allowLegacyMultiPane:true});
   return {w,d,calls,cleanup,get saved(){return saved},get legacyClosed(){return legacyClosed},get listener(){return listener}};
 }
 function visit(f) {

@@ -9,7 +9,7 @@ const path = require('node:path');
 let JSDOM; try { ({ JSDOM } = require(path.join(process.env.NEKO_DOM_DEPS || '/private/tmp/neko-sidebar-dom-20261026', 'node_modules/jsdom'))); } catch {}
 const tick = () => new Promise(resolve => setTimeout(resolve, 45));
 const source = fs.readFileSync(path.join(__dirname, '../../apps/neko-workbench/embedded-dsh/unified-layout-source.js'), 'utf8');
-function fixture(t, initial = {}, { width = 800, failSave = false, videoPlatform = 'bilibili', videoPlatformRequest = null } = {}) {
+function fixture(t, initial = {}, { width = 800, failSave = false, videoPlatform = 'bilibili', videoPlatformRequest = null, allowLegacyMultiPane = true } = {}) {
   const dom = new JSDOM(`<body><aside data-neko-side-rail><div class="neko-workspace-rail-controls"></div><button class="neko-community-yui">社区</button><button class="neko-side-rail__bilibili">B站</button></aside><div id="frame" style="display:grid;grid-template-columns:220px ${width}px 0px"><div><aside data-slot="sidebar"><section class="neko-companion-dock"><textarea>pet draft</textarea></section><div data-slot="settings.launcher"></div></aside></div><div class="some_centerCol_HASH_42"><textarea id="draft">coding draft</textarea></div><div></div></div></body>`, { runScripts:'outside-only', pretendToBeVisual:true });
   t.after(() => dom.window.close());
   const w = dom.window, d = w.document;
@@ -24,15 +24,33 @@ function fixture(t, initial = {}, { width = 800, failSave = false, videoPlatform
     subscribeCommunity: fn => { listener = fn; return () => { listener = null; }; },
   };
   w.eval(source + '\nwindow.startUnified=installUnifiedLayout;');
-  const cleanup = w.startUnified({ document:d, window:w, bridge, hideLegacy:() => {}, cssText:'' });
+  const cleanup = w.startUnified({ document:d, window:w, bridge, hideLegacy:() => {}, cssText:'', allowLegacyMultiPane });
   // These controls tests exercise the persisted multi-pane configuration after
   // the user explicitly restores it; startup itself now shows two areas.
-  if (saved.enabled) w.setTimeout(() => [...d.querySelectorAll('.neko-unified-config button')].find(b => b.textContent === '恢复上次多栏布局')?.click(), 0);
+  if (allowLegacyMultiPane && saved.enabled) w.setTimeout(() => [...d.querySelectorAll('.neko-unified-config button')].find(b => b.textContent === '恢复上次多栏布局')?.click(), 0);
   return { w, d, calls, bridge, cleanup, get saved() { return saved; }, get listener() { return listener; }, setFail(v) { fail = v; } };
 }
 const q = (f, s) => f.d.querySelector(s);
 const key = (f, node, k, extra = {}) => node.dispatchEvent(new f.w.KeyboardEvent('keydown', { key:k, bubbles:true, cancelable:true, ...extra }));
 const two = { enabled:true, side:'workspace', left:'coding', right:'community', ratio:0.5 };
+
+test('production temporarily disables every multi-pane entry without rewriting old saved layouts', { skip:!JSDOM }, async t => {
+  const old = { enabled:true, side:'workspace', left:'community', right:'coding', ratio:.6, flex:{enabled:true,rootAxis:'x',stackAxis:'y',rootRatio:.6,stackRatio:.5,slots:['social','bilibili','coding']} };
+  const f = fixture(t, old, {allowLegacyMultiPane:false}); await tick(); await tick();
+  assert.equal(q(f,'.neko-layout-entry'), null);
+  assert.equal(q(f,'.neko-layout-presets'), null);
+  assert.equal(q(f,'.neko-unified-config'), null);
+  const secondCleanup = f.w.startUnified({document:f.d,window:f.w,bridge:f.bridge});
+  assert.equal(f.d.querySelectorAll('[data-neko-unified-style]').length, 1, 'reinstall cannot duplicate the production controller');
+  secondCleanup();
+  assert.equal(f.d.body.hasAttribute('data-neko-flex-mode'), false);
+  assert.equal(f.d.body.hasAttribute('data-neko-unified-enabled'), false);
+  f.d.dispatchEvent(new f.w.CustomEvent('neko-unified-open-config')); await tick();
+  assert.equal(q(f,'.neko-unified-config'), null, 'external settings cannot restore old layouts');
+  assert.equal(f.calls.filter(c=>c.action==='set-pane-layout').length,0,'startup does not overwrite saved layouts');
+  assert.equal(f.saved.flex.enabled,true); assert.equal(q(f,'#draft').value,'coding draft');
+  assert.equal(q(f,'.neko-companion-dock textarea').value,'pet draft'); f.cleanup();
+});
 
 test('three-pane video entry switches B站 and YouTube in one slot, preserves other regions and opens the entered video', { skip:!JSDOM }, async t => {
   const f=fixture(t); let social=null;
