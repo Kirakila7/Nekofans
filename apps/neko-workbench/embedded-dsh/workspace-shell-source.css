@@ -69,7 +69,7 @@ body[data-neko-workspace-shell] .neko-chatroom-preview { position:fixed; z-index
 .neko-workspace-project__heading { display:flex; align-items:center; min-width:0; gap:4px; }
 .neko-workspace-project__name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; flex:1; text-align:left; padding:4px 3px; font-weight:600 !important; }
 .neko-workspace-project__provider { color:var(--nws-muted); font-size:9px; padding-right:3px; }
-.neko-workspace-session { display:block; width:100%; text-align:left; padding:6px 8px 6px 15px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.neko-workspace-session { display:block; box-sizing:border-box; width:100%; min-width:0; text-align:left; padding:6px 8px 6px 15px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .neko-workspace-session[data-selected="true"] { background:var(--nws-hover); border-radius:6px; }
 .neko-workspace-more { width:100%; padding:8px; }
 .neko-companion-dock { position:relative; display:grid; grid-template-columns:minmax(0,1fr); flex:none; min-width:0; width:auto; box-sizing:border-box; margin:0 12px 7px; padding:0; border:0; color:var(--nws-text); background:transparent; font:12px/1.5 system-ui,sans-serif; }
@@ -336,20 +336,26 @@ body[data-neko-workspace-shell] [data-neko-companion-footer] { display:block !im
 .neko-startup__status { min-height:1.5em; color:var(--nws-muted); font-size:12px; margin:0 0 10px; }
 .neko-startup__projects { display:grid; gap:12px; }
 .neko-startup__project { border:1px solid var(--nws-border); border-radius:12px; background:color-mix(in srgb,var(--nws-bg) 72%,transparent); overflow:hidden; }
-.neko-startup__project-row { display:flex; align-items:center; }
+.neko-startup__project-row { display:flex; align-items:center; min-width:0; }
 .neko-startup__project-header { display:flex; flex:1; min-width:0; justify-content:space-between; gap:12px; border:0; background:transparent; text-align:left; padding:11px 15px; }
-.neko-startup__project-header strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.neko-startup__provider { color:var(--nws-muted); font-size:11px; }
+.neko-startup__project-header strong { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.neko-startup__provider { flex:none; color:var(--nws-muted); font-size:11px; }
 .neko-startup__project-new { flex:none; border:1px solid var(--nws-border); border-radius:7px; background:transparent; margin:0 10px; padding:5px 8px; font-size:12px !important; }
-.neko-startup__session { display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%; border:0; border-top:1px solid color-mix(in srgb,var(--nws-border) 70%,transparent); background:transparent; text-align:left; padding:10px 15px; }
-.neko-startup__session span:first-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.neko-startup__arrow { color:var(--nws-muted); font-size:20px; line-height:1; }
+.neko-startup__session { display:flex; box-sizing:border-box; align-items:center; justify-content:space-between; gap:10px; width:100%; min-width:0; border:0; border-top:1px solid color-mix(in srgb,var(--nws-border) 70%,transparent); background:transparent; text-align:left; padding:10px 15px; }
+.neko-startup__session span:first-child { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.neko-startup__arrow { flex:none; color:var(--nws-muted); font-size:20px; line-height:1; }
 .neko-startup button:hover:not(:disabled) { background:var(--nws-hover); }
+.neko-startup button:active:not(:disabled) { background:var(--dsw-alias-interactive-bg-active,#d0e5ef); }
 .neko-startup button:disabled { opacity:.5; cursor:not-allowed; }
 .neko-startup button:focus-visible,.neko-startup input:focus-visible { outline:2px solid #4c89ad; outline-offset:2px; }
+.neko-startup__project button:focus-visible { outline-offset:-2px; }
 .neko-startup__more { justify-self:start; font-size:12px !important; }
 @media(max-width:620px) { .neko-startup__header { flex-wrap:wrap; } .neko-startup__inner { padding:20px; } }
 /* The chooser lives inside a resizable work column, independent of the window. */
+@container (max-width:600px) {
+  .neko-startup__inner { padding:20px; }
+  .neko-startup__header { flex-wrap:wrap; }
+}
 @container (max-width:400px) {
   .neko-startup__inner { padding:16px 12px; }
   .neko-startup__header { flex-direction:column; align-items:flex-start; gap:10px; margin-bottom:16px; }
