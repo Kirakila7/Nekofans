@@ -39,7 +39,7 @@ function snapshot(over={}){
   outbox:[],catSettings:{mode:'assist'},cat:{},suggestion:null,nudge:null,error:'',...over};
 }
 
-function setup(t,{lobby=true,snap=snapshot(),respond,composer=true}={}){
+function setup(t,{lobby=true,snap=snapshot(),respond,composer=true,home=false}={}){
  const dom=new JSDOM('<body><aside data-neko-side-rail><div class="neko-side-rail__theme"></div></aside><div data-slot="sidebar"><button data-neko-new-session="plus">+</button><div data-neko-seat-mount></div><div data-slot="sidebar.workspaces">native</div><div data-slot="settings.launcher"></div></div><main><textarea>native draft</textarea></main></body>',{runScripts:'outside-only'});
  t.after(()=>dom.window.close());
  const {window:w}=dom,doc=w.document;doc.querySelector('[data-slot="sidebar"]').getBoundingClientRect=()=>({right:300});
@@ -54,8 +54,9 @@ function setup(t,{lobby=true,snap=snapshot(),respond,composer=true}={}){
   bridge.subscribeLobby=fn=>{lobbySub=fn;return()=>{lobbySub=null;};};
  }
  if(composer)w.eval(composerSource);
+ if(home)w.eval(fs.readFileSync(path.join(base,'embedded-dsh/chatroom-preview-source.js'),'utf8'));
  w.eval(source+'\nwindow.install=installWorkspaceShell');
- const cleanup=w.install({window:w,document:doc,bridge,cssText:css,avatar:id=>id==='bigfish'?'data:image/png;base64,iVBORw0KGgo=':'',
+ const cleanup=w.install({window:w,document:doc,bridge,cssText:css,mountHome:home ? async stage => {const mark=doc.createElement('span');mark.textContent='home fixture';stage.appendChild(mark);return ()=>{};} : undefined,avatar:id=>id==='bigfish'?'data:image/png;base64,iVBORw0KGgo=':'',
   hideSocial:()=>{calls.hideSocial++;community?.({status:'hidden'});},openCommunity:()=>{calls.community++;community?.({status:'ready'});}});
  t.after(()=>cleanup());
  return {w,doc,calls,cleanup,push:next=>{current=next;lobbySub?.(next);},get current(){return current;},setCurrent:v=>{current=v;}};
@@ -284,4 +285,14 @@ test('猫猫设置 shows the needs-Chat-API state and saves only changed fields;
  doc.querySelector('.neko-lobby-admin-open').click(); await tick(); assert(doc.querySelector('.neko-lobby-dialog[data-dialog="admin"]'));
  f.push(snapshot()); await tick();
  assert.equal(doc.querySelector('.neko-lobby-dialog'), null, 'the admin dialog closes when admin rights go away');
+});
+
+test('local home and lobby retain independent navigation and home stage',{skip:DOM_SKIP},async t=>{
+ const {doc}=setup(t,{home:true});await tick();
+ const home=doc.querySelector('button[aria-label*="我的小窝"]');assert(home);home.click();await tick();
+ const homeView=doc.querySelector('.neko-chatroom-preview__home-view'),stage=doc.querySelector('[data-neko-home-stage]');
+ assert(!homeView.hidden);assert.match(stage.textContent,/home fixture/);
+ const lobby=doc.querySelector('.neko-lobby-panel'),open=doc.querySelector('.neko-lobby-switch');open.click();await tick();
+ assert(!lobby.hidden,'opening lobby shows its own panel');assert.match(stage.textContent,/home fixture/,'home is not destroyed');
+ open.click();await tick();assert(lobby.hidden);assert(!homeView.hidden);assert.match(stage.textContent,/home fixture/);
 });

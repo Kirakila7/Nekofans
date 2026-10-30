@@ -187,13 +187,14 @@ test('chatroom opens in sidebar by default and workspace switch preserves footer
  const w=dom.window,d=w.document,sidebar=d.querySelector('[data-slot="sidebar"]'), footer=d.querySelector('#footer');
  sidebar.getBoundingClientRect=()=>({left:64,top:0,right:304,bottom:800,width:240,height:800});
  footer.getBoundingClientRect=()=>({left:64,top:640,right:304,bottom:800,width:240,height:160});
- const store=createWorkspaceLayout(path.join(temp(t),'layout.json')),events=[];
+ const store=createWorkspaceLayout(path.join(temp(t),'layout.json')),events=[],homeCalls=[];
  const bridge={action:async()=>({}),getState:async()=>({workspaceRoot:'/p',workspaceRevision:0,companion:{ready:true,messages:[]}}),companion:async()=>({}),workspace:async r=>{if(r.action==='state')return store.get();if(r.action==='codex-state')return {items:[],approvals:[]};if(r.action==='catalog')return {sessions:[],projects:[],providers:{}};return null;}};
  d.addEventListener('neko-chatroom-mode-change',()=>events.push(d.body.hasAttribute('data-neko-chatroom-active')));
  w.eval(fs.readFileSync(path.join(base,'embedded-dsh/chatroom-preview-source.js'),'utf8')+'\n'+fs.readFileSync(path.join(base,'embedded-dsh/workspace-shell-source.js'),'utf8')+'\nwindow.install=installWorkspaceShell');
- let communityCalls=0;const stop=w.install({window:w,document:d,bridge,avatar:()=>'',openCommunity:async()=>{communityCalls++;},cssText:fs.readFileSync(path.join(base,'embedded-dsh/workspace-shell-source.css'),'utf8'),locateSidebar:()=>({root:sidebar,slot:sidebar})});await tick();
+ let communityCalls=0;const stop=w.install({window:w,document:d,bridge,avatar:()=>'',mountHome:stage=>{homeCalls.push(stage);return ()=>homeCalls.push('release');},openCommunity:async()=>{communityCalls++;},cssText:fs.readFileSync(path.join(base,'embedded-dsh/workspace-shell-source.css'),'utf8'),locateSidebar:()=>({root:sidebar,slot:sidebar})});await tick();
  const preview=d.querySelector('[data-neko-chatroom-preview]'),dock=d.querySelector('.neko-companion-dock');
  assert(preview&&!preview.hidden);assert.equal(preview.style.left,'64px');assert.equal(preview.style.height,'640px');assert.match(preview.textContent,/聊天功能尚未开放/);
+ const home=preview.querySelector('button[aria-label*="我的小窝"]');assert(home);home.click();await tick();assert.equal(homeCalls[0],preview.querySelector('[data-neko-home-stage]'));assert.match(preview.textContent,/工作台本地存档 · 尚未同步/);assert(!preview.hidden);assert.equal(d.querySelector('.dsh_centerCol_x textarea').value,'工作草稿');preview.querySelector('.neko-chatroom-preview__home-back').click();
  assert(d.querySelector('[data-slot="sidebar.workspaces"]').hasAttribute('inert'));assert(!dock.hasAttribute('inert'));assert(!footer.hasAttribute('inert'));
  const nav=d.querySelector('nav[data-neko-tools]'),group=d.querySelector('#native-group'),picker=d.querySelector('.neko-startup');assert(group.hasAttribute('inert'));assert(!picker.hidden);
  d.querySelector('.neko-community-yui').click();await tick();assert.equal(communityCalls,1);assert(!picker.hidden,'community selection leaves the right-hand picker intact');
@@ -207,7 +208,7 @@ test('chatroom opens in sidebar by default and workspace switch preserves footer
  nav.setAttribute('data-neko-tools','folded');await tick();assert(group.hasAttribute('inert'),'folded native tools become inert behind the preview again');
  d.querySelector('.neko-room-workspace').click();await tick();assert(preview.hidden);assert(!d.querySelector('[data-slot="sidebar.workspaces"]').hasAttribute('inert'));assert.equal(d.querySelector('.dsh_centerCol_x textarea').value,'工作草稿');assert.deepEqual(events,[false]);
  d.querySelector('.neko-room-entry').click();await tick();assert(!preview.hidden);assert.deepEqual(events,[false,true]);
- stop();assert(!d.body.hasAttribute('data-neko-chatroom-active'));assert(!d.querySelector('[data-slot="sidebar.workspaces"]').hasAttribute('inert'));assert(!d.querySelector('[data-neko-chatroom-preview]'));
+ stop();assert.equal(homeCalls.at(-1),'release');assert(!d.body.hasAttribute('data-neko-chatroom-active'));assert(!d.querySelector('[data-slot="sidebar.workspaces"]').hasAttribute('inert'));assert(!d.querySelector('[data-neko-chatroom-preview]'));
 });
 test('workspace DOM keeps three configurable filters, all sessions reset, collapsible private chat and native UI restoration',{skip:!JSDOM},async t=>{
  const dom=new JSDOM('<body><aside data-neko-side-rail><div class="neko-side-rail__theme" aria-hidden="true"></div></aside><div data-slot="sidebar"><button data-neko-new-session="plus">+</button><div class="neko-mode-switch">工作区 休闲区</div><div data-neko-seat-mount></div><div data-slot="sidebar.workspaces">native sessions</div><div data-slot="settings.launcher"></div></div><main><textarea>native draft</textarea></main></body>',{runScripts:'outside-only'});t.after(()=>dom.window.close());
