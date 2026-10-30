@@ -173,6 +173,7 @@ test('lobby e2e against a running N.E.K.O.Chat (two synthetic subjects)', {
 
     await t.test('an assist suggestion produces no lobby message until A confirms it', async () => {
       const fromA = a.events.mark(), fromB = b.events.mark(), seqB = b.client.snapshot().lastEventSeq;
+      const seenB = new Set(b.client.snapshot().messages.map(m => m.id));   // a reused dev database keeps earlier runs' messages
       const result = await a.lobbyCat.requestSuggestion({ targetMessageId: null, instruction: '' });
       assert.equal(result.text, SUGGESTION);
       assert.equal(a.lobbyCat.snapshot().suggestion.state, 'ready');
@@ -182,7 +183,7 @@ test('lobby e2e against a running N.E.K.O.Chat (two synthetic subjects)', {
       assert.deepEqual(a.events.since(fromA, 'ack'), []);
       assert.equal(a.client.snapshot().outbox.length, 0);
       assert.equal(b.client.snapshot().lastEventSeq, seqB);
-      assert.ok(!b.client.snapshot().messages.some(m => m.text === SUGGESTION));
+      assert.ok(!b.client.snapshot().messages.some(m => !seenB.has(m.id) && m.text === SUGGESTION));
       a.lobbyCat.discardSuggestion();
     });
 
