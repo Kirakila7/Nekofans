@@ -328,7 +328,8 @@ test('same-axis extreme ratios retain visible video and accommodate the chat foo
   const footer=f.d.createElement('div'); footer.setAttribute('data-neko-companion-footer',''); footer.getBoundingClientRect=()=>({height:260}); f.d.body.appendChild(footer);
   q(f,'.neko-layout-entry').click(); await tick();
   [...f.d.querySelectorAll('.neko-flex-config button')].find(b=>b.textContent==='上下排列').click(); await tick(); q(f,'.neko-unified-config .close').click(); await tick(); await tick();
-  key(f,q(f,'.neko-unified-divider'),'Home'); key(f,q(f,'.neko-flex-divider'),'End'); await tick(); await tick();
+  key(f,q(f,'.neko-unified-divider'),'Home'); await tick(); await tick();
+  for (let i=0; i<8; i++) { key(f,q(f,'.neko-flex-divider'),'ArrowDown',{shiftKey:true}); await tick(); }
   assert(social.height>=340, 'chat room leaves space for its current footer plus content');
   const video=f.calls.filter(c=>['open','layout'].includes(c.action)&&c.site==='bilibili'||c.action==='layout'&&c.slot==='left').at(-1);
   assert(video && video.bounds.height>=118, 'video retains a usable height beneath its header');

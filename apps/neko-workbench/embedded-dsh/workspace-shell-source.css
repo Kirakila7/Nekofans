@@ -1,22 +1,27 @@
 body[data-neko-workspace-shell] { --nws-bg:var(--dsw-alias-bg-layer-1,#fbfeff); --nws-border:var(--dsw-alias-border-l1,#c4dbe6); --nws-text:var(--dsw-alias-label-primary,#17303d); --nws-muted:var(--dsw-alias-label-secondary,#637d8c); --nws-hover:var(--dsw-alias-interactive-bg-hover,#ddedf4); }
-body[data-neko-workspace-collapsed] [data-neko-collapsed-composer] { position:fixed !important; z-index:2147481000 !important; right:16px !important; bottom:16px !important; left:auto !important; top:auto !important; box-sizing:border-box !important; width:min(480px, calc(100vw - 96px)) !important; max-width:calc(100vw - 96px) !important; max-height:45vh; overflow:auto; background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:20px; box-shadow:0 8px 28px #17303d24; }
-body[data-neko-workspace-collapsed] [data-neko-collapsed-composer] .neko-gallery { display:none !important; }
+body:is([data-neko-workspace-collapsed],[data-neko-flex-workspace-collapsed]) [data-neko-collapsed-composer] { position:fixed !important; z-index:2147481000 !important; right:16px !important; bottom:16px !important; left:auto !important; top:auto !important; box-sizing:border-box !important; width:min(480px, calc(100vw - 96px)) !important; max-width:calc(100vw - 96px) !important; max-height:45vh; overflow:auto; background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:20px; box-shadow:0 8px 28px #17303d24; }
+body:is([data-neko-workspace-collapsed],[data-neko-flex-workspace-collapsed]) [data-neko-collapsed-composer] .neko-gallery { display:none !important; }
 /* The native seat remains in its React tree. Hide its decorative landing hero
    only in compact mode; native project and mode controls return on focus. */
-body[data-neko-workspace-collapsed] [data-neko-collapsed-composer] [class*="_composerStack"] > :has(.neko-gallery) { display:none !important; }
-body[data-neko-workspace-collapsed] [data-neko-collapsed-composer] [class*="_composerStack"] { width:100% !important; gap:0 !important; padding:0 !important; }
-body[data-neko-workspace-collapsed] [data-neko-collapsed-composer] [class*="_heroWorkspaceRow"] { display:none !important; }
-body[data-neko-workspace-collapsed] [data-neko-collapsed-composer]:focus-within [class*="_heroWorkspaceRow"] { display:flex !important; margin:0; padding:4px 10px 0; }
-body[data-neko-workspace-collapsed] [data-neko-collapsed-composer] :has(> [data-composer-card]) { box-sizing:border-box; width:100%; min-width:0; padding:0 !important; }
-body[data-neko-workspace-collapsed] [data-neko-collapsed-composer] [data-composer-card] { display:flex !important; flex-direction:row !important; flex-wrap:wrap; align-items:center; gap:4px !important; padding:3px 5px !important; box-shadow:none; background:transparent; }
-body[data-neko-workspace-collapsed] [data-neko-collapsed-composer] [data-input-scroll] { flex:1 1 140px; min-width:70px; max-height:120px; margin:0; }
-body[data-neko-workspace-collapsed] [data-neko-collapsed-composer] [data-composer-input] { min-height:32px !important; line-height:22px; padding:5px 6px !important; }
+body:is([data-neko-workspace-collapsed],[data-neko-flex-workspace-collapsed]) [data-neko-collapsed-composer] [class*="_composerStack"] > :has(.neko-gallery) { display:none !important; }
+body:is([data-neko-workspace-collapsed],[data-neko-flex-workspace-collapsed]) [data-neko-collapsed-composer] [class*="_composerStack"] { width:100% !important; gap:0 !important; padding:0 !important; }
+body:is([data-neko-workspace-collapsed],[data-neko-flex-workspace-collapsed]) [data-neko-collapsed-composer] [class*="_heroWorkspaceRow"] { display:none !important; }
+body:is([data-neko-workspace-collapsed],[data-neko-flex-workspace-collapsed]) [data-neko-collapsed-composer]:focus-within [class*="_heroWorkspaceRow"] { display:flex !important; margin:0; padding:4px 10px 0; }
+body:is([data-neko-workspace-collapsed],[data-neko-flex-workspace-collapsed]) [data-neko-collapsed-composer] :has(> [data-composer-card]) { box-sizing:border-box; width:100%; min-width:0; padding:0 !important; }
+body:is([data-neko-workspace-collapsed],[data-neko-flex-workspace-collapsed]) [data-neko-collapsed-composer] [data-composer-card] { display:flex !important; flex-direction:row !important; flex-wrap:wrap; align-items:center; gap:4px !important; padding:3px 5px !important; box-shadow:none; background:transparent; }
+body:is([data-neko-workspace-collapsed],[data-neko-flex-workspace-collapsed]) [data-neko-collapsed-composer] [data-input-scroll] { flex:1 1 140px; min-width:70px; max-height:120px; margin:0; }
+body:is([data-neko-workspace-collapsed],[data-neko-flex-workspace-collapsed]) [data-neko-collapsed-composer] [data-composer-input] { min-height:32px !important; line-height:22px; padding:5px 6px !important; }
 /* DSH's row is an inline-size container, whose intrinsic width is zero.
    Restore intrinsic sizing here so the real native controls stay visible. */
-body[data-neko-workspace-collapsed] [data-neko-collapsed-composer] [data-composer-card] > [class*="_row"] { container-type:normal; flex:0 0 auto; min-width:0; max-width:100%; flex-wrap:wrap; justify-content:flex-end; gap:4px; padding:0; overflow:visible; }
-body[data-neko-workspace-collapsed] [data-neko-collapsed-composer] [data-composer-card] > [class*="_row"] > [class*="_tools"],
-body[data-neko-workspace-collapsed] [data-neko-collapsed-composer] [data-composer-card] > [class*="_row"] > [class*="_trailing"] { flex:0 0 auto; gap:4px; margin-left:0; }
+body:is([data-neko-workspace-collapsed],[data-neko-flex-workspace-collapsed]) [data-neko-collapsed-composer] [data-composer-card] > [class*="_row"] { container-type:normal; flex:0 0 auto; min-width:0; max-width:100%; flex-wrap:wrap; justify-content:flex-end; gap:4px; padding:0; overflow:visible; }
+body:is([data-neko-workspace-collapsed],[data-neko-flex-workspace-collapsed]) [data-neko-collapsed-composer] [data-composer-card] > [class*="_row"] > [class*="_tools"],
+body:is([data-neko-workspace-collapsed],[data-neko-flex-workspace-collapsed]) [data-neko-collapsed-composer] [data-composer-card] > [class*="_row"] > [class*="_trailing"] { flex:0 0 auto; gap:4px; margin-left:0; }
 .neko-workspace-expand-control { position:fixed; right:16px; z-index:2147481001; padding:7px 12px; border:1px solid var(--nws-border); border-radius:9px; background:var(--nws-bg); color:var(--nws-text); font:12px system-ui,sans-serif; cursor:pointer; box-shadow:0 4px 14px #17303d19; }
+/* In three-pane mode keep the original native input mounted while only it
+   remains visible, and anchor it to the video region rather than the window. */
+body[data-neko-flex-workspace-collapsed] [data-neko-flex-coding] { overflow:visible !important; visibility:hidden !important; pointer-events:none !important; }
+body[data-neko-flex-workspace-collapsed] [data-neko-collapsed-composer] { visibility:visible !important; pointer-events:auto !important; right:var(--neko-flex-compact-right,16px) !important; bottom:var(--neko-flex-compact-bottom,16px) !important; width:min(480px,var(--neko-flex-compact-width,calc(100vw - 96px))) !important; max-width:var(--neko-flex-compact-width,calc(100vw - 96px)) !important; }
+body[data-neko-flex-workspace-collapsed] .neko-workspace-expand-control { right:var(--neko-flex-compact-right,16px); }
 .neko-workspace-expand-control[hidden],.neko-workspace-collapse-notice[hidden] { display:none !important; }
 .neko-workspace-expand-control:focus-visible { outline:2px solid #4c89ad; outline-offset:2px; }
 .neko-workspace-collapse-notice { position:fixed; z-index:2147481002; right:16px; bottom:18px; margin:0; padding:10px 14px; border:1px solid var(--nws-border); border-radius:10px; background:var(--nws-bg); color:var(--nws-text); font:12px system-ui,sans-serif; }

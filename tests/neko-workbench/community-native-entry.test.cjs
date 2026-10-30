@@ -13,7 +13,7 @@ function between(source, start, end) {
 
 test('actual dedicated native community IPC authenticates the current workbench main frame', async () => {
   const source = fs.readFileSync(path.join(base, 'main.cjs'), 'utf8');
-  const handlers = new Map(), calls = [], dividerCalls = [];
+  const handlers = new Map(), calls = [], dividerCalls = [], composerCalls = [];
   const contents = { mainFrame: { url: 'http://127.0.0.1:59099/coding?fixture=1' } };
   const host = { webContents: contents, isDestroyed: () => false };
   const validation = source.slice(source.indexOf('function isWorkbenchOrigin'), source.indexOf('function rolesState'));
@@ -23,13 +23,19 @@ test('actual dedicated native community IPC authenticates the current workbench 
   vm.runInNewContext(validation + route, { URL, dshWindow: host, dshLaunchUrl: 'http://127.0.0.1:59099/?fixture=1', screenShare: { hide: () => screenHides++ },
     ipcMain: { handle: (name, fn) => handlers.set(name, fn) },
     communityController: { hasVisibleView:true, action: async (window, request) => { calls.push({ window, request }); return { ok: true }; } },
-    nativeDividerController: { setEnabled:value=>dividerCalls.push(['enabled',value]), raise:value=>dividerCalls.push(['raise',value]), place:(window,request)=>{dividerCalls.push(['place',window,request]);return {ok:true};} } });
+    nativeDividerController: { setEnabled:value=>dividerCalls.push(['enabled',value]), raise:value=>dividerCalls.push(['raise',value]), place:(window,request)=>{dividerCalls.push(['place',window,request]);return {ok:true};} },
+    nativeComposerController: { setEnabled:value=>composerCalls.push(['enabled',value]), raise:()=>composerCalls.push(['raise']), place:(window,request)=>{composerCalls.push(['place',window,request]);return {ok:true};}, update:state=>{composerCalls.push(['update',state]);return {ok:true};} } });
   const handle = handlers.get('workbench:community'); assert.equal(typeof handle, 'function');
   const request = { action: 'open', bounds: { x: 280, y: 88, width: 820, height: 650 } };
   assert.equal((await handle({ sender: contents, senderFrame: contents.mainFrame }, request)).ok, true);
   assert.equal(calls[0].window, host); assert.equal(calls[0].request, request);
   assert.equal(screenHides,1,'opening community pauses the competing screen panel');
   assert.deepEqual(dividerCalls.slice(0,2),[['enabled',true],['raise',true]]);
+  assert.deepEqual(composerCalls.slice(0,2),[['enabled',true],['raise']]);
+  const composer = handlers.get('workbench:native-composer'), composerRequest = {action:'place',rect:{x:300,y:450,width:400,height:76}};
+  assert.equal(composer({sender:contents,senderFrame:contents.mainFrame},composerRequest).ok,true);
+  assert.equal(composerCalls[2][1],host);assert.equal(composerCalls[2][2],composerRequest);
+  assert.throws(()=>composer({sender:{},senderFrame:contents.mainFrame},composerRequest),/工作台/);
   const divider=handlers.get('workbench:divider'), geometry={action:'place',id:'chat',rect:{x:320,y:0,width:12,height:500}};
   assert.equal(divider({sender:contents,senderFrame:contents.mainFrame},geometry).ok,true);
   assert.equal(dividerCalls.at(-1)[1],host);assert.equal(dividerCalls.at(-1)[2],geometry);
@@ -47,7 +53,7 @@ test('actual dedicated native community IPC authenticates the current workbench 
   const legacyAction = vm.runInNewContext(`${legacy};workbenchAction`, {});
   await assert.rejects(legacyAction('open-community'), /内嵌社区/);
   assert.match(source, /communityController\.bindHost\(dshWindow\)/);
-  assert.match(source, /quitting=true;nativeDividerController\.dispose\(\);communityController\.dispose\(\)/);
+  assert.match(source, /quitting=true;nativeComposerController\.dispose\(\);nativeDividerController\.dispose\(\);communityController\.dispose\(\)/);
 });
 
 test('workbench preload exposes only the named community bridge and removable status subscription', async () => {

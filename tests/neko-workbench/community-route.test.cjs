@@ -4,11 +4,12 @@ const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
 const { DEFAULT_COMMUNITY_URL, COMMUNITY_PARTITION, resolveCommunityUrl,
   classifyCommunityNavigation, createCommunityController, validateCommunityRequest,
-  communityBounds, createSocialController, BILIBILI_URL, BILIBILI_HOME_URL, BILIBILI_PARTITION, BILIBILI_MOBILE_USER_AGENT,
+  communityBounds, createSocialController, BILIBILI_URL, BILIBILI_HOME_URL, BILIBILI_PARTITION, BILIBILI_DESKTOP_USER_AGENT,
   classifyBilibiliNavigation, bilibiliVideoShareUrl, bilibiliOfficialPlayerUrl } = require('../../apps/neko-workbench/community-config.cjs');
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const bounds = { x: 300, y: 80, width: 800, height: 650 };
+const desktopUA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7871.212 Safari/537.36';
 function deferred() { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; }
 function fixture(env = {}, useSocial = false, extra = {}) {
   const views = [], external = [], states = [], errors = [], copied = [];
@@ -24,7 +25,7 @@ function fixture(env = {}, useSocial = false, extra = {}) {
     }
     setWindowOpenHandler(handler) { this.popup = handler; }
     setUserAgent(value) { this.userAgent = value; }
-    getUserAgent() { return this.userAgent || 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) TestApp/0.1 Chrome/150.0.7871.212 Electron/43.3.0 Safari/537.36'; }
+    getUserAgent() { return this.userAgent || (extra.rawUserAgent ?? 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) TestApp/0.1 Chrome/150.0.7871.212 Electron/43.3.0 Safari/537.36'); }
     isDestroyed() { return this.destroyed; }
     getURL() { return this.url; }
     focus() { this.focused = (this.focused || 0) + 1; }
@@ -299,6 +300,7 @@ test('official player URLs are reconstructed from supported Bilibili video ident
   const source = 'https://m.bilibili.com/video/BV1WYnd6DEAw?p=2&token=private#fragment';
   const player = 'https://player.bilibili.com/player.html?bvid=BV1WYnd6DEAw&p=2&autoplay=0';
   assert.equal(bilibiliOfficialPlayerUrl(source), player);
+  assert.equal(bilibiliOfficialPlayerUrl('https://www.bilibili.com/video/BV1WYnd6DEAw?p=2'), player);
   assert.equal(bilibiliVideoShareUrl(player), 'https://www.bilibili.com/video/BV1WYnd6DEAw?p=2');
   assert.equal(classifyBilibiliNavigation(player).kind, 'internal');
   for (const url of ['https://m.bilibili.com/', 'https://m.bilibili.com/video/av123',
@@ -324,19 +326,19 @@ test('official playback is user initiated, stays in the same isolated view, copi
   const contents = f.views[0].webContents;
   assert.equal(f.states.at(-1).canPlayOfficial, false);
   await assert.rejects(f.action({ action: 'play-official' }), /请先打开/);
-  await contents.loadURL('https://m.bilibili.com/video/BV1WYnd6DEAw?p=2&token=private');
+  await contents.loadURL('https://www.bilibili.com/video/BV1WYnd6DEAw?p=2&token=private');
   assert.equal(f.states.at(-1).canPlayOfficial, true);
   assert.deepEqual(await f.action({ action: 'play-official' }), { ok: true });
   assert.equal(contents.getURL(), 'https://player.bilibili.com/player.html?bvid=BV1WYnd6DEAw&p=2&autoplay=0');
-  assert.equal(contents.userAgent, 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7871.212 Safari/537.36');
+  assert.equal(contents.userAgent, desktopUA);
   assert.equal(f.views.length, 1); assert.equal(f.host.children.size, 1);
   assert.equal(f.states.at(-1).isOfficialPlayer, true); assert.equal(f.states.at(-1).canPlayOfficial, false);
   assert.equal(f.states.at(-1).canShare, true);
   await f.action({ action: 'copy-video-link' });
   assert.deepEqual(f.copied, ['https://www.bilibili.com/video/BV1WYnd6DEAw?p=2']);
   await f.action({ action: 'back' });
-  assert.match(contents.getURL(), /^https:\/\/m\.bilibili\.com\/video\/BV1WYnd6DEAw/);
-  assert.equal(contents.userAgent, BILIBILI_MOBILE_USER_AGENT);
+  assert.match(contents.getURL(), /^https:\/\/www\.bilibili\.com\/video\/BV1WYnd6DEAw/);
+  assert.equal(contents.userAgent, desktopUA);
   assert.equal(f.states.at(-1).canPlayOfficial, true);
   await f.action({ action: 'back' }); assert.equal(contents.getURL(), BILIBILI_URL);
   assert.equal(f.states.at(-1).canPlayOfficial, false);
@@ -459,7 +461,7 @@ test('native feed is an isolated child WebContentsView with no BrowserWindow or 
   f.controller.dispose();
 });
 
-test('Bilibili is an isolated single-pane mobile view with page history and preserved community', async () => {
+test('Bilibili is an isolated desktop view with page history and preserved community', async () => {
   const f = fixture({}, true); await f.open(); const community = f.views[0];
   community.webContents.scrollFixture = 240;
   await f.action({ action: 'open', site: 'bilibili', bounds });
@@ -472,13 +474,15 @@ test('Bilibili is an isolated single-pane mobile view with page history and pres
   assert.equal(bili.options.webPreferences.contextIsolation, true);
   assert.equal(bili.options.webPreferences.nodeIntegration, false);
   assert.equal('preload' in bili.options.webPreferences, false);
-  assert.equal(bili.webContents.userAgent, BILIBILI_MOBILE_USER_AGENT);
-  assert.equal(community.webContents.userAgent, undefined, 'mobile UA is restricted to the isolated Bilibili view');
+  assert.equal(BILIBILI_URL, 'https://www.bilibili.com/');
+  assert.equal(bili.webContents.userAgent, desktopUA);
+  assert.equal(community.webContents.userAgent, undefined, 'Bilibili UA is restricted to the isolated Bilibili view');
   assert.deepEqual(bili.webContents.loads, [BILIBILI_URL]);
   assert.equal(f.states.at(-1).site, 'bilibili'); assert.equal(f.states.at(-1).canGoBack, false);
-  assert.equal(bili.webContents.popup({ url: 'https://m.bilibili.com/video/BV1fixture' }).action, 'deny');
+  assert.equal(bili.webContents.popup({ url: 'https://www.bilibili.com/video/BV1fixture' }).action, 'deny');
   await tick();
-  assert.equal(bili.webContents.loads.at(-1), 'https://m.bilibili.com/video/BV1fixture');
+  assert.equal(bili.webContents.loads.at(-1), 'https://www.bilibili.com/video/BV1fixture');
+  assert.equal(bili.webContents.userAgent, desktopUA);
   assert.equal(f.states.at(-1).canGoBack, true);
   await f.action({ action: 'back' }); assert.equal(bili.webContents.getURL(), BILIBILI_URL);
   assert.equal(f.states.at(-1).canGoBack, false);
@@ -492,9 +496,10 @@ test('Bilibili is an isolated single-pane mobile view with page history and pres
 
 test('Bilibili navigation allows only explicit official HTTPS origins and never creates another window', async () => {
   const f = fixture({}, true); await f.action({ action: 'open', site: 'bilibili', bounds }); const contents = f.views[0].webContents;
-  for (const url of ['https://m.bilibili.com/video/BV1test', 'https://www.bilibili.com/', 'https://passport.bilibili.com/login']) {
+  for (const url of ['https://m.bilibili.com/video/BV1test', 'https://www.bilibili.com/', 'https://www.bilibili.com/video/BV1WYnd6DEAw', 'https://passport.bilibili.com/login']) {
     assert.equal(classifyBilibiliNavigation(url).kind, 'internal');
     assert.equal(navigate(contents, 'will-navigate', url), false);
+    assert.equal(contents.userAgent, desktopUA, 'all Bilibili navigation keeps the same desktop UA');
     assert.equal(contents.popup({ url }).action, 'deny');
   }
   for (const url of ['https://bilibili.com.evil.invalid/', 'https://m.bilibili.com:8443/', 'file:///tmp/test', 'javascript:alert(1)', 'https://user@bilibili.com/']) {
@@ -503,6 +508,15 @@ test('Bilibili navigation allows only explicit official HTTPS origins and never 
   }
   assert.throws(() => validateCommunityRequest({ action: 'open', site: 'https://evil.invalid', bounds }));
   assert.throws(() => validateCommunityRequest({ action: 'back', site: 'bilibili' }));
+  f.controller.dispose();
+});
+
+test('Bilibili desktop UA fallback remains desktop when Chromium UA cannot be parsed', async () => {
+  const f = fixture({}, true, { rawUserAgent: 'unparseable' });
+  await f.action({ action: 'open', site: 'bilibili', bounds });
+  assert.equal(f.views[0].webContents.userAgent, BILIBILI_DESKTOP_USER_AGENT);
+  assert(!BILIBILI_DESKTOP_USER_AGENT.includes('Mobile'));
+  assert(!BILIBILI_DESKTOP_USER_AGENT.includes('Electron'));
   f.controller.dispose();
 });
 

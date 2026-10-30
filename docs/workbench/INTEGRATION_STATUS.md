@@ -4,6 +4,8 @@ The daily artifact is built from this repository. `config/daily-release.json` is
 
 ## Pending source changes
 
+- In the social / Bilibili / coding three-pane layout, dragging the workspace to the right or bottom edge opens a trusted native floating composer above a full-size desktop Bilibili view. The DSH input adapter checks the retained current session and preserves unsynchronized drafts; unsupported rich drafts require expanding the workspace. Local Electron fixtures cover the video overlay, lobby transitions and recovery. An isolated real DSH session dispatched synthetic input to a local stub in queue mode, without contacting a provider; real backend responses and Bilibili playback remain unverified.
+
 - Lobby suggestions filter recalled memories to entries with exclusively lobby-message provenance. Open and in-flight shared experiences are retained on shutdown; temporary memory-write failures remain pending. Synthetic tests verify isolation, retry and deduplication; a synthetic summary was written and recalled through the real local N.E.K.O. worker. On Windows pending text inherits the data-directory ACL and owner-only access remains unverified. Real OAuth and production chat service are not configured.
 
 - Friend text visits from Workbench PR #7 are integrated into the native application and workbench options menus. The model settings are shared with main chat, but community OAuth must currently be configured separately using the public values documented in `docs/TEXT_VISITS.md`; the ordinary launcher does not supply them. Isolated tests pass (83 cases, plus the Electron main-entry smoke). Real two-account sessions and TRTC remain unverified.

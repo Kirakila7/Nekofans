@@ -1,7 +1,7 @@
 'use strict';
 (() => {
   const api = window.nativeComposer, form = document.getElementById('composer'), message = document.getElementById('message'), send = document.getElementById('send'), expand = document.getElementById('expand'), copy = document.getElementById('copy'), status = document.getElementById('status');
-  let state = { value:'', enabled:false, busy:false, sessionToken:'', revision:0 }, composing = false, dirty = false, conflict = false, blockedDraft = false;
+  let state = { value:'', enabled:false, busy:false, sessionToken:'', revision:0 }, composing = false, dirty = false, conflict = false, blockedDraft = false, submitUnknown = false;
   let pendingEdit = null, pendingSubmit = null, submitQueued = false, expandQueued = false, confirmExpand = false, expandTimer = null, editSequence = 0, submitSequence = 0;
   let draftOwner = '', recoveryOwner = '', storageFailed = false;
   const recoveryKey = token => 'neko.workspace.pending-draft.v1:' + encodeURIComponent(token);
@@ -12,12 +12,12 @@
       return value && value.sessionToken === token && typeof value.value === 'string' && value.value.length <= 30000 ? value : null;
     } catch { storageFailed = true; return null; }
   }
-  function rememberRecovery() {
+  function rememberRecovery(kind = 'draft') {
     const token = draftOwner || state.sessionToken;
     if (!token || blockedDraft) return;
     draftOwner = token;
     try {
-      const value = JSON.stringify({sessionToken:token,value:message.value,revision:state.revision});
+      const value = JSON.stringify({sessionToken:token,value:message.value,revision:state.revision,kind});
       window.localStorage.setItem(recoveryKey(token),value);
       if (window.localStorage.getItem(recoveryKey(token)) !== value) throw Error('save unavailable');
       storageFailed = false;
@@ -50,8 +50,23 @@
   }
   function sendSubmit() {
     if (!submitQueued || pendingEdit !== null || dirty || conflict || blockedDraft || !state.enabled || !state.sessionToken || state.busy) return;
-    submitQueued = false; pendingSubmit = ++submitSequence; refresh();
-    api.send({ type:'submit', value:message.value, sessionToken:state.sessionToken, revision:state.revision, submissionId:pendingSubmit });
+    submitQueued = false;
+    const request = { id:++submitSequence, value:message.value, sessionToken:state.sessionToken, revision:state.revision };
+    pendingSubmit = request;
+    // Keep a per-session recovery copy before dispatch, including if the app
+    // exits or changes layout before the acknowledgment or its timeout.
+    draftOwner = request.sessionToken; rememberRecovery('submit-unknown');
+    // A view can be detached before the IPC reaches the host.  Absence of an
+    // acknowledgement does not tell us whether the native session accepted it.
+    request.timer = setTimeout(() => {
+      if (pendingSubmit !== request) return;
+      pendingSubmit = null; submitUnknown = true; conflict = true; expandQueued = false; confirmExpand = false;
+      if (expandTimer !== null) clearTimeout(expandTimer); expandTimer = null;
+      message.value = request.value; draftOwner = request.sessionToken; rememberRecovery('submit-unknown');
+      status.textContent = '发送结果未确认，可能已发送；请展开工作区核对，勿重复发送'; status.hidden = false; refresh();
+    }, 5000);
+    refresh();
+    api.send({ type:'submit', value:request.value, sessionToken:request.sessionToken, revision:request.revision, submissionId:request.id });
   }
   function finishExpand() {
     if (!expandQueued || composing || dirty || pendingEdit !== null || pendingSubmit !== null || submitQueued || conflict || blockedDraft) return;
@@ -60,9 +75,14 @@
   }
   function requestExpand() {
     if (blockedDraft || conflict) {
-      if (!confirmExpand) { confirmExpand = true; status.textContent = '请先复制未同步的草稿，再点一次展开工作区'; status.hidden = false; return; }
-      // A second explicit click confirms the user has copied the protected text.
-      clearRecovery(recoveryOwner || draftOwner, message.value);
+      const saved = readRecovery(recoveryOwner || draftOwner);
+      if (!saved || saved.value !== message.value) {
+        status.textContent = '草稿副本暂未保存，请复制内容并保持窗口打开'; status.hidden = false; return;
+      }
+      if (!confirmExpand) { confirmExpand = true; status.textContent = submitUnknown ? '任务可能已发送；核对后再点一次展开并清除本机副本' : '未同步草稿会保留在本机，再点一次展开工作区'; status.hidden = false; return; }
+      if (submitUnknown) clearRecovery(recoveryOwner || draftOwner, message.value);
+      // Expanding is not proof that copying succeeded: retain the recovery
+      // record until the native draft is observed to contain the same text.
       api.send({type:'expand'}); return;
     }
     if (!composing && !dirty && pendingEdit === null && pendingSubmit === null && !submitQueued) { api.send({type:'expand'}); return; }
@@ -92,7 +112,11 @@
     if (changedSession) {
       // An unacknowledged draft belongs to the previous session. Never write
       // it into the new one or destroy it; leave it selectable for copying.
-      blockedDraft = blockedDraft || composing || dirty || pendingEdit !== null;
+      if (pendingSubmit !== null) {
+        clearTimeout(pendingSubmit.timer); message.value = pendingSubmit.value;
+        draftOwner = pendingSubmit.sessionToken; rememberRecovery('submit-unknown'); submitUnknown = true;
+      }
+      blockedDraft = blockedDraft || composing || dirty || pendingEdit !== null || pendingSubmit !== null;
       if (blockedDraft) recoveryOwner = draftOwner || state.sessionToken;
       if (!blockedDraft) { dirty = false; conflict = false; }
       if (pendingEdit?.timer) clearTimeout(pendingEdit.timer);
@@ -102,7 +126,8 @@
     state = next;
     if (changedSession && !blockedDraft && next.sessionToken) {
       const saved = readRecovery(next.sessionToken);
-      if (saved && saved.value === next.value) clearRecovery(next.sessionToken, next.value);
+      if (saved?.kind === 'submit-unknown') { blockedDraft = true; submitUnknown = true; recoveryOwner = next.sessionToken; message.value = saved.value; }
+      else if (saved && saved.value === next.value) clearRecovery(next.sessionToken, next.value);
       else if (saved) { blockedDraft = true; recoveryOwner = next.sessionToken; message.value = saved.value; }
     }
     if (!changedSession && pendingEdit !== null && next.settledEditId === pendingEdit.id) {
@@ -111,9 +136,9 @@
       else { dirty = message.value !== pendingEdit.value; if (!dirty && !composing && next.value === pendingEdit.value) { clearRecovery(draftOwner, next.value); draftOwner = ''; } }
       pendingEdit = null;
     }
-    if (pendingSubmit !== null && next.settledSubmitId === pendingSubmit) pendingSubmit = null;
-    if (!composing && !dirty && pendingEdit === null && !conflict && !blockedDraft) message.value = next.value;
-    status.textContent = blockedDraft ? '会话已切换或发现未同步的本地草稿；请先复制再展开工作区处理' : conflict ? '原工作区草稿已变化；请先复制再展开工作区处理' : storageFailed && (dirty || composing || pendingEdit !== null) ? '未同步输入暂不能保存到本机，请保持窗口打开' : (next.status || '');
+    if (pendingSubmit !== null && next.settledSubmitId === pendingSubmit.id) { clearTimeout(pendingSubmit.timer); clearRecovery(pendingSubmit.sessionToken, pendingSubmit.value); draftOwner = ''; pendingSubmit = null; }
+    if (!composing && !dirty && pendingEdit === null && pendingSubmit === null && !conflict && !blockedDraft) message.value = next.value;
+    status.textContent = submitUnknown ? '发送结果未确认，可能已发送；请展开工作区核对，勿重复发送' : blockedDraft ? '会话已切换或发现未同步的本地草稿；请先复制再展开工作区处理' : conflict ? '原工作区草稿已变化；请先复制再展开工作区处理' : storageFailed && (dirty || composing || pendingEdit !== null || pendingSubmit !== null) ? '未同步输入暂不能保存到本机，请保持窗口打开' : (next.status || '');
     status.hidden = !status.textContent;
     refresh();
     if (!changedSession && !conflict && !blockedDraft) { sendEdit(); sendSubmit(); refresh(); finishExpand(); }

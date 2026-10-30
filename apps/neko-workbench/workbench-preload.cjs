@@ -20,6 +20,8 @@ contextBridge.exposeInMainWorld('nekoWorkbench',Object.freeze({
   community:request=>ipcRenderer.invoke('workbench:community',request),
   divider:request=>ipcRenderer.invoke('workbench:divider',request),
   subscribeDivider:callback=>{if(typeof callback!=='function')throw new TypeError('callback must be a function');const listener=(_event,state)=>callback(state);ipcRenderer.on('workbench:divider-event',listener);return()=>ipcRenderer.removeListener('workbench:divider-event',listener);},
+  nativeComposer:request=>ipcRenderer.invoke('workbench:native-composer',request),
+  subscribeNativeComposer:callback=>{if(typeof callback!=='function')throw new TypeError('callback must be a function');const listener=(_event,state)=>callback(state);ipcRenderer.on('workbench:native-composer-event',listener);return()=>ipcRenderer.removeListener('workbench:native-composer-event',listener);},
   subscribeCommunity:callback=>{const listener=(_event,state)=>callback(state);ipcRenderer.on('workbench:community-state',listener);return()=>ipcRenderer.removeListener('workbench:community-state',listener);},
   communityAccount:action=>ipcRenderer.invoke('workbench:community-account',action),
   subscribeCommunityAccount:callback=>{if(typeof callback!=='function')throw new TypeError('callback must be a function');const listener=(_event,state)=>callback(state);ipcRenderer.on('workbench:community-account-state',listener);return()=>ipcRenderer.removeListener('workbench:community-account-state',listener);},
