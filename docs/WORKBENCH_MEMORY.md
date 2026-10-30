@@ -16,7 +16,9 @@ npm run setup:neko-memory
 
 组件用独立的 `services/neko-memory/pyproject.toml`、`uv.lock` 和 `.venv`。启动始终通过 `uv run`；开发时可用 `NEKO_WORKBENCH_MEMORY_PYTHON` 显式选择已有 Python 环境，产品代码没有归档目录或本机源码的硬编码路径。
 
-在面板展开“N.E.K.O. 记忆组件与整理模型”，选择复用聊天 API，或单独配置 OpenAI 兼容 / Anthropic 整理模型，再点击“保存并连接记忆组件”。无需额外启用或切换模式；模型配置就绪后自动使用。整理模型可能产生费用，主聊天和记忆整理可分别配置。新密钥由现有 Electron safeStorage 加密保存，只向原生子进程的 stdin 临时传递，不写 argv、环境变量、模型配置文件或日志。
+在面板展开“N.E.K.O. 记忆组件与整理模型”，选择复用聊天 API，或单独配置 OpenAI 兼容 / Anthropic 整理模型，再点击“保存并连接记忆组件”。使用已登录工作台账号聊天时，也可显式勾选“使用已登录的工作台账号整理记忆”；这个选项默认关闭，需要先切换到工作台账号聊天。启用后使用已授权的账号模型，不需要额外 Key；切换回其他聊天方式后不会暗中改用其他账号或密钥。原有 API 模式和加密保存的独立密钥不变。
+
+记忆整理会把需要处理的私聊片段发送给所选模型服务商，可能消耗工作台账号额度或产生费用。当前桥不返回实际用量，费用与额度影响未知，不能按零消耗计算。该账号通道目前只通过模拟账号和合成资料测试；真实账号能否调用以及实际计费均未验证。聊天 API 新密钥由现有 Electron safeStorage 加密保存，只向原生子进程的 stdin 临时传递，不写 argv、环境变量、模型配置文件或日志。
 
 升级时把旧 hub 事件和尚未进入 hub 的 diary.sqlite 事件，按原 ID、来源、修订和删除记录迁入原生投递队列。旧 hub 快照保存在 preNativeOnlyHub 元数据中，原 diary.sqlite 与 Markdown 文件不改动；旧恢复点元数据保留。现有冲突保留各版，面板支持显式合并，修改命令绑定修订 ID。
 
@@ -42,7 +44,7 @@ npm run setup:neko-memory
 
 原生记忆自动处理完成的回合，定时重试未完成的投递。网络失败保留事件和待处理队列。分批发送与原生效果键支持丢响应重试，事实已持久化而回执未保存的中断可以恢复。
 
-私人内容只进入本角色私有存储和本地记忆面板，不写公开日记或通知正文。合并与恢复不会降低私人范围。账号、Cookie、API 密钥、DSH 权限、其他角色和内部系统提示词不作为记忆事件同步。
+私人内容保存在本角色私有存储和本地记忆面板，不写公开日记或通知正文；记忆整理所需片段会发给用户选择的模型服务商。合并与恢复不会降低私人范围。账号、Cookie、API 密钥、DSH 权限、其他角色和内部系统提示词不作为记忆事件同步。
 
 DSH 工作会话、子代理任务及“任务备注”保持独立。生活代理的原始日记仍由生活代理管理，不再作为并行记忆后端。
 
@@ -66,6 +68,8 @@ main-chat/
 
 原生进程仅监听 `127.0.0.1` 动态端口。每次启动生成新 token 与实例 ID；HTTP 只开放受鉴权的 `/workbench-memory/*`，拒绝浏览器 Origin 和原生其他路由。READY 必须发生在真实原生运行态初始化之后。退出通过 stdin EOF 请求关闭，超时仅回收本应用创建的进程树；不会停止外部 N.E.K.O. 服务。
 
+账号记忆通道使用仅回环的临时代理及每次新建的随机令牌，不向记忆进程提供账号密钥；切换或关闭通道会停止代理并使令牌失效。前台聊天会请求取消正在运行的后台记忆；清理未确认时会安全拒绝后续调用，失败记录保留重试。
+
 正式组件没有测试桩或 free-model 回退，关闭原生诊断内容日志、云存档和外部记忆同步。向量资源是否可用仍由原引擎管理，缺失时保留原生 BM25 回退，不将离线关键词测试称为向量质量验收。
 
 ## 验证
@@ -76,7 +80,7 @@ npm run check:neko
 
 # 真实本机记忆引擎，模型接口使用回环合成响应
 $env:NEKO_MEMORY_COMPONENT_TEST='1'
-node --experimental-strip-types --test tests/neko-workbench/neko-memory-component.test.mjs tests/neko-workbench/memory-workbench-component.test.cjs
+node --experimental-strip-types --test tests/neko-workbench/neko-memory-component.test.mjs tests/neko-workbench/memory-account-proxy.test.mjs tests/neko-workbench/memory-workbench-component.test.cjs
 
 # 原生写入与同步日志之间的中断恢复
 cd services/neko-memory

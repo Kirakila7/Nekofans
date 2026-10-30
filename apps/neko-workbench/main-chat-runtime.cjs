@@ -58,7 +58,7 @@ class WorkbenchMainChat {
     this.memorySecretStore = new WorkbenchSecretStore(path.join(this.dataDir, 'secrets', 'memory-api-key.encrypted'), safeStorage);
     this.memoryConfigFile = path.join(this.dataDir, 'memory-model.json');
     if (accountProvider != null && typeof accountProvider.stream !== 'function') throw new Error('工作台账号聊天接口无效');
-    this.memoryWorker = memoryWorker; this.accountProvider = accountProvider || null;
+    this.memoryWorker = memoryWorker; this.accountProvider = accountProvider || null; this.memoryAccountProxy=null;
     this.fetch = fetchImpl; this.initialBackend = BACKENDS.has(initialBackend) ? initialBackend : 'chat-api';
     this.shared = sharedModules; this.opened = null; this.listeners = new Set(); this.tail = Promise.resolve();
     this.closed = false; this.backend = this.initialBackend; this.configError = '';
@@ -145,6 +145,7 @@ class WorkbenchMainChat {
       try { atomicJson(this.configFile, { backend, mainChat: this.settings }); }
       catch { throw new Error('聊天方式未能保存，请检查本机存储'); }
       this.cancel();
+      if(this.readMemoryModel().useAccount && oldBackend!==backend)await this.stopMemoryModel();
       try {
         if ((oldBackend === 'deepseek-account') !== (backend === 'deepseek-account')) {
           this.closeOpened(); this.backend = backend; this.openNow();
@@ -170,7 +171,7 @@ class WorkbenchMainChat {
       const restoreSecret = await this.secretStore.prepareRollback();
       try {
         this.closeOpened();
-        if(this.readMemoryModel().useChatApi)await this.memorySystem?.worker.stop();
+        if(this.readMemoryModel().useChatApi||this.readMemoryModel().useAccount)await this.stopMemoryModel();
         if (change.key.action === 'replace') await this.secretStore.set(change.key.value);
         else if (change.key.action === 'clear') await this.secretStore.clear();
         if (this.closed) throw failure();
@@ -204,37 +205,47 @@ class WorkbenchMainChat {
       memoryModel:this.readMemoryModel() };
   }
   readMemoryModel() {
-    let settings={useChatApi:true};
+    let settings={useChatApi:true,useAccount:false};
     if(fs.existsSync(this.memoryConfigFile))settings=JSON.parse(fs.readFileSync(this.memoryConfigFile,'utf8'));
-    return {...settings,hasKey:this.memorySecretStore.has()};
+    return {...settings,useAccount:settings.useAccount===true,hasKey:this.memorySecretStore.has()};
   }
   async memoryModel() {
-    const config=this.readMemoryModel(),settings=config.useChatApi?this.settings:config;
+    const config=this.readMemoryModel();
+    if(config.useAccount){
+      if(this.backend!=='deepseek-account'||typeof this.accountProvider?.memory!=='function')throw Error('请切换到工作台账号并连接后使用记忆整理');
+      const {createMemoryAccountProxy}=require('./memory-account-proxy.cjs');
+      if(!this.memoryAccountProxy)this.memoryAccountProxy=createMemoryAccountProxy({invoke:args=>this.accountProvider.memory(args)});
+      return this.memoryAccountProxy.start();
+    }
+    const settings=config.useChatApi?this.settings:config;
     this.shared.validateConfig(settings);
     return {...settings,apiKey:await (config.useChatApi?this.secretStore:this.memorySecretStore).get()};
   }
+  async stopMemoryModel(){const proxy=this.memoryAccountProxy;await Promise.all([this.memorySystem?.worker.stop(),proxy?.close()]);if(this.memoryAccountProxy===proxy)this.memoryAccountProxy=null;}
   async configureMemory(input) {
     if(input.enabled===false)throw new Error('当前统一使用 N.E.K.O. 记忆');
-    if(typeof input.useChatApi!=='boolean')throw new Error('请选择记忆整理模型');
-    let config={useChatApi:true};
+    if(typeof input.useChatApi!=='boolean'||(input.useAccount!==undefined&&typeof input.useAccount!=='boolean'))throw new Error('请选择记忆整理模型');
+    if(input.useAccount&&this.backend!=='deepseek-account')throw new Error('请先切换到工作台账号聊天');
+    let config={useChatApi:true,useAccount:false};
+    if(input.useAccount){const {hasKey,...previousConfig}=this.readMemoryModel();config={...previousConfig,useAccount:true};}
     const rollback=await this.memorySecretStore.prepareRollback(),previous=fs.existsSync(this.memoryConfigFile)?fs.readFileSync(this.memoryConfigFile):null;
     try{
-      if(!input.useChatApi){
+      if(!input.useAccount&&!input.useChatApi){
         const change=parseApiInput({...input,maxOutputTokens:1024},this.shared);
         if(change.key.action==='replace')await this.memorySecretStore.set(change.key.value);
         else if(change.key.action==='clear')await this.memorySecretStore.clear();
-        config={...change.settings,useChatApi:false};
+        config={...change.settings,useChatApi:false,useAccount:false};
       }
       atomicJson(this.memoryConfigFile,config);
     }catch{
       await rollback();if(previous===null)fs.rmSync(this.memoryConfigFile,{force:true});else atomicBytes(this.memoryConfigFile,previous);throw new Error('记忆模型设置未能保存');
     }
+    await this.stopMemoryModel();
     await this.memorySystem.activeSync?.catch(()=>{});
-    await this.memorySystem.worker.stop();
     return this.memorySystem.connect();
   }
   async memoryAction(input) {
-    if (!input || typeof input !== 'object' || Object.keys(input).some(key => !['action', 'id', 'text','mode','enabled','revisionIds','useChatApi','protocol','baseUrl','model','requestTimeoutMs','key'].includes(key))) throw new Error('记忆操作无效');
+    if (!input || typeof input !== 'object' || Object.keys(input).some(key => !['action', 'id', 'text','mode','enabled','revisionIds','useChatApi','useAccount','protocol','baseUrl','model','requestTimeoutMs','key'].includes(key))) throw new Error('记忆操作无效');
     if (this.closed || !usesChatService(this.backend) || !this.opened?.memory) throw new Error('记忆服务未就绪');
     if(['configure-neko','sync'].includes(input.action)||String(input.action).startsWith('event-')){
       try{
@@ -275,7 +286,7 @@ class WorkbenchMainChat {
       },
       recordSharedExperience: async input => ready().recordSharedExperience(input) });
   }
-  close() { this.closed = true; this.cancel(); return this.serial(async () => { await this.memorySystem?.close(); this.closeOpened(); this.listeners.clear(); }); }
+  close() { this.closed = true; this.cancel(); return this.serial(async () => { await this.memorySystem?.close(); await this.memoryAccountProxy?.close(); this.memoryAccountProxy=null; this.closeOpened(); this.listeners.clear(); }); }
 }
 
 function trustedLocalCaller(event, window, expectedUrl) {

@@ -195,6 +195,7 @@ exports.apply=function(ctx){
     if(!root)throw new Error('DSH 尚未就绪');
     if(method==='companion-account-status')return companionAccount.status();
     if(method==='companion-account-chat')return companionAccount.send({requestId:p.requestId,text:p.text,context:p.context,history:p.history,maxTokens:p.maxTokens});
+    if(method==='memory-account-model')return companionAccount.send({requestId:p.requestId,text:p.text,context:p.context,history:p.history,maxTokens:p.maxTokens,purpose:'memory'});
     if(method==='companion-account-cancel')return companionAccount.cancel({requestId:p.requestId});
     if(method==='workspace-catalog')return readDshWorkspaceCatalog(ctx,p);
     if(method==='fish-care'){

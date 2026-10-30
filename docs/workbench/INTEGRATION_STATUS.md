@@ -4,6 +4,8 @@ The daily artifact is built from this repository. `config/daily-release.json` is
 
 ## Pending source changes
 
+- N.E.K.O. memory can optionally use the signed-in workbench account model without a separate API key. This option is **off by default** and must be enabled in memory settings while account chat is selected. Extraction sends the necessary private conversation excerpts to the chosen model provider and can consume account allowance or incur charges; actual usage and cost are unknown. The account bridge does not report model usage and no zero-usage value is fabricated. Only synthetic conversations, a fake account provider and isolated local profiles have been tested, including extraction, recall, restart, cancellation and offline retry. Real account access, provider response, allowance and billing remain unverified. Existing Chat API and independently configured memory keys remain separate.
+
 - The coding surface exposes a shortcut into the current DSH session’s native file tree. The floating workspace saves pending text, expands, checks the selected session again, then requests the native files tab. Unsupported or stale sessions fail closed; local fixture and Electron tests use simulated file services, not the user’s files. DSH native file APIs are internal and a real project directory interaction remains unverified.
 
 - In workbench-account companion chat, a starting or disconnected DSH bridge no longer appears ready. The input keeps its draft and offers an explicit reconnect when disconnected; pressing send during disconnection does not restart or transmit anything. The bridge becoming ready does not confirm account login, quota or a real model reply, which must be checked separately.
