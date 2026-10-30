@@ -165,3 +165,28 @@ test('lobbyMemory is chat-api only and rechecks the backend on every call', asyn
   await assert.rejects(() => memory.recordSharedExperience({ id: 'seg-1' }));
   assert.equal(calls.length, 1);
 });
+
+test('lobby recall only returns memories whose entire provenance is from the lobby',async()=>{
+  const {WorkbenchMainChat}=require('../../apps/neko-workbench/main-chat-runtime.cjs');
+  const values=[{text:'lobby',evidenceRefs:['lobby-msg:m1']},{text:'private',evidenceRefs:['chat-msg:m2']},
+    {text:'mixed',evidenceRefs:['lobby-msg:m1','chat-msg:m2']},{text:'unknown',evidenceRefs:[]},{text:'unmarked'}];
+  const runtime={closed:false,backend:'chat-api',memorySystem:{recall:async()=>values}};
+  assert.deepEqual((await WorkbenchMainChat.prototype.lobbyMemory.call(runtime).recall('test',300)).map(v=>v.text),['lobby']);
+});
+
+test('the assist provider receives lobby memories but no private or mixed-provenance memories', async () => {
+  const { WorkbenchMainChat } = require('../../apps/neko-workbench/main-chat-runtime.cjs');
+  const runtime = { closed: false, backend: 'chat-api', memorySystem: { recall: async () => [
+    { text: '公开大厅经历', evidenceRefs: ['lobby-msg:m1'] },
+    { text: SECRET_MEMORY, evidenceRefs: ['chat-msg:m2'] },
+    { text: '混合来源秘密', evidenceRefs: ['lobby-msg:m1', 'chat-msg:m2'] },
+  ] } };
+  const memory = WorkbenchMainChat.prototype.lobbyMemory.call(runtime);
+  const s = setup({ recall: (...args) => memory.recall(...args) });
+  const target = s.add(F.message());
+  await s.cat.requestSuggestion({ targetMessageId: target.id });
+  const prompt = s.provider.calls[0].persona.prompt;
+  assert.match(prompt, /公开大厅经历/);
+  assert.equal(prompt.includes(SECRET_MEMORY), false);
+  assert.equal(prompt.includes('混合来源秘密'), false);
+});

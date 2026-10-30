@@ -19,12 +19,12 @@ function fixture(t){
 }
 const input=(extra={})=>({id:'seg-synthetic-1',text:SUMMARY,occurredAt:Date.parse('2026-10-29T12:00:00Z'),evidenceRefs:['lobby-msg:m1','lobby-msg:m2','lobby-msg:m1'],...extra});
 
-test('recordSharedExperience writes one private inferred episode with lobby source markers',async t=>{
+test('recordSharedExperience writes one private inferred fact with lobby source markers',async t=>{
   const f=fixture(t),memory=f.create();const result=await memory.recordSharedExperience(input());
   assert.equal(result.itemId,'lobby:seg-synthetic-1');assert.equal(result.created,true);assert.match(result.eventId,/^lobby:[0-9a-f]{64}$/);
   const event=memory.hub.snapshot().events.find(e=>e.itemId===result.itemId);
   assert.equal(event.origin,'user');assert.equal(event.eventId,result.eventId);assert.equal(event.occurredAt,'2026-10-29T12:00:00.000Z');
-  assert.deepEqual(event.value,{kind:'episode',text:SUMMARY,visibility:'private',certainty:'inferred',evidenceRefs:['lobby-msg:m1','lobby-msg:m2']});
+  assert.deepEqual(event.value,{kind:'fact',text:SUMMARY,visibility:'private',certainty:'inferred',evidenceRefs:['lobby-msg:m1','lobby-msg:m2']});
   const view=await memory.view();assert(view.records.some(r=>r.itemId==='lobby:seg-synthetic-1'&&!r.deleted&&!r.conflict));
   await memory.sync();assert(f.remote.events().some(e=>e.eventId===result.eventId));
 });
@@ -37,6 +37,12 @@ test('repeated submission of one segment keeps one record and the same event id;
   const record=(await memory.view()).records.find(r=>r.itemId===first.itemId);
   await memory.change({action:'event-delete',id:first.itemId,revisionIds:record.heads.map(e=>e.eventId)});
   await memory.recordSharedExperience(input());const after=(await memory.view()).records.find(r=>r.itemId===first.itemId);assert.equal(after.deleted,true);
+});
+
+test('concurrent retries of one segment persist a single record without conflict',async t=>{
+  const f=fixture(t),memory=f.create();const values=await Promise.all(Array.from({length:8},(_,i)=>memory.recordSharedExperience(input({text:'合成并发摘要 '+i}))));
+  assert.equal(values.filter(v=>v.created).length,1);assert.equal(new Set(values.map(v=>v.eventId)).size,1);
+  const rows=(await memory.view()).records.filter(r=>r.itemId==='lobby:seg-synthetic-1');assert.equal(rows.length,1);assert.equal(rows[0].conflict,false);
 });
 
 test('lobby experience is editable through existing actions and survives a controller rebuild',async t=>{

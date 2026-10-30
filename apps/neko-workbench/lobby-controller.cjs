@@ -333,6 +333,7 @@ function buildController(deps) {
   if (client && pendingFile) {
     try {
       experience = make.experience({ file: pendingFile, getProvider: provider, now, newId, timers,
+        onError:()=>{lastError='大厅待处理记忆无法保存';schedulePublish();},
         getMemory: () => (provider() && typeof deps.recordSharedExperience === 'function'
           ? { recordSharedExperience: entry => deps.recordSharedExperience(entry) } : null) });
     } catch { experience = null; }
@@ -670,6 +671,7 @@ function buildController(deps) {
     quiet(() => {
       const had = lastProvider; lastProvider = !!provider();
       reconcile();
+      if(!had&&lastProvider)processPending();
       if (had !== lastProvider && me && online()) void syncServerCat();
     });
     schedulePublish();
@@ -679,7 +681,7 @@ function buildController(deps) {
   function dispose() {
     if (disposed) return;
     disposed = true;
-    if (experience) quiet(() => { if (experience.hasOpenSegment()) experience.persistOnQuit(); else experience.dispose(); });
+    if (experience) quiet(() => experience.persistOnQuit());
     if (cat) quiet(() => cat.dispose());
     if (client) quiet(() => client.dispose());
     if (auth) quiet(() => auth.dispose());

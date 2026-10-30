@@ -4,6 +4,8 @@ The daily artifact is built from this repository. `config/daily-release.json` is
 
 ## Pending source changes
 
+- Lobby suggestions filter recalled memories to entries with exclusively lobby-message provenance. Open and in-flight shared experiences are retained on shutdown; temporary memory-write failures remain pending. Synthetic tests verify isolation, retry and deduplication; a synthetic summary was written and recalled through the real local N.E.K.O. worker. On Windows pending text inherits the data-directory ACL and owner-only access remains unverified. Real OAuth and production chat service are not configured.
+
 - Friend text visits from Workbench PR #7 are integrated into the native application and workbench options menus. The model settings are shared with main chat, but community OAuth must currently be configured separately using the public values documented in `docs/TEXT_VISITS.md`; the ordinary launcher does not supply them. Isolated tests pass (83 cases, plus the Electron main-entry smoke). Real two-account sessions and TRTC remain unverified.
 - Dragging the left-content divider to the far right (or pressing End) collapses the work area to a compact native DSH composer with a restore button. The original input remains mounted, and the previous width and project chooser return on expansion. Community/Bilibili native views leave space for the floating control. DOM tests cover draft preservation and view geometry; a temporary DSH window verified the visual collapsed state and restore. The temporary profile was signed out, so message sending and a real active task have not been verified. Installation is pending disk-space recovery.
 - The work area shows a project and session chooser instead of the unbound native landing page. A genuinely active DSH session can be resumed; starting a project-bound session retains its input and drafts. DSH selection and active-session fields are feature-detected internal APIs of the installed version; isolated DOM and Electron tests cover navigation and layout, while real DSH session transitions and older-version fallback still need verification.
@@ -48,7 +50,7 @@ Screen companion's optional private context uses confirmed legacy Chat API memor
 
 ## Public lobby (频道), pending
 
-The workbench has a 频道 panel for the new N.E.K.O.Chat service (protocol: `N.E.K.O.Chat/docs/protocol.md`). It is uncommitted work on `feat/lobby-chat` and is not in the 0.28.0 daily artifact. Details are in `apps/neko-workbench/IMPLEMENTATION_v0.29.md`.
+The workbench has a 频道 panel for the new N.E.K.O.Chat service (protocol: `N.E.K.O.Chat/docs/protocol.md`). This source change is not in the existing 0.28.0 daily artifact. Details are in `apps/neko-workbench/IMPLEMENTATION_v0.29.md`.
 
 - Modules: `lobby-config`, `lobby-auth`, `lobby-client`, `lobby-frames`, `lobby-sanitize`, `lobby-avatars`, `lobby-cat`, `lobby-experience`, `lobby-controller` (main process) and `lobby-composer.js` plus `createLobbyView` in the workspace shell (renderer). Wired through `workbench:lobby` IPC with `assertWorkbenchCaller`, and `lobby`/`subscribeLobby` in the preload.
 - Participation: off, assist (她帮你起草, user sends; default) or independent (her own cat messages by mention, owner-or-mention or free trigger). Both AI modes require the Chat API backend. Origin labels: `human`, `human_ai` (人＋AI 共同回复), cat (AI 独立发言).
@@ -61,7 +63,7 @@ Not verified:
 
 - Real OAuth sign-in against auth.project-neko.cn. Registration of `neko-chat-desktop-{env}` is in Project-N-E-K-O/neko-auth-platform#304 (open, not deployed): a public PKCE client with fixed callbacks `http://127.0.0.1:48921/oauth/callback`, `:48922` and `:48923`, consent required (no auto-consent), gated by `CHAT_INTEGRATION_ENABLED`, which defaults to `false`. The workbench now tries those three ports by default; `NEKO_WORKBENCH_CHAT_OAUTH_PORTS` overrides them. Sign-in cannot complete against the official platform until that client is enabled in production.
 - A production chat server. `NEKO_WORKBENCH_CHAT_URL` has no default, so the panel shows 频道服务未配置 until it is set.
-- Real model behaviour: suggestion quality, independent replies, prompt-injection resistance, and whether summaries keep other people's words attributed. The memory worker's own fact extraction from lobby summaries is also untested.
+- Real model behaviour: suggestion quality, independent replies, prompt-injection resistance, and whether summaries keep other people's words attributed. The local worker smoke used a synthetic prewritten summary; it did not test live model summarization.
 - The Electron GUI with this panel; no QA instance was launched for this work.
 
 ## bigfish-pet intake

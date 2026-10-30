@@ -1,8 +1,9 @@
 'use strict';
 // Lobby shared experiences flow back into the companion's memory as one or two
 // sentence summaries. Raw lobby text is never written to memory; it is kept only
-// in process memory and, on quit, in data/lobby/pending-experience.json (0600)
-// until the next start summarizes it. Message text is never logged.
+// in process memory and temporarily in data/lobby/pending-experience.json when
+// recovery is needed. The file inherits its parent directory's Windows ACL.
+// Message text is never logged.
 const fs = require('node:fs');
 const { createHash } = require('node:crypto');
 const S = require('./lobby-sanitize.cjs');
@@ -74,7 +75,7 @@ function createLobbyExperience(deps) {
   // Ids already observed into any segment (open or closed), last 1000. A resume
   // replay re-delivers own messages; they must not start a second segment.
   const recorded = new Set();
-  const jobs = new Set();
+  const jobs = new Map();       // promise -> segment; retained through shutdown
   let open = null, idle = null, disposed = false, mode = 'off', processing = null;
 
   function remember(message) {
@@ -135,25 +136,30 @@ function createLobbyExperience(deps) {
   /** Idle 10 min / leave lobby / mode switch: summarize now. */
   function close() {
     const segment = take();
-    if (segment) { const job = processSegment(segment).finally(() => jobs.delete(job)); jobs.add(job); }
+    if (segment) {
+      const job = processSegment(segment).then(result => {
+        if(result==='retry'&&!disposed)savePending([segment]);
+      }).catch(()=>{try{deps.onError?.();}catch{}}).finally(() => jobs.delete(job));
+      jobs.set(job,segment);
+    }
   }
 
   async function processSegment(segment) {
-    if (disposed) return false;
+    if (disposed) return 'stopped';
     const provider = deps.getProvider?.(), memory = deps.getMemory?.();
-    if (!provider || !memory) return false;            // neko backend or no key: nothing is written back
+    if (!provider || !memory) return 'retry';
     let text = '';
     for (let attempt = 0; attempt < 2 && !text; attempt++) {
       try { text = await summarize(segment, { provider, timers, now, newId }); } catch { text = ''; }
-      if (disposed) return false;
+      if (disposed) return 'stopped';
     }
-    if (!text) return false;                           // retried once; drop, never write raw text
+    if (!text) return 'discard';                       // retried once; drop, never write raw text
     const stamped = `${whenText(segment.endedAt)}，${text}`;
     try {
       await memory.recordSharedExperience({ id: segment.id, text: stamped, occurredAt: segment.endedAt,
         evidenceRefs: segment.lines.map(r => 'lobby-msg:' + r.id) });
-      return true;
-    } catch { return false; }
+      return 'done';
+    } catch { return 'retry'; }
   }
 
   function readPending() {
@@ -166,32 +172,50 @@ function createLobbyExperience(deps) {
         && Array.isArray(s.lines) && s.lines.length && s.lines.length <= LIMITS.messages
         && s.lines.every(r => r && ID.test(r.id || '') && typeof r.line === 'string' && r.line.length <= LIMITS.lineChars + 80))
         .slice(-LIMITS.pendingSegments);
-    } catch { return []; }
+    } catch (error) {
+      if(error?.code==='ENOENT'||error instanceof SyntaxError)return [];
+      throw error; // An unreadable queue must not be mistaken for an empty queue.
+    }
   }
-  /** before-quit: only persist the open segment; the next start summarizes it. */
+  function writePending(segments) {
+    if(!segments.length){fs.rmSync(deps.file,{force:true});return;}
+    atomicBytes(deps.file,Buffer.from(JSON.stringify({version:1,segments:segments.slice(-LIMITS.pendingSegments)})));
+  }
+  function savePending(segments) {
+    const byId=new Map(readPending().map(segment=>[segment.id,segment]));
+    for(const segment of segments)byId.set(segment.id,segment);
+    writePending([...byId.values()]);
+  }
+  /** Persist open and currently processing segments before shutdown. */
   function persistOnQuit() {
+    if(disposed)return false;
     const segment = take();
     disposed = true;
-    const segments = [...readPending(), ...(segment ? [segment] : [])].slice(-LIMITS.pendingSegments);
+    const segments = [...jobs.values(), ...(segment ? [segment] : [])];
     if (!segments.length) return false;
-    atomicBytes(deps.file, Buffer.from(JSON.stringify({ version: 1, segments })));
+    savePending(segments);
     return true;
   }
-  /** Start: summarize segments saved at the last quit, then delete the file. */
+  /** Start: acknowledge successful or deliberately discarded segments only. */
   function processPending() {
     if (processing) return processing;
     processing = (async () => {
       const segments = readPending();
       if (!fs.existsSync(deps.file)) return 0;
       if (!deps.getProvider?.() || !deps.getMemory?.()) return 0;   // keep for a later chat-api start
-      let written = 0;
-      for (const segment of segments) if (await processSegment(segment)) written++;
-      if (!disposed) fs.rmSync(deps.file, { force: true });
+      let written = 0;const completed=new Set();
+      for (const segment of segments) {
+        const result=await processSegment(segment);
+        if(result==='done'){written++;completed.add(segment.id);}
+        else if(result==='discard')completed.add(segment.id);
+        if(disposed)break;
+      }
+      if (!disposed) writePending(readPending().filter(segment=>!completed.has(segment.id)));
       return written;
     })().finally(() => { processing = null; });
     return processing;
   }
-  async function idleJobs() { while (jobs.size) await Promise.allSettled([...jobs]); }
+  async function idleJobs() { while (jobs.size) await Promise.allSettled([...jobs.keys()]); }
   function dispose() { if (idle) timers.clearTimeout(idle); idle = null; open = null; disposed = true; }
 
   return { observe, deleted, setMode, close, leave: close, persistOnQuit, processPending, idle: idleJobs, dispose,

@@ -98,7 +98,8 @@ test('quit persists the open segment 0600 without summarizing; the next start su
   s.exp.observe(F.owner({ text: RAW, created_at: s.clock.now() }), ctx());
   assert.equal(s.exp.persistOnQuit(), true);
   assert.equal(s.provider.calls.length, 0);
-  assert.equal(fs.statSync(s.file).mode & 0o777, 0o600);
+  // Windows reports DOS mode bits rather than the effective ACL.
+  if(process.platform!=='win32')assert.equal(fs.statSync(s.file).mode & 0o777, 0o600);
   const saved = JSON.parse(fs.readFileSync(s.file, 'utf8'));
   assert.equal(saved.version, 1); assert.equal(saved.segments.length, 1);
 
@@ -122,6 +123,36 @@ test('a corrupt, oversized or stale pending file is discarded', async t => {
     assert.equal(await s.make().processPending(), 0); assert.equal(fs.existsSync(s.file), false);
   }
   assert.equal(s.writes.length, 0);
+});
+
+test('quit preserves a segment whose model summary is still in flight',async t=>{
+  const s=setup(t),slow=F.fakeProvider('我和主人聊了合成话题。',{hold:true}),exp=s.make({getProvider:()=>slow});
+  exp.observe(F.owner({text:RAW,created_at:s.clock.now()}),ctx());exp.close();await F.flush();
+  assert.equal(exp.hasOpenSegment(),false);assert.equal(exp.persistOnQuit(),true);
+  slow.release();await exp.idle();assert.equal(s.writes.length,0);assert.equal(fs.existsSync(s.file),true);
+  assert.equal(await s.make().processPending(),1);assert.equal(s.writes.length,1);assert.equal(fs.existsSync(s.file),false);
+});
+
+test('a temporary memory write failure preserves pending records for the next retry',async t=>{
+  const s=setup(t);s.exp.observe(F.owner({created_at:s.clock.now()}),ctx());s.exp.persistOnQuit();
+  const broken=s.make({getMemory:()=>({recordSharedExperience:async()=>{throw Error('temporary')}})});
+  assert.equal(await broken.processPending(),0);assert.equal(fs.existsSync(s.file),true);
+  assert.equal(await s.make().processPending(),1);assert.equal(s.writes.length,1);assert.equal(fs.existsSync(s.file),false);
+});
+
+test('a failed live memory write queues the segment rather than dropping it',async t=>{
+  const s=setup(t),broken=s.make({getMemory:()=>({recordSharedExperience:async()=>{throw Error('temporary')}})});
+  broken.observe(F.owner({created_at:s.clock.now()}),ctx());broken.close();await broken.idle();
+  assert.equal(fs.existsSync(s.file),true);assert.equal(await s.make().processPending(),1);assert.equal(s.writes.length,1);
+});
+
+test('an unreadable pending queue is preserved instead of being treated as empty',async t=>{
+  const s=setup(t);s.exp.observe(F.owner({created_at:s.clock.now()}),ctx());s.exp.persistOnQuit();
+  const original=fs.readFileSync;t.mock.method(fs,'readFileSync',(file,...args)=>{
+    if(file===s.file)throw Object.assign(Error('temporarily unreadable'),{code:'EACCES'});
+    return original(file,...args);
+  });
+  await assert.rejects(s.make().processPending(),{code:'EACCES'});assert.equal(fs.existsSync(s.file),true);
 });
 
 test('lobby-experience never logs and never writes raw text to memory', () => {

@@ -10,7 +10,7 @@ const hash=v=>createHash('sha256').update(stable(v)).digest('hex');
 /** Native NEKO is the only memory provider; the hub is a durable delivery ledger. */
 export class WorkbenchMemory {
   constructor({directory,dataDir,repositoryRoot,getModel,getPersona,getLegacy,notify=()=>{},worker,autoSyncIntervalMs=30000}){
-    Object.assign(this,{directory,dataDir,getLegacy,notify});this.closed=false;this.activeSync=null;this.localTail=Promise.resolve();
+    Object.assign(this,{directory,dataDir,getLegacy,notify});this.closed=false;this.activeSync=null;this.localTail=Promise.resolve();this.lobbyTail=Promise.resolve();
     try{
     this.store=new EventStore(join(directory,'hub.sqlite'));
     this.settings={autoSync:true,nekoEnabled:true};
@@ -152,16 +152,20 @@ export class WorkbenchMemory {
     const at=typeof occurredAt==='number'?occurredAt:Date.parse(occurredAt);
     if(!Number.isFinite(at))throw Error('大厅经历时间无效');
     if(!Array.isArray(evidenceRefs)||!evidenceRefs.length||evidenceRefs.length>256||evidenceRefs.some(ref=>typeof ref!=='string'||!/^lobby-msg:[A-Za-z0-9_-]{1,120}$/.test(ref)))throw Error('大厅经历来源无效');
-    await this.localSync();if(this.closed)throw Error('记忆服务已关闭');
-    const itemId='lobby:'+id,eventId='lobby:'+hash([id,text.trim()]);
-    // One record per segment. A retry after restart may summarize differently;
-    // never fork the item into a conflict or revive a record the user deleted.
-    if(this.hub.snapshot().events.some(e=>e.itemId===itemId))return {itemId,eventId,created:false};
-    const event=this.event(itemId,{kind:'episode',text:text.trim(),visibility:'private',certainty:'inferred',evidenceRefs:[...new Set(evidenceRefs)]},[],'upsert','user',eventId);
-    event.occurredAt=new Date(at).toISOString();
-    await this.hub.add([event]);
-    void this.sync().catch(()=>{});this.publish();
-    return {itemId,eventId,created:true};
+    const task=this.lobbyTail.then(async()=>{
+      await this.localSync();
+      const itemId='lobby:'+id,eventId='lobby:'+hash([id,text.trim()]);
+      const prior=this.hub.snapshot().events.find(e=>e.itemId===itemId);
+      if(prior)return {itemId,eventId:prior.eventId,created:false};
+      // The summary is already model-generated. Persist it directly as an
+      // inferred fact so a second extraction cannot silently discard it.
+      const event=this.event(itemId,{kind:'fact',text:text.trim(),visibility:'private',certainty:'inferred',evidenceRefs:[...new Set(evidenceRefs)]},[],'upsert','user',eventId);
+      event.occurredAt=new Date(at).toISOString();
+      await this.hub.add([event]);this.publish();
+      return {itemId,eventId,created:true};
+    });
+    this.lobbyTail=task.catch(()=>{});const result=await task;
+    if(!this.closed)void this.sync().catch(()=>{});return result;
   }
   async connect(){
     try{await this.hub.ready('neko');this.providerStates.neko='已连接';this.error='';}
@@ -193,7 +197,7 @@ export class WorkbenchMemory {
   }
   async close(){
     if(this.closed)return;this.closed=true;clearInterval(this.timer);
-    await this.worker.close();await Promise.allSettled([this.activeSync,this.localTail]);await this.hub.queue;
+    await this.lobbyTail;await this.worker.close();await Promise.allSettled([this.activeSync,this.localTail]);await this.hub.queue;
     this.store.close();
   }
 }

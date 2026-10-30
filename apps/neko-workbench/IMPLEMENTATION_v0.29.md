@@ -47,15 +47,15 @@
 用户在频道里发过言，且当时参与方式是 assist 或 independent，这一段在 10 分钟静默、离开频道或切换方式后结束。`lobby-experience.cjs` 只取这段里和用户相关的消息（最多 30 条、6000 字），用用户自己的聊天 API 生成一两句摘要（≤200 字，要求把别人的话写成「某某说……」），再调用 `memorySystem.recordSharedExperience`。记忆条目 `itemId` 以 `lobby:` 开头，`evidenceRefs` 是 `lobby-msg:<id>`，`certainty` 为 `inferred`，同一段重复提交得到相同 `eventId`。记忆窗口显示来源「大厅共同经历」，可以确认、修改或删除。
 
 - `off` 模式、用户没发言的段落不写。摘要连续失败两次就放弃，不写原文。
-- 退出时未写回的片段存到 `data/lobby/pending-experience.json`（0600），下次启动处理后删除；超过 7 天的片段丢弃。
-- 只有一起回复会读召回的记忆，而且只读不写。独立发言不读记忆。记忆写入只发生在 `lobby-experience.cjs`。
+- 退出时打开或正在处理的片段存到 `data/lobby/pending-experience.json`；临时写入失败的片段也保留待重试，成功或明确放弃摘要后删除；超过 7 天的片段丢弃。POSIX 使用 0600；Windows 继承数据目录 ACL，尚未验证为仅所有者可读。
+- 只有一起回复会读召回的记忆，而且只允许所有来源引用均为大厅消息的记录；无来源或混合来源不返回。独立发言不读记忆。记忆写入只发生在 `lobby-experience.cjs`。
 - hub 的 `origin` 校验没有改，条目来源靠 `lobby:` 前缀和 `lobby-msg:` 引用区分。
 
 ## 本地数据与隐私
 
 - `data/lobby/secrets/refresh-token.encrypted`：`WorkbenchSecretStore` 加密保存，拒绝 `basic_text` 后端。
 - `data/lobby/cat.json`（0600，`atomicBytes` 写入）：`personaId`、`serverCatId`、`mode`、`independentTrigger`、频道补充说明（≤500 字）、每日上限。
-- `data/lobby/pending-experience.json`（0600）：退出时未写回的共同经历片段，下次启动处理后删除。
+- `data/lobby/pending-experience.json`：未写回的共同经历片段，写入成功后删除；Windows 文件权限继承数据目录 ACL。
 - 不写入 `data/main-chat/` 的会话库。记忆只通过 `recordSharedExperience` 写进 hub。
 - 频道生成都不经过 `MainChatService` 和私聊会话库。独立发言不读记忆；一起回复只读召回结果、不写；记忆写入只发生在 `lobby-experience.cjs`。
 - 消息文本不写日志；除 `pending-experience.json` 外不落盘（客户端内存只保留最近 500 条）。

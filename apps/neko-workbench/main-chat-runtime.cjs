@@ -246,7 +246,14 @@ class WorkbenchMainChat {
       return this.memorySystem;
     };
     return Object.freeze({ personaId: PERSONA,
-      recall: async (query, budget, signal) => ready().recall(PERSONA, query, budget, signal),
+      recall: async (query, budget, signal) => {
+        const memory=ready(),values=await memory.recall(PERSONA, query, budget, signal);
+        if(ready()!==memory||signal?.aborted)return [];
+        // Only explicitly sourced lobby experiences are eligible for a public reply.
+        // Missing or mixed provenance is private by default.
+        return (Array.isArray(values)?values:[]).filter(v=>Array.isArray(v?.evidenceRefs)&&v.evidenceRefs.length>0
+          &&v.evidenceRefs.every(ref=>typeof ref==='string'&&/^lobby-msg:[A-Za-z0-9_-]{1,120}$/.test(ref)));
+      },
       recordSharedExperience: async input => ready().recordSharedExperience(input) });
   }
   close() { this.closed = true; this.cancel(); return this.serial(async () => { await this.memorySystem?.close(); this.closeOpened(); this.listeners.clear(); }); }
