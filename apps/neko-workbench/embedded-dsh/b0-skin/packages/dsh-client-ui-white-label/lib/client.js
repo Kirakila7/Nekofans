@@ -3188,7 +3188,7 @@ function installWorkspaceShell(options = {}) {
   const history = el('div', 'neko-companion-history'); history.id = 'neko-companion-history'; history.hidden = true; history.tabIndex = 0; history.setAttribute('role', 'log'); history.setAttribute('aria-label', '主 agent 最近聊天记录'); history.setAttribute('aria-live', 'polite');
   const chatStatus = el('div', 'neko-companion-status'); chatStatus.hidden = true;
   const chatStatusText = el('span'); chatStatusText.setAttribute('role', 'status'); chatStatusText.setAttribute('aria-live', 'polite');
-  const chatSetup = button('聊天设置', 'neko-companion-setup', async () => { try { await bridge.action('chat-settings'); } catch (error) { chatError = error.message || '聊天设置未能打开'; renderCompanion(); } });
+  const chatSetup = button('聊天设置', 'neko-companion-setup', async () => { const reconnect = state?.companion?.backend === 'deepseek-account' && state?.companion?.workbenchStatus === 'unavailable'; chatError = ''; try { await bridge.action(reconnect ? 'reconnect-workbench' : 'chat-settings'); } catch (error) { chatError = error.message || (reconnect ? '工作台未能重连，请重试' : '聊天设置未能打开'); renderCompanion(); } });
   const chatRecover = button('恢复失败内容', 'neko-companion-recover', () => {
     const failedText = state?.companion?.failedText;
     if (!failedText || chatInput.value.trim()) return;
@@ -3374,7 +3374,7 @@ function installWorkspaceShell(options = {}) {
   form.addEventListener('submit', async event => {
     event.preventDefault(); const text = chatInput.value.trim(); if (!text || sending || state?.companion?.working) return;
     chatError = '';
-    if (!state?.companion?.ready) { try { await bridge.action('chat-settings'); } catch (error) { chatError = error.message || '请从左上角设置连接聊天'; } renderCompanion(); return; }
+    if (!state?.companion?.ready) { if (state?.companion?.backend === 'deepseek-account' && state?.companion?.workbenchStatus !== 'ready') { renderCompanion(); return; } try { await bridge.action('chat-settings'); } catch (error) { chatError = error.message || '请从左上角设置连接聊天'; } renderCompanion(); return; }
     const draft = chatInput.value; sending = true; renderCompanion();
     try { await bridge.companion({ action: 'send', text }); historyPeek = true; if (chatInput.value === draft) chatInput.value = ''; }
     catch (error) { chatError = error.message || '消息未发送，请重试'; }
@@ -3682,7 +3682,8 @@ function installWorkspaceShell(options = {}) {
     chatSend.hidden = !!c.working; chatStop.hidden = !c.working; chatSend.disabled = sending; chatSend.title = c.ready ? '发送消息' : '连接聊天设置';
     const status = !state?.companion ? '正在检查聊天连接…' : sending ? '正在发送…' : c.working ? '大肥鱼正在回复…' : chatError || c.error || (!c.ready ? '聊天尚未连接，请先设置' : '');
     chatStatusText.textContent = status;
-    chatSetup.hidden = !state?.companion || !!c.ready || sending || !!c.working;
+    chatSetup.textContent = c.backend === 'deepseek-account' && c.workbenchStatus === 'unavailable' ? '重连工作台' : '聊天设置';
+    chatSetup.hidden = !state?.companion || !!c.ready || sending || !!c.working || (c.backend === 'deepseek-account' && c.workbenchStatus === 'starting');
     chatRecover.hidden = !c.failedText || sending || !!c.working;
     chatRecover.disabled = !!chatInput.value.trim();
     chatRecover.title = chatRecover.disabled ? '请先保留或清空当前草稿，再恢复失败的消息' : '将失败的消息放回输入框，不会自动发送';
