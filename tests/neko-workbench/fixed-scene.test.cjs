@@ -23,7 +23,7 @@ test('fixed chat, video and work scene preserves drafts and saved layouts withou
   assert(d.body.hasAttribute('data-neko-fixed-scene')); assert(d.body.hasAttribute('data-neko-flex-mode'));
   assert(calls.some(r=>r.action==='open'&&r.site==='bilibili'&&r.slot==='left'));
   assert.equal(d.querySelector('.x_centerCol_H').getAttribute('data-neko-flex-coding'),'');
-  assert.equal(d.querySelector('.x_centerCol_H').style.getPropertyValue('--neko-flex-y'),'390px');
+  assert.equal(d.querySelector('.x_centerCol_H').style.getPropertyValue('--neko-flex-y'),'426px'); // 36px strip names the bound session above the real pane
   assert([...d.querySelectorAll('.neko-flex-move,.neko-unified-divider')].every(node=>node.hidden));
   assert(!calls.some(r=>r.action==='set-pane-layout'||r.action==='place'&&r.id));
   assert.equal(d.querySelector('.neko-companion-dock textarea').value,'companion draft'); assert.equal(d.querySelector('.x_centerCol_H textarea').value,'work draft');

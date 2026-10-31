@@ -4,6 +4,8 @@ The daily artifact is built from this repository. `config/daily-release.json` is
 
 ## Pending source changes
 
+- Issues #43–#46 (macOS): 「公共聊天室」 opens the real channel lobby inside the left chatroom column with a 「返回聊天室」 control, keeping 我的小窝, the right-hand work area and its drafts; signed-out and offline states come from the lobby bridge with no demo messages. The fixed 「聊天、工作与视频」 scene names the bound project and session in a strip above the real DSH pane. On community, Bilibili and YouTube, choosing a session or project from the floating records binds the floating input without expanding the workspace or leaving the page; the input shows the bound session, progress and result from the native snapshot, or an explicit unavailable state with a manual expand. The rail companion parks beside its chat box on those pages instead of roaming, follows it on resize, and a manual drag holds until the page changes. Synthetic jsdom tests and an isolated Electron fixture at 1200×800 and 800×560 cover this; real channel login, real Bilibili/YouTube playback and real DSH sends were not verified.
+
 - The workbench filters obsolete per-port local DSH authentication cookies from requests to the active loopback service, preserving current authentication and all stored cookies, to avoid oversized headers after repeated restarts.
 
 - Startup shows the chatroom and expanded project records. Office mode keeps the project list and work area in place with an adjustable divider. The rail opens a fixed chatroom/Bilibili/work scene, with a project and session chooser confined to the work area. DOM fixtures cover switching, selection, preserved drafts and the fixed dividers; installed-app behavior and real Bilibili playback require separate verification.

@@ -9,7 +9,7 @@ function createNativeComposerAdapter(options = {}) {
   let scheduled = false;
   const selection = () => options.getSelection?.();
   const selectedId = value => value && !value.subagentAddress && typeof value.sessionId === 'string' && value.sessionId ? value.sessionId : null;
-  const unavailable = reason => ({ available: false, reason, sessionId: null, revision: null, draft: '', phase: null });
+  const unavailable = reason => ({ available: false, reason, sessionId: null, revision: null, draft: '', phase: null, running: false, failed: false });
   function detach() {
     if (typeof unbindShell === 'function') { try { unbindShell(); } catch {} }
     if (typeof unbindNotice === 'function') { try { unbindNotice(); } catch {} }
@@ -55,8 +55,9 @@ function createNativeComposerAdapter(options = {}) {
       const session = active.binding.session?.getSnapshot?.(), notice = active.shell.notices?.getSnapshot?.();
       const rich = raw.occurrences.length > 0 || raw.attachmentIds.length > 0 || raw.claim != null;
       const reason = session?.removed === true ? '工作会话已不可用，请展开工作区选择会话' : rich ? '当前草稿包含引用、附件或指令，请展开工作区继续编辑' : raw.draft.length > 30000 ? '草稿较长，请展开工作区继续编辑' : raw.phase !== 'plain' ? '原生输入正在处理，请稍候' : '';
-      const status = session?.promptError || session?.lastAgentError || notice?.level === 'error' ? '工作会话出现错误，请展开工作区查看详情' : Array.isArray(session?.pendingSubmissions) && session.pendingSubmissions.length ? '正在交给工作区处理' : '';
-      return { available: !reason, reason, status, sessionId: active.id, revision: raw.draftRev, draft: raw.draft, phase: raw.phase };
+      const failed = !!(session?.promptError || session?.lastAgentError || notice?.level === 'error'), running = session?.running === true;
+      const status = failed ? '工作会话出现错误，请展开工作区查看详情' : Array.isArray(session?.pendingSubmissions) && session.pendingSubmissions.length ? '正在交给工作区处理' : running ? '工作会话正在处理…' : '';
+      return { available: !reason, reason, status, sessionId: active.id, revision: raw.draftRev, draft: raw.draft, phase: raw.phase, running, failed };
     } catch { return unavailable('输入状态暂不可用'); }
   }
   function snapshot() {

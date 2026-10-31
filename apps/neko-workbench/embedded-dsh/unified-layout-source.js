@@ -650,7 +650,9 @@ function installUnifiedLayout(options = {}) {
     mobile.hidden=true;
     if (!sideSurface && !doc.body.hasAttribute('data-neko-chatroom-active')) activateFlexRoom();
     const social=byName.social; doc.dispatchEvent(new win.CustomEvent('neko-flex-social-geometry', {detail:social}));
-    const code=byName.coding; setCoding(geo.center, code, 'start', true); geo.center.setAttribute('data-neko-flex-coding','');
+    // The fixed scene names the bound project/session in a strip above the
+    // real DSH pane rather than over its own header.
+    const code=fixedScene && byName.coding.height > 216 ? {...byName.coding,y:byName.coding.y+36,height:byName.coding.height-36} : byName.coding; setCoding(geo.center, code, 'start', true); geo.center.setAttribute('data-neko-flex-coding','');
     for (const [key,value] of Object.entries({x:code.x,y:code.y,width:code.width,height:code.height})) geo.center.style.setProperty('--neko-flex-'+key,Math.round(value)+'px');
     panels.right.node.hidden=true; closeView('right');
     if (sideSurface === 'community') placePanel('side',social,'community');
