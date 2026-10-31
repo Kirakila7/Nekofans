@@ -1074,29 +1074,25 @@ function installWorkspaceShell(options = {}) {
     return choices;
   }
   function connectionSummary() { const connected = phase => ['ready', 'connected'].includes(phase) ? '已连接' : phase === 'error' ? '连接出错' : '未连接'; return 'N.E.K.O.：' + connected(state?.neko?.connection) + ' · 工作台：' + connected(state?.workbench?.connection); }
-  // The rail's engine switch now lives in the native settings dialog (通用设置).
-  let nativeOfficeBlock = null;
-  function renderNativeOfficeSettings() {
+  // The rail's engine switch and settings now live behind a 工作台设置 entry
+  // appended to the native settings navigation.
+  let nativeSettingsEntry = null;
+  function renderNativeSettingsNav() {
     if (disposed) return;
-    const dialog = Array.from(doc.querySelectorAll('[role="dialog"]')).find(node => node.textContent.includes('通用设置') && node.querySelector('[class*="_options"]'));
-    if (!dialog) { nativeOfficeBlock?.remove(); nativeOfficeBlock = null; return; }
-    const activeTab = dialog.querySelector('[class*="_navCell"][class*="_active"]')?.textContent.trim();
-    if (activeTab && activeTab !== '通用设置') { nativeOfficeBlock?.remove(); nativeOfficeBlock = null; return; }
-    if (!nativeOfficeBlock || !nativeOfficeBlock.isConnected) {
-      nativeOfficeBlock = el('div', 'neko-native-settings-office');
-      const head = el('div'); head.append(el('h4', '', '工作界面'), el('p', '', '选择右侧工作区使用的引擎'));
-      const choices = el('div', 'neko-native-settings-office__choices');
-      for (const [id, name, pic, disabled] of [['dsh', 'DSH', 'bigfish', false], ['codex', codexPaused() ? 'Codex · 测试中' : 'Codex', 'devcat', codexPaused()], ['claude', 'Claude · 待接入', 'claude', true]]) {
-        const choice = button('', 'neko-native-settings-office__choice', async () => { leaveViews(); await saveLayout({ officeMode: id }); });
-        choice.dataset.officeId = id; choice.disabled = disabled;
-        choice.append(image(avatar(pic)), el('span', '', name));
-        choices.appendChild(choice);
-      }
-      const more = button('更多工作台设置…', 'neko-native-settings-office__more', () => { dialog.querySelector('[class*="_close"]')?.click(); openSettings('general'); });
-      nativeOfficeBlock.append(head, choices, more);
-      dialog.querySelector('[class*="_options"]').prepend(nativeOfficeBlock);
-    }
-    for (const choice of nativeOfficeBlock.querySelectorAll('[data-office-id]')) choice.setAttribute('aria-pressed', String(layout?.officeMode === choice.dataset.officeId));
+    const dialog = Array.from(doc.querySelectorAll('[role="dialog"]')).find(node => node.textContent.includes('通用设置') && node.querySelector('[class*="_navList"]'));
+    if (!dialog) { nativeSettingsEntry?.remove(); nativeSettingsEntry = null; return; }
+    const navList = dialog.querySelector('[class*="_navList"]');
+    if (nativeSettingsEntry?.isConnected && nativeSettingsEntry.parentElement === navList) return;
+    const sample = navList.querySelector('button[class*="_navCell"]');
+    if (!sample) return;
+    const item = doc.createElement('button');
+    item.type = 'button';
+    item.className = sample.className.split(/\s+/).filter(name => name && !/_active$/.test(name)).join(' ');
+    item.textContent = '工作台设置';
+    item.setAttribute('data-neko-settings-entry', '');
+    item.addEventListener('click', () => { dialog.querySelector('[class*="_close"]')?.click(); openSettings('general'); });
+    navList.appendChild(item);
+    nativeSettingsEntry = item;
   }
   function openSettings(kind = 'general', id) {
     if (modal.hidden) settingsReturnFocus = doc.activeElement;
@@ -1310,7 +1306,7 @@ function installWorkspaceShell(options = {}) {
         if (directoryStatus.style.maxWidth !== statusWidth) directoryStatus.style.maxWidth = statusWidth;
       }
     } else { directoryControl.hidden = true; sceneProjects.hidden = true; }
-    syncCollapsedComposer(); positionCompanionMenu(); renderNativeOfficeSettings();
+    syncCollapsedComposer(); positionCompanionMenu(); renderNativeSettingsNav();
   }
   function schedule() { if (!disposed && !queued) { queued = true; Promise.resolve().then(() => { queued = false; place(); positionCompanionMenu(); }); } }
   function nativeNew(event) {
