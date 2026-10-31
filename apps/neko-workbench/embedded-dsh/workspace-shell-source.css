@@ -101,6 +101,10 @@ body[data-neko-workspace-shell] .neko-chatroom-preview { position:relative; z-in
 /* Leave room for the companion and its input dock at the column foot. */
 body[data-neko-chatroom-active] .neko-chatroom-preview { padding-bottom:136px; }
 body[data-neko-workspace-shell] .neko-role-host { display:flex; flex-direction:column; min-height:0; }
+/* The native sidebar keeps its intrinsic width; stretch it to the split track
+   so the Home column, the divider and the account row share one edge. */
+body[data-neko-workspace-shell] .kB3qhq_root { width:100% !important; max-width:none !important; flex:1 1 auto !important; min-width:0 !important; }
+body[data-neko-workspace-shell] .neko-role-host { min-width:0; }
 /* While Home is active, masked native branches must not reserve layout space. */
 body[data-neko-chatroom-active] [data-neko-room-masked] { display:none !important; }
 /* Home owns the sidebar column; the native navigation and seats step aside. */
