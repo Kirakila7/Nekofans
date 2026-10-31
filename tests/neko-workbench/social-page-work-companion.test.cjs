@@ -100,7 +100,7 @@ test('「公共聊天室」 opens the real channel in the main work area and sta
  assert.equal(hidden,0,'does not close other pages');assert(d.querySelector('.neko-companion-dock textarea'),'companion dock stays');
  assert.match(panel.textContent,/尚未登录频道|登录频道/,'shows the real sign-in state, no demo messages');
  assert.equal(d.querySelectorAll('.neko-lobby-message').length,0);
- const back=panel.querySelector('.neko-lobby-room-back');assert.equal(back.hidden,false);back.click();await tick();
- assert.equal(panel.hidden,false,'back keeps the room conversation in the main area');assert.equal(d.querySelector('.neko-chatroom-preview').hidden,false);
+ 
+ assert.equal(panel.hidden,false,'the room conversation stays in the main area');assert.equal(d.querySelector('.neko-chatroom-preview').hidden,false);
  assert.equal(d.querySelector('main textarea').value,'native draft');
 });

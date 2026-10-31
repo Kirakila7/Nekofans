@@ -194,6 +194,15 @@ function installWorkspaceShell(options = {}) {
   doc.addEventListener('neko-home-open', onHomeOpen);
   doc.addEventListener('neko-home-close', onHomeClose);
   const seats = own(el('div', 'neko-custom-seats')); seats.setAttribute('role', 'group'); seats.setAttribute('aria-label', '自定义工作 agent');
+  // The native DSH tools (插件 / 自动化任务 / 更多) live above the seats.
+  const workTools = own(el('div', 'neko-work-tools'));
+  for (const label of ['插件', '自动化任务', '更多']) {
+    const tool = button(label, 'neko-work-tools__button', () => {
+      const row = Array.from(doc.querySelectorAll('[class*="_panelList"] button')).find(node => node.textContent.trim() === label);
+      row?.click();
+    });
+    workTools.appendChild(tool);
+  }
   const sessionBrowser = own(el('section', 'neko-session-browser')); sessionBrowser.setAttribute('aria-label', '全部工作会话');
   const listHeader = el('div', 'neko-session-browser__header');
   const allButton = button('全部工作会话', 'neko-session-all', () => saveLayout({ activeSeatId: null }));
@@ -1078,6 +1087,7 @@ function installWorkspaceShell(options = {}) {
     if (theme && officeButton.parentNode !== theme) { if (!nativeMarks.has(theme)) nativeMarks.set(theme, new Map()); nativeMarks.get(theme).set('aria-hidden', theme.getAttribute('aria-hidden')); theme.setAttribute('aria-hidden', ''); theme.appendChild(officeButton); }
     if (rail && railTop.parentNode !== rail) theme?.after(railTop);
     const mount = doc.querySelector('[data-neko-seat-mount]'); if (mount && seats.parentNode !== mount) mount.appendChild(seats);
+    if (mount && workTools.parentNode !== mount) mount.prepend(workTools);
     const nativeBrowser = doc.querySelector('[data-slot="sidebar.workspaces"]');
     if (nativeBrowser) { markNative(nativeBrowser, 'data-neko-session-browser-original'); if (sessionBrowser.parentNode !== nativeBrowser.parentNode || sessionBrowser.nextSibling !== nativeBrowser) nativeBrowser.before(sessionBrowser); }
     const account = doc.querySelector('[data-slot="settings.launcher"]');
@@ -1278,8 +1288,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
   const catSettingsButton = button('猫猫设置', 'neko-lobby-cat-settings', () => openDialog('cat')); catSettingsButton.setAttribute('aria-haspopup', 'dialog');
   const adminButton = button('管理', 'neko-lobby-admin-open', () => openDialog('admin')); adminButton.setAttribute('aria-haspopup', 'dialog'); adminButton.dataset.admin = '';
   headerActions.append(catSettingsButton, signOut);
-  const roomBack = button('‹ 返回聊天室', 'neko-lobby-room-back', () => { onBack?.(); }); roomBack.hidden = true;
-  header.append(roomBack, title, topic, onlineCount, headerActions);
+  header.append(title, topic, onlineCount, headerActions);
   const gate = el('div', 'neko-lobby-gate'), gateText = el('p', 'neko-lobby-gate__text');
   const signIn = button('登录频道', 'neko-lobby-sign-in', () => call({ action: 'sign-in' }).then(() => { if (open && connected()) join(); }));
   const signInCancel = button('取消登录', 'neko-lobby-sign-in-cancel', () => call({ action: 'sign-in-cancel' }));
@@ -1356,7 +1365,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     return result;
   }
   function join(force = false) { if (!open || (!force && joined) || !connected()) return; joined = true; call({ action: 'open' }); }
-  function setInRoom(next) { inRoom = !!next; panel.toggleAttribute('data-neko-lobby-in-room', inRoom); roomBack.hidden = !inRoom; panel.setAttribute('aria-label', inRoom ? '公共聊天室 · 频道' : '频道 · 公共大厅'); if (open) onChange?.(); }
+  function setInRoom(next) { inRoom = !!next; panel.toggleAttribute('data-neko-lobby-in-room', inRoom); panel.setAttribute('aria-label', inRoom ? '公共聊天室 · 频道' : '频道 · 公共大厅'); if (open) onChange?.(); }
   function show({ room = false } = {}) { if (disposed) return; if (open) { if (inRoom !== !!room) setInRoom(room); return; } setInRoom(room); onOpen?.(!!room); open = true; panel.hidden = false; railButton.setAttribute('aria-expanded', 'true'); render(); join(); onChange?.(); input.focus?.(); }
   function hide() { if (!open) return; open = false; panel.hidden = true; setInRoom(false); railButton.setAttribute('aria-expanded', 'false'); closePicker(); if (joined) { joined = false; call({ action: 'close' }); } onChange?.(); }
   function toggle() { if (open) hide(); else show(); }
