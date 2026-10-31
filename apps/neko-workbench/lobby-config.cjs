@@ -1,10 +1,15 @@
 'use strict';
 
-// Lobby (N.E.K.O.Chat) endpoint configuration. Values come only from the
-// environment; there is no production default for the chat service yet, so an
-// unset NEKO_WORKBENCH_CHAT_URL means the lobby panel shows "unconfigured".
-// Error text never echoes the configured value.
+// Lobby (N.E.K.O.Chat) endpoint configuration. The production chat service is
+// built in; NEKO_WORKBENCH_CHAT_URL overrides it for another deployment, and an
+// explicit empty value disables the lobby panel ("unconfigured"), keeping the
+// private companion chat independent. Error text never echoes the configured
+// value.
 const { OFFICIAL_AUTH_ORIGIN } = require('./community-config.cjs');
+
+// Production channel service. Only the origin participates: the panel appends
+// /ws and the HTTP endpoints itself.
+const DEFAULT_CHAT_URL = 'https://chat.nekotech.ai/';
 
 const DEFAULT_CHAT_CLIENT_ID = 'neko-chat-desktop-prod';
 const CHAT_CLIENT_ID_PATTERN = /^neko-chat-desktop-[a-z]+$/;
@@ -42,10 +47,12 @@ function hasCredentialParameter(url) {
   return false;
 }
 
-// Returns null when unset. https everywhere; http only on loopback hosts.
+// Unset falls back to the built-in production service; an explicit empty value
+// opts out (null). https everywhere; http only on loopback hosts.
 function resolveChatUrl(value = process.env.NEKO_WORKBENCH_CHAT_URL) {
-  if (value == null || value === '') return null;
-  const url = parseWebUrl(value);
+  if (value === '') return null;
+  const raw = value == null ? DEFAULT_CHAT_URL : value;
+  const url = parseWebUrl(raw);
   if (!url || (url.protocol !== 'https:' && !isLoopbackUrl(url)) || hasCredentialParameter(url)) throw new Error(CHAT_URL_ERROR);
   return url.href;
 }
@@ -116,6 +123,6 @@ function resolveChatConfig(env = process.env) {
   });
 }
 
-module.exports = { OFFICIAL_AUTH_ORIGIN, DEFAULT_CHAT_CLIENT_ID, CHAT_CLIENT_ID_PATTERN, LOOPBACK_HOSTS,
+module.exports = { OFFICIAL_AUTH_ORIGIN, DEFAULT_CHAT_URL, DEFAULT_CHAT_CLIENT_ID, CHAT_CLIENT_ID_PATTERN, LOOPBACK_HOSTS,
   resolveChatUrl, resolveChatClientId, resolveChatAuthUrl, resolveChatOAuthPorts,
   chatSocketBase, chatChannelSocketUrl, resolveChatConfig };
