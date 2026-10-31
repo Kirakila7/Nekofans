@@ -67,13 +67,15 @@ body[data-neko-workspace-shell] [data-neko-session-browser-original],
 body[data-neko-workspace-shell] .neko-hero-pick__name { display:none !important; }
 /* Sidebar brand row: the wordmark is the only brand text in the room column. */
 body[data-neko-workspace-shell] .neko-wordmark { font-size:var(--nk-font-lg); font-weight:600; letter-spacing:.01em; }
-/* Mode switch sits under the brand as one segmented control. */
-body[data-neko-workspace-shell] .neko-mode-switch { display:flex; gap:2px; margin:8px 10px 10px; padding:3px; border:1px solid var(--nk-border); border-radius:var(--nk-radius-md); background:var(--nk-surface-2); }
-body[data-neko-workspace-shell] .neko-mode-switch__button { flex:1 1 0; min-width:0; padding:5px 8px; border:0; border-radius:var(--nk-radius-sm); background:transparent; color:var(--nk-text-2); font:var(--nk-font-sm)/1.4 system-ui,sans-serif; cursor:pointer; }
-body[data-neko-workspace-shell] .neko-mode-switch__button:hover:not(:disabled) { background:var(--nk-hover); color:var(--nk-text); }
-body[data-neko-workspace-shell] .neko-mode-switch__button[aria-pressed="true"] { background:var(--nk-surface); color:var(--nk-text); box-shadow:var(--nk-shadow-sm); }
-body[data-neko-workspace-shell] .neko-mode-switch__button:disabled { opacity:.5; cursor:not-allowed; }
-body[data-neko-workspace-shell] .neko-mode-switch__button:focus-visible { outline:2px solid var(--nk-focus); outline-offset:1px; }
+/* The native community mode switch stays out of the sidebar. */
+body[data-neko-workspace-shell] .neko-mode-switch { display:none !important; }
+/* Home / Work sits under the brand as one segmented control. */
+body[data-neko-workspace-shell] .neko-home-work-switch { display:flex; gap:2px; margin:8px 10px 10px; padding:3px; border:1px solid var(--nk-border); border-radius:var(--nk-radius-md); background:var(--nk-surface-2); }
+body[data-neko-workspace-shell] .neko-home-work-switch__button { flex:1 1 0; min-width:0; padding:5px 8px; border:0; border-radius:var(--nk-radius-sm); background:transparent; color:var(--nk-text-2); font:var(--nk-font-sm)/1.4 system-ui,sans-serif; cursor:pointer; }
+body[data-neko-workspace-shell] .neko-home-work-switch__button:hover:not(:disabled) { background:var(--nk-hover); color:var(--nk-text); }
+body[data-neko-workspace-shell] .neko-home-work-switch__button[aria-pressed="true"] { background:var(--nk-surface); color:var(--nk-text); box-shadow:var(--nk-shadow-sm); }
+body[data-neko-workspace-shell] .neko-home-work-switch__button:disabled { opacity:.5; cursor:not-allowed; }
+body[data-neko-workspace-shell] .neko-home-work-switch__button:focus-visible { outline:2px solid var(--nk-focus); outline-offset:1px; }
 body[data-neko-workspace-shell] button[data-neko-new-session="plus"] { position:absolute !important; visibility:hidden !important; pointer-events:none !important; }
 .neko-workspace-rail-controls { display:flex; flex-direction:column; gap:10px; padding-top:14px; }
 .neko-room-entry, .neko-room-workspace { font-size:21px; line-height:1; }

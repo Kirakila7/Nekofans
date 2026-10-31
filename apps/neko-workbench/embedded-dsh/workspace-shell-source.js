@@ -93,7 +93,7 @@ function installWorkspaceShell(options = {}) {
     // overlay is positioned elsewhere. Exempt only its path while it is open.
     const tools = sidebar.querySelector('nav[data-neko-tools="open"]');
     // The room column keeps the native brand row and mode switch above it.
-    const headerNodes = [sidebar.querySelector('.neko-wordmark'), sidebar.querySelector('.neko-mode-switch')].filter(Boolean);
+    const headerNodes = [sidebar.querySelector('.neko-wordmark'), sidebar.querySelector('.neko-home-work-switch')].filter(Boolean);
     function visit(node) {
       if (node === dock || node === account || node.hasAttribute('data-neko-companion-footer')) { unmaskRoomBranch(node); return; }
       if (headerNodes.includes(node)) { unmaskRoomBranch(node); return; }
@@ -115,8 +115,32 @@ function installWorkspaceShell(options = {}) {
     if (roomActive) { doc.body.setAttribute('data-neko-chatroom-active', ''); doc.querySelector('.neko-side-rail__expand:not([hidden])')?.click(); }
     else { doc.body.removeAttribute('data-neko-chatroom-active'); roomPreview.hidden = true; releaseRoomInert(); if (lobby?.inRoom()) lobby.hide(); }
     roomButton.setAttribute('aria-pressed', String(roomActive)); workButton.setAttribute('aria-pressed', String(!roomActive));
+    renderHomeWorkSwitch();
     doc.dispatchEvent(new win.Event('neko-chatroom-mode-change'));
     schedule();
+  }
+  // Home / Work replaces the native community switch under the brand: Home is
+  // the chatroom column, Work is the native workspace navigation.
+  const homeWorkSwitch = own(el('div', 'neko-home-work-switch'));
+  homeWorkSwitch.setAttribute('role', 'group'); homeWorkSwitch.setAttribute('aria-label', 'Home 与 Work');
+  const homeWorkButtons = {};
+  for (const [mode, label, hint] of [['home', 'Home', 'Home：聊天室'], ['work', 'Work', 'Work：工作区']]) {
+    const control = button(label, 'neko-home-work-switch__button', () => setRoomActive(mode === 'home'));
+    control.setAttribute('aria-label', hint);
+    homeWorkButtons[mode] = control; homeWorkSwitch.appendChild(control);
+  }
+  function renderHomeWorkSwitch() {
+    homeWorkButtons.home.setAttribute('aria-pressed', String(roomActive));
+    homeWorkButtons.work.setAttribute('aria-pressed', String(!roomActive));
+  }
+  function mountHomeWorkSwitch() {
+    const sidebar = doc.querySelector('[data-slot="sidebar"]');
+    if (!sidebar) return;
+    const items = sidebar.querySelector('.neko-sidebar-items');
+    const anchor = items || sidebar.querySelector('.neko-mode-switch');
+    if (anchor) { if (homeWorkSwitch.parentNode !== anchor.parentElement) anchor.parentElement.insertBefore(homeWorkSwitch, anchor); }
+    else if (homeWorkSwitch.parentNode !== sidebar) sidebar.prepend(homeWorkSwitch);
+    renderHomeWorkSwitch();
   }
   function sideSurfaceChanged(event) {
     const surface = event.detail?.surface;
@@ -1100,6 +1124,7 @@ function installWorkspaceShell(options = {}) {
       startupOpen = true; renderStartup();
     }
     const found = options.locateSidebar?.(); const root = found?.root || found?.slot || doc.querySelector('[data-slot="sidebar"]');
+    mountHomeWorkSwitch();
     const rail = doc.querySelector('[data-neko-side-rail]'), theme = rail?.querySelector('.neko-side-rail__theme');
     const space = rail?.querySelector('.neko-side-rail__space') || null;
     if (space !== railSpace) {
@@ -1167,7 +1192,7 @@ function installWorkspaceShell(options = {}) {
       const side = flexSocialRect ? {left:flexSocialRect.x,top:flexSocialRect.y,right:flexSocialRect.x+flexSocialRect.width,bottom:flexSocialRect.y+flexSocialRect.height,width:flexSocialRect.width,height:flexSocialRect.height} : slotRect?.width > 0 && slotRect?.height > 0 ? slotRect : track?.getBoundingClientRect();
       // Leave the native brand row and mode switch visible above the room column.
       const brandNode = sidebar?.querySelector('.neko-wordmark');
-      const switchNode = sidebar?.querySelector('.neko-mode-switch');
+      const switchNode = sidebar?.querySelector('.neko-home-work-switch');
       const sideTop = side?.top || 0;
       const headerBottom = Math.max(sideTop, brandNode?.getBoundingClientRect().bottom || 0, switchNode?.getBoundingClientRect().bottom || 0);
       const contentTop = headerBottom > sideTop + 1 ? headerBottom + 8 : sideTop;
