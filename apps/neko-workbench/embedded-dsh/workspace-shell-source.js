@@ -51,6 +51,16 @@ function installWorkspaceShell(options = {}) {
   // lobby bridge the row stays a labelled preview.
   const roomPreview = previewFactory ? own(previewFactory(doc, avatar, { mountHome: options.mountHome, openPublicRoom: lobby ? () => lobby.show({ room: true }) : null })) : null;
   if (roomPreview?.disposeHome) releases.push(() => roomPreview.disposeHome());
+  // Community, video and fish live above the room list, under Home.
+  const homeFeatures = roomPreview ? own(el('div', 'neko-home-features')) : null;
+  if (homeFeatures) roomPreview.prepend(homeFeatures);
+  function mountHomeFeatures() {
+    if (!homeFeatures) return;
+    const rail = doc.querySelector('[data-neko-side-rail]');
+    for (const node of [communityButton, rail?.querySelector('.neko-side-rail__bilibili'), rail?.querySelector('.neko-side-rail__fish')]) {
+      if (node && node.parentElement !== homeFeatures) homeFeatures.appendChild(node);
+    }
+  }
   let roomActive = !!roomPreview, roomSelection = !!roomPreview, sideSocial = false, initialRoomResolved = false;
   let flexSocialRect = null, flexSocialKey = '';
   function onFlexSocialGeometry(event) {
@@ -1125,6 +1135,7 @@ function installWorkspaceShell(options = {}) {
     }
     const found = options.locateSidebar?.(); const root = found?.root || found?.slot || doc.querySelector('[data-slot="sidebar"]');
     mountHomeWorkSwitch();
+    mountHomeFeatures();
     const rail = doc.querySelector('[data-neko-side-rail]'), theme = rail?.querySelector('.neko-side-rail__theme');
     const space = rail?.querySelector('.neko-side-rail__space') || null;
     if (space !== railSpace) {

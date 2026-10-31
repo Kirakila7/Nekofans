@@ -250,7 +250,7 @@ function installWorkbenchSideRail(options = {}) {
     if (stopped) return;
     if (videoMenuTimer) win.clearTimeout(videoMenuTimer); videoMenuTimer = null;
     videoMenu.hidden = !open; bili.setAttribute('aria-expanded',String(open));
-    if (open) { const rect = bili.getBoundingClientRect(); videoMenu.style.top = Math.max(8,Math.min(win.innerHeight - 112,rect.top - 12))+'px'; }
+    if (open) { const rect = bili.getBoundingClientRect(); videoMenu.style.top = Math.max(8,Math.min(win.innerHeight - 112,rect.top - 12))+'px'; videoMenu.style.left = Math.max(8, Math.round(rect.left))+'px'; }
     if (focus && open) videoOptions[videoPlatform].focus(); else if (focus) bili.focus();
   }
   function delayVideoMenuClose() { if (videoMenuTimer) win.clearTimeout(videoMenuTimer); videoMenuTimer = win.setTimeout(() => setVideoMenu(false),220); }
