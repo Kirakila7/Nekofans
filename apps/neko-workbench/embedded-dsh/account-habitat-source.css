@@ -113,12 +113,6 @@ button.hjANda_trigger[data-neko-unified-account][data-collapsed="true"] .neh-pro
 .neh-account-refresh { padding: 4px 9px; border: 1px solid var(--dsw-alias-border-l1, #d3dee9); border-radius: 7px; background: transparent; color: inherit; font: inherit; font-size: 11px; cursor: pointer; }
 .neh-account-refresh:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary, #2c66a6); outline-offset: 2px; }
 
-/* Closing identity row at the bottom of the account menu. */
-.neh-menu-footer { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--nk-border, #e4e7ec); color: var(--nk-text, #1d2430); font: 12px/1.4 system-ui, sans-serif; }
-.neh-menu-footer__avatar { width: 24px; height: 24px; flex: none; border-radius: 50%; object-fit: contain; }
-.neh-menu-footer__name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
-.neh-menu-footer__chevron { flex: none; color: var(--nk-text-3, #8b929e); }
-
 /* Bottom account row: avatar + name, opens the native account menu. */
 body[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account] {
   position: fixed !important;
