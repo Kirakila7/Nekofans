@@ -112,3 +112,60 @@ button.hjANda_trigger[data-neko-unified-account][data-collapsed="true"] .neh-pro
 .neh-quota-note { margin: 4px 0 0; font-size: 11px; line-height: 17px; color: var(--dsw-alias-label-secondary, #62758a); }
 .neh-account-refresh { padding: 4px 9px; border: 1px solid var(--dsw-alias-border-l1, #d3dee9); border-radius: 7px; background: transparent; color: inherit; font: inherit; font-size: 11px; cursor: pointer; }
 .neh-account-refresh:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary, #2c66a6); outline-offset: 2px; }
+
+/* Bottom account row: avatar + name, opens the native account menu. */
+body[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account] {
+  position: fixed !important;
+  left: var(--neko-sidebar-left, 64px) !important;
+  bottom: 0 !important;
+  top: auto !important;
+  width: var(--neko-sidebar-width, 280px) !important;
+  height: 48px !important;
+  min-height: 48px !important;
+  padding: 0 12px !important;
+  margin: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  border: 0 !important;
+  border-top: 1px solid var(--nk-border, #e4e7ec) !important;
+  border-radius: 0 !important;
+  background: var(--nk-surface, #fff) !important;
+  box-shadow: none !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  z-index: 45 !important;
+  box-sizing: border-box !important;
+  color: var(--nk-text, #1d2430) !important;
+  font: 13px/1.4 system-ui, sans-serif !important;
+  cursor: pointer !important;
+  text-align: left !important;
+}
+body[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account]:hover { background: var(--nk-hover, #f2f4f7) !important; }
+body[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account]:focus-visible { outline: 2px solid var(--nk-focus, #3f6ea8); outline-offset: -2px; }
+body[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account] .neh-launcher {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  width: 100% !important;
+  height: 100% !important;
+  grid-template-columns: none !important;
+  pointer-events: none !important;
+}
+body[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account] .neh-identity {
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 8px !important;
+  min-width: 0 !important;
+}
+body[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account] .neh-developer-avatar { width: 28px !important; height: 28px !important; order: -1 !important; }
+body[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account] .neh-developer-name { font-size: 13px !important; font-weight: 500 !important; color: var(--nk-text, #1d2430) !important; min-width: 0 !important; overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important; }
+body[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account] .neh-habitat-column,
+body[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account] .neh-providers { display: none !important; }
+body[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account] .neh-launcher::after {
+  content: '⌄';
+  margin-left: auto;
+  color: var(--nk-text-3, #8b929e);
+  font-size: 14px;
+  line-height: 1;
+}

@@ -1156,6 +1156,11 @@ function installWorkspaceShell(options = {}) {
     const centerRect = doc.querySelector('[data-neko-chat-center]')?.getBoundingClientRect();
     const railRect = rail?.getBoundingClientRect();
     const sidebarRect = sidebar?.getBoundingClientRect();
+    if (sidebarRect?.width > 0) {
+      const leftPx = `${Math.round(sidebarRect.left)}px`, widthPx = `${Math.round(sidebarRect.width)}px`;
+      if (doc.body.style.getPropertyValue('--neko-sidebar-left') !== leftPx) doc.body.style.setProperty('--neko-sidebar-left', leftPx);
+      if (doc.body.style.getPropertyValue('--neko-sidebar-width') !== widthPx) doc.body.style.setProperty('--neko-sidebar-width', widthPx);
+    }
     const left = Math.max(0, railRect?.width > 0 ? railRect.right : sidebarRect?.left || 0);
     const right = Math.min(win.innerWidth, centerRect && centerRect.left > left ? centerRect.left : 0);
     const expanded = !!account && roomActive && !sideSocial &&
@@ -1164,7 +1169,8 @@ function installWorkspaceShell(options = {}) {
       !sidebar?.closest('[data-sidebar-collapsed="true"]') && right - left >= 80;
     if (expanded) {
       const accountRect = account.getBoundingClientRect();
-      const bottom = accountRect.height > 0 && accountRect.top > 60 ? accountRect.top : win.innerHeight;
+      const accountRow = doc.querySelector('button.hjANda_trigger[data-neko-unified-account]') ? 48 : 0;
+      const bottom = Math.min(accountRect.height > 0 && accountRect.top > 60 ? accountRect.top : win.innerHeight, win.innerHeight - accountRow);
       const floating = hasNativeComposerBridge ? floatingBounds() : null;
       const safeRight = floating ? Math.min(right, floating.x - 12) : right;
       const geometry = { '--neko-companion-left': `${Math.round(left)}px`, '--neko-companion-width': `${Math.max(0, Math.floor(safeRight - left))}px`, '--neko-companion-bottom': `${Math.max(0, Math.round(win.innerHeight - bottom))}px` };
@@ -1201,8 +1207,8 @@ function installWorkspaceShell(options = {}) {
         const r = node?.getBoundingClientRect();
         if (r && r.height > 0 && r.top > (side?.top || 0) + 60) bottom = Math.min(bottom, r.top);
       }
-      const visible = !!side && side.width >= 80 && bottom - contentTop >= 80 && !sidebar?.closest('[data-sidebar-collapsed="true"]');
-      if (visible) {
+      if (doc.querySelector('button.hjANda_trigger[data-neko-unified-account]')) bottom = Math.min(bottom, win.innerHeight - 48);
+      const visible = !!side && side.width >= 80 && bottom - contentTop >= 80 && !sidebar?.closest('[data-sidebar-collapsed="true"]');      if (visible) {
         const values = { left: `${Math.round(side.left)}px`, top: `${Math.round(contentTop)}px`, width: `${Math.round(side.width)}px`, height: `${Math.round(bottom - contentTop)}px` };
         for (const [key, value] of Object.entries(values)) if (roomPreview.style[key] !== value) roomPreview.style[key] = value;
         protectRoomFooter(sidebar, account);

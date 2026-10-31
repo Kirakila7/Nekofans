@@ -71,22 +71,18 @@ body[data-neko-side-rail-layout] .neko-role-host .neko-bilibili,
 body[data-neko-side-rail-layout] [data-neko-rail-fish-original] { display: none !important; }
 body[data-neko-side-rail-layout] .neko-role-host .neko-social-actions { grid-template-columns: 1fr; }
 body[data-neko-side-rail-layout] [data-slot="settings.launcher"] { height: 0; min-height: 0; margin: 0; padding: 0; }
+/* Bottom account row: avatar + name, opens the native account menu. */
 body[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-account-habitat][data-neko-unified-account] {
-  position: fixed; left: 12px; bottom: 12px; z-index: 41;
-  display: grid !important; place-items: center; width: 40px !important; height: 40px !important;
-  min-height: 40px !important; padding: 4px !important; margin: 0 !important;
-  border: 0 !important; border-radius: 12px; background: transparent;
-  opacity: 0 !important; pointer-events: none !important;
+  position: fixed; left: var(--neko-sidebar-left, var(--neko-companion-left, 64px)); bottom: 0; z-index: 45;
+  display: flex !important; align-items: center; width: var(--neko-sidebar-width, var(--neko-companion-width, 280px)) !important; height: 48px !important;
+  min-height: 48px !important; padding: 0 12px !important; margin: 0 !important; box-sizing: border-box !important;
+  border: 0 !important; border-top: 1px solid var(--nk-border, #e4e7ec) !important; border-radius: 0 !important;
+  background: var(--nk-surface, #fff) !important; box-shadow: none !important;
+  opacity: 1 !important; pointer-events: auto !important;
+  color: var(--nk-text, #1d2430) !important; font: 13px/1.4 system-ui, sans-serif !important; cursor: pointer !important; text-align: left !important;
 }
-body[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account] .neh-launcher {
-  display: block !important; width: 32px !important; height: 32px !important;
-}
-body[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account] .neh-identity { display: block; }
-body[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account] .neh-developer-avatar { width: 32px; height: 32px; }
-body[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account] .neh-developer-name,
-body[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account] .neh-providers { display: none; }
-body[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account]:hover { background: var(--dsw-alias-interactive-bg-hover, #ddedf4); }
-body[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account]:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary, #246b91); outline-offset: 2px; }
+body[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account]:hover { background: var(--nk-hover, #f2f4f7) !important; }
+body[data-neko-side-rail-layout] button.hjANda_trigger[data-neko-unified-account]:focus-visible { outline: 2px solid var(--nk-focus, #3f6ea8); outline-offset: -2px; }
 /* Press and disabled cues for rail icon buttons (focus ring is defined above). */
 .neko-side-rail__button:active:not(:disabled) { background: var(--dsw-alias-interactive-bg-active, #d0e5ef); }
 .neko-side-rail__button:disabled { opacity: .45; cursor: not-allowed; }
