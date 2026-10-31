@@ -1,11 +1,11 @@
 'use strict';
 
-// Lobby (N.E.K.O.Chat) endpoint configuration. Values come only from the
-// environment; there is no production default for the chat service yet, so an
-// unset NEKO_WORKBENCH_CHAT_URL means the lobby panel shows "unconfigured".
-// Error text never echoes the configured value.
+// Lobby (N.E.K.O.Chat) endpoint configuration. The official service is used by
+// default; the environment can override it or explicitly disable it with an
+// empty value. Error text never echoes the configured value.
 const { OFFICIAL_AUTH_ORIGIN } = require('./community-config.cjs');
 
+const DEFAULT_CHAT_URL = 'https://chat.nekotech.ai';
 const DEFAULT_CHAT_CLIENT_ID = 'neko-chat-desktop-prod';
 const CHAT_CLIENT_ID_PATTERN = /^neko-chat-desktop-[a-z]+$/;
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]']);
@@ -104,7 +104,8 @@ function chatChannelSocketUrl(config, channelId) {
 // Throws (with fixed text) on an invalid configuration; the lobby controller
 // catches it so the private companion chat is never affected.
 function resolveChatConfig(env = process.env) {
-  const chatUrl = resolveChatUrl(env.NEKO_WORKBENCH_CHAT_URL);
+  const chatUrl = resolveChatUrl(env.NEKO_WORKBENCH_CHAT_URL === undefined
+    ? DEFAULT_CHAT_URL : env.NEKO_WORKBENCH_CHAT_URL);
   if (!chatUrl) return Object.freeze({ configured: false });
   return Object.freeze({
     configured: true,
@@ -116,6 +117,6 @@ function resolveChatConfig(env = process.env) {
   });
 }
 
-module.exports = { OFFICIAL_AUTH_ORIGIN, DEFAULT_CHAT_CLIENT_ID, CHAT_CLIENT_ID_PATTERN, LOOPBACK_HOSTS,
+module.exports = { OFFICIAL_AUTH_ORIGIN, DEFAULT_CHAT_URL, DEFAULT_CHAT_CLIENT_ID, CHAT_CLIENT_ID_PATTERN, LOOPBACK_HOSTS,
   resolveChatUrl, resolveChatClientId, resolveChatAuthUrl, resolveChatOAuthPorts,
   chatSocketBase, chatChannelSocketUrl, resolveChatConfig };
