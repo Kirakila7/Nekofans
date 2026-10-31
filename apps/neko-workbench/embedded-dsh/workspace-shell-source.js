@@ -92,10 +92,13 @@ function installWorkspaceShell(options = {}) {
     // The original native tools nav remains in the sidebar DOM even when its
     // overlay is positioned elsewhere. Exempt only its path while it is open.
     const tools = sidebar.querySelector('nav[data-neko-tools="open"]');
+    // The room column keeps the native brand row and mode switch above it.
+    const headerNodes = [sidebar.querySelector('.neko-wordmark'), sidebar.querySelector('.neko-mode-switch')].filter(Boolean);
     function visit(node) {
       if (node === dock || node === account || node.hasAttribute('data-neko-companion-footer')) { unmaskRoomBranch(node); return; }
+      if (headerNodes.includes(node)) { unmaskRoomBranch(node); return; }
       if (tools && node === tools) { unmaskRoomBranch(node); return; }
-      if (node.contains(dock) || account && node.contains(account) || tools && node.contains(tools)) {
+      if (node.contains(dock) || account && node.contains(account) || tools && node.contains(tools) || headerNodes.some(child => node.contains(child))) {
         unmaskRoomBranch(node);
         for (const child of node.children) visit(child); return;
       }
@@ -1162,14 +1165,20 @@ function installWorkspaceShell(options = {}) {
       }
       const slotRect = sidebar?.getBoundingClientRect();
       const side = flexSocialRect ? {left:flexSocialRect.x,top:flexSocialRect.y,right:flexSocialRect.x+flexSocialRect.width,bottom:flexSocialRect.y+flexSocialRect.height,width:flexSocialRect.width,height:flexSocialRect.height} : slotRect?.width > 0 && slotRect?.height > 0 ? slotRect : track?.getBoundingClientRect();
+      // Leave the native brand row and mode switch visible above the room column.
+      const brandNode = sidebar?.querySelector('.neko-wordmark');
+      const switchNode = sidebar?.querySelector('.neko-mode-switch');
+      const sideTop = side?.top || 0;
+      const headerBottom = Math.max(sideTop, brandNode?.getBoundingClientRect().bottom || 0, switchNode?.getBoundingClientRect().bottom || 0);
+      const contentTop = headerBottom > sideTop + 1 ? headerBottom + 8 : sideTop;
       let bottom = side?.bottom;
       for (const node of flexSocialRect ? [account?.parentElement] : [account?.parentElement, dock, account]) {
         const r = node?.getBoundingClientRect();
         if (r && r.height > 0 && r.top > (side?.top || 0) + 60) bottom = Math.min(bottom, r.top);
       }
-      const visible = !!side && side.width >= 80 && bottom - side.top >= 80 && !sidebar?.closest('[data-sidebar-collapsed="true"]');
+      const visible = !!side && side.width >= 80 && bottom - contentTop >= 80 && !sidebar?.closest('[data-sidebar-collapsed="true"]');
       if (visible) {
-        const values = { left: `${Math.round(side.left)}px`, top: `${Math.round(side.top)}px`, width: `${Math.round(side.width)}px`, height: `${Math.round(bottom - side.top)}px` };
+        const values = { left: `${Math.round(side.left)}px`, top: `${Math.round(contentTop)}px`, width: `${Math.round(side.width)}px`, height: `${Math.round(bottom - contentTop)}px` };
         for (const [key, value] of Object.entries(values)) if (roomPreview.style[key] !== value) roomPreview.style[key] = value;
         protectRoomFooter(sidebar, account);
       } else releaseRoomInert();

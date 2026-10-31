@@ -65,7 +65,7 @@ function installWorkbenchSideRail(options = {}) {
   let preferredRatio = 1, restoreRatio = .75, chatFrame = null, chatCenter = null, oldChatGrid = null, chatDrag = null, lastChatGeometry = null;
   // Office and social layouts have separate remembered widths. Office always
   // keeps both the project list and work area visible.
-  let gridMode = null, officeRatio = null, socialRatio = 1;
+  let gridMode = null, officeRatio = null, socialRatio = .23;
   let nativeDividerKey = '';
   function postNativeDivider(rect) {
     if (typeof bridge.divider !== 'function') return;
