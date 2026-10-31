@@ -1,11 +1,5 @@
 /* One independent rail; the native session/sidebar/composer layout remains. */
-body[data-neko-side-rail-layout] { --neko-rail-width: 0px; }
-/* The icon rail is gone; its controls live in the sidebar / workbench settings. */
-body[data-neko-side-rail-layout] .neko-side-rail,
-body[data-neko-side-rail-layout] .neko-avatar-anchor,
-body[data-neko-side-rail-layout] .neko-avatar-portal { display: none !important; }
-/* Clear the native traffic lights now that the sidebar starts at the window edge. */
-body[data-neko-side-rail-layout] .kB3qhq_logoRow { padding-top: 38px; }
+body[data-neko-side-rail-layout] { --neko-rail-width: 64px; }
 body[data-neko-side-rail-layout] [data-neko-rail-app] {
   width: calc(100% - var(--neko-rail-width)) !important;
   margin-left: var(--neko-rail-width) !important; min-width: 0;
