@@ -1,5 +1,10 @@
 /* One independent rail; the native session/sidebar/composer layout remains. */
 body[data-neko-side-rail-layout] { --neko-rail-width: 64px; }
+/* Home/Work in the sidebar replaces the rail's room/work buttons; the rail's
+   account shortcut is replaced by the bottom account row. */
+body[data-neko-side-rail-layout] .neko-room-entry,
+body[data-neko-side-rail-layout] .neko-room-workspace,
+body[data-neko-side-rail-layout] .neko-side-rail__account { display: none !important; }
 body[data-neko-side-rail-layout] [data-neko-rail-app] {
   width: calc(100% - var(--neko-rail-width)) !important;
   margin-left: var(--neko-rail-width) !important; min-width: 0;

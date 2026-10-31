@@ -337,7 +337,9 @@ function installNekoAccountHabitat(ctx, options) {
   }
   function releaseMenu() {
     if (!menuRecord) return;
-    pauseMedia(menuRecord.owned); menuRecord.owned.remove(); restoreAttributes(menuRecord);
+    pauseMedia(menuRecord.owned); menuRecord.owned.remove();
+    menuRecord.footer?.remove();
+    restoreAttributes(menuRecord);
     menuRecord = null;
   }
   function renderLauncher(snap) {
@@ -392,10 +394,26 @@ function installNekoAccountHabitat(ctx, options) {
     const help = effectiveSignedIn(snap) ? '账号和充值可在下方设置中管理。' : '使用下方登录按钮连接账号。';
     menuRecord.owned.append(heading, summary, habitat(snap, true), element('p', 'neh-menu-help', help));
   }
+  function renderMenuFooter() {
+    if (!menuRecord?.footer) return;
+    const trigger = doc.querySelector(triggerSelector);
+    const name = trigger?.querySelector('.neh-developer-name')?.textContent || '账号';
+    const src = trigger?.querySelector('.neh-developer-avatar')?.getAttribute('src') || developerSrc;
+    const footer = menuRecord.footer;
+    // Keep the row last without re-inserting it on every render.
+    if (footer.parentElement && footer.parentElement.lastElementChild !== footer) footer.parentElement.appendChild(footer);
+    else if (!footer.parentElement && menuRecord.viewport) menuRecord.viewport.appendChild(footer);
+    const key = name + '\n' + (src || '');
+    if (menuRecord.footerKey === key) return;
+    menuRecord.footerKey = key;
+    const avatar = element('img', 'neh-menu-footer__avatar');
+    avatar.alt = ''; avatar.draggable = false; if (src) avatar.src = src;
+    footer.replaceChildren(avatar, element('span', 'neh-menu-footer__name', name), element('span', 'neh-menu-footer__chevron', '⌄'));
+  }
   function render() {
     if (stopped) return;
     const snap = reader.getSnapshot();
-    renderLauncher(snap); renderMenu(snap);
+    renderLauncher(snap); renderMenu(snap); renderMenuFooter();
     const message = accountsBridge ? 'DSH ' + dshLoginLabel(snap) + '，Codex ' + codexLoginLabel() : effectiveSignedIn(snap) ? '账号，' + balanceLabel(snap) + '，来源：' + snap.source : '账号未登录，余额暂不可读取';
     if (message !== lastAnnouncement) { announcement.textContent = message; lastAnnouncement = message; }
   }
@@ -469,9 +487,14 @@ function installNekoAccountHabitat(ctx, options) {
         const own = element('div', 'neh-menu-card');
         own.setAttribute('data-neko-account-owned', 'menu-card');
         own.setAttribute('role', 'presentation');
-        menuRecord = { element: menu, owned: own, attributes: new Map(), renderKey: null };
+        // Closing identity row at the bottom of the native menu.
+        const footer = element('div', 'neh-menu-footer');
+        footer.setAttribute('data-neko-account-owned', 'menu-footer');
+        footer.setAttribute('role', 'presentation');
+        menuRecord = { element: menu, owned: own, footer, viewport, footerKey: null, attributes: new Map(), renderKey: null };
         rememberSet(menuRecord, 'data-neko-account-habitat-menu', '');
         viewport.prepend(own); // Only our node is inserted; original buttons are untouched.
+        viewport.appendChild(footer);
         if (accountsBridge) { if (signedIn) reader.refresh(); refreshCodex(true); }
       }
     }
