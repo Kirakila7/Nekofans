@@ -207,9 +207,7 @@ function installWorkspaceShell(options = {}) {
   for (const [key, value] of Object.entries({ x: '2.5', y: '3', width: '11', height: '10', rx: '1.5' })) railExpandRect.setAttribute(key, value);
   const railExpandLine = doc.createElementNS('http://www.w3.org/2000/svg', 'path'); railExpandLine.setAttribute('d', 'M6.5 3v10');
   railExpandIcon.append(railExpandRect, railExpandLine); railExpand.appendChild(railExpandIcon);
-  const railNew = button('+', 'neko-collapsed-rail__button neko-collapsed-rail__new', () => doc.querySelector('.kB3qhq_newSession')?.click());
-  railNew.setAttribute('aria-label', '新建会话');
-  collapsedRail.append(railExpand, railNew); doc.body.appendChild(collapsedRail);
+  collapsedRail.append(railExpand); doc.body.appendChild(collapsedRail);
   for (const label of ['插件', '自动化任务', '更多']) {
     const tool = button(label, 'neko-work-tools__button', () => {
       const row = Array.from(doc.querySelectorAll('[class*="_panelList"] button')).find(node => node.textContent.trim() === label);

@@ -463,7 +463,7 @@ body[data-neko-workspace-shell] [data-neko-companion-footer] { display:block !im
 /* Native DSH tools live above the seats instead of the floating top-right entry. */
 .neko-work-tools { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:4px; margin:0 0 var(--nk-space-2); }
 /* Collapsed rail: our own expand + new-session icons, level with the lights. */
-.neko-collapsed-rail { display:none; position:fixed; left:0; top:0; bottom:0; width:56px; box-sizing:border-box; z-index:50; flex-direction:column; align-items:center; gap:4px; padding-top:2px; background:linear-gradient(180deg,#212023 0%,#1f1f21 58%,#26262a 100%); -webkit-app-region:no-drag; }
+.neko-collapsed-rail { display:none; position:fixed; left:0; top:0; bottom:0; width:72px; box-sizing:border-box; z-index:50; flex-direction:column; align-items:center; gap:4px; padding-top:42px; background:linear-gradient(180deg,#212023 0%,#1f1f21 58%,#26262a 100%); -webkit-app-region:no-drag; }
 body[data-neko-sidebar-collapsed] .neko-collapsed-rail { display:flex; }
 .neko-collapsed-rail__button { display:grid; place-items:center; width:36px; height:36px; padding:6px; border:1px solid transparent; border-radius:8px; background:transparent; color:var(--nk-text-2); font:18px/1 system-ui,sans-serif; cursor:pointer; }
 .neko-collapsed-rail__button:hover { background:var(--nk-hover); color:var(--nk-text); }
