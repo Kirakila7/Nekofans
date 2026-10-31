@@ -3154,6 +3154,7 @@ function installWorkspaceShell(options = {}) {
   // A lightweight shortcut into DSH's own session-scoped file tree. It never
   // enumerates paths itself or changes the selected session or draft.
   const directoryControl = own(el('div', 'neko-workspace-directory'));
+  let directoryStatusTimer = null;
   const directoryButton = button('', 'neko-workspace-directory__button', () => {
     let message = '';
     if (lobby?.covers()) message = '请先返回工作区，再查看项目目录';
@@ -3166,6 +3167,8 @@ function installWorkspaceShell(options = {}) {
     }
     directoryStatus.textContent = message;
     directoryStatus.hidden = !message;
+    if (directoryStatusTimer) win.clearTimeout(directoryStatusTimer);
+    directoryStatusTimer = message ? win.setTimeout(() => { directoryStatus.hidden = true; directoryStatus.textContent = ''; directoryStatusTimer = null; }, 3000) : null;
   });
   directoryButton.title = '打开当前项目目录'; directoryButton.setAttribute('aria-label', '打开当前项目目录');
   const directoryIcon = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -4170,7 +4173,7 @@ function installWorkspaceShell(options = {}) {
       let lastSessionId = nativeSelection()?.sessionId || null;
       const releaseSelection = options.subscribeDshSelection(() => {
         const nextSessionId = nativeSelection()?.sessionId || null;
-        if (nextSessionId !== lastSessionId) { lastSessionId = nextSessionId; directoryStatus.textContent = ''; directoryStatus.hidden = true; renderCatalog(); }
+        if (nextSessionId !== lastSessionId) { lastSessionId = nextSessionId; directoryStatus.textContent = ''; directoryStatus.hidden = true; if (directoryStatusTimer) { win.clearTimeout(directoryStatusTimer); directoryStatusTimer = null; } renderCatalog(); }
         schedule();
       });
       if (typeof releaseSelection === 'function') releases.push(releaseSelection);
@@ -4193,6 +4196,7 @@ function installWorkspaceShell(options = {}) {
     doc.removeEventListener('pointerdown', dismissCompanionMenu, true);
     doc.removeEventListener('neko-side-surface-change', sideSurfaceChanged);
     doc.removeEventListener('neko-flex-social-geometry', onFlexSocialGeometry);
+    if (directoryStatusTimer) { win.clearTimeout(directoryStatusTimer); directoryStatusTimer = null; }
     if (roomPreview) { doc.removeEventListener('neko-chatroom-show-workspace', showWorkspaceFromLayout); doc.body.removeAttribute('data-neko-chatroom-active'); doc.body.removeAttribute('data-neko-home-active'); releaseRoomInert(); doc.dispatchEvent(new win.Event('neko-chatroom-mode-change')); }
     doc.removeEventListener('neko-home-open', onHomeOpen); doc.removeEventListener('neko-home-close', onHomeClose);
     for (const release of releases) if (typeof release === 'function') release();
@@ -4957,7 +4961,7 @@ function installWorkbenchSideRail(options = {}) {
     const reserve = center.width > 0 && center.right > bounds.left && center.right <= bounds.right ? Math.max(0, bounds.right - center.right) : 0;
     const width = bounds.width - reserve;
     if (!Number.isFinite(width) || width < 240 || bounds.height < 100) return null;
-    const min = mode === 'social' ? Math.min(265, width) : Math.min(180, width * .2), max = mode === 'office' ? Math.max(min, width - Math.min(320, width * .4)) : width;
+    const min = Math.min(265, width), max = mode === 'office' ? Math.max(min, width - Math.min(320, width * .4)) : width;
     return { bounds, width, min, max };
   }
   function setChatRatio(next) {

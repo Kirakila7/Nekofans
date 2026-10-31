@@ -129,7 +129,7 @@ function installWorkbenchSideRail(options = {}) {
     const reserve = center.width > 0 && center.right > bounds.left && center.right <= bounds.right ? Math.max(0, bounds.right - center.right) : 0;
     const width = bounds.width - reserve;
     if (!Number.isFinite(width) || width < 240 || bounds.height < 100) return null;
-    const min = mode === 'social' ? Math.min(265, width) : Math.min(180, width * .2), max = mode === 'office' ? Math.max(min, width - Math.min(320, width * .4)) : width;
+    const min = Math.min(265, width), max = mode === 'office' ? Math.max(min, width - Math.min(320, width * .4)) : width;
     return { bounds, width, min, max };
   }
   function setChatRatio(next) {
