@@ -39,7 +39,7 @@ function createChatroomPreview(doc, avatar = () => '', options = {}) {
   const publicRoom = addRoom('公共聊天室', openPublicRoom ? '进入频道，一起交流与分享' : '一起交流与分享', '✦', 'is-public', !!openPublicRoom);
   if (openPublicRoom) {
     publicRoom.setAttribute('aria-label', '进入公共聊天室，频道');
-    publicRoom.addEventListener('click', () => openPublicRoom());
+    publicRoom.addEventListener('click', () => { homeView.hidden = true; openPublicRoom(); });
   }
   const home = addRoom('我的小窝', '进入 Yui 的家', '⌂', 'is-home', true);
   home.setAttribute('aria-label', '进入我的小窝，Yui 的家');
@@ -90,11 +90,22 @@ function createChatroomPreview(doc, avatar = () => '', options = {}) {
       mounting = false; homeView.removeAttribute('aria-busy');
     }
   };
-  home.addEventListener('click', () => { room.hidden = true; homeView.hidden = false; back.focus(); void mount(); });
-  back.addEventListener('click', () => { homeView.hidden = true; room.hidden = false; home.focus(); });
+  const win = doc.defaultView;
+  function placeHome() {
+    if (homeView.hidden || !win) return;
+    const center = doc.querySelector('[data-neko-chat-center]');
+    const rect = center?.getBoundingClientRect();
+    const box = rect && rect.width > 80 ? rect : { left: 0, top: 0, width: win.innerWidth, height: win.innerHeight };
+    Object.assign(homeView.style, { left: Math.round(box.left) + 'px', top: Math.round(box.top) + 'px', width: Math.round(box.width) + 'px', height: Math.round(box.height) + 'px' });
+  }
+  const onHomeResize = () => placeHome();
+  // The home opens in the main work area; the room list stays in the sidebar.
+  home.addEventListener('click', () => { homeView.hidden = false; placeHome(); back.focus(); void mount(); });
+  back.addEventListener('click', () => { homeView.hidden = true; home.focus(); });
   retry.addEventListener('click', () => { void mount(); });
+  if (win) win.addEventListener('resize', onHomeResize);
   panel.focusPublicRoom = () => { if (!homeView.hidden) return; publicRoom.focus?.(); };
-  panel.disposeHome = () => { disposed = true; releaseHome?.(); releaseHome = null; };
+  panel.disposeHome = () => { disposed = true; if (win) win.removeEventListener('resize', onHomeResize); releaseHome?.(); releaseHome = null; };
   panel.append(room, homeView);
   return panel;
 }

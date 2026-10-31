@@ -19,6 +19,7 @@
 .neko-chatroom-preview__home-status[hidden] { display:none; }
 .neko-chatroom-preview__room-view[hidden], .neko-chatroom-preview__home-view[hidden] { display:none; }
 .neko-chatroom-preview__home-view { min-height:100%; display:flex; flex-direction:column; gap:var(--nk-space-2); }
+.neko-chatroom-preview__home-view:not([hidden]) { position:fixed; z-index:36; box-sizing:border-box; padding:var(--nk-space-3); overflow:auto; background:var(--dsw-alias-bg-base, var(--nk-canvas)); }
 .neko-chatroom-preview__home-header { display:flex; align-items:center; flex-wrap:wrap; gap:var(--nk-space-2); }
 .neko-chatroom-preview__home-header h2 { margin:0; font-size:var(--nk-font-md); }
 .neko-chatroom-preview__home-back, .neko-chatroom-preview__home-retry { border:1px solid var(--nk-border); border-radius:var(--nk-radius-sm); padding:5px 8px; color:var(--nk-text-2); background:var(--nk-surface); font:inherit; cursor:pointer; }
