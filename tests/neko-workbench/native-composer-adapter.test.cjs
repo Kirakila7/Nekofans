@@ -3,7 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {createNativeComposerAdapter} = require('../../apps/neko-workbench/embedded-dsh/native-composer-source.js');
 
-function fixture() {
+function fixture(options = {}) {
   let selection = {sessionId:'s1'}, main = 's1', selectionListener = null;
   const bindings = new Map(), shells = new Map(), changes = [];
   function add(id) {
@@ -21,6 +21,7 @@ function fixture() {
     getShell:(_binding,id)=>shells.get(id)?.shell,
     subscribeSelection(fn){selectionListener=fn;return()=>{selectionListener=null;}},
     onChange:state=>changes.push(state),
+    ...options,
   });
   return {api,first,shells,bindings,changes,select(value){selection=value;selectionListener?.();}, main(value){main=value;}};
 }
@@ -85,4 +86,33 @@ test('native session and input errors are surfaced without claiming send success
   for(const fn of listeners)fn();
   const state=f.api.snapshot();assert.match(state.status,/工作会话出现错误/);assert(!state.status.includes('private'));
   assert.equal(f.changes.at(-1).status,state.status);f.api.dispose();assert.equal(listeners.size,0);
+});
+
+test('floating task feed follows only the retained Chat target and releases the old subscription', async () => {
+  const sources = new Map();
+  for (const id of ['s1','s2']) {
+    const listeners = new Set();
+    sources.set(id,{listeners,value:{legacy:{nodes:[{kind:'user',seq:1,content:[{type:'text',text:id + ' task'}]},{kind:'assistant',seq:2,blocks:[{kind:'reasoning',text:'private reasoning'},{kind:'text',text:id + ' answer'}]},{kind:'context',seq:3,content:[{type:'text',text:'system context'}]}],partial:{turn:1,step:2,blocks:[{kind:'text',text:'live reply'}]},runningCalls:[{name:'file_read',argsRaw:'private args'}]}},getSnapshot(){return this.value},subscribe(fn){listeners.add(fn);return()=>listeners.delete(fn)}});
+  }
+  const f=fixture({getTranscript:(_binding,id)=>sources.get(id)});
+  Object.assign(f.bindings.get('s1').session,{getSnapshot:()=>({running:true,openState:'open'})});
+  const initial=f.api.snapshot();
+  assert.deepEqual(initial.taskMessages.map(row=>row.text),['s1 task','s1 answer','live reply']);
+  assert.equal(initial.taskRunning,true);assert.match(initial.taskStatus,/file_read/);
+  assert(!JSON.stringify(initial).includes('private'));assert(!JSON.stringify(initial).includes('system context'));
+  sources.get('s1').value.legacy.partial.blocks[0].text='stream advanced';
+  for(const fn of sources.get('s1').listeners)fn();
+  assert.equal(f.changes.at(-1).taskMessages.at(-1).text,'stream advanced');
+  const late=[...sources.get('s1').listeners][0];
+  f.select({sessionId:'s2'});f.main('s2');await Promise.resolve();
+  assert.equal(sources.get('s1').listeners.size,0);late();
+  assert.equal(f.changes.at(-1).sessionId,'s2');assert.equal(f.changes.at(-1).taskMessages[0].text,'s2 task');
+  f.api.dispose();assert.equal(sources.get('s2').listeners.size,0);
+});
+
+test('task feed reports unavailable/error states and bounds messages without claiming completion',()=>{
+  const f=fixture();assert.match(f.api.snapshot().taskStatus,/暂不可用/);
+  Object.assign(f.bindings.get('s1').session,{getSnapshot:()=>({lastAgentError:'private provider error',pendingSubmissions:[{requestId:'q',text:'queued text'}]})});
+  const state=f.api.snapshot();assert.match(state.taskStatus,/出现错误/);assert.equal(state.taskMessages[0].pending,true);assert(!JSON.stringify(state).includes('private provider'));
+  f.api.dispose();
 });

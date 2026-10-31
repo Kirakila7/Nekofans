@@ -57,9 +57,13 @@ if (!process.versions.electron || process.env.NEKO_RAIL_QA_CHILD !== '1') {
       for (const surface of ['community','bilibili']) {
         await win.webContents.executeJavaScript(`document.dispatchEvent(new CustomEvent('neko-side-surface-change',{detail:{surface:${JSON.stringify(surface)}}}));`,true);
         await wait(100);
-        const social=await win.webContents.executeJavaScript(`(()=>{const d=document.querySelector('.neko-companion-dock'),p=document.querySelector('.neko-rail-companion'),c=document.querySelector('.neko-companion-character'),r=p.getBoundingClientRect();p.click();return{dockDisplay:getComputedStyle(d).display,rail:p.hidden,parent:c.parentElement===p,count:document.querySelectorAll('.neko-companion-character').length,x:r.x,width:r.width,height:r.height,actions:window.qaActions};})()`,true);
+        const social=await win.webContents.executeJavaScript(`(()=>{const d=document.querySelector('.neko-companion-dock'),p=document.querySelector('.neko-rail-companion'),c=document.querySelector('.neko-companion-character'),r=p.getBoundingClientRect();return{dockDisplay:getComputedStyle(d).display,rail:p.hidden,parent:c.parentElement===p,count:document.querySelectorAll('.neko-companion-character').length,x:r.x,width:r.width,height:r.height,actions:window.qaActions.length};})()`,true);
         assert.equal(social.dockDisplay,'none',surface+' has no bottom-left chat'); assert.equal(social.rail,false); assert(social.parent); assert.equal(social.count,1);
-        assert(social.x>=0&&social.x+social.width<=64,'fish stays inside the rail'); assert(social.width>=54&&social.height>=68,'larger rail fish'); assert.equal(social.actions.at(-1),'open-companion-chat');
+        assert(social.x>=0&&social.x+social.width<=64,'fish stays inside the rail'); assert(social.width>=54&&social.height>=68,'larger rail fish');
+        await win.webContents.executeJavaScript("document.querySelector('.neko-rail-companion').click()",true);await wait(100);
+        assert.equal(await win.webContents.executeJavaScript("document.querySelector('.neko-companion-dock').hasAttribute('data-neko-companion-rail-chat') && document.querySelector('.neko-companion-form textarea').value === 'unsent social fixture'",true),true);
+        assert.equal(await win.webContents.executeJavaScript('window.qaActions.length',true),social.actions,'chat stays inside the workbench');
+        await win.webContents.executeJavaScript("document.querySelector('.neko-companion-rail-close').click()",true);await wait(100);
       }
       await win.webContents.executeJavaScript(`document.dispatchEvent(new CustomEvent('neko-side-surface-change',{detail:{surface:'hidden'}}));`,true); await wait(100);
       const restored=await win.webContents.executeJavaScript(`(()=>{const d=document.querySelector('.neko-companion-dock');return{display:getComputedStyle(d).display,parent:document.querySelector('.neko-companion-character').parentElement===d,draft:document.querySelector('.neko-companion-form textarea').value};})()`,true);

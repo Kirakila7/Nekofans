@@ -52,6 +52,18 @@ if(!process.versions.electron||process.env.NEKO_VIDEO_COMPOSER_QA_CHILD!=='1'){
         assert.equal(owner.contentView.children.at(-1),input,'input is above opaque video');
         const r=input.getBounds();assert.equal(area.x+r.x,root.x+Math.round(rect.x*zoom));assert.equal(area.y+r.y,root.y+Math.round(rect.y*zoom));
         assert.equal(await input.webContents.executeJavaScript('document.querySelector("textarea").value'),'retained synthetic draft');
+        // The merged project-records UI is taller than the original input.
+        // It must stay in the same video owner and remain usable at every zoom.
+        const expanded={...rect,y:height-376,height:360};
+        composer.place(host,{action:'place',rect:expanded});
+        composer.update({value:'retained synthetic draft',enabled:true,busy:false,sessionToken:'fixture-session',revision:1,recordsOpen:true,records:[{id:'dsh:fixture-session',title:'Synthetic session',project:'Synthetic project',enabled:true}]});
+        await wait(30);
+        assert.equal(owner.contentView.children.at(-1),input);
+        assert.equal(input.getBounds().height,Math.round(expanded.height*zoom));
+        assert.equal(await input.webContents.executeJavaScript('!document.querySelector("#records").hidden && document.querySelector("#records-list").children.length === 1'),true);
+        await input.webContents.executeJavaScript('document.querySelector("#records-toggle").click()');await wait(30);
+        assert((await host.webContents.executeJavaScript('qaEvents.read()')).some(e=>e.type==='records-toggle'&&e.open===false));
+        assert.equal(await input.webContents.executeJavaScript('document.querySelector("textarea").value'),'retained synthetic draft');
         if(zoom===1&&Number(process.env.NEKO_VIDEO_QA_HOLD_MS))await wait(Number(process.env.NEKO_VIDEO_QA_HOLD_MS));
         // Input uses the real isolated preload and IPC; no backend task runs.
         await input.webContents.executeJavaScript("document.querySelector('#expand').click()");await wait(30);
@@ -60,7 +72,7 @@ if(!process.versions.electron||process.env.NEKO_VIDEO_COMPOSER_QA_CHILD!=='1'){
         assert(owner.isDestroyed());assert(host.contentView.children.includes(input),'before closing video window the original input is released and restored');
         assert.equal(await input.webContents.executeJavaScript('document.querySelector("textarea").value'),'retained synthetic draft');
       }
-      console.log(JSON.stringify({ok:true,zooms:[1,1.25,1.5],videoEdgesAligned:true,inputAboveVideo:true,nativeExpandIPC:true,inputAndDraftRetained:true,frameRemoved:true}));
+      console.log(JSON.stringify({ok:true,zooms:[1,1.25,1.5],videoEdgesAligned:true,inputAboveVideo:true,nativeExpandIPC:true,inputAndDraftRetained:true,frameRemoved:true,expandedRecordsAboveVideo:true,nativeRecordsToggleIPC:true}));
     }finally{composer.dispose();social.dispose();host.destroy();}
     app.quit();
   }).catch(error=>{console.error(error.stack||error);app.exit(1);});

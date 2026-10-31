@@ -68,7 +68,7 @@ function createNativeComposerController({ WebContentsView, ipcMain, baseDir = __
     bind(window);
     if (request.action === 'remove') { rect = null; detach(); return { ok: true }; }
     const r = request.rect;
-    if (!r || Object.keys(r).sort().join(',') !== 'height,width,x,y' || !Object.values(r).every(n => Number.isFinite(n) && Math.abs(n) < 100000) || r.width < 100 || r.width > 1200 || r.height < 32 || r.height > 500) throw Error('无效悬浮输入位置');
+    if (!r || Object.keys(r).sort().join(',') !== 'height,width,x,y' || !Object.values(r).every(n => Number.isFinite(n) && Math.abs(n) < 100000) || r.width < 100 || r.width > 1200 || r.height < 32 || r.height > 1000) throw Error('无效悬浮输入位置');
     rect = { ...r }; if (!view) make(); refresh(); return { ok: true };
   }
   function update(snapshot) {
@@ -76,14 +76,28 @@ function createNativeComposerController({ WebContentsView, ipcMain, baseDir = __
     if (snapshot.sessionToken !== state.sessionToken) { pendingSubmit = null; pendingEdit = null; }
     if (pendingSubmit !== null && snapshot.settledSubmitId === pendingSubmit) pendingSubmit = null;
     if (pendingEdit !== null && snapshot.settledEditId === pendingEdit) pendingEdit = null;
-    state = { value: snapshot.value, settledEditId: Number.isSafeInteger(snapshot.settledEditId) ? snapshot.settledEditId : null, editConflict: snapshot.editConflict === true, status: typeof snapshot.status === 'string' ? snapshot.status.slice(0, 160) : '', settledSubmitId: Number.isSafeInteger(snapshot.settledSubmitId) ? snapshot.settledSubmitId : null, placeholder: typeof snapshot.placeholder === 'string' ? snapshot.placeholder.slice(0, 120) : '发消息或创建任务…', enabled: snapshot.enabled === true, busy: snapshot.busy === true, sessionToken: snapshot.sessionToken, revision: snapshot.revision };
+    const records = Array.isArray(snapshot.records) ? snapshot.records.slice(0, 200).filter(item => item && typeof item.id === 'string' && item.id.length <= 512 && typeof item.title === 'string' && typeof item.project === 'string').map(item => ({id:item.id,title:item.title.slice(0,160),project:item.project.slice(0,120),enabled:item.enabled === true})) : [];
+    state = { settledRecordOpenId:Number.isSafeInteger(snapshot.settledRecordOpenId) ? snapshot.settledRecordOpenId : null, records, recordsOpen:snapshot.recordsOpen === true, recordsHasMore:snapshot.recordsHasMore === true, recordsLoading:snapshot.recordsLoading === true, recordsStatus:typeof snapshot.recordsStatus === 'string' ? snapshot.recordsStatus.slice(0,160) : '', value: snapshot.value, settledEditId: Number.isSafeInteger(snapshot.settledEditId) ? snapshot.settledEditId : null, editConflict: snapshot.editConflict === true, status: typeof snapshot.status === 'string' ? snapshot.status.slice(0, 160) : '', settledSubmitId: Number.isSafeInteger(snapshot.settledSubmitId) ? snapshot.settledSubmitId : null, placeholder: typeof snapshot.placeholder === 'string' ? snapshot.placeholder.slice(0, 120) : '发消息或创建任务…', enabled: snapshot.enabled === true, busy: snapshot.busy === true, sessionToken: snapshot.sessionToken, revision: snapshot.revision };
+    state.sessionLabel = typeof snapshot.sessionLabel === 'string' ? snapshot.sessionLabel.slice(0,240) : '';
+    state.taskOpen = snapshot.taskOpen === true;
+    state.taskStatus = typeof snapshot.taskStatus === 'string' ? snapshot.taskStatus.slice(0,160) : '';
+    state.taskRunning = snapshot.taskRunning === true;
+    state.taskMessages = Array.isArray(snapshot.taskMessages) ? snapshot.taskMessages.slice(-40).filter(row => row && typeof row.id === 'string' && ['user','assistant','activity'].includes(row.role) && typeof row.text === 'string').map(row => ({id:row.id.slice(0,512),role:row.role,text:row.text.slice(0,6000),streaming:row.streaming === true,pending:row.pending === true})) : [];
     publish(); return { ok: true };
   }
   function input(event, message) {
-    if (!host || host.isDestroyed() || !view || !ready || !attached || !enabled || event.sender !== view.webContents || event.senderFrame !== view.webContents.mainFrame || !message || !['edit', 'submit', 'expand', 'files'].includes(message.type)) return;
+    if (!host || host.isDestroyed() || !view || !ready || !attached || !enabled || event.sender !== view.webContents || event.senderFrame !== view.webContents.mainFrame || !message || !['edit', 'submit', 'expand', 'files', 'task-toggle', 'records-toggle', 'records-resize', 'records-refresh', 'records-more', 'record-open'].includes(message.type)) return;
     if (message.type === 'files') {
       if (!state.enabled || !state.sessionToken || message.sessionToken !== state.sessionToken || message.revision !== state.revision || pendingEdit !== null || pendingSubmit !== null) { view.webContents.send('neko-composer-state', { ...state, status:'工作会话或草稿已变化，请展开工作区重试' }); return; }
       host.webContents.send('workbench:native-composer-event', {type:'files',sessionToken:state.sessionToken,revision:state.revision}); return;
+    }
+    if (message.type === 'records-refresh' || message.type === 'records-more') { if (!state.recordsLoading && (message.type !== 'records-more' || state.recordsHasMore)) host.webContents.send('workbench:native-composer-event', {type:message.type}); return; }
+    if (message.type === 'records-toggle' || message.type === 'task-toggle') { if (typeof message.open === 'boolean') host.webContents.send('workbench:native-composer-event', {type:message.type,open:message.open}); return; }
+    if (message.type === 'records-resize') { if (Number.isFinite(message.delta) && Math.abs(message.delta) <= 4000 && (message.dx === undefined || Number.isFinite(message.dx) && Math.abs(message.dx) <= 4000)) host.webContents.send('workbench:native-composer-event', {type:'records-resize',delta:message.delta,dx:message.dx || 0}); return; }
+    if (message.type === 'record-open') {
+      if (!Number.isSafeInteger(message.openId) || message.openId <= 0) return;
+      if (pendingEdit !== null || pendingSubmit !== null || message.sessionToken !== state.sessionToken || message.revision !== state.revision || typeof message.id !== 'string' || !state.records?.some(row => row.id === message.id && row.enabled)) { view.webContents.send('neko-composer-state', {...state,settledRecordOpenId:message.openId,status:'工作会话已变化，请检查后重试'}); return; }
+      host.webContents.send('workbench:native-composer-event', {type:'record-open',id:message.id,sessionToken:state.sessionToken,revision:state.revision,openId:message.openId}); return;
     }
     if (message.type !== 'expand') {
       const invalid = !state.enabled || !state.sessionToken || message.sessionToken !== state.sessionToken || message.revision !== state.revision || typeof message.value !== 'string' || message.value.length > 30000 || (message.type === 'edit' && (pendingEdit !== null || !Number.isSafeInteger(message.editId) || message.editId <= 0)) || (message.type === 'submit' && (state.busy || pendingSubmit !== null || !Number.isSafeInteger(message.submissionId) || message.submissionId <= 0 || !message.value.trim()));

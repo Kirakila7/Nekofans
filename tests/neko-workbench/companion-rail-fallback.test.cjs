@@ -60,9 +60,12 @@ for (const surface of ['community', 'bilibili', 'youtube']) {
     assert.equal(dock.hidden,true); assert.equal(w.getComputedStyle(dock).display,'none');
     assert.equal(fish.parentElement,rail); assert.equal(rail.hidden,false); assert.equal(menu.hidden,true);
     assert.equal(rail.getAttribute('aria-haspopup'),null); assert.match(rail.getAttribute('aria-label'),/点击聊天/);
-    rail.click(); await tick(); assert.deepEqual(actions,['open-companion-chat']); assert.equal(menu.hidden,true);
+    rail.click(); await tick(); assert.deepEqual(actions,[],'chat stays in the workbench'); assert.equal(menu.hidden,true);
+    assert.equal(dock.hidden,false); assert(dock.hasAttribute('data-neko-companion-rail-chat')); assert.equal(dock.parentElement,d.body); assert.equal(d.activeElement,input);
     change(surface==='community'?'bilibili':'community'); await tick();
-    assert.equal(dock.hidden,true); assert.equal(d.querySelectorAll('.neko-companion-character').length,1);
+    assert.equal(dock.hidden,false); assert.equal(d.querySelectorAll('.neko-companion-character').length,1); assert.equal(input.value,'保留未发送草稿');
+    d.querySelector('.neko-companion-rail-close').click(); await tick(); assert.equal(dock.hidden,true); assert(!dock.hasAttribute('data-neko-companion-rail-chat'));
+    rail.click(); await tick(); d.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true})); await tick(); assert.equal(dock.hidden,true);
     change('hidden'); await tick();
     assert.equal(dock.hidden,false); assert.equal(fish.parentElement,dock); assert.equal(rail.hidden,true);
     assert.equal(input.value,'保留未发送草稿'); assert.equal(layout.companionHistoryOpen,true); assert.equal(rail.getAttribute('aria-haspopup'),'menu');

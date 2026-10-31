@@ -39,7 +39,7 @@ function fixture(t, { accountBridge = false, savedLayout = null } = {}) {
     bridge.subscribeCommunityAccount = fn => { accountListener=fn; return()=>{accountListener=null;}; };
   }
   w.eval(source+'\nwindow.startUnified=installUnifiedLayout;');
-  const cleanup=w.startUnified({document:d,window:w,bridge,hideLegacy:()=>legacyClosed++,cssText:''});
+  const cleanup=w.startUnified({document:d,window:w,bridge,hideLegacy:()=>legacyClosed++,cssText:'',allowLegacyMultiPane:true});
   return {w,d,bridge,calls,cleanup,get saved(){return saved},get listener(){return listener},get accountListener(){return accountListener},get releaseAccount(){return releaseAccount},get legacyClosed(){return legacyClosed}};
 }
 async function openConfig(f) { f.d.querySelector('.neko-layout-entry').click(); await sleep(); }

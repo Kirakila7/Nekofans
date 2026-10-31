@@ -36,6 +36,7 @@ body[data-neko-workspace-shell] button[data-neko-new-session="plus"] { position:
 .neko-workspace-rail-controls { display:flex; flex-direction:column; gap:10px; padding-top:14px; }
 .neko-room-entry, .neko-room-workspace { font-size:21px; line-height:1; }
 .neko-room-entry[aria-pressed="true"], .neko-room-workspace[aria-pressed="true"] { background:var(--nws-hover); color:#396c9f; }
+body[data-neko-workspace-shell] [data-neko-room-masked] { visibility:hidden !important; }
 body[data-neko-workspace-shell] .neko-chatroom-preview { position:fixed; z-index:35; box-sizing:border-box; overflow:auto; background:var(--dsw-specific-sidebar-fill,#e5edf8); }
 .neko-workspace-settings { font-size:24px; line-height:1; }
 .neko-office-switch { border:1px solid var(--nws-border); background:var(--nws-hover); }
@@ -77,6 +78,9 @@ body[data-neko-workspace-shell] .neko-chatroom-preview { position:fixed; z-index
    geometry is supplied by the workspace shell and follows its left pane. */
 .neko-companion-dock[data-neko-companion-expanded] { position:fixed; left:var(--neko-companion-left); bottom:var(--neko-companion-bottom); width:var(--neko-companion-width); max-width:none; margin:0; z-index:52; }
 .neko-companion-dock[data-neko-companion-expanded] .neko-companion-form { width:100%; box-sizing:border-box; }
+.neko-companion-dock[data-neko-companion-rail-chat] { position:fixed; inset:auto; left:var(--neko-rail-chat-left); top:var(--neko-rail-chat-top); width:var(--neko-rail-chat-width); max-height:calc(100vh - 32px); overflow:auto; z-index:2147481002; margin:0; padding:32px 10px 10px; border:1px solid var(--nws-border); border-radius:14px; background:var(--nws-bg); box-shadow:0 8px 28px #17303d2b; }
+.neko-companion-dock[data-neko-companion-rail-chat] .neko-companion-history { max-height:240px; }
+.neko-companion-rail-close { position:absolute; top:4px; right:6px; width:26px; height:26px; border:0; border-radius:8px; background:transparent; color:inherit; cursor:pointer; font:20px system-ui; }
 .neko-companion-character { justify-self:center; width:76px; height:90px; position:relative; transform:translateX(var(--neko-companion-offset,0px)); cursor:grab; touch-action:none; user-select:none; -webkit-user-select:none; }
 .neko-companion-character[data-dragging="true"] { cursor:grabbing; }
 .neko-companion-menu { position:fixed; z-index:60; display:grid; gap:3px; min-width:160px; max-width:240px; box-sizing:border-box; padding:6px; color:var(--nws-text); background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:12px; box-shadow:0 8px 28px #17303d20; font:13px/1.5 system-ui; }
@@ -305,6 +309,15 @@ body[data-neko-workspace-shell] [data-neko-companion-footer] { display:block !im
 .neko-lobby-dialog__error { margin:0; color:#bd5c4e; font-size:12px; }
 .neko-lobby-dialog__footer { display:flex; justify-content:flex-end; gap:8px; }
 @media(max-width:900px) { .neko-lobby-members { display:none; } }
+.neko-lobby-panel { padding:12px; overflow:hidden; }
+.neko-lobby-header { flex-wrap:wrap; gap:6px; }
+.neko-lobby-topic { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.neko-lobby-panel[data-neko-narrow] .neko-lobby-members { display:none; }
+.neko-lobby-panel:not([data-neko-narrow]) .neko-lobby-members { display:block; }
+.neko-lobby-panel:not([data-neko-narrow]) .neko-lobby-members-toggle { display:none; }
+.neko-lobby-panel[data-neko-narrow][data-members-open] .neko-lobby-members { display:block; position:absolute; z-index:3; top:100px; right:12px; bottom:120px; width:min(200px,calc(100% - 24px)); padding:12px; border:1px solid var(--nws-border); border-radius:10px; background:var(--nws-bg); box-shadow:0 6px 20px #17303d24; }
+.neko-lobby-panel[data-neko-narrow] .neko-lobby-header__actions { width:100%; flex-wrap:wrap; margin:0; }
+.neko-lobby-panel[data-neko-narrow] .neko-lobby-modes { flex-wrap:wrap; }
 
 /* Interaction states: hover/press cues on enabled controls only, visible focus
    rings, and busy/disabled cues. Disabled (e.g. Codex 测试中) never gets hover. */
@@ -328,6 +341,10 @@ body[data-neko-workspace-shell] [data-neko-companion-footer] { display:block !im
 .neko-workspace-directory__button:hover { background:var(--nws-hover); }
 .neko-workspace-directory__button:focus-visible { outline:2px solid #4c89ad; outline-offset:2px; }
 .neko-workspace-directory__status { position:absolute; right:0; bottom:42px; box-sizing:border-box; width:max-content; max-width:min(220px,70vw); padding:7px 10px; border:1px solid var(--nws-border); border-radius:8px; background:var(--nws-bg); color:var(--nws-text); font:12px/1.4 system-ui,sans-serif; }
+.neko-scene-projects { position:fixed; z-index:41; width:100px; height:36px; border:1px solid var(--nws-border); border-radius:9px; background:var(--nws-bg); color:var(--nws-text); font:12px system-ui,sans-serif; cursor:pointer; }
+.neko-scene-projects[hidden] { display:none !important; }
+.neko-scene-projects:hover { background:var(--nws-hover); }
+.neko-scene-projects:focus-visible { outline:2px solid #4c89ad; outline-offset:2px; }
 .neko-startup { position:fixed; z-index:40; box-sizing:border-box; overflow:auto; container-type:inline-size; color:var(--nws-text); background:var(--dsw-alias-bg-base,#edf4fb); font:14px/1.5 system-ui,sans-serif; }
 .neko-startup[hidden] { display:none !important; }
 .neko-startup__inner { width:min(760px,100%); margin:0 auto; box-sizing:border-box; padding:clamp(22px,5vw,54px); }
@@ -377,3 +394,10 @@ body[data-neko-workspace-shell] [data-neko-companion-footer] { display:block !im
 }
 /* Keep the last project row reachable beside the fixed directory shortcut. */
 .neko-startup__inner { padding-bottom:64px; }
+
+/* Project history uses the existing session chooser while the work area is compact. */
+.neko-floating-records-control { position:fixed; right:112px; z-index:2147481001; padding:7px 12px; border:1px solid var(--nws-border); border-radius:9px; background:var(--nws-bg); color:var(--nws-text); font:12px system-ui,sans-serif; cursor:pointer; box-shadow:0 4px 14px #17303d19; }
+.neko-floating-records-control[hidden] { display:none !important; }
+.neko-floating-records-control:focus-visible { outline:2px solid #4c89ad; outline-offset:2px; }
+.neko-startup[data-neko-floating-records] { z-index:2147481001; resize:both; overflow:auto; min-width:min(260px,calc(100vw - 96px)); min-height:160px; max-width:calc(100vw - 96px); max-height:calc(100vh - 160px); border:1px solid var(--nws-border); border-radius:14px; box-shadow:0 8px 28px #17303d24; }
+.neko-startup[data-neko-floating-records] .neko-startup__inner { padding:16px 14px 28px; }
