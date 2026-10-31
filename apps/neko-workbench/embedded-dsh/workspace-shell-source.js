@@ -17,6 +17,7 @@ function installWorkspaceShell(options = {}) {
   // The embedded DSH themes its aliases inline; mirror the official dark palette.
   const OFFICIAL_DARK = {
     '--dsw-alias-bg-base':'#151517', '--dsw-alias-bg-layer-1':'#202329', '--dsw-alias-bg-layer-2':'#2c2c2e',
+    '--dsw-specific-sidebar-fill':'#212025',
     '--dsw-alias-border-l1':'#2c2e35', '--dsw-alias-label-primary':'#f2f2f4', '--dsw-alias-label-secondary':'#a7a9b0',
     '--dsw-alias-interactive-bg-hover':'#262830', '--dsw-alias-interactive-bg-active':'#2e3038', '--dsw-alias-brand-primary':'#7d9bc9'
   };

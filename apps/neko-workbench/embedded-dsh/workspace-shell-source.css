@@ -116,6 +116,7 @@ html body[data-ds-dark-theme] {
   --dsw-alias-bg-base:#151517 !important;
   --dsw-alias-bg-layer-1:#202329 !important;
   --dsw-alias-bg-layer-2:#2c2c2e !important;
+  --dsw-specific-sidebar-fill:#212025 !important;
   --dsw-alias-border-l1:#2c2e35 !important;
   --dsw-alias-label-primary:#f2f2f4 !important;
   --dsw-alias-label-secondary:#a7a9b0 !important;
