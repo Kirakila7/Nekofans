@@ -1,8 +1,17 @@
 /* One independent rail; the native session/sidebar/composer layout remains. */
-body[data-neko-side-rail-layout] { --neko-rail-width: 64px; }
+body[data-neko-side-rail-layout] { --neko-rail-width: 0px; }
+/* The rail is gone: its entries moved into Home and the native settings dialog. */
+body[data-neko-side-rail-layout] .neko-side-rail,
+body[data-neko-side-rail-layout] .neko-avatar-anchor,
+body[data-neko-side-rail-layout] .neko-avatar-portal { display: none !important; }
+/* Clear the native traffic lights now that the sidebar starts at the window edge. */
+body[data-neko-side-rail-layout] .kB3qhq_logoRow { padding-top: 38px; }
 /* The engine switch and workbench settings entry moved into the native settings dialog. */
 body[data-neko-side-rail-layout] .neko-office-switch,
 body[data-neko-side-rail-layout] .neko-workspace-settings { display: none !important; }
+/* Channel and layout shortcuts are paused; their surfaces remain reachable elsewhere. */
+body[data-neko-side-rail-layout] .neko-lobby-switch,
+body[data-neko-side-rail-layout] .neko-fixed-scene-entry { display: none !important; }
 /* Home/Work in the sidebar replaces the rail's room/work buttons; the rail's
    account shortcut is replaced by the bottom account row. */
 body[data-neko-side-rail-layout] .neko-room-entry,
