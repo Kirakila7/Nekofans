@@ -63,9 +63,8 @@ function installWorkbenchSideRail(options = {}) {
   chatDivider.setAttribute('aria-label', '调整左侧内容和工作区宽度');
   chatDivider.title = '拖动调整宽度 · 双击恢复 3:1 · 方向键调整';
   let preferredRatio = 1, restoreRatio = .75, chatFrame = null, chatCenter = null, oldChatGrid = null, chatDrag = null, lastChatGeometry = null;
-  // Office and social layouts have separate remembered widths. Office always
-  // keeps both the project list and work area visible.
-  let gridMode = null, officeRatio = null, socialRatio = .26;
+  // One remembered width shared by the Chat and Work layouts.
+  let gridMode = null;
   let nativeDividerKey = '';
   function postNativeDivider(rect) {
     if (typeof bridge.divider !== 'function') return;
@@ -151,12 +150,14 @@ function installWorkbenchSideRail(options = {}) {
     const geometry = active && rest ? chatGeometry(found, mode) : null;
     if (!geometry) { clearChatGrid(); return; }
     if (gridMode !== mode) {
-      if (gridMode === 'office') officeRatio = preferredRatio;
-      else if (gridMode === 'social') socialRatio = preferredRatio;
+      const first = gridMode === null;
       clearChatGrid();
       gridMode = mode;
-      const nativeWidth = /^\s*(\d+(?:\.\d+)?)px(?:\s|$)/.exec(rawColumns);
-      preferredRatio = mode === 'office' ? (officeRatio ?? (nativeWidth ? Number(nativeWidth[1]) / geometry.width : .32)) : socialRatio;
+      if (first) {
+        const nativeWidth = /^\s*(\d+(?:\.\d+)?)px(?:\s|$)/.exec(rawColumns);
+        preferredRatio = nativeWidth ? Number(nativeWidth[1]) / geometry.width : .26;
+      }
+      // Both modes share one width; switching keeps the current ratio.
     }
     const dividerLabel = mode === 'office' ? '调整项目列表和工作区宽度' : '调整左侧内容和工作区宽度';
     if (chatDivider.getAttribute('aria-label') !== dividerLabel) chatDivider.setAttribute('aria-label', dividerLabel);

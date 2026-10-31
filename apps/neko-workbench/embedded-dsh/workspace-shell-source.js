@@ -1121,7 +1121,7 @@ function installWorkspaceShell(options = {}) {
     }
     const left = Math.max(0, railRect?.width > 0 ? railRect.right : sidebarRect?.left || 0);
     const right = Math.min(win.innerWidth, centerRect && centerRect.left > left ? centerRect.left : 0);
-    const expanded = !!account && roomActive && !sideSocial &&
+    const expanded = !!account && !sideSocial &&
       !doc.body.hasAttribute('data-neko-flex-mode') &&
       !doc.body.hasAttribute('data-neko-flex-social-hidden') &&
       !sidebar?.closest('[data-sidebar-collapsed="true"]') && right - left >= 80;
