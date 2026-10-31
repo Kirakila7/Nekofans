@@ -82,7 +82,7 @@ test('on a social page the rail companion parks beside its chat box, drags freel
  assert.equal(input.value,'unsent fixture','the companion draft survives page switches');
 });
 
-test('「公共聊天室」 opens the real channel inside the room column with a way back',{skip:DOM_SKIP},async t=>{
+test('「公共聊天室」 opens the real channel in the main work area and stays selected',{skip:DOM_SKIP},async t=>{
  const dom=new JSDOM('<body><aside data-neko-side-rail><div class="neko-side-rail__theme"></div></aside><div data-slot="sidebar"><div data-neko-seat-mount></div><div data-slot="sidebar.workspaces">native</div><div data-slot="settings.launcher"></div></div><main><textarea>native draft</textarea></main></body>',{runScripts:'outside-only'});
  t.after(()=>dom.window.close());const w=dom.window,d=w.document;d.querySelector('[data-slot="sidebar"]').getBoundingClientRect=()=>({left:64,top:0,right:300,bottom:800,width:236,height:800});
  const calls=[];let layout={seats:[],activeSeatId:null,officeMode:'dsh',companionCollapsed:false,companionHistoryOpen:false};
@@ -101,6 +101,6 @@ test('「公共聊天室」 opens the real channel inside the room column with a
  assert.match(panel.textContent,/尚未登录频道|登录频道/,'shows the real sign-in state, no demo messages');
  assert.equal(d.querySelectorAll('.neko-lobby-message').length,0);
  const back=panel.querySelector('.neko-lobby-room-back');assert.equal(back.hidden,false);back.click();await tick();
- assert.equal(panel.hidden,true,'back returns to the chatroom list');assert.equal(d.querySelector('.neko-chatroom-preview').hidden,false);
+ assert.equal(panel.hidden,false,'back keeps the room conversation in the main area');assert.equal(d.querySelector('.neko-chatroom-preview').hidden,false);
  assert.equal(d.querySelector('main textarea').value,'native draft');
 });

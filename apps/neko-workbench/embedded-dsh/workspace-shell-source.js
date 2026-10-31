@@ -102,6 +102,7 @@ function installWorkspaceShell(options = {}) {
     }
     railTop.prepend(roomButton, workButton); doc.body.appendChild(roomPreview);
     doc.body.setAttribute('data-neko-chatroom-active', '');
+    doc.body.setAttribute('data-neko-home-active', '');
   }
   function unmaskRoomBranch(node) {
     if (roomInert.delete(node)) node.removeAttribute('inert');
@@ -143,8 +144,8 @@ function installWorkspaceShell(options = {}) {
     if (closeSocial && sideSocial) doc.dispatchEvent(new win.Event('neko-side-surface-close'));
     if (closeSocial) { sideSocial = false; roomSelection = !!active; }
     roomActive = !!active;
-    if (roomActive) { doc.body.setAttribute('data-neko-chatroom-active', ''); doc.querySelector('.neko-side-rail__expand:not([hidden])')?.click(); if (roomPreview) roomPreview.scrollTop = 0; }
-    else { doc.body.removeAttribute('data-neko-chatroom-active'); roomPreview.hidden = true; releaseRoomInert(); if (lobby?.inRoom()) lobby.hide(); }
+    if (roomActive) { doc.body.setAttribute('data-neko-chatroom-active', ''); doc.body.setAttribute('data-neko-home-active', ''); doc.querySelector('.neko-side-rail__expand:not([hidden])')?.click(); if (roomPreview) roomPreview.scrollTop = 0; if (roomPreview && !roomPreview.querySelector('.neko-chatroom-preview__home-view:not([hidden])') && lobby && !lobby.isOpen()) lobby.show({ room: true }); }
+    else { doc.body.removeAttribute('data-neko-chatroom-active'); doc.body.removeAttribute('data-neko-home-active'); roomPreview.hidden = true; releaseRoomInert(); lobby?.hide(); }
     roomButton.setAttribute('aria-pressed', String(roomActive)); workButton.setAttribute('aria-pressed', String(!roomActive));
     renderHomeWorkSwitch();
     doc.dispatchEvent(new win.Event('neko-chatroom-mode-change'));
@@ -187,6 +188,11 @@ function installWorkspaceShell(options = {}) {
   doc.addEventListener('neko-side-surface-change', sideSurfaceChanged);
   function showWorkspaceFromLayout() { setRoomActive(false); }
   if (roomPreview) { roomButton.setAttribute('aria-pressed', 'true'); workButton.setAttribute('aria-pressed', 'false'); doc.addEventListener('neko-chatroom-show-workspace', showWorkspaceFromLayout); }
+  // Home shows one independent view at a time: the room conversation or the local home.
+  function onHomeOpen() { if (!roomActive) return; lobby?.hide(); schedule(); }
+  function onHomeClose() { if (!roomActive) return; lobby?.show({ room: true }); schedule(); }
+  doc.addEventListener('neko-home-open', onHomeOpen);
+  doc.addEventListener('neko-home-close', onHomeClose);
   const seats = own(el('div', 'neko-custom-seats')); seats.setAttribute('role', 'group'); seats.setAttribute('aria-label', '自定义工作 agent');
   const sessionBrowser = own(el('section', 'neko-session-browser')); sessionBrowser.setAttribute('aria-label', '全部工作会话');
   const listHeader = el('div', 'neko-session-browser__header');
@@ -1124,6 +1130,9 @@ function installWorkspaceShell(options = {}) {
       }
       const showRoom = roomActive && !sideSocial && !doc.body.hasAttribute('data-neko-flex-social-hidden');
       if (roomPreview.hidden === showRoom) roomPreview.hidden = !showRoom;
+      const homeOpen = !!roomPreview.querySelector('.neko-chatroom-preview__home-view:not([hidden])');
+      // Home always shows a room: the public chatroom is the default.
+      if (showRoom && !homeOpen && lobby && !lobby.isOpen()) lobby.show({ room: true });
       if (lobby?.inRoom()) {
         // The conversation opens in the main work area; the room list stays.
         const center = doc.querySelector('[data-neko-chat-center]');
@@ -1229,7 +1238,8 @@ function installWorkspaceShell(options = {}) {
     doc.removeEventListener('pointerdown', dismissCompanionMenu, true);
     doc.removeEventListener('neko-side-surface-change', sideSurfaceChanged);
     doc.removeEventListener('neko-flex-social-geometry', onFlexSocialGeometry);
-    if (roomPreview) { doc.removeEventListener('neko-chatroom-show-workspace', showWorkspaceFromLayout); doc.body.removeAttribute('data-neko-chatroom-active'); releaseRoomInert(); doc.dispatchEvent(new win.Event('neko-chatroom-mode-change')); }
+    if (roomPreview) { doc.removeEventListener('neko-chatroom-show-workspace', showWorkspaceFromLayout); doc.body.removeAttribute('data-neko-chatroom-active'); doc.body.removeAttribute('data-neko-home-active'); releaseRoomInert(); doc.dispatchEvent(new win.Event('neko-chatroom-mode-change')); }
+    doc.removeEventListener('neko-home-open', onHomeOpen); doc.removeEventListener('neko-home-close', onHomeClose);
     for (const release of releases) if (typeof release === 'function') release();
     for (const [node, attrs] of nativeMarks) for (const [name, before] of attrs) { if (node.getAttribute(name) === '') { if (before === null) node.removeAttribute(name); else node.setAttribute(name, before); } }
     doc.body.removeAttribute('data-neko-workspace-shell'); doc.body.removeAttribute('data-neko-office-mode');
@@ -1268,7 +1278,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
   const catSettingsButton = button('猫猫设置', 'neko-lobby-cat-settings', () => openDialog('cat')); catSettingsButton.setAttribute('aria-haspopup', 'dialog');
   const adminButton = button('管理', 'neko-lobby-admin-open', () => openDialog('admin')); adminButton.setAttribute('aria-haspopup', 'dialog'); adminButton.dataset.admin = '';
   headerActions.append(catSettingsButton, signOut);
-  const roomBack = button('‹ 返回聊天室', 'neko-lobby-room-back', () => { hide(); onBack?.(); }); roomBack.hidden = true;
+  const roomBack = button('‹ 返回聊天室', 'neko-lobby-room-back', () => { onBack?.(); }); roomBack.hidden = true;
   header.append(roomBack, title, topic, onlineCount, headerActions);
   const gate = el('div', 'neko-lobby-gate'), gateText = el('p', 'neko-lobby-gate__text');
   const signIn = button('登录频道', 'neko-lobby-sign-in', () => call({ action: 'sign-in' }).then(() => { if (open && connected()) join(); }));

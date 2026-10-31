@@ -107,6 +107,10 @@ body[data-neko-chatroom-active] [data-neko-room-masked] { display:none !importan
 body[data-neko-chatroom-active] .neko-sidebar-items,
 body[data-neko-chatroom-active] .neko-session-browser,
 body[data-neko-chatroom-active] .neko-seat-mount { display:none !important; }
+/* Home never shows the DSH page; its own view covers the main area. */
+body[data-neko-home-active] [data-neko-chat-center] { visibility:hidden !important; }
+body[data-neko-home-active] .neko-workspace-directory,
+body[data-neko-home-active] .neko-scene-projects { display:none !important; }
 /* Follow the official DeepSeek Harness dark palette instead of the skin tint. */
 html body[data-ds-dark-theme] {
   --dsw-alias-bg-base:#151517 !important;

@@ -100,8 +100,8 @@ function createChatroomPreview(doc, avatar = () => '', options = {}) {
   }
   const onHomeResize = () => placeHome();
   // The home opens in the main work area; the room list stays in the sidebar.
-  home.addEventListener('click', () => { homeView.hidden = false; placeHome(); back.focus(); void mount(); });
-  back.addEventListener('click', () => { homeView.hidden = true; home.focus(); });
+  home.addEventListener('click', () => { homeView.hidden = false; placeHome(); doc.dispatchEvent(new win.Event('neko-home-open')); back.focus(); void mount(); });
+  back.addEventListener('click', () => { homeView.hidden = true; doc.dispatchEvent(new win.Event('neko-home-close')); home.focus(); });
   retry.addEventListener('click', () => { void mount(); });
   if (win) win.addEventListener('resize', onHomeResize);
   panel.focusPublicRoom = () => { if (!homeView.hidden) return; publicRoom.focus?.(); };
