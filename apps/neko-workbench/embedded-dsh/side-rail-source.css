@@ -83,7 +83,7 @@ body[data-neko-side-rail-layout] .neko-avatar-anchor {
 body[data-neko-side-rail-layout] .neko-avatar-portal .neko-avatar--mark {
   width: 100%; height: 100%; object-fit: contain;
 }
-body[data-neko-side-rail-layout] .neko-role-host .neko-bilibili,
+body[data-neko-side-rail-layout] .neko-role-host .neko-bilibili:not(.neko-side-rail__button),
 body[data-neko-side-rail-layout] [data-neko-rail-fish-original] { display: none !important; }
 body[data-neko-side-rail-layout] .neko-role-host .neko-social-actions { grid-template-columns: 1fr; }
 body[data-neko-side-rail-layout] [data-slot="settings.launcher"] { height: 0; min-height: 0; margin: 0; padding: 0; }

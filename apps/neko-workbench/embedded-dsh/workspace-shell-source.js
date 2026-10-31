@@ -14,6 +14,18 @@ function installWorkspaceShell(options = {}) {
   let nativeNewPending = false, nativeNewTimer = null, nativeNewBefore = null;
   let office = { status: 'idle', thread: null, items: [], approvals: [], error: '' };
   const nativeMarks = new Map(), nodes = [], releases = [], drafts = new Map(), groupOpen = new Set(), groupSearchCollapsed = new Set();
+  // The embedded DSH themes its aliases inline; mirror the official dark palette.
+  const OFFICIAL_DARK = {
+    '--dsw-alias-bg-base':'#151517', '--dsw-alias-bg-layer-1':'#202329', '--dsw-alias-bg-layer-2':'#2c2c2e',
+    '--dsw-alias-border-l1':'#2c2e35', '--dsw-alias-label-primary':'#f2f2f4', '--dsw-alias-label-secondary':'#a7a9b0',
+    '--dsw-alias-interactive-bg-hover':'#262830', '--dsw-alias-interactive-bg-active':'#2e3038', '--dsw-alias-brand-primary':'#7d9bc9'
+  };
+  function applyOfficialDarkPalette() {
+    if (!doc.body.hasAttribute('data-ds-dark-theme')) return;
+    for (const [name, value] of Object.entries(OFFICIAL_DARK)) {
+      if (doc.body.style.getPropertyValue(name) !== value || doc.body.style.getPropertyPriority(name) !== 'important') doc.body.style.setProperty(name, value, 'important');
+    }
+  }
   const modelChoices = new Map();
   const currentModelChoice = () => modelChoices.get(selectedId || 'new') || { model: null, effort: null };
   function rememberModelChoice(key, choice) {
@@ -59,6 +71,13 @@ function installWorkspaceShell(options = {}) {
       if (node && node.parentElement !== homeFeatures) homeFeatures.appendChild(node);
     }
   }
+  // The room list is a normal sidebar child, not a viewport overlay.
+  function mountRoomPreview() {
+    if (!roomPreview) return;
+    const sidebar = doc.querySelector('[data-slot="sidebar"]');
+    const items = sidebar?.querySelector('.neko-sidebar-items');
+    if (items && roomPreview.parentElement !== items.parentElement) items.parentElement.insertBefore(roomPreview, items);
+  }
   let roomActive = !!roomPreview, roomSelection = !!roomPreview, sideSocial = false, initialRoomResolved = false;
   let flexSocialRect = null, flexSocialKey = '';
   function onFlexSocialGeometry(event) {
@@ -95,6 +114,9 @@ function installWorkspaceShell(options = {}) {
     roomMasked.clear();
   }
   function protectRoomFooter(sidebar, account) {
+    if (!sidebar) return;
+    // The embedded room column must never sit under a masked ancestor.
+    for (let node = roomPreview?.parentElement; node && node !== sidebar.parentElement; node = node.parentElement) unmaskRoomBranch(node);
     // Never inert the original main companion/account footer. Mark only the
     // branches that are wholly behind the preview and restore our marks later.
     // The original native tools nav remains in the sidebar DOM even when its
@@ -104,6 +126,7 @@ function installWorkspaceShell(options = {}) {
     const headerNodes = [sidebar.querySelector('.neko-wordmark'), sidebar.querySelector('.neko-home-work-switch')].filter(Boolean);
     function visit(node) {
       if (node === dock || node === account || node.hasAttribute('data-neko-companion-footer')) { unmaskRoomBranch(node); return; }
+      if (node === roomPreview || (roomPreview && node.contains(roomPreview))) { unmaskRoomBranch(node); return; }
       if (headerNodes.includes(node)) { unmaskRoomBranch(node); return; }
       if (tools && node === tools) { unmaskRoomBranch(node); return; }
       if (node.contains(dock) || account && node.contains(account) || tools && node.contains(tools) || headerNodes.some(child => node.contains(child))) {
@@ -120,7 +143,7 @@ function installWorkspaceShell(options = {}) {
     if (closeSocial && sideSocial) doc.dispatchEvent(new win.Event('neko-side-surface-close'));
     if (closeSocial) { sideSocial = false; roomSelection = !!active; }
     roomActive = !!active;
-    if (roomActive) { doc.body.setAttribute('data-neko-chatroom-active', ''); doc.querySelector('.neko-side-rail__expand:not([hidden])')?.click(); }
+    if (roomActive) { doc.body.setAttribute('data-neko-chatroom-active', ''); doc.querySelector('.neko-side-rail__expand:not([hidden])')?.click(); if (roomPreview) roomPreview.scrollTop = 0; }
     else { doc.body.removeAttribute('data-neko-chatroom-active'); roomPreview.hidden = true; releaseRoomInert(); if (lobby?.inRoom()) lobby.hide(); }
     roomButton.setAttribute('aria-pressed', String(roomActive)); workButton.setAttribute('aria-pressed', String(!roomActive));
     renderHomeWorkSwitch();
@@ -1012,6 +1035,15 @@ function installWorkspaceShell(options = {}) {
   }
   function place() {
     if (disposed) return;
+    const shellSidebar = doc.querySelector('[data-slot="sidebar"]');
+    const shellColumn = shellSidebar?.closest('[class*="_sidebarCol"]') || shellSidebar;
+    const shellSidebarRect = shellColumn?.getBoundingClientRect();
+    if (shellSidebarRect?.width > 0) {
+      const leftPx = `${Math.round(shellSidebarRect.left)}px`, widthPx = `${Math.round(shellSidebarRect.width)}px`;
+      if (doc.body.style.getPropertyValue('--neko-sidebar-left') !== leftPx) doc.body.style.setProperty('--neko-sidebar-left', leftPx);
+      if (doc.body.style.getPropertyValue('--neko-sidebar-width') !== widthPx) doc.body.style.setProperty('--neko-sidebar-width', widthPx);
+    }
+    applyOfficialDarkPalette();
     // A valid selection snapshot with no session plus a visible DSH hero means
     // the native workspace was cleared. Global tool pages do not mount it.
     const selection = nativeSelection();
@@ -1020,6 +1052,7 @@ function installWorkspaceShell(options = {}) {
     const found = options.locateSidebar?.(); const root = found?.root || found?.slot || doc.querySelector('[data-slot="sidebar"]');
     mountHomeWorkSwitch();
     mountHomeFeatures();
+    mountRoomPreview();
     const rail = doc.querySelector('[data-neko-side-rail]'), theme = rail?.querySelector('.neko-side-rail__theme');
     const space = rail?.querySelector('.neko-side-rail__space') || null;
     if (space !== railSpace) {
@@ -1083,35 +1116,24 @@ function installWorkspaceShell(options = {}) {
         const expand = doc.querySelector('.neko-side-rail__expand:not([hidden])');
         if (!collapsed || expand) { initialRoomResolved = true; if (collapsed) expand.click(); }
       }
-      let track = sidebar;
-      while (track?.parentElement && track.parentElement !== doc.body) {
-        const next = track.nextElementSibling;
-        if (next && typeof next.className === 'string' && /(?:^|\s)[^\s]*_centerCol(?:[_-][^\s]+)?(?:\s|$)/.test(next.className)) break;
-        track = track.parentElement;
-      }
-      const slotRect = sidebar?.getBoundingClientRect();
-      const side = flexSocialRect ? {left:flexSocialRect.x,top:flexSocialRect.y,right:flexSocialRect.x+flexSocialRect.width,bottom:flexSocialRect.y+flexSocialRect.height,width:flexSocialRect.width,height:flexSocialRect.height} : slotRect?.width > 0 && slotRect?.height > 0 ? slotRect : track?.getBoundingClientRect();
-      // Leave the native brand row and mode switch visible above the room column.
-      const brandNode = sidebar?.querySelector('.neko-wordmark');
-      const switchNode = sidebar?.querySelector('.neko-home-work-switch');
-      const sideTop = side?.top || 0;
-      const headerBottom = Math.max(sideTop, brandNode?.getBoundingClientRect().bottom || 0, switchNode?.getBoundingClientRect().bottom || 0);
-      const contentTop = headerBottom > sideTop + 1 ? headerBottom + 8 : sideTop;
-      let bottom = side?.bottom;
-      for (const node of flexSocialRect ? [account?.parentElement] : [account?.parentElement, dock, account]) {
-        const r = node?.getBoundingClientRect();
-        if (r && r.height > 0 && r.top > (side?.top || 0) + 60) bottom = Math.min(bottom, r.top);
-      }
-      if (doc.querySelector('button.hjANda_trigger[data-neko-unified-account]')) bottom = Math.min(bottom, win.innerHeight - 48);
-      const visible = !!side && side.width >= 80 && bottom - contentTop >= 80 && !sidebar?.closest('[data-sidebar-collapsed="true"]');      if (visible) {
-        const values = { left: `${Math.round(side.left)}px`, top: `${Math.round(contentTop)}px`, width: `${Math.round(side.width)}px`, height: `${Math.round(bottom - contentTop)}px` };
-        for (const [key, value] of Object.entries(values)) if (roomPreview.style[key] !== value) roomPreview.style[key] = value;
+      // The room column is an in-flow child of the sidebar now, so it scrolls
+      // and aligns with the native sidebar instead of covering it.
+      if (sidebar) {
+        mountRoomPreview();
         protectRoomFooter(sidebar, account);
-      } else releaseRoomInert();
-      const showRoom = visible && roomActive && !sideSocial && !doc.body.hasAttribute('data-neko-flex-social-hidden');
+      }
+      const showRoom = roomActive && !sideSocial && !doc.body.hasAttribute('data-neko-flex-social-hidden');
       if (roomPreview.hidden === showRoom) roomPreview.hidden = !showRoom;
-      if (lobby?.inRoom()) { if (showRoom) lobby.place(roomPreview.style); else lobby.hide(); }
-    }
+      if (lobby?.inRoom()) {
+        // The conversation opens in the main work area; the room list stays.
+        const center = doc.querySelector('[data-neko-chat-center]');
+        const centerBox = center?.getBoundingClientRect();
+        const fallbackBox = roomPreview?.parentElement?.getBoundingClientRect();
+        const box = centerBox && centerBox.width > 80 && centerBox.height > 80 ? centerBox : fallbackBox;
+        if (box && box.width > 80) lobby.place({ left: `${Math.round(box.left)}px`, top: `${Math.round(box.top)}px`, width: `${Math.round(box.width)}px`, height: `${Math.round(box.height)}px` });
+        else lobby.place({ left: '0px', top: '0px', width: `${win.innerWidth}px`, height: `${win.innerHeight}px` });
+      }
+    } else if (lobby?.inRoom()) lobby.hide();
     watchDockAncestors();
     syncCompanionPlacement(rail);
     const bounds = companionInRail ? railBounds() : null, size = bounds ? `${bounds.space.width}:${bounds.space.height}` : '';

@@ -62,7 +62,7 @@ body[data-neko-flex-workspace-collapsed] .neko-workspace-expand-control { right:
 body[data-neko-workspace-shell] .neko-avatar-anchor,
 body[data-neko-workspace-shell] .neko-avatar-portal,
 body[data-neko-workspace-shell] .neko-role-host .neko-roles,
-body[data-neko-workspace-shell] .neko-role-host .neko-community,
+body[data-neko-workspace-shell] .neko-role-host .neko-community:not(.neko-side-rail__button),
 body[data-neko-workspace-shell] [data-neko-session-browser-original],
 body[data-neko-workspace-shell] .neko-hero-pick__name { display:none !important; }
 /* Sidebar brand row: the wordmark is the only brand text in the room column. */
@@ -97,7 +97,42 @@ body[data-neko-workspace-shell] button[data-neko-new-session="plus"] { position:
 .neko-room-entry, .neko-room-workspace { font-size:21px; line-height:1; }
 .neko-room-entry[aria-pressed="true"], .neko-room-workspace[aria-pressed="true"] { background:var(--nws-hover); color:#396c9f; }
 body[data-neko-workspace-shell] [data-neko-room-masked] { visibility:hidden !important; }
-body[data-neko-workspace-shell] .neko-chatroom-preview { position:fixed; z-index:35; box-sizing:border-box; overflow:auto; background:var(--dsw-specific-sidebar-fill,#e5edf8); }
+body[data-neko-workspace-shell] .neko-chatroom-preview { position:relative; z-index:auto; box-sizing:border-box; flex:1 1 auto; min-height:0; overflow:auto; background:transparent; }
+/* Leave room for the companion and its input dock at the column foot. */
+body[data-neko-chatroom-active] .neko-chatroom-preview { padding-bottom:136px; }
+body[data-neko-workspace-shell] .neko-role-host { display:flex; flex-direction:column; min-height:0; }
+/* While Home is active, masked native branches must not reserve layout space. */
+body[data-neko-chatroom-active] [data-neko-room-masked] { display:none !important; }
+/* Home owns the sidebar column; the native navigation and seats step aside. */
+body[data-neko-chatroom-active] .neko-sidebar-items,
+body[data-neko-chatroom-active] .neko-session-browser,
+body[data-neko-chatroom-active] .neko-seat-mount { display:none !important; }
+/* Follow the official DeepSeek Harness dark palette instead of the skin tint. */
+html body[data-ds-dark-theme] {
+  --dsw-alias-bg-base:#151517 !important;
+  --dsw-alias-bg-layer-1:#202329 !important;
+  --dsw-alias-bg-layer-2:#2c2c2e !important;
+  --dsw-alias-border-l1:#2c2e35 !important;
+  --dsw-alias-label-primary:#f2f2f4 !important;
+  --dsw-alias-label-secondary:#a7a9b0 !important;
+  --dsw-alias-interactive-bg-hover:#262830 !important;
+  --dsw-alias-interactive-bg-active:#2e3038 !important;
+  --dsw-alias-brand-primary:#7d9bc9 !important;
+  --nk-canvas:#151517 !important;
+  --nk-surface:#202329 !important;
+  --nk-surface-2:#24252d !important;
+  --nk-surface-3:#2c2c2e !important;
+  --nk-hover:#262830 !important;
+  --nk-active:#2e3038 !important;
+  --nk-border:#2c2e35 !important;
+  --nk-border-strong:#3a3d45 !important;
+  --nk-text:#f2f2f4 !important;
+  --nk-text-2:#a7a9b0 !important;
+  --nk-text-3:#7f828a !important;
+  --nk-accent:#7d9bc9 !important;
+  --nk-accent-soft:#2a3446 !important;
+  --nk-focus:#7d9bc9 !important;
+}
 .neko-workspace-settings { font-size:24px; line-height:1; }
 .neko-office-switch { border:1px solid var(--nws-border); background:var(--nws-hover); }
 .neko-custom-seats { display:grid; gap:3px; margin:10px 0 6px; min-width:0; container-type:inline-size; }
