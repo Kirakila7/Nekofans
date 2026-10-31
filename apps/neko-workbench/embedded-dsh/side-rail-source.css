@@ -1,5 +1,8 @@
 /* One independent rail; the native session/sidebar/composer layout remains. */
 body[data-neko-side-rail-layout] { --neko-rail-width: 64px; }
+/* The engine switch and workbench settings entry moved into the native settings dialog. */
+body[data-neko-side-rail-layout] .neko-office-switch,
+body[data-neko-side-rail-layout] .neko-workspace-settings { display: none !important; }
 /* Home/Work in the sidebar replaces the rail's room/work buttons; the rail's
    account shortcut is replaced by the bottom account row. */
 body[data-neko-side-rail-layout] .neko-room-entry,
