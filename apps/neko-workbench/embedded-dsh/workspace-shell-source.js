@@ -155,9 +155,9 @@ function installWorkspaceShell(options = {}) {
   // Home / Work replaces the native community switch under the brand: Home is
   // the chatroom column, Work is the native workspace navigation.
   const homeWorkSwitch = own(el('div', 'neko-home-work-switch'));
-  homeWorkSwitch.setAttribute('role', 'group'); homeWorkSwitch.setAttribute('aria-label', 'Home 与 Work');
+  homeWorkSwitch.setAttribute('role', 'group'); homeWorkSwitch.setAttribute('aria-label', 'Chat 与 Work');
   const homeWorkButtons = {};
-  for (const [mode, label, hint] of [['home', 'Home', 'Home：聊天室'], ['work', 'Work', 'Work：工作区']]) {
+  for (const [mode, label, hint] of [['home', 'Chat', 'Chat：聊天室'], ['work', 'Work', 'Work：工作区']]) {
     const control = button(label, 'neko-home-work-switch__button', () => setRoomActive(mode === 'home'));
     control.setAttribute('aria-label', hint);
     homeWorkButtons[mode] = control; homeWorkSwitch.appendChild(control);

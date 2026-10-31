@@ -76,6 +76,18 @@ body[data-neko-workspace-shell] .neko-home-work-switch__button:hover:not(:disabl
 body[data-neko-workspace-shell] .neko-home-work-switch__button[aria-pressed="true"] { background:var(--nk-surface); color:var(--nk-text); box-shadow:var(--nk-shadow-sm); }
 body[data-neko-workspace-shell] .neko-home-work-switch__button:disabled { opacity:.5; cursor:not-allowed; }
 body[data-neko-workspace-shell] .neko-home-work-switch__button:focus-visible { outline:2px solid var(--nk-focus); outline-offset:1px; }
+body[data-ds-dark-theme] .neko-home-work-switch { background:#1b1a1f; border-color:#2c2b31; }
+body[data-ds-dark-theme] .neko-home-work-switch__button { color:var(--nk-text-3); font-weight:500; }
+body[data-ds-dark-theme] .neko-home-work-switch__button[aria-pressed="true"] { background:#3a3941; color:#ffffff; font-weight:600; box-shadow:0 1px 3px #00000073; }
+/* The embedded DSH sidebar uses a quiet vertical gradient in dark mode. */
+body[data-ds-dark-theme] .PIRFFq_sidebarCol { background:linear-gradient(180deg,#212023 0%,#1f1f21 58%,#26262a 100%) !important; }
+/* Keep the Work session list on the same content edge as the seats. */
+body[data-neko-workspace-shell] .neko-session-browser { margin:0 12px 0 4px; }
+/* Drag the window from the brand row now that the native title bar is hidden. */
+body[data-neko-workspace-shell] .kB3qhq_logoRow { -webkit-app-region:drag; }
+body[data-neko-workspace-shell] .kB3qhq_logoRow button,
+body[data-neko-workspace-shell] .kB3qhq_logoRow a,
+body[data-neko-workspace-shell] .kB3qhq_logoRow input { -webkit-app-region:no-drag; }
 /* Community, video and fish sit above the room list under Home. */
 .neko-home-features { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; margin:0 0 var(--nk-space-3); }
 .neko-home-features > .neko-side-rail__button {
