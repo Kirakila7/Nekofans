@@ -213,6 +213,23 @@ test('controller requires sign-in before open', async () => {
   assert.match(res.error, /登录/);
 });
 
+test('opening the channel refreshes the community profile', async () => {
+  let client = null;
+  const { controller, clock } = setup({ onClient: value => { client = value; } });
+  await controller.request({ action: 'sign-in' });
+  await controller.request({ action: 'open' });
+  await clock.advance(100);
+  assert.equal(controller.snapshot().me.display_name, '用户一');
+  client.setMe({ user: { user_id: ME, name: 'user1', display_name: '新昵称', avatar: { kind: 'hue', hue: 10, text: '用' } },
+    role: 'member', is_admin: false, muted_until: null, banned_at: null, cat: null, limits: {} });
+  await controller.request({ action: 'close' });
+  assert.equal(controller.snapshot().me.display_name, '用户一', 'closing does not drop the cached profile');
+  const reopened = await controller.request({ action: 'open' });
+  assert.equal(reopened.ok, true);
+  await clock.advance(100);
+  assert.equal(controller.snapshot().me.display_name, '新昵称', 'reopening picks up community profile edits');
+});
+
 test('controller snapshot excludes tokens and raw responses', async () => {
   const { controller, clock } = setup();
   await controller.request({ action: 'sign-in' });
