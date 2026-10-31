@@ -197,6 +197,19 @@ function installWorkspaceShell(options = {}) {
   const seats = own(el('div', 'neko-custom-seats')); seats.setAttribute('role', 'group'); seats.setAttribute('aria-label', '自定义工作 agent');
   // The native DSH tools (插件 / 自动化任务 / 更多) live above the seats.
   const workTools = own(el('div', 'neko-work-tools'));
+  // Collapsed rail: expand and new-session controls at the window's top-left.
+  const collapsedRail = own(el('div', 'neko-collapsed-rail'));
+  const railExpand = button('', 'neko-collapsed-rail__button', () => doc.querySelector('.kB3qhq_toggle')?.click());
+  railExpand.setAttribute('aria-label', '展开侧边栏');
+  const railExpandIcon = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  for (const [key, value] of Object.entries({ viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.4', 'stroke-linejoin': 'round' })) railExpandIcon.setAttribute(key, value);
+  const railExpandRect = doc.createElementNS('http://www.w3.org/2000/svg', 'rect');
+  for (const [key, value] of Object.entries({ x: '2.5', y: '3', width: '11', height: '10', rx: '1.5' })) railExpandRect.setAttribute(key, value);
+  const railExpandLine = doc.createElementNS('http://www.w3.org/2000/svg', 'path'); railExpandLine.setAttribute('d', 'M6.5 3v10');
+  railExpandIcon.append(railExpandRect, railExpandLine); railExpand.appendChild(railExpandIcon);
+  const railNew = button('+', 'neko-collapsed-rail__button neko-collapsed-rail__new', () => doc.querySelector('.kB3qhq_newSession')?.click());
+  railNew.setAttribute('aria-label', '新建会话');
+  collapsedRail.append(railExpand, railNew); doc.body.appendChild(collapsedRail);
   for (const label of ['插件', '自动化任务', '更多']) {
     const tool = button(label, 'neko-work-tools__button', () => {
       const row = Array.from(doc.querySelectorAll('[class*="_panelList"] button')).find(node => node.textContent.trim() === label);
@@ -1060,6 +1073,8 @@ function installWorkspaceShell(options = {}) {
       if (doc.body.style.getPropertyValue('--neko-sidebar-width') !== widthPx) doc.body.style.setProperty('--neko-sidebar-width', widthPx);
     }
     applyOfficialDarkPalette();
+    const collapsedNow = !!doc.querySelector('[data-sidebar-collapsed="true"]');
+    if (doc.body.hasAttribute('data-neko-sidebar-collapsed') !== collapsedNow) doc.body.toggleAttribute('data-neko-sidebar-collapsed', collapsedNow);
     // A valid selection snapshot with no session plus a visible DSH hero means
     // the native workspace was cleared. Global tool pages do not mount it.
     const selection = nativeSelection();
@@ -1137,7 +1152,9 @@ function installWorkspaceShell(options = {}) {
       // and aligns with the native sidebar instead of covering it.
       if (sidebar) {
         mountRoomPreview();
-        protectRoomFooter(sidebar, account);
+        // A collapsed sidebar shows the native rail; do not mask it.
+        if (sidebar.closest('[data-sidebar-collapsed="true"]')) releaseRoomInert();
+        else protectRoomFooter(sidebar, account);
       }
       const showRoom = roomActive && !sideSocial && !doc.body.hasAttribute('data-neko-flex-social-hidden');
       if (roomPreview.hidden === showRoom) roomPreview.hidden = !showRoom;
@@ -1148,8 +1165,10 @@ function installWorkspaceShell(options = {}) {
         // The conversation opens in the main work area; the room list stays.
         const center = doc.querySelector('[data-neko-chat-center]');
         const centerBox = center?.getBoundingClientRect();
+        const colBox = doc.querySelector('[class*="_sidebarCol"]')?.getBoundingClientRect();
         const fallbackBox = roomPreview?.parentElement?.getBoundingClientRect();
-        const box = centerBox && centerBox.width > 80 && centerBox.height > 80 ? centerBox : fallbackBox;
+        const columnBox = colBox && colBox.right > 0 && colBox.right < win.innerWidth - 80 ? { left: colBox.right, top: 0, width: win.innerWidth - colBox.right, height: win.innerHeight } : null;
+        const box = centerBox && centerBox.width > 80 && centerBox.height > 80 ? centerBox : columnBox || fallbackBox;
         if (box && box.width > 80) lobby.place({ left: `${Math.round(box.left)}px`, top: `${Math.round(box.top)}px`, width: `${Math.round(box.width)}px`, height: `${Math.round(box.height)}px` });
         else lobby.place({ left: '0px', top: '0px', width: `${win.innerWidth}px`, height: `${win.innerHeight}px` });
       }
@@ -1201,7 +1220,7 @@ function installWorkspaceShell(options = {}) {
   }
   function schedule() { if (!disposed && !queued) { queued = true; Promise.resolve().then(() => { queued = false; place(); positionCompanionMenu(); }); } }
   function escape(event) { if (event.key !== 'Escape') return; if (!companionMenu.hidden) { event.preventDefault(); event.stopPropagation(); closeCompanionMenu(); } else if (!modal.hidden) { event.stopPropagation(); closeSettings(); } else if ((layout?.companionHistoryOpen || historyPeek) && dock.contains(doc.activeElement)) { event.preventDefault(); historyPeek = false; saveLayout({ companionHistoryOpen: false }); historyToggle.focus(); } }
-  const observer = new win.MutationObserver(records => { if (records.some(record => record.type !== 'attributes' || record.attributeName !== 'style' || record.target.matches?.('[data-neko-unified-coding]') || record.target === doc.body && doc.body.hasAttribute('data-neko-flex-workspace-collapsed'))) schedule(); }); observer.observe(doc.body, { childList: true, subtree: true, attributes:true, attributeFilter:['data-neko-unified-enabled', 'data-neko-unified-coding', 'data-neko-side-social-active', 'data-neko-workspace-collapsed', 'data-neko-flex-workspace-collapsed', 'data-neko-flex-coding', 'data-neko-tools', 'style'] });
+  const observer = new win.MutationObserver(records => { if (records.some(record => record.type !== 'attributes' || record.attributeName !== 'style' || record.target.matches?.('[data-neko-unified-coding]') || record.target === doc.body && doc.body.hasAttribute('data-neko-flex-workspace-collapsed'))) schedule(); }); observer.observe(doc.body, { childList: true, subtree: true, attributes:true, attributeFilter:['data-neko-unified-enabled', 'data-neko-unified-coding', 'data-neko-side-social-active', 'data-neko-sidebar-collapsed', 'data-neko-workspace-collapsed', 'data-neko-flex-workspace-collapsed', 'data-neko-flex-coding', 'data-neko-tools', 'style'] });
   // Observe only the dock's ancestors for inline style changes: watching every
   // style mutation would also watch our own drag/position updates.
   const ancestorObserver = new win.MutationObserver(schedule);

@@ -130,7 +130,7 @@ function installWorkbenchSideRail(options = {}) {
     const reserve = center.width > 0 && center.right > bounds.left && center.right <= bounds.right ? Math.max(0, bounds.right - center.right) : 0;
     const width = bounds.width - reserve;
     if (!Number.isFinite(width) || width < 240 || bounds.height < 100) return null;
-    const min = Math.min(180, width * .2), max = mode === 'office' ? Math.max(min, width - Math.min(320, width * .4)) : width;
+    const min = mode === 'social' ? Math.min(265, width) : Math.min(180, width * .2), max = mode === 'office' ? Math.max(min, width - Math.min(320, width * .4)) : width;
     return { bounds, width, min, max };
   }
   function setChatRatio(next) {
@@ -196,7 +196,7 @@ function installWorkbenchSideRail(options = {}) {
     const frame = sidebar?.closest('[data-sidebar-collapsed="true"]');
     nativeToggle = frame ? [...sidebar.querySelectorAll('button')].find(button => /^(打开侧边栏|展开侧边栏|open sidebar|expand sidebar)$/i.test((button.getAttribute('aria-label') || button.getAttribute('title') || '').trim())) : null;
     const columns = frame?.style.gridTemplateColumns || '';
-    const hiddenColumns = /^\s*\S+\s+/.test(columns) ? columns.replace(/^\s*\S+\s+/, '0px ') : '';
+    const hiddenColumns = /^\s*\S+\s+/.test(columns) ? columns.replace(/^\s*\S+\s+/, '56px ') : '';
     if (hiddenFrame && (hiddenFrame !== frame || !nativeToggle || !hiddenColumns)) releaseFrame();
     if (frame && nativeToggle && hiddenColumns) {
       if (!hiddenFrame) { hiddenFrame = frame; previousGrid = { value: frame.style.getPropertyValue('--neko-hidden-grid'), priority: frame.style.getPropertyPriority('--neko-hidden-grid') }; }
