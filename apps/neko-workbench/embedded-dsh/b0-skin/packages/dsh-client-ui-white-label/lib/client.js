@@ -2948,10 +2948,18 @@ function installWorkspaceShell(options = {}) {
     '--dsw-alias-border-l1':'#2c2e35', '--dsw-alias-label-primary':'#f2f2f4', '--dsw-alias-label-secondary':'#a7a9b0',
     '--dsw-alias-interactive-bg-hover':'#262830', '--dsw-alias-interactive-bg-active':'#2e3038', '--dsw-alias-brand-primary':'#7d9bc9'
   };
+  const darkPaletteApplied = new Set();
   function applyOfficialDarkPalette() {
-    if (!doc.body.hasAttribute('data-ds-dark-theme')) return;
+    const dark = doc.body.hasAttribute('data-ds-dark-theme');
     for (const [name, value] of Object.entries(OFFICIAL_DARK)) {
-      if (doc.body.style.getPropertyValue(name) !== value || doc.body.style.getPropertyPriority(name) !== 'important') doc.body.style.setProperty(name, value, 'important');
+      if (dark) {
+        darkPaletteApplied.add(name);
+        if (doc.body.style.getPropertyValue(name) !== value || doc.body.style.getPropertyPriority(name) !== 'important') doc.body.style.setProperty(name, value, 'important');
+      } else if (darkPaletteApplied.delete(name)) {
+        // DSH does not re-set every alias when it returns to light, so a dark
+        // override left inline would keep seats and hovers dark. Release ours.
+        if (doc.body.style.getPropertyValue(name) === value) doc.body.style.removeProperty(name);
+      }
     }
   }
   const modelChoices = new Map();
@@ -4148,7 +4156,7 @@ function installWorkspaceShell(options = {}) {
   }
   function schedule() { if (!disposed && !queued) { queued = true; Promise.resolve().then(() => { queued = false; place(); positionCompanionMenu(); }); } }
   function escape(event) { if (event.key !== 'Escape') return; if (!companionMenu.hidden) { event.preventDefault(); event.stopPropagation(); closeCompanionMenu(); } else if (!modal.hidden) { event.stopPropagation(); closeSettings(); } else if ((layout?.companionHistoryOpen || historyPeek) && dock.contains(doc.activeElement)) { event.preventDefault(); historyPeek = false; saveLayout({ companionHistoryOpen: false }); historyToggle.focus(); } }
-  const observer = new win.MutationObserver(records => { if (records.some(record => record.type !== 'attributes' || record.attributeName !== 'style' || record.target.matches?.('[data-neko-unified-coding]') || record.target === doc.body && doc.body.hasAttribute('data-neko-flex-workspace-collapsed'))) schedule(); }); observer.observe(doc.body, { childList: true, subtree: true, attributes:true, attributeFilter:['data-neko-unified-enabled', 'data-neko-unified-coding', 'data-neko-side-social-active', 'data-neko-sidebar-collapsed', 'data-neko-workspace-collapsed', 'data-neko-flex-workspace-collapsed', 'data-neko-flex-coding', 'data-neko-tools', 'style'] });
+  const observer = new win.MutationObserver(records => { if (records.some(record => record.type !== 'attributes' || record.attributeName !== 'style' || record.target.matches?.('[data-neko-unified-coding]') || record.target === doc.body && doc.body.hasAttribute('data-neko-flex-workspace-collapsed'))) schedule(); }); observer.observe(doc.body, { childList: true, subtree: true, attributes:true, attributeFilter:['data-ds-dark-theme', 'data-neko-unified-enabled', 'data-neko-unified-coding', 'data-neko-side-social-active', 'data-neko-sidebar-collapsed', 'data-neko-workspace-collapsed', 'data-neko-flex-workspace-collapsed', 'data-neko-flex-coding', 'data-neko-tools', 'style'] });
   // Observe only the dock's ancestors for inline style changes: watching every
   // style mutation would also watch our own drag/position updates.
   const ancestorObserver = new win.MutationObserver(schedule);

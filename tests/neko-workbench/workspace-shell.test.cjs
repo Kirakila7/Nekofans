@@ -22,6 +22,17 @@ test('project directory shortcut uses the current native session and preserves t
  center.setAttribute('data-neko-unified-coding','');d.body.setAttribute('data-neko-unified-enabled','');await tick();assert(!control.hidden);assert.equal(control.style.left,'980px');assert.equal(control.style.top,'560px');center.setAttribute('data-neko-unified-coding','hidden');await tick();assert(control.hidden,'directory shortcut follows coding visibility');center.setAttribute('data-neko-unified-coding','');d.body.removeAttribute('data-neko-unified-enabled');await tick();
  d.body.setAttribute('data-neko-workspace-collapsed','');await tick();assert(control.hidden,'directory shortcut must not cover the compact composer');d.body.removeAttribute('data-neko-workspace-collapsed');await tick();assert(!control.hidden);stop();assert(!d.querySelector('.neko-workspace-directory'));
 });
+test('leaving dark mode releases the palette aliases the shell mirrors',{skip:!JSDOM},async t=>{
+ const dom=new JSDOM('<body><aside data-slot="sidebar"><div data-slot="settings.launcher"></div></aside><main data-neko-chat-center><div data-composer-seat><div data-composer-card><textarea></textarea></div></div></main></body>',{runScripts:'outside-only',pretendToBeVisual:true});t.after(()=>dom.window.close());
+ const w=dom.window,d=w.document,sidebar=d.querySelector('[data-slot="sidebar"]'),center=d.querySelector('main'),store=createWorkspaceLayout(path.join(temp(t),'layout.json'));
+ sidebar.getBoundingClientRect=()=>({left:64,top:0,right:304,bottom:800,width:240,height:800});center.getBoundingClientRect=()=>({left:304,top:0,right:1024,bottom:800,width:720,height:800});
+ const bridge={getState:async()=>({workspaceRoot:'/p',workspaceRevision:0,companion:{ready:true,messages:[]}}),companion:async()=>({}),workspace:async r=>{if(r.action==='state')return {...store.get(),codexAvailable:false};if(r.action==='codex-state')return {items:[],approvals:[]};if(r.action==='catalog')return {sessions:[],projects:[],providers:{dsh:'ready',codex:'testing'}};return null;}};
+ w.eval(fs.readFileSync(path.join(base,'embedded-dsh/workspace-shell-source.js'),'utf8')+'\nwindow.install=installWorkspaceShell');const stop=w.install({window:w,document:d,bridge,avatar:()=>'',locateSidebar:()=>({root:sidebar,slot:sidebar}),hasDshActiveSession:()=>false,openDshFiles:()=>{}});await tick();
+ d.body.setAttribute('data-ds-dark-theme','');await until(()=>d.body.style.getPropertyValue('--dsw-alias-interactive-bg-hover')==='#262830');
+ d.body.removeAttribute('data-ds-dark-theme');await until(()=>d.body.style.getPropertyValue('--dsw-alias-interactive-bg-hover')==='');
+ for(const name of ['--dsw-alias-bg-base','--dsw-alias-bg-layer-1','--dsw-alias-label-primary','--dsw-alias-interactive-bg-hover']){assert.equal(d.body.style.getPropertyValue(name),'',name+' must not stay inline after light mode');}
+ stop();
+});
 test('three seats persist independent names, avatars, platform and project scopes without changing sessions',t=>{
  const p=path.join(temp(t),'layout.json'),s=createWorkspaceLayout(p);assert.equal(s.get().seats.length,3);assert.equal(s.get().companionHistoryOpen,false);
  s.updateSeat('seat-3',{name:'设计小助手',provider:'codex',avatarId:'gemini',projectRoot:'/my/project'});s.update({activeSeatId:'seat-3',companionCollapsed:true,companionHistoryOpen:true,officeMode:'codex'});
