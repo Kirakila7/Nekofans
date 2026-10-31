@@ -1,6 +1,4 @@
 .neko-layout-entry { font-size:21px; }
-.neko-fixed-scene-entry { font-size:21px; }
-.neko-fixed-scene-entry[aria-pressed="true"] { background:var(--dsw-alias-bg-layer-2,#dceafa); color:var(--dsw-alias-primary,#497bb3); }
 /* The workbench settings expose this same dialog; keep the rail trigger as a
    fallback when the workspace shell is absent. */
 body[data-neko-workspace-shell] .neko-layout-entry { display:none !important; }

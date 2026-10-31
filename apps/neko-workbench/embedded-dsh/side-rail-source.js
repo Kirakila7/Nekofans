@@ -144,7 +144,7 @@ function installWorkbenchSideRail(options = {}) {
   function syncChatGrid(sidebar) {
     const found = sidebar && findChatFrame(sidebar);
     const social = doc.body.hasAttribute('data-neko-chatroom-active') || doc.body.hasAttribute('data-neko-side-social-active');
-    const active = !doc.body.hasAttribute('data-neko-flex-mode') && !doc.body.hasAttribute('data-neko-fixed-scene') && found && !sidebar.closest('[data-sidebar-collapsed="true"]');
+    const active = !doc.body.hasAttribute('data-neko-flex-mode') && found && !sidebar.closest('[data-sidebar-collapsed="true"]');
     const mode = active ? (social ? 'social' : 'office') : null;
     const rawColumns = found?.frame.style.gridTemplateColumns || '';
     const rest = rawColumns.match(/^\s*\S+\s+([\s\S]+)$/)?.[1];
@@ -366,7 +366,7 @@ function installWorkbenchSideRail(options = {}) {
   doc.addEventListener('pointerdown', onDragStart, true); doc.addEventListener('pointerup', onDragEnd); doc.addEventListener('pointercancel', onDragEnd);
   doc.head.appendChild(style); doc.body.prepend(rail); doc.body.appendChild(chatDivider); doc.body.setAttribute('data-neko-side-rail-layout', '');
   const observer = new win.MutationObserver(schedule);
-  observer.observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-label', 'aria-expanded', 'data-sidebar-collapsed', 'data-neko-chatroom-active', 'data-neko-side-social-active', 'data-neko-flex-mode', 'data-neko-fixed-scene', 'style'] });
+  observer.observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-label', 'aria-expanded', 'data-sidebar-collapsed', 'data-neko-chatroom-active', 'data-neko-side-social-active', 'data-neko-flex-mode', 'style'] });
   sync();
   return () => {
     if (stopped) return; stopped = true; observer.disconnect();

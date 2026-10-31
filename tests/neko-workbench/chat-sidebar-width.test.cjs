@@ -99,8 +99,6 @@ test('office keeps project list and working view fixed while resizing and restor
   assert(f.d.querySelector('[data-slot="sidebar"]')); assert.equal(f.d.querySelector('textarea').value,'unsent draft');
   f.d.body.setAttribute('data-neko-chatroom-active',''); await tick(f.w); assert.equal(h.getAttribute('aria-valuenow'),'100');
   f.d.body.removeAttribute('data-neko-chatroom-active'); await tick(f.w); assert.equal(h.getAttribute('aria-valuenow'),'68');
-  f.d.body.setAttribute('data-neko-fixed-scene',''); await tick(f.w); assert(h.hidden); assert(!f.frame.hasAttribute('data-neko-chat-sidebar-grid'));
-  f.d.body.removeAttribute('data-neko-fixed-scene'); await tick(f.w); assert(!h.hidden); assert.equal(h.getAttribute('aria-valuenow'),'68');
   assert.equal(f.d.querySelector('textarea').value,'unsent draft'); f.cleanup();
 });
 

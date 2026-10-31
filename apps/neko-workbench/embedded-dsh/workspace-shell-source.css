@@ -394,16 +394,6 @@ body[data-neko-workspace-shell] [data-neko-companion-footer] { display:block !im
 .neko-workspace-directory__button:hover { background:var(--nws-hover); }
 .neko-workspace-directory__button:focus-visible { outline:2px solid #4c89ad; outline-offset:2px; }
 .neko-workspace-directory__status { position:absolute; right:0; bottom:42px; box-sizing:border-box; width:max-content; max-width:min(220px,70vw); padding:7px 10px; border:1px solid var(--nws-border); border-radius:8px; background:var(--nws-bg); color:var(--nws-text); font:12px/1.4 system-ui,sans-serif; }
-.neko-scene-header { position:fixed; z-index:41; height:36px; box-sizing:border-box; display:flex; align-items:center; gap:8px; padding:0 4px 0 12px; border-bottom:1px solid var(--nws-border); background:var(--nws-bg); color:var(--nws-text); font:12px/1.4 system-ui,sans-serif; }
-.neko-scene-header[hidden],.neko-scene-header [hidden] { display:none !important; }
-.neko-scene-header__title { min-width:0; flex:1 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; font-weight:600; }
-.neko-scene-header__status { flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:2px 7px; border-radius:6px; background:var(--nk-surface-3); color:var(--nk-text-2); font-size:11px; }
-.neko-scene-header[data-tone="progress"] .neko-scene-header__status { background:color-mix(in srgb,#3fa36f 18%,transparent); color:color-mix(in srgb,#3fa36f 65%,var(--nk-text)); }
-.neko-scene-header[data-tone="error"] .neko-scene-header__status { background:color-mix(in srgb,#c4554a 18%,transparent); color:color-mix(in srgb,#c4554a 55%,var(--nk-text)); }
-.neko-scene-projects { flex:none; height:28px; padding:0 10px; border:1px solid var(--nws-border); border-radius:8px; background:var(--nws-bg); color:var(--nws-text); font:12px system-ui,sans-serif; cursor:pointer; }
-@media (max-width:520px) { .neko-scene-header__status { display:none; } }
-.neko-scene-projects:hover { background:var(--nws-hover); }
-.neko-scene-projects:focus-visible { outline:2px solid #4c89ad; outline-offset:2px; }
 .neko-startup { position:fixed; z-index:40; box-sizing:border-box; overflow:auto; container-type:inline-size; color:var(--nws-text); background:var(--dsw-alias-bg-base,#edf4fb); font:14px/1.5 system-ui,sans-serif; }
 .neko-startup[hidden] { display:none !important; }
 .neko-startup__inner { width:min(760px,100%); margin:0 auto; box-sizing:border-box; padding:clamp(22px,5vw,54px); }
