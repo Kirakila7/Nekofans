@@ -1,4 +1,38 @@
-body[data-neko-workspace-shell] { --nws-bg:var(--dsw-alias-bg-layer-1,#fbfeff); --nws-border:var(--dsw-alias-border-l1,#c4dbe6); --nws-text:var(--dsw-alias-label-primary,#17303d); --nws-muted:var(--dsw-alias-label-secondary,#637d8c); --nws-hover:var(--dsw-alias-interactive-bg-hover,#ddedf4); }
+/* Workbench design tokens. Colours derive from the embedded DSH theme aliases
+   so light and dark skins stay consistent; spacing, radii and type stay fixed.
+   Patch CSS consumes these (and the legacy --nws-* aliases below). */
+:root, body {
+  --nk-canvas:var(--dsw-alias-bg-base,#f4f5f7);
+  --nk-surface:var(--dsw-alias-bg-layer-1,#ffffff);
+  --nk-surface-2:var(--dsw-alias-bg-layer-2,#f7f8fa);
+  --nk-surface-3:var(--dsw-alias-bg-layer-3,var(--dsw-alias-bg-layer-2,#eef0f3));
+  --nk-hover:var(--dsw-alias-interactive-bg-hover,#f2f4f7);
+  --nk-active:var(--dsw-alias-interactive-bg-active,#e9edf3);
+  --nk-border:var(--dsw-alias-border-l1,#e4e7ec);
+  --nk-border-strong:var(--dsw-alias-border-l2,#d5d9e0);
+  --nk-text:var(--dsw-alias-label-primary,#1d2430);
+  --nk-text-2:var(--dsw-alias-label-secondary,#5f6773);
+  --nk-text-3:var(--dsw-alias-label-tertiary,#8b929e);
+  --nk-accent:var(--dsw-alias-brand-primary,#3f6ea8);
+  --nk-accent-soft:color-mix(in srgb,var(--dsw-alias-brand-primary,#3f6ea8) 14%,transparent);
+  --nk-focus:var(--dsw-alias-brand-primary,#3f6ea8);
+  --nk-space-1:4px; --nk-space-2:8px; --nk-space-3:12px; --nk-space-4:16px; --nk-space-5:20px; --nk-space-6:24px;
+  --nk-radius-xs:4px; --nk-radius-sm:6px; --nk-radius-md:8px; --nk-radius-lg:12px; --nk-radius-xl:16px;
+  --nk-font-xs:11px; --nk-font-sm:12px; --nk-font-md:13px; --nk-font-lg:15px; --nk-font-xl:18px;
+  --nk-leading:1.5;
+  --nk-pane-header:44px;
+  --nk-pane-pad-x:12px;
+  --nk-pane-pad-y:12px;
+  --nk-gutter:8px;
+  --nk-shadow-sm:0 1px 2px #141e2d0f;
+  --nk-shadow-md:0 6px 20px #141e2d1a;
+  /* Legacy aliases kept for the existing patch rules. */
+  --nws-bg:var(--nk-surface);
+  --nws-border:var(--nk-border);
+  --nws-text:var(--nk-text);
+  --nws-muted:var(--nk-text-2);
+  --nws-hover:var(--nk-hover);
+}
 body:is([data-neko-workspace-collapsed],[data-neko-flex-workspace-collapsed]) [data-neko-collapsed-composer] { position:fixed !important; z-index:2147481000 !important; right:16px !important; bottom:16px !important; left:auto !important; top:auto !important; box-sizing:border-box !important; width:min(480px, calc(100vw - 96px)) !important; max-width:calc(100vw - 96px) !important; max-height:45vh; overflow:auto; background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:20px; box-shadow:0 8px 28px #17303d24; }
 body:is([data-neko-workspace-collapsed],[data-neko-flex-workspace-collapsed]) [data-neko-collapsed-composer] .neko-gallery { display:none !important; }
 /* The native seat remains in its React tree. Hide its decorative landing hero
@@ -110,10 +144,10 @@ body[data-neko-workspace-shell] .neko-chatroom-preview { position:fixed; z-index
 .neko-companion-form button:hover,.neko-companion-history-toggle[aria-expanded="true"] { background:color-mix(in srgb,var(--nws-muted) 9%,transparent); color:var(--nws-text); }
 .neko-companion-form button:focus-visible { outline:2px solid #4c89ad; outline-offset:1px; }
 .neko-companion-history-toggle svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round; }
-.neko-office-panel { position:fixed; z-index:28; display:flex; flex-direction:column; box-sizing:border-box; container:neko-office / inline-size; padding:22px clamp(18px,5vw,75px) 24px; color:var(--nws-text); background:var(--dsw-alias-bg-base,#edf6fa); font:14px/1.65 system-ui,sans-serif; }
+.neko-office-panel { position:fixed; z-index:28; display:flex; flex-direction:column; box-sizing:border-box; container:neko-office / inline-size; padding:var(--nk-pane-pad-y) clamp(18px,5vw,75px) var(--nk-pane-pad-y); color:var(--nws-text); background:var(--nk-surface); font:14px/1.65 system-ui,sans-serif; }
 .neko-office-panel[hidden],.neko-workspace-modal[hidden],.neko-companion-dock [hidden] { display:none !important; }
 .neko-office-panel[data-neko-compact] { padding:14px 12px 16px; }
-.neko-office-header { display:flex; align-items:center; gap:10px; min-height:42px; flex:none; }
+.neko-office-header { display:flex; align-items:center; gap:10px; min-height:var(--nk-pane-header); flex:none; border-bottom:1px solid var(--nws-border); }
 .neko-office-brand { width:32px; height:32px; object-fit:contain; }
 .neko-office-header strong { max-width:45%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .neko-office-model { font-size:11px; color:var(--nws-muted); margin-right:auto; }
@@ -129,7 +163,7 @@ body[data-neko-workspace-shell] .neko-chatroom-preview { position:fixed; z-index
 .neko-office-welcome img { width:100px; height:100px; object-fit:contain; }
 .neko-office-welcome h2 { font-size:20px; margin:12px 0 0; color:var(--nws-text); }
 .neko-office-welcome p { font-size:13px; }
-.neko-office-form { flex:none; background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:18px; padding:12px 15px; box-shadow:0 5px 24px #13304808; }
+.neko-office-form { flex:none; background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:var(--nk-radius-lg); padding:12px 15px; box-shadow:var(--nk-shadow-sm); }
 .neko-office-form textarea { width:100%; resize:vertical; max-height:180px; min-height:65px; color:inherit; background:transparent; border:0; font:14px/1.65 system-ui; outline:none; box-sizing:border-box; }
 .neko-office-controls { display:flex; align-items:center; flex-wrap:wrap; gap:8px 14px; padding:8px 0; border-top:1px solid var(--nws-border); }
 .neko-office-control { display:flex; align-items:center; gap:6px; min-width:0; font-size:11px; color:var(--nws-muted); }
@@ -195,17 +229,17 @@ body[data-neko-workspace-shell] [data-neko-companion-footer] { display:block !im
 
 .neko-lobby-switch svg { width:24px; height:24px; }
 .neko-lobby-switch[data-connection="online"] { color:#2f7d5b; }
-.neko-lobby-panel { position:fixed; z-index:29; display:flex; flex-direction:column; box-sizing:border-box; padding:18px clamp(18px,4vw,60px) 18px; color:var(--nws-text); background:var(--dsw-alias-bg-base,#edf6fa); font:14px/1.6 system-ui,sans-serif; }
+.neko-lobby-panel { position:fixed; z-index:29; display:flex; flex-direction:column; box-sizing:border-box; padding:var(--nk-pane-pad-y) clamp(18px,4vw,60px) var(--nk-pane-pad-y); color:var(--nws-text); background:var(--nk-surface); font:14px/1.6 system-ui,sans-serif; }
 .neko-lobby-panel[hidden],.neko-lobby-panel [hidden] { display:none !important; }
 /* 公共聊天室: the channel fills only the chatroom column, above the preview. */
-.neko-lobby-panel[data-neko-lobby-in-room] { z-index:36; padding:12px 12px 14px; font-size:13px; }
+.neko-lobby-panel[data-neko-lobby-in-room] { z-index:36; padding:var(--nk-pane-pad-y) var(--nk-pane-pad-x) 14px; font-size:13px; }
 .neko-lobby-panel[data-neko-lobby-in-room] .neko-lobby-header { flex-wrap:wrap; row-gap:4px; }
 .neko-lobby-panel[data-neko-lobby-in-room] .neko-lobby-members { display:none; }
 .neko-lobby-room-back { flex:none; }
 .neko-lobby-panel button { color:inherit; background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:8px; padding:5px 10px; font:12px/1.5 system-ui; cursor:pointer; }
 .neko-lobby-panel button:disabled { opacity:.45; cursor:default; }
 .neko-lobby-panel button:focus-visible,.neko-lobby-log:focus-visible { outline:2px solid #4c89ad; outline-offset:1px; }
-.neko-lobby-header { display:flex; align-items:baseline; gap:10px; min-height:38px; flex:none; border-bottom:1px solid var(--nws-border); padding-bottom:8px; }
+.neko-lobby-header { display:flex; align-items:center; gap:10px; min-height:var(--nk-pane-header); flex:none; border-bottom:1px solid var(--nws-border); padding-bottom:0; }
 .neko-lobby-title { font-size:16px; max-width:30%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .neko-lobby-topic { flex:1; min-width:0; color:var(--nws-muted); font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .neko-lobby-online { color:var(--nws-muted); font-size:12px; white-space:nowrap; }
@@ -215,21 +249,21 @@ body[data-neko-workspace-shell] [data-neko-companion-footer] { display:block !im
 .neko-lobby-older { align-self:center; margin:8px 0 0; }
 .neko-lobby-log { flex:1; min-height:80px; overflow:auto; padding:12px 0; }
 .neko-lobby-empty { color:var(--nws-muted); text-align:center; margin-top:40px; }
-.neko-lobby-message { display:flex; gap:10px; margin:0 0 12px; padding:8px 12px; border-radius:14px; }
-.neko-lobby-message[data-kind="cat"] { background:color-mix(in srgb,#f3b56b 14%,var(--nws-bg)); }
-.neko-lobby-message[data-mine="true"][data-kind="human"] { background:var(--nws-bg); }
+.neko-lobby-message { display:flex; gap:10px; margin:0 0 var(--nk-space-3); padding:10px 12px; border-radius:var(--nk-radius-lg); }
+.neko-lobby-message[data-kind="cat"] { background:var(--nk-surface-2); }
+.neko-lobby-message[data-mine="true"][data-kind="human"] { background:var(--nk-accent-soft); }
 .neko-lobby-message--outbox { opacity:.75; }
 .neko-lobby-avatar { width:32px; height:32px; flex:none; border-radius:50%; object-fit:cover; }
 .neko-lobby-avatar[data-kind="cat"] { border-radius:10px; object-fit:contain; }
 .neko-lobby-avatar--hue { display:grid; place-items:center; color:#fff; font-size:14px; background:hsl(var(--neko-lobby-hue,200) 45% 52%); }
 .neko-lobby-message__body { flex:1; min-width:0; }
-.neko-lobby-message__meta { display:flex; align-items:center; flex-wrap:wrap; gap:6px; font-size:12px; color:var(--nws-muted); }
+.neko-lobby-message__meta { display:flex; align-items:center; flex-wrap:wrap; gap:6px; margin-bottom:3px; font-size:var(--nk-font-xs); color:var(--nws-muted); }
 .neko-lobby-label { color:var(--nws-text); font-weight:600; overflow-wrap:anywhere; }
 .neko-lobby-badge { font-size:10px; border:1px solid var(--nws-border); border-radius:5px; padding:0 4px; }
 .neko-lobby-badge--assist { border-style:dashed; }
 .neko-lobby-time { font-size:10px; }
 .neko-lobby-text,.neko-lobby-quote__text { white-space:pre-wrap; overflow-wrap:anywhere; }
-.neko-lobby-mention { color:#246b91; background:color-mix(in srgb,#246b91 10%,transparent); border-radius:4px; padding:0 2px; }
+.neko-lobby-mention { color:var(--nk-accent); background:var(--nk-accent-soft); border-radius:var(--nk-radius-xs); padding:0 2px; }
 .neko-lobby-mention[data-kind="cat"] { color:#9a5a17; background:color-mix(in srgb,#f3b56b 22%,transparent); }
 .neko-lobby-quote { margin:4px 0; padding:2px 8px; border-left:3px solid var(--nws-border); color:var(--nws-muted); font-size:12px; }
 .neko-lobby-quote__label { display:block; font-weight:600; }
@@ -247,7 +281,7 @@ body[data-neko-workspace-shell] [data-neko-companion-footer] { display:block !im
 .neko-lobby-dots { display:flex; gap:10px; margin-left:auto; color:var(--nws-muted); }
 .neko-lobby-dot::before { content:''; display:inline-block; width:7px; height:7px; margin-right:4px; border-radius:50%; background:#b9c6cd; vertical-align:middle; }
 .neko-lobby-dot[data-on="true"]::before { background:#3fa36f; }
-.neko-lobby-form { position:relative; flex:none; background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:16px; padding:10px 14px; }
+.neko-lobby-form { position:relative; flex:none; background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:var(--nk-radius-lg); padding:10px 14px; }
 .neko-lobby-form textarea { width:100%; resize:none; min-height:44px; max-height:160px; color:inherit; background:transparent; border:0; font:14px/1.6 system-ui; outline:none; box-sizing:border-box; }
 .neko-lobby-reply { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--nws-muted); margin-bottom:4px; }
 .neko-lobby-reply__text { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -337,9 +371,9 @@ body[data-neko-workspace-shell] [data-neko-companion-footer] { display:block !im
 .neko-scene-header { position:fixed; z-index:41; height:36px; box-sizing:border-box; display:flex; align-items:center; gap:8px; padding:0 4px 0 12px; border-bottom:1px solid var(--nws-border); background:var(--nws-bg); color:var(--nws-text); font:12px/1.4 system-ui,sans-serif; }
 .neko-scene-header[hidden],.neko-scene-header [hidden] { display:none !important; }
 .neko-scene-header__title { min-width:0; flex:1 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; font-weight:600; }
-.neko-scene-header__status { flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:2px 7px; border-radius:6px; background:#eef4fb; color:#44648a; font-size:11px; }
-.neko-scene-header[data-tone="progress"] .neko-scene-header__status { background:#e8f3ec; color:#2f6a45; }
-.neko-scene-header[data-tone="error"] .neko-scene-header__status { background:#fdecec; color:#9a3434; }
+.neko-scene-header__status { flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:2px 7px; border-radius:6px; background:var(--nk-surface-3); color:var(--nk-text-2); font-size:11px; }
+.neko-scene-header[data-tone="progress"] .neko-scene-header__status { background:color-mix(in srgb,#3fa36f 18%,transparent); color:color-mix(in srgb,#3fa36f 65%,var(--nk-text)); }
+.neko-scene-header[data-tone="error"] .neko-scene-header__status { background:color-mix(in srgb,#c4554a 18%,transparent); color:color-mix(in srgb,#c4554a 55%,var(--nk-text)); }
 .neko-scene-projects { flex:none; height:28px; padding:0 10px; border:1px solid var(--nws-border); border-radius:8px; background:var(--nws-bg); color:var(--nws-text); font:12px system-ui,sans-serif; cursor:pointer; }
 @media (max-width:520px) { .neko-scene-header__status { display:none; } }
 .neko-scene-projects:hover { background:var(--nws-hover); }
