@@ -22,6 +22,16 @@ test('screen panel IPC delegates to its own authority; workbench may only hide f
 test('state serialization never persists screen feedback',()=>{
  const calls=[],saved={actors:[{id:'main',chatBackend:'neko',screenReply:{text:'PRIVATE_SCREEN'},name:'cat'}]};
  const save=source.slice(source.indexOf('function save(){'),source.indexOf('function broadcast(){'));
- const saveFn=vm.runInNewContext(save+';save',{state:saved,data:'/tmp/fixture',path,fs:{writeFileSync:(_file,value)=>calls.push(value),renameSync(){}}});
- saveFn();assert(!calls[0].includes('PRIVATE_SCREEN'));assert.equal(JSON.parse(calls[0]).actors[0].name,'cat');
+ const predicate=source.match(/^const usesMainChatService\s*=.*;$/m)?.[0];
+ assert(predicate, 'missing main chat backend predicate');
+ const saveFn=vm.runInNewContext(predicate+'\n'+save+';save',{state:saved,data:'/tmp/fixture',path,fs:{writeFileSync:(_file,value)=>calls.push(value),renameSync(){}}});
+ for (const backend of ['neko','chat-api','deepseek-account']) {
+  saved.actors[0].chatBackend=backend;
+  saved.actors[0].messages=[{text:'PRIVATE_CHAT'}];
+  saveFn();
+  const text=calls.at(-1),actor=JSON.parse(text).actors[0];
+  assert(!text.includes('PRIVATE_SCREEN'), `${backend}: screen feedback must not be persisted`);
+  assert.equal(actor.name,'cat');
+  if (backend !== 'neko') assert(!text.includes('PRIVATE_CHAT'), `${backend}: main chat messages are stored by their own service`);
+ }
 });

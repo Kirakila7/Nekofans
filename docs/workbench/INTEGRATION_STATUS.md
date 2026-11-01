@@ -1,8 +1,16 @@
-# Local test workbench 0.28.18 (source, pending installation)
+# Local test workbench 0.28.35 (source, pending installation)
 
 The daily artifact is built from this repository. `config/daily-release.json` is the version authority; every app includes `Contents/Resources/WORKBENCH_BUILD.json` with the source commit and SHA-256 of every shipped source file. Historical QA checkouts and profiles are not release inputs.
 
 ## Pending source changes
+
+- Integrate PR #36 public lobby into the left chatroom area with a return control and narrow member access, preserving the local home, scene layout and native work composer. The composer identifies a verified work session before lobby-mode sends and retains recovery copies when send outcome is unknown. Isolated Electron QA checked lobby opening/return, home and scene layout; real channel configuration, authorization, server messages and work-provider replies remain unverified. PR #36 Windows shaped-view implementation was not integrated pending independent Windows validation.
+
+- The workbench filters obsolete per-port local DSH authentication cookies from requests to the active loopback service, preserving current authentication and all stored cookies, to avoid oversized headers after repeated restarts.
+
+- Startup shows the chatroom and expanded project records. Office mode keeps the project list and work area in place with an adjustable divider. The rail opens a fixed chatroom/Bilibili/work scene, with a project and session chooser confined to the work area. DOM fixtures cover switching, selection, preserved drafts and the fixed dividers; installed-app behavior and real Bilibili playback require separate verification.
+
+- The native workspace composer stays enabled on the default chatroom even without a visible embedded website; switching video views only changes layering. Hidden native sidebar branches are visually masked while the chatroom is open, with the account, companion and tools preserved. Targeted DOM tests cover restoration and routing; an isolated native window checks the no-video startup. Installed-app interaction remains to be verified.
 
 - Temporarily disable legacy multi-pane layout controls without overwriting saved layout preferences. The ordinary workbench defaults to a lower-right native floating composer with expandable, resizable project/session records; current-session file entry preserves draft synchronization and validates the session before opening DSH files. Isolated component tests cover preserved drafts, lounge safety, video/home integration and narrow-window recovery; real DSH file access and actual network playback remain separate checks.
 
@@ -12,7 +20,7 @@ The daily artifact is built from this repository. `config/daily-release.json` is
 
 - Project and session lists show opening, selection, error and partial-search feedback. Search expands matches without losing normal collapsed state; the chooser adjusts to narrow panes. Isolated DOM and Electron layout tests cover synthetic sessions and resizing. Real session transitions and the separate floating project-record view remain to be validated.
 
-- The main companion and its existing chat input follow the left pane width in the chatroom and local home while the project chooser remains on the right. The character stays within the left pane; switching to other surfaces restores the existing sidebar or rail placement. Isolated Electron fixtures cover resizing, two-way dragging, click vs drag, surface changes and draft retention; community and video transitions use simulated events, not live playback or login.
+- The main companion and its existing chat input follow the left pane width in the chatroom and local home while the project chooser remains on the right. On community, Bilibili and YouTube surfaces the companion returns to the narrow left rail even when the ordinary sidebar remains visible; returning restores its previous dock and draft. DOM tests cover these simulated surface transitions; they do not verify live playback or login.
 
 - The shared video slot offers Bilibili desktop and the official YouTube embed player, selected from the rail without replacing the coding draft or local home. Playlist, Shorts, size and navigation checks use isolated fixtures. Electron fixtures check the local home and floating workspace with synthetic Bilibili and YouTube pages; live playback and continuous Shorts navigation are not verified.
 
@@ -77,10 +85,12 @@ The workbench has a 频道 panel for the new N.E.K.O.Chat service (protocol: `N.
 
 Verified only with synthetic fixtures: injected fetch, fake WebSocket, a loopback OAuth callback server on port 0, fake model providers, fake clocks and temporary memory directories. The N.E.K.O.Chat backend has its own tests and a two-user smoke script (`scripts/ws_smoke.py`) against fake auth; the workbench has not been run end-to-end against that backend in this step.
 
+The default chat service is `https://chat.nekotech.ai`. `NEKO_WORKBENCH_CHAT_URL` can override it, or explicitly be set to an empty string to disable it.
+
 Not verified:
 
 - Real OAuth sign-in against auth.project-neko.cn. Registration of `neko-chat-desktop-{env}` is in Project-N-E-K-O/neko-auth-platform#304 (open, not deployed): a public PKCE client with fixed callbacks `http://127.0.0.1:48921/oauth/callback`, `:48922` and `:48923`, consent required (no auto-consent), gated by `CHAT_INTEGRATION_ENABLED`, which defaults to `false`. The workbench now tries those three ports by default; `NEKO_WORKBENCH_CHAT_OAUTH_PORTS` overrides them. Sign-in cannot complete against the official platform until that client is enabled in production.
-- A production chat server. `NEKO_WORKBENCH_CHAT_URL` has no default, so the panel shows 频道服务未配置 until it is set.
+- Production sign-in and connectivity across deployments still depend on the deployed service.
 - Real model behaviour: suggestion quality, independent replies, prompt-injection resistance, and whether summaries keep other people's words attributed. The local worker smoke used a synthetic prewritten summary; it did not test live model summarization.
 - The Electron GUI with this panel; no QA instance was launched for this work.
 

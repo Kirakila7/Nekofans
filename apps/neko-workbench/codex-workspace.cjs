@@ -104,7 +104,7 @@ function createCodexWorkspace({ env = process.env, spawnProcess = spawn, resolve
           else if (pending.has(m.id)) { const e = pending.get(m.id); pending.delete(m.id); clearTimeout(e.timer); m.error ? e.reject(failure()) : e.resolve(m.result); }
         }
       });
-      await request('initialize', { clientInfo: { name: 'neko_workbench', title: 'N.E.K.O. 工作台', version: require('./package.json').version }, capabilities: null });
+      await request('initialize', { clientInfo: { name: 'neko_workbench', title: 'NEKOfuns', version: require('./package.json').version }, capabilities: null });
       write({ method: 'initialized' });
     })();
     try { await ready; } catch (error) { ready = null; child?.kill('SIGTERM'); throw error; }

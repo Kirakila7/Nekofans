@@ -10,6 +10,9 @@
 .neko-chatroom-preview__label span { color:#96a8ba; font-size:10px; font-weight:400; }
 .neko-chatroom-preview__rooms { display:grid; gap:4px; }
 .neko-chatroom-preview__room { display:flex; align-items:center; gap:10px; padding:9px 8px; border:1px solid transparent; border-radius:10px; }
+button.neko-chatroom-preview__room { width:100%; text-align:left; color:inherit; font:inherit; cursor:pointer; }
+button.neko-chatroom-preview__room:hover { background:#e5f1fc; }
+button.neko-chatroom-preview__room:focus-visible { outline:2px solid #4c89ad; outline-offset:2px; }
 .neko-chatroom-preview__room:first-child { background:#ffffff80; border-color:#dce7f3; }
 .neko-chatroom-preview__room:is(button) { width:100%; background:transparent; color:inherit; font:inherit; text-align:left; cursor:pointer; }
 .neko-chatroom-preview__room:is(button):hover { background:#ffffff80; border-color:#dce7f3; }

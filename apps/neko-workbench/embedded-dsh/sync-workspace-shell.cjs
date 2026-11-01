@@ -3,6 +3,9 @@ const fs=require('node:fs'),path=require('node:path');
 const base=__dirname,file=path.join(base,'b0-skin/packages/dsh-client-ui-white-label/lib/client.js');
 const source=fs.readFileSync(path.join(base,'workspace-shell-source.js'),'utf8');
 const css=fs.readFileSync(path.join(base,'workspace-shell-source.css'),'utf8');
+// Reuse the original dsh-pet reply bubble, scoped to our companion so it
+// cannot affect unrelated DSH UI. The shell CSS positions it at the pet.
+const bubbleCss=fs.readFileSync(path.join(base,'../original/bubble.css'),'utf8').replace(/\.pet-bubble/g,'.neko-companion-dock .pet-bubble');
 // lobby-composer.js is UMD. Inside the bundle factory `module` exists, so shadow it (and globalThis) to keep the
 // bundle's own exports intact; the page CSP has no unsafe-eval, so this is plain text wrapping.
 const composer=fs.readFileSync(path.join(base,'../lobby-composer.js'),'utf8');
@@ -13,7 +16,7 @@ const nativeComposer=fs.readFileSync(path.join(base,'native-composer-source.js')
 const home=fs.readFileSync(path.join(base,'yui-home-ui-source.js'),'utf8');
 const homeTextures=fs.readFileSync(path.join(base,'yui-home-textures-source.js'),'utf8');
 const homeCss=fs.readFileSync(path.join(base,'yui-home-ui-source.css'),'utf8');
-const block='// @neko-workspace-shell:start\nconst WORKSPACE_SHELL_CSS = '+JSON.stringify(css)+' + '+JSON.stringify(previewCss)+' + '+JSON.stringify(homeCss)+';\n'+composerBlock+homeTextures+'\n'+home+'\n'+preview+'\n'+nativeComposer+'\n'+source+'\n// @neko-workspace-shell:end\n';
+const block='// @neko-workspace-shell:start\nconst WORKSPACE_SHELL_CSS = '+JSON.stringify(css)+' + '+JSON.stringify(bubbleCss)+' + '+JSON.stringify(previewCss)+' + '+JSON.stringify(homeCss)+';\n'+composerBlock+homeTextures+'\n'+home+'\n'+preview+'\n'+nativeComposer+'\n'+source+'\n// @neko-workspace-shell:end\n';
 let code=fs.readFileSync(file,'utf8');
 if(code.includes('// @neko-workspace-shell:start'))code=code.replace(/\/\/ @neko-workspace-shell:start[\s\S]*?\/\/ @neko-workspace-shell:end\n/,()=>block);
 else code=code.replace('// @neko-side-rail:start',()=>block+'\n// @neko-side-rail:start');

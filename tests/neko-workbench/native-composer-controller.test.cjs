@@ -90,3 +90,11 @@ test('files event is authorized only for the current clean session and trusted v
  t.ipcMain.emit('neko-composer-input',event,{type:'files',sessionToken:'s1',revision:3});assert.deepEqual(t.window.webContents.sent[0],['workbench:native-composer-event',{type:'files',sessionToken:'s1',revision:3}]);
  t.ipcMain.emit('neko-composer-input',event,{type:'edit',value:'new',sessionToken:'s1',revision:3,editId:1});t.ipcMain.emit('neko-composer-input',event,{type:'files',sessionToken:'s1',revision:3});assert.equal(t.window.webContents.sent.length,2);t.controller.dispose();
 });
+test('lobby submit requires a verified target and preserves uncertain result to child',async()=>{
+ const t=setup();await init(t);const v=FakeView.latest,event={sender:v.webContents,senderFrame:v.webContents.mainFrame};
+ const state={value:'草稿',enabled:true,busy:false,sessionToken:'s',revision:1,targetRequired:true,targetLabel:''};
+ t.controller.update(state);const request={type:'submit',value:'草稿',sessionToken:'s',revision:1,submissionId:11};
+ t.ipcMain.emit('neko-composer-input',event,request);assert.equal(t.window.webContents.sent.length,0);
+ t.controller.update({...state,targetLabel:'项目 · 会话'});t.ipcMain.emit('neko-composer-input',event,request);assert.equal(t.window.webContents.sent.length,1);
+ t.controller.update({...state,targetLabel:'项目 · 会话',settledSubmitId:11,submitUnknown:true});assert.equal(v.webContents.sent.at(-1)[1].submitUnknown,true);assert.equal(v.webContents.sent.at(-1)[1].targetLabel,'项目 · 会话');t.controller.dispose();
+});

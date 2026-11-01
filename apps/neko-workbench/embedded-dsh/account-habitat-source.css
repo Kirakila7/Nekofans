@@ -1,5 +1,5 @@
 /* Only the native AccountMenu marked by installNekoAccountHabitat is affected. */
-button.hjANda_trigger[data-neko-account-habitat] {
+button[data-neko-account-habitat] {
   position: relative;
   display: block !important;
   height: 94px !important;
@@ -12,11 +12,9 @@ button.hjANda_trigger[data-neko-account-habitat] {
   background: var(--dsw-alias-bg-layer-1, #fcfdff);
   text-align: left;
 }
-button.hjANda_trigger[data-neko-account-habitat]::before,
-button.hjANda_trigger[data-neko-account-habitat]::after { content: none !important; display: none !important; }
-button.hjANda_trigger[data-neko-account-habitat] > .hjANda_avatar,
-button.hjANda_trigger[data-neko-account-habitat] > .hjANda_label,
-button.hjANda_trigger[data-neko-account-habitat] > svg { display: none !important; }
+button[data-neko-account-habitat]::before,
+button[data-neko-account-habitat]::after { content: none !important; display: none !important; }
+button[data-neko-account-habitat] > :not(.neh-launcher) { display: none !important; }
 .neh-launcher {
   display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 9px;
   width: 100%; height: 76px; align-items: end; pointer-events: none;
@@ -45,15 +43,15 @@ button.hjANda_trigger[data-neko-account-habitat] > svg { display: none !importan
 .neh-pet-video { object-fit: cover; }
 .neh-pet-poster { object-fit: contain; }
 .neh-empty-world { position: absolute; inset: 0; display: grid; place-items: center; font-size: 10px; color: var(--dsw-alias-label-secondary, #62758a); }
-button.hjANda_trigger[data-neko-account-habitat][data-collapsed="true"] {
+button[data-neko-account-habitat][data-collapsed="true"] {
   width: 36px !important; height: 36px !important; min-height: 36px; padding: 6px !important;
   border: none; background: transparent;
 }
-button.hjANda_trigger[data-neko-account-habitat][data-collapsed="true"] .neh-launcher { display: block; width: 24px; height: 24px; }
-button.hjANda_trigger[data-neko-account-habitat][data-collapsed="true"] .neh-identity { display: block; }
-button.hjANda_trigger[data-neko-account-habitat][data-collapsed="true"] .neh-developer-avatar { width: 24px; height: 24px; }
-button.hjANda_trigger[data-neko-account-habitat][data-collapsed="true"] .neh-developer-name,
-button.hjANda_trigger[data-neko-account-habitat][data-collapsed="true"] .neh-habitat-column { display: none; }
+button[data-neko-account-habitat][data-collapsed="true"] .neh-launcher { display: block; width: 24px; height: 24px; }
+button[data-neko-account-habitat][data-collapsed="true"] .neh-identity { display: block; }
+button[data-neko-account-habitat][data-collapsed="true"] .neh-developer-avatar { width: 24px; height: 24px; }
+button[data-neko-account-habitat][data-collapsed="true"] .neh-developer-name,
+button[data-neko-account-habitat][data-collapsed="true"] .neh-habitat-column { display: none; }
 [data-neko-account-habitat-menu] {
   width: 340px; min-width: min(340px, calc(100vw - 24px)) !important;
   box-sizing: border-box; max-width: calc(100vw - 24px); max-height: calc(100vh - 24px); overflow-y: auto; overflow-x: hidden; border-radius: 16px !important;
@@ -75,22 +73,22 @@ button.hjANda_trigger[data-neko-account-habitat][data-collapsed="true"] .neh-hab
 .neh-habitat-column--menu .neh-pet { width: 80px; height: 80px; left: calc(50% - 40px); bottom: 3px; }
 .neh-menu-help { margin: 9px 0 0; font-size: 11px; line-height: 16px; color: var(--dsw-alias-label-secondary, #62758a); }
 .neh-screen-reader { position: fixed; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
-button.hjANda_trigger[data-neko-account-habitat][data-signed-out="true"] {
+button[data-neko-account-habitat][data-signed-out="true"] {
   display: flex !important; align-items: center; justify-content: center;
   width: 36px !important; height: 36px !important; min-height: 36px;
   padding: 6px !important; border: none; background: transparent;
 }
-button.hjANda_trigger[data-neko-account-habitat][data-signed-out="true"] .neh-launcher {
+button[data-neko-account-habitat][data-signed-out="true"] .neh-launcher {
   display: block; width: 24px; height: 24px;
 }
 .neh-signed-out-icon { display: block; width: 24px; height: 24px; }
 
-button.hjANda_trigger[data-neko-unified-account]:not([data-collapsed="true"]) {
+button[data-neko-unified-account]:not([data-collapsed="true"]) {
   display: block !important; width: 100% !important; height: 94px !important; min-height: 94px;
   padding: 8px 9px !important; border: 1px solid var(--dsw-alias-border-l1, #d3dee9);
   border-radius: 16px; background: var(--dsw-alias-bg-layer-1, #fcfdff);
 }
-button.hjANda_trigger[data-neko-unified-account]:not([data-collapsed="true"]) .neh-launcher {
+button[data-neko-unified-account]:not([data-collapsed="true"]) .neh-launcher {
   display: grid; width: 100%; height: 76px;
 }
 .neh-providers { display: grid; gap: 10px; align-self: center; min-width: 0; }
@@ -99,7 +97,7 @@ button.hjANda_trigger[data-neko-unified-account]:not([data-collapsed="true"]) .n
 .neh-provider-login { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--dsw-alias-label-secondary, #62758a); white-space: nowrap; }
 .neh-provider-login::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .neh-provider-login[data-connected="true"] { color: var(--dsw-alias-brand-primary, #2c66a6); }
-button.hjANda_trigger[data-neko-unified-account][data-collapsed="true"] .neh-providers { display: none; }
+button[data-neko-unified-account][data-collapsed="true"] .neh-providers { display: none; }
 .neh-provider-card { display: grid; gap: 5px; margin-top: 9px; padding: 12px; border: 1px solid var(--dsw-alias-border-l1, #d3dee9); border-radius: 10px; }
 .neh-provider-balance { font-size: 14px; line-height: 22px; font-weight: 600; }
 .neh-provider-source, .neh-quota-reset { display: block; font-size: 10px; line-height: 15px; color: var(--dsw-alias-label-secondary, #62758a); }

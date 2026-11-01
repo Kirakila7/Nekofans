@@ -39,11 +39,11 @@ function snapshot(over={}){
   outbox:[],catSettings:{mode:'assist'},cat:{},suggestion:null,nudge:null,error:'',...over};
 }
 
-function setup(t,{lobby=true,snap=snapshot(),respond,composer=true,home=false}={}){
+function setup(t,{lobby=true,snap=snapshot(),respond,composer=true,home=false,officeMode='dsh'}={}){
  const dom=new JSDOM('<body><aside data-neko-side-rail><div class="neko-side-rail__theme"></div></aside><div data-slot="sidebar"><button data-neko-new-session="plus">+</button><div data-neko-seat-mount></div><div data-slot="sidebar.workspaces">native</div><div data-slot="settings.launcher"></div></div><main><textarea>native draft</textarea></main></body>',{runScripts:'outside-only'});
  t.after(()=>dom.window.close());
  const {window:w}=dom,doc=w.document;doc.querySelector('[data-slot="sidebar"]').getBoundingClientRect=()=>({right:300});
- let layout={seats:[{id:'seat-1',name:'DSH',provider:'dsh',avatarId:'bigfish',projectRoot:''}],activeSeatId:null,officeMode:'dsh',companionCollapsed:false,companionHistoryOpen:false};
+ let layout={seats:[{id:'seat-1',name:'DSH',provider:'dsh',avatarId:'bigfish',projectRoot:''}],activeSeatId:null,officeMode,companionCollapsed:false,companionHistoryOpen:false};
  const state={workspaceRoot:'/fixture',workspaceRevision:0,companion:{name:'主agent',ready:true,working:false,messages:[]}};
  const calls={lobby:[],hideSocial:0,community:0};let lobbySub,community,current=snap;
  const bridge={getState:async()=>state,action:async()=>({ok:true}),subscribe:()=>()=>{},
@@ -63,7 +63,7 @@ function setup(t,{lobby=true,snap=snapshot(),respond,composer=true,home=false}={
 }
 const rowOf=(doc,n)=>doc.querySelector('.neko-lobby-message[data-id="'+mid(n)+'"]');
 const labelOf=(doc,n)=>rowOf(doc,n).querySelector('.neko-lobby-label').textContent;
-test('频道 rail button opens the lobby beside the dock: hideSocial first, dock untouched, community hides it',{skip:DOM_SKIP},async t=>{
+test('频道 rail button opens the lobby in the sidebar, leaving the dock and workspace intact',{skip:DOM_SKIP},async t=>{
  const f=setup(t),{doc,calls}=f;await tick();
  const rail=doc.querySelector('.neko-workspace-rail-controls'),lobbyButton=doc.querySelector('.neko-lobby-switch');
  assert(lobbyButton,'rail button installed');assert.equal(lobbyButton.parentElement,rail);
@@ -77,8 +77,8 @@ test('频道 rail button opens the lobby beside the dock: hideSocial first, dock
  assert(doc.querySelector('.neko-workspace-modal').hidden,'opening the panel closes settings');
  assert(!panel.hidden);assert.equal(lobbyButton.getAttribute('aria-expanded'),'true');
  assert.equal(calls.lobby.filter(r=>r.action==='open').length,1,'joins the lobby once');
- assert.equal(panel.style.left,'300px','placed like the office panel');
- assert(doc.querySelector('.neko-office-panel').hidden,'office panel yields to the lobby');
+ assert.equal(panel.style.left,'0px','placed at the sidebar left edge');assert.equal(panel.style.width,'300px');
+ assert.equal(doc.querySelector('main textarea').value,'native draft');assert(!doc.querySelector('main').hasAttribute('inert'));
  assert.equal(doc.querySelectorAll('.neko-companion-dock').length,1);assert.equal(doc.querySelector('.neko-companion-dock'),dock);
  assert.equal(dock.closest('[hidden],[inert],[aria-hidden="true"]'),null,'dock is neither hidden nor inert');
  assert(!panel.contains(dock));assert.equal(draft.value,'私聊草稿');assert.equal(draft.disabled,false);
@@ -88,6 +88,16 @@ test('频道 rail button opens the lobby beside the dock: hideSocial first, dock
  assert.equal(calls.community,1);assert(panel.hidden,'opening the community hides the lobby');assert.equal(calls.lobby.at(-1).action,'close');
  assert.equal(doc.querySelector('.neko-companion-dock'),dock);assert.equal(draft.value,'私聊草稿');
  f.cleanup();assert(!doc.querySelector('.neko-lobby-panel'));assert(!doc.querySelector('.neko-lobby-switch'));
+});
+
+test('opening and returning from the lobby keeps the Codex workspace visible',{skip:DOM_SKIP},async t=>{
+ const {doc}=setup(t,{officeMode:'codex'});await tick();
+ const office=doc.querySelector('.neko-office-panel');assert.equal(office.hidden,false);
+ const position=office.getAttribute('style');
+ doc.querySelector('.neko-lobby-switch').click();await tick();
+ assert.equal(office.hidden,false);assert.equal(office.getAttribute('style'),position);
+ doc.querySelector('.neko-lobby-back').click();await tick();
+ assert.equal(office.hidden,false);assert.equal(office.getAttribute('style'),position);
 });
 
 test('message list: origin labels, own labels, badges by origin only, reply quote label, mentions, deleted, text-only rendering',{skip:DOM_SKIP},async t=>{
@@ -292,7 +302,8 @@ test('local home and lobby retain independent navigation and home stage',{skip:D
  const home=doc.querySelector('button[aria-label*="我的小窝"]');assert(home);home.click();await tick();
  const homeView=doc.querySelector('.neko-chatroom-preview__home-view'),stage=doc.querySelector('[data-neko-home-stage]');
  assert(!homeView.hidden);assert.match(stage.textContent,/home fixture/);
- const lobby=doc.querySelector('.neko-lobby-panel'),open=doc.querySelector('.neko-lobby-switch');open.click();await tick();
+ doc.querySelector('.neko-chatroom-preview__home-back').click();await tick();
+ const lobby=doc.querySelector('.neko-lobby-panel'),open=doc.querySelector('[aria-label="打开公共聊天室"]');open.click();await tick();
  assert(!lobby.hidden,'opening lobby shows its own panel');assert.match(stage.textContent,/home fixture/,'home is not destroyed');
- open.click();await tick();assert(lobby.hidden);assert(!homeView.hidden);assert.match(stage.textContent,/home fixture/);
+ doc.querySelector('.neko-lobby-back').click();await tick();assert(lobby.hidden);home.click();await tick();assert(!homeView.hidden);assert.match(stage.textContent,/home fixture/);
 });

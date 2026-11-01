@@ -35,7 +35,7 @@ function main(){
       console.log('默认项目已绑定：'+projectRoot);
     }
   }
-  console.log('已安装 N.E.K.O. 工作台 '+release.version+'（build '+release.build+'）。聊天存档和账号配置保留。');
+  console.log('已安装 NEKOfuns '+release.version+'（build '+release.build+'）。聊天存档和账号配置保留。');
   console.log('应用位置：'+target);
 }
 try{main();}catch(error){console.error(error.message);process.exitCode=1;}

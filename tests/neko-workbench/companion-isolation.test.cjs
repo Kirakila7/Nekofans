@@ -11,7 +11,7 @@ const { execFile } = require('node:child_process');
 const { EventEmitter } = require('node:events');
 
 const appDir = path.resolve(__dirname, '../../apps/neko-workbench');
-const WORKBENCH_TITLE = 'N.E.K.O. 工作台';
+const WORKBENCH_TITLE = 'NEKOfuns';
 
 const SCENARIOS = Object.freeze({
   missing: 'actual main sends private companion chat with no lobby module and no NEKO_WORKBENCH_CHAT_URL',
@@ -31,6 +31,9 @@ if (harnessIndex < 0) {
   for (const [scenario, title] of Object.entries(SCENARIOS)) test(title, async () => {
     const env = { ...process.env };
     for (const name of Object.keys(env)) if (name.startsWith('NEKO_WORKBENCH_CHAT_')) delete env[name];
+    // An absent URL now selects the official channel default. An explicit
+    // empty override is the supported way to exercise the unconfigured case.
+    if (scenario === 'unconfigured') env.NEKO_WORKBENCH_CHAT_URL = '';
     if (FAKE_LOBBY.has(scenario)) env.NEKO_WORKBENCH_CHAT_URL = 'https://chat.fixture.test/';
     await new Promise((resolve, reject) => execFile(process.execPath, [__filename, '--isolation-harness', scenario],
       { env, timeout: 20000, maxBuffer: 2e6, windowsHide: true }, (error, stdout, stderr) => {
@@ -40,7 +43,7 @@ if (harnessIndex < 0) {
   });
 
 
-  test('workspace shell source never hides, inerts, removes or rebuilds the companion dock', () => {
+  test('workspace shell preserves the companion dock and only hides it during social views', () => {
     const source = fs.readFileSync(path.join(appDir, 'embedded-dsh/workspace-shell-source.js'), 'utf8');
     assert.equal(source.split("el('section', 'neko-companion-dock')").length - 1, 1, 'the dock is created exactly once per install');
     const forbidden = [
@@ -49,15 +52,32 @@ if (harnessIndex < 0) {
       /\bdock\s*\.\s*parentNode\s*\.\s*removeChild\b/,
       /\.removeChild\(\s*dock\s*\)/,
     ];
-    for (const pattern of forbidden) assert.doesNotMatch(source, pattern);
+    // Social/video takes the left pane, so the preserved dock is hidden while
+    // the same character offers a desktop-pet chat fallback. No other dock
+    // hiding, inerting, removal, replacement or direct style writes are allowed.
+    const socialGuard = 'if (dock.hidden !== sideSocial) dock.hidden = sideSocial;';
+    assert.equal(source.split(socialGuard).length - 1, 1, 'only the social-view conditional controls dock visibility');
+    const remainingSource = source.replace(socialGuard, '');
+    for (const pattern of forbidden) assert.doesNotMatch(remainingSource, pattern);
     const css = fs.readFileSync(path.join(appDir, 'embedded-dsh/workspace-shell-source.css'), 'utf8');
     for (const rule of css.split('}')) {
       const [selectors, body = ''] = rule.split('{');
       const targetsDock = selectors.split(',').some(selector => /\.neko-companion-dock(?:\[[^\]]*\]|:[\w-]+)*\s*$/.test(selector.trim()));
-      if (targetsDock) assert.doesNotMatch(body, /display\s*:\s*none|visibility\s*:\s*hidden/, 'no CSS rule hides the dock itself: ' + selectors.trim());
+      if (targetsDock && selectors.trim() !== '.neko-companion-dock[hidden]') assert.doesNotMatch(body, /display\s*:\s*none|visibility\s*:\s*hidden/, 'only the explicit hidden state hides the dock: ' + selectors.trim());
     }
     const bundle = fs.readFileSync(path.join(appDir, 'embedded-dsh/b0-skin/packages/dsh-client-ui-white-label/lib/client.js'), 'utf8');
     assert(bundle.includes(source), 'the shipped UI bundle carries this exact shell source');
+  });
+
+  test('desktop companion chat action opens the existing pet input', async () => {
+    const vm = require('node:vm');
+    const source = fs.readFileSync(path.join(appDir, 'main.cjs'), 'utf8');
+    const start = source.indexOf('async function workbenchAction'), end = source.indexOf('function workbenchOptions', start);
+    assert(start >= 0 && end > start);
+    let opened = 0;
+    const action = vm.runInNewContext(source.slice(start, end) + ';workbenchAction', { showInput: () => opened++ });
+    const result = await action('open-companion-chat');
+    assert.equal(opened, 1); assert.equal(result.ok, true);
   });
 
   let JSDOM;

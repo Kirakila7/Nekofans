@@ -86,13 +86,13 @@ test('a lost submission acknowledgment preserves the text and prevents an automa
  assert.equal(x.el.value,'可能已发送的任务');assert.equal(x.el.readOnly,true);assert.match(x.status.textContent,/可能已发送/);assert.equal(records.size,1);
  submit(x);assert.equal(x.events.length,1,'unknown result must not be retried');
  x.snap(3,'',{settledSubmitId:x.events[0].submissionId});assert.equal(x.el.value,'可能已发送的任务');assert.equal(records.size,1);assert.match(x.status.textContent,/勿重复发送/);
- x.expand.click();assert.equal(x.events.length,1);assert.match(x.status.textContent,/核对后/);x.expand.click();assert.equal(x.events.at(-1).type,'expand');assert.equal(records.size,0);
+ x.expand.click();assert.equal(x.events.length,1);assert.match(x.status.textContent,/本机副本会保留/);x.expand.click();assert.equal(x.events.at(-1).type,'expand');assert.equal(records.size,1);
 });
 test('an unacknowledged submission remains marked uncertain after restart even if native draft matches',{skip:!JSDOM},t=>{
  const records=new Map(),storage={getItem:k=>records.get(k)??null,setItem:(k,v)=>records.set(k,v),removeItem:k=>records.delete(k)};
  const old=setup(t,{storage});old.snap(2,'需核对的任务');submit(old);assert.equal(records.size,1);
  const restored=setup(t,{storage,initial:{value:'需核对的任务'}});assert.equal(restored.el.value,'需核对的任务');assert.equal(restored.el.readOnly,true);assert.match(restored.status.textContent,/可能已发送/);submit(restored);assert.equal(restored.events.length,0);
- restored.expand.click();assert.match(restored.status.textContent,/核对后/);assert.equal(records.size,1);restored.expand.click();assert.equal(restored.events.at(-1).type,'expand');assert.equal(records.size,0);
+ restored.expand.click();assert.match(restored.status.textContent,/本机副本会保留/);assert.equal(records.size,1);restored.expand.click();assert.equal(restored.events.at(-1).type,'expand');assert.equal(records.size,1);
 });
 test('an acknowledged submission cancels its timeout and clears its recovery copy',{skip:!JSDOM},t=>{
  let timeout,cleared=false;const records=new Map(),storage={getItem:k=>records.get(k)??null,setItem:(k,v)=>records.set(k,v),removeItem:k=>records.delete(k)};
@@ -112,4 +112,22 @@ test('files waits for draft confirmation and fails closed on conflicts or absent
  x.snap(2,'内容',{settledEditId:x.events[0].editId});assert.deepEqual(x.events.map(e=>e.type),['edit','files']);assert.equal(x.events[1].sessionToken,'s1');assert.equal(x.events[1].revision,2);
  const y=setup(t);type(y,'未同步');y.snap(2,'其他',{settledEditId:y.events[0].editId,editConflict:true});assert(y.w.document.getElementById('files').disabled);y.w.document.getElementById('files').click();assert.equal(y.events.length,1);
  const z=setup(t,{initial:{enabled:false,sessionToken:''}});assert(z.w.document.getElementById('files').disabled);z.w.document.getElementById('files').click();assert.equal(z.events.length,0);
+});
+
+test('lobby target must be identified before sending, and updates follow the session',{skip:!JSDOM},t=>{
+ const x=setup(t),target=x.w.document.getElementById('target'),send=x.w.document.getElementById('send');
+ x.snap(1,'draft',{targetRequired:true,targetLabel:''});assert.match(target.textContent,/未确认/);assert.equal(send.disabled,true);submit(x);assert.equal(x.events.length,0);
+ x.snap(1,'draft',{targetRequired:true,targetLabel:'示例项目 · 工作会话'});assert.match(target.textContent,/示例项目 · 工作会话/);assert.equal(send.disabled,false);
+ x.snap(2,'',{sessionToken:'s2',targetRequired:true,targetLabel:''});assert.match(target.textContent,/未确认/);assert.equal(send.disabled,true);
+});
+
+test('an explicit uncertain native-submit result retains the recovery and blocks repeat',{skip:!JSDOM},t=>{
+ const records=new Map(),storage={getItem:k=>records.get(k)??null,setItem:(k,v)=>records.set(k,v),removeItem:k=>records.delete(k)};
+ const x=setup(t,{storage});type(x,'可能已发送');const edit=x.events.at(-1);x.snap(2,'可能已发送',{settledEditId:edit.editId});submit(x);
+ const submission=x.events.at(-1);assert.equal(submission.type,'submit');x.snap(2,'可能已发送',{settledSubmitId:submission.submissionId,submitUnknown:true});
+ assert.match(x.status.textContent,/可能已发送/);assert.equal(x.el.value,'可能已发送');assert.equal(x.el.readOnly,true);assert.equal(records.size,1);
+ submit(x);assert.equal(x.events.filter(e=>e.type==='submit').length,1);
+ x.expand.click();assert.match(x.status.textContent,/本机副本会保留/);assert.equal(records.size,1);assert.equal(x.events.some(e=>e.type==='expand'),false);
+ x.expand.click();assert.equal(x.events.at(-1).type,'expand');assert.equal(records.size,1,'expanding must not delete the only recovery copy');
+ const reopened=setup(t,{storage});assert.equal(reopened.el.value,'可能已发送');assert.equal(reopened.el.readOnly,true);assert.match(reopened.status.textContent,/可能已发送/);assert.equal(reopened.events.length,0);assert.equal(records.size,1);
 });

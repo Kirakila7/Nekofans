@@ -1,6 +1,6 @@
 'use strict';
 (() => {
-  const api = window.nativeComposer, form = document.getElementById('composer'), message = document.getElementById('message'), send = document.getElementById('send'), expand = document.getElementById('expand'), files = document.getElementById('files'), copy = document.getElementById('copy'), status = document.getElementById('status');
+  const api = window.nativeComposer, form = document.getElementById('composer'), message = document.getElementById('message'), send = document.getElementById('send'), expand = document.getElementById('expand'), files = document.getElementById('files'), copy = document.getElementById('copy'), status = document.getElementById('status'), target = document.getElementById('target');
   let state = { value:'', enabled:false, busy:false, sessionToken:'', revision:0 }, composing = false, dirty = false, conflict = false, blockedDraft = false, submitUnknown = false;
   let pendingEdit = null, pendingSubmit = null, submitQueued = false, expandQueued = false, expandAction = 'expand', confirmExpand = false, expandTimer = null, editSequence = 0, submitSequence = 0;
   let draftOwner = '', recoveryOwner = '', storageFailed = false;
@@ -35,7 +35,9 @@
     message.placeholder = state.placeholder || '工作区未连接';
     copy.hidden = !(blockedDraft || conflict);
     files.disabled = message.disabled || conflict || blockedDraft || pendingSubmit !== null || submitQueued || expandQueued || recordOpenPending !== null;
-    send.disabled = message.disabled || state.busy || conflict || blockedDraft || submitQueued || pendingSubmit !== null || recordOpenPending !== null || !message.value.trim();
+    send.disabled = message.disabled || state.busy || conflict || blockedDraft || submitQueued || pendingSubmit !== null || recordOpenPending !== null || (state.targetRequired === true && !state.targetLabel) || !message.value.trim();
+    target.textContent = state.targetLabel ? '工作会话：' + state.targetLabel : '工作会话未确认，请展开工作区核对';
+    target.title = target.textContent;
   }
   function sendEdit() {
     if (message.disabled || composing || conflict || blockedDraft || pendingEdit !== null || !dirty) return;
@@ -83,8 +85,7 @@
       if (!saved || saved.value !== message.value) {
         status.textContent = '草稿副本暂未保存，请复制内容并保持窗口打开'; status.hidden = false; return;
       }
-      if (!confirmExpand) { confirmExpand = true; status.textContent = submitUnknown ? '任务可能已发送；核对后再点一次展开并清除本机副本' : '未同步草稿会保留在本机，再点一次展开工作区'; status.hidden = false; return; }
-      if (submitUnknown) clearRecovery(recoveryOwner || draftOwner, message.value);
+      if (!confirmExpand) { confirmExpand = true; status.textContent = submitUnknown ? '任务可能已发送；再点一次展开工作区核对，本机副本会保留' : '未同步草稿会保留在本机，再点一次展开工作区'; status.hidden = false; return; }
       // Expanding is not proof that copying succeeded: retain the recovery
       // record until the native draft is observed to contain the same text.
       api.send({type:'expand'}); return;
@@ -166,7 +167,15 @@
       else { dirty = message.value !== pendingEdit.value; if (!dirty && !composing && next.value === pendingEdit.value) { clearRecovery(draftOwner, next.value); draftOwner = ''; } }
       pendingEdit = null;
     }
-    if (pendingSubmit !== null && next.settledSubmitId === pendingSubmit.id) { clearTimeout(pendingSubmit.timer); clearRecovery(pendingSubmit.sessionToken, pendingSubmit.value); draftOwner = ''; pendingSubmit = null; }
+    if (pendingSubmit !== null && next.settledSubmitId === pendingSubmit.id) {
+      const request = pendingSubmit; clearTimeout(request.timer); pendingSubmit = null;
+      if (next.submitUnknown === true) {
+        message.value = request.value; draftOwner = request.sessionToken;
+        rememberRecovery('submit-unknown'); submitUnknown = true; conflict = true;
+        submitQueued = false; expandQueued = false; confirmExpand = false;
+        if (expandTimer !== null) clearTimeout(expandTimer); expandTimer = null;
+      } else { clearRecovery(request.sessionToken, request.value); draftOwner = ''; }
+    }
     if (!composing && !dirty && pendingEdit === null && pendingSubmit === null && !conflict && !blockedDraft) message.value = next.value;
     status.textContent = submitUnknown ? '发送结果未确认，可能已发送；请展开工作区核对，勿重复发送' : blockedDraft ? '会话已切换或发现未同步的本地草稿；请先复制再展开工作区处理' : conflict ? '原工作区草稿已变化；请先复制再展开工作区处理' : storageFailed && (dirty || composing || pendingEdit !== null || pendingSubmit !== null) ? '未同步输入暂不能保存到本机，请保持窗口打开' : (next.status || '');
     status.hidden = !status.textContent;

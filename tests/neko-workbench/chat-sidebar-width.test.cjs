@@ -35,8 +35,8 @@ test('chatroom starts collapsed, drags widely, retains its session ratio and kee
   pointer(f.w,handle,'pointerup',264); await tick(f.w);
   assert.equal(f.d.querySelector('textarea').value,'unsent draft');
   f.d.body.removeAttribute('data-neko-chatroom-active'); await tick(f.w);
-  assert(handle.hidden); assert(!f.frame.hasAttribute('data-neko-chat-sidebar-grid'));
-  assert(!f.center.hasAttribute('data-neko-chat-center')); assert.equal(f.frame.style.gridTemplateColumns,'280px minmax(0px, 1fr) 0px');
+  assert(!handle.hidden); assert(f.frame.hasAttribute('data-neko-chat-sidebar-grid'));
+  assert.equal(handle.getAttribute('aria-label'),'调整项目列表和工作区宽度'); assert.equal(f.frame.style.getPropertyValue('--neko-chat-sidebar-grid'),'280px minmax(0px, 1fr) 0px');
   f.d.body.setAttribute('data-neko-chatroom-active',''); await tick(f.w); assert.equal(handle.getAttribute('aria-valuenow'),'20');
   f.cleanup(); assert(!f.d.querySelector('.neko-chat-sidebar-divider'));
   const again=f.w.install({document:f.d,window:f.w,bridge:{action:async()=>{}},openBilibiliHome:async()=>{}}); await tick(f.w);
@@ -85,7 +85,22 @@ test('community and B站 retain the left width when replacing the chatroom', {sk
   f.d.body.setAttribute('data-neko-chatroom-active',''); f.d.body.removeAttribute('data-neko-side-social-active'); await tick(f.w);
   assert(!h.hidden); assert.equal(h.getAttribute('aria-valuenow'),'50');
   f.d.body.removeAttribute('data-neko-chatroom-active'); await tick(f.w);
-  assert(h.hidden); assert(!f.frame.hasAttribute('data-neko-chat-sidebar-grid'));
+  assert(!h.hidden); assert.equal(h.getAttribute('aria-label'),'调整项目列表和工作区宽度');
+  assert.equal(f.d.querySelector('textarea').value,'unsent draft'); f.cleanup();
+});
+
+test('office keeps project list and working view fixed while resizing and restores social widths independently', {skip:!JSDOM}, async t => {
+  const f=fixture(t); await tick(f.w); const h=f.d.querySelector('.neko-chat-sidebar-divider');
+  assert(!h.hidden); assert.equal(h.getAttribute('aria-label'),'调整项目列表和工作区宽度');
+  pointer(f.w,h,'pointerdown',344); pointer(f.w,h,'pointermove',664); pointer(f.w,h,'pointerup',664); await tick(f.w);
+  assert.equal(h.getAttribute('aria-valuenow'),'60');
+  pointer(f.w,h,'pointerdown',664); pointer(f.w,h,'pointermove',1064); pointer(f.w,h,'pointerup',1064); await tick(f.w);
+  assert.equal(h.getAttribute('aria-valuenow'),'68'); assert(!f.d.body.hasAttribute('data-neko-workspace-collapsed'));
+  assert(f.d.querySelector('[data-slot="sidebar"]')); assert.equal(f.d.querySelector('textarea').value,'unsent draft');
+  f.d.body.setAttribute('data-neko-chatroom-active',''); await tick(f.w); assert.equal(h.getAttribute('aria-valuenow'),'100');
+  f.d.body.removeAttribute('data-neko-chatroom-active'); await tick(f.w); assert.equal(h.getAttribute('aria-valuenow'),'68');
+  f.d.body.setAttribute('data-neko-fixed-scene',''); await tick(f.w); assert(h.hidden); assert(!f.frame.hasAttribute('data-neko-chat-sidebar-grid'));
+  f.d.body.removeAttribute('data-neko-fixed-scene'); await tick(f.w); assert(!h.hidden); assert.equal(h.getAttribute('aria-valuenow'),'68');
   assert.equal(f.d.querySelector('textarea').value,'unsent draft'); f.cleanup();
 });
 

@@ -165,7 +165,7 @@ const ctx = {
   },
 }
 exportsObj.apply(ctx)
-assert.equal(document.title, 'New chat — N.E.K.O. 工作台')
+assert.equal(document.title, 'New chat — NEKOfuns')
 
 // The welcome notice is overridden only by its own list id. Rendering it
 // advances the existing queue once without creating content or persistence.
