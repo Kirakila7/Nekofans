@@ -17,3 +17,14 @@ test('stuck model cleanup fails closed and blocks later turns',async()=>{const f
 test('incompatible host response fails closed',async()=>{const f=fixture({prepare:async()=>({})});await assert.rejects(f.api.send({requestId:'companion-a',text:'你好'}),/模型服务不可用/);});
 test('final block text replaces its prior deltas and usage after finish is allowed',async()=>{const f=fixture({stream:async function*(){yield {type:'block-start',index:0,blockType:'text'};yield {type:'text-delta',index:0,text:'你'};yield {type:'block-end',index:0,block:{type:'text',text:'你好'}};yield {type:'finish',reason:{kind:'stop'}};yield {type:'usage',usage:{}};}});assert.deepEqual(await f.api.send({requestId:'companion-a',text:'你好'}),{text:'你好'});});
 test('a stream cleanup rejection blocks later calls',async()=>{const f=fixture({stream:()=>({[Symbol.asyncIterator](){return {next:async()=>({done:false,value:{type:'tool-call'}}),return:async()=>{throw Error('private diagnostic');}};}})});await assert.rejects(f.api.send({requestId:'companion-a',text:'你好'}),/清理未确认/);await assert.rejects(f.api.send({requestId:'companion-b',text:'你好'}),/清理未确认/);});
+test('foreground conversation preempts background memory and never queues behind it',async()=>{
+ let started;const f=fixture({stream:async function* (options){const text=options.messages.at(-1).content[0].text;if(text==='background'){await new Promise(resolve=>{started=resolve;options.signal.addEventListener('abort',resolve,{once:true});});return;}yield {type:'text-delta',index:0,text:'foreground'};yield {type:'finish',reason:{kind:'stop'}};}});
+ const memory=f.api.send({requestId:'memory-one',text:'background',purpose:'memory'});memory.catch(()=>{});while(!started)await new Promise(r=>setImmediate(r));
+ await assert.rejects(f.api.send({requestId:'memory-two',text:'other',purpose:'memory'}),/暂不可用/);
+ assert.deepEqual(await f.api.send({requestId:'companion-foreground',text:'hello'}),{text:'foreground'});await assert.rejects(memory,/取消/);
+});
+test('disconnected memory call fails closed and later reconnect succeeds',async()=>{
+ let online=false;const f=fixture();f.ctx.get=()=>({getState:async()=>({status:online?'credential-stored':'credential-missing'})});
+ await assert.rejects(f.api.send({requestId:'memory-first',text:'synthetic',purpose:'memory'}),/登录/);online=true;
+ assert.deepEqual(await f.api.send({requestId:'memory-second',text:'synthetic',purpose:'memory'}),{text:'你好'});
+});

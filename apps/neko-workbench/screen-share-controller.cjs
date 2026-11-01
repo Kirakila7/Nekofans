@@ -6,11 +6,11 @@ const { ScreenObservation } = require('./screen-observation-runtime.cjs');
 const { trustedLocalCaller } = require('./main-chat-runtime.cjs');
 
 function createScreenShare({ WebContentsView, desktopCapturer, systemPreferences, dataDir, repositoryRoot, safeStorage,
-  getChat, getHost, isChatBusy, onReply, onOpen = async () => {} } = {}) {
+  getChat, getHost, isChatBusy, onReply, onRecord, onOpen = async () => {} } = {}) {
   let view, host, attached = false, visible = false, selected = null, pendingGrant = false, known = new Map(), boundHost, loadPromise, paneEpoch = 0;
   const url = pathToFileURL(path.join(__dirname, 'screen-share.html')).href;
   const vision = new ScreenVision({ dataDir, repositoryRoot, safeStorage, getChat });
-  const runtime = new ScreenObservation({ observe: input => vision.observe(input), isChatBusy, onReply,
+  const runtime = new ScreenObservation({ observe: input => vision.observe(input), isChatBusy, onReply, onRecord,
     onState: () => publish() });
   function snapshot() { return { ...runtime.read(), vision: vision.read(), permission: process.platform === 'darwin' ? systemPreferences.getMediaAccessStatus('screen') : 'unknown' }; }
   function publish() { if (view && !view.webContents.isDestroyed()) view.webContents.send('screen-share:state', snapshot()); }
@@ -105,7 +105,7 @@ function createScreenShare({ WebContentsView, desktopCapturer, systemPreferences
           requireTarget(current.effective, value.contextConsent);
           consent = { ...target };
         }
-        selected = source; const result = runtime.start(source, target, consent); pendingGrant = true; return { ...result, vision: current };
+        selected = source; const result = runtime.start(source, target, consent, value?.memoryConsent === true); pendingGrant = true; return { ...result, vision: current };
       }
       case 'pause': pause(); return snapshot();
       case 'stop': pendingGrant = false; selected = null; runtime.stop(); return snapshot();

@@ -7,7 +7,8 @@
 <section class="card"><div class="source-row"><label for="sources">共享来源</label><button id="refresh" type="button">刷新列表</button></div><select id="sources" aria-label="共享窗口或屏幕"><option value="">请选择一个窗口或屏幕</option></select>
 <p class="hint">点击开始后，所选画面会发给下方视觉 API。只获取画面，不获取声音；最多 120 次请求后自动暂停。</p>
 <p class="hint">接收方：<strong id="recipient">尚未配置视觉服务</strong></p>
-<label class="check"><input id="share-context" type="checkbox">同时向上述服务发送主角色设定、聊天 API 中已确认的旧版聊天记忆、最近 8 条聊天及本轮画面反馈（默认关闭；不包含 N.E.K.O. 原生记忆）</label>
+<label class="check"><input id="share-context" type="checkbox">同时向上述服务发送主角色设定、聊天 API 中已确认的旧版聊天记忆、相关 N.E.K.O. 原生记忆、最近 8 条聊天及本轮画面反馈（默认关闭）</label>
+<label class="check"><input id="save-screen-memory" type="checkbox">本次共享的观察文字可保存到主角色长期记忆，并可能发送给配置的记忆整理模型（默认关闭）</label>
 <div class="controls"><button id="start" class="primary" type="button">开始共享</button><button id="pause" type="button" disabled>暂停</button><button id="stop" type="button" disabled>停止</button></div>
 <p id="status" role="status" aria-live="polite">尚未共享</p><video id="preview" muted playsinline autoplay hidden aria-label="当前共享画面预览"></video></section>
 <details class="card" id="vision-settings"><summary>视觉 API <span id="model"></span></summary><form id="settings-form">

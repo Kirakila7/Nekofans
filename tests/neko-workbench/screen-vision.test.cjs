@@ -16,12 +16,13 @@ async function fixture(t){
   if(pathname.endsWith('/messages'))return new Response('event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"text":"看到了"}}\n\nevent: message_stop\ndata: {"type":"message_stop"}\n\n');
   return new Response('data: {"choices":[{"delta":{"content":"看"}}]}\n\ndata: {"choices":[{"delta":{"content":"到了"},"finish_reason":"stop"}],"usage":{"prompt_tokens":12,"completion_tokens":3}}\n\ndata: [DONE]\n\n');
  };
- // Vision consent tests exercise the legacy memory.list boundary directly;
+ // Vision consent tests exercise the N.E.K.O. memory recall boundary directly;
  // prevent the independent native memory worker and its background sync from
  // racing the per-test read gates or starting a real local service.
  const memoryWorker={request:async()=>{throw Error('fixture memory worker offline');},stop:async()=>{},close:async()=>{}};
  const chat=new WorkbenchMainChat({dataDir:directory,repositoryRoot:root,safeStorage,memoryWorker});await chat.start();
  clearInterval(chat.memorySystem.timer);
+ chat.memorySystem.recall=async()=>[];
  const baseUrl='https://vision.example.test/v1';
  await chat.saveApi({protocol:'openai-compatible',baseUrl,model:'fixture-vision',requestTimeoutMs:2000,maxOutputTokens:256,key:{action:'replace',value:'fixture-private'}});
  const vision=new ScreenVision({dataDir:directory,repositoryRoot:root,safeStorage,getChat:()=>chat,fetch:fakeFetch});
@@ -30,18 +31,24 @@ async function fixture(t){
 }
 test('default image request does not read or send private memory, chat or prior observations',async t=>{
  const {vision:v,chat,requests}=await fixture(t);const texts=[];
- let memoryReads=0,chatReads=0;chat.opened.memory.list=async()=>{memoryReads++;return [{text:'PRIVATE_MEMORY',confirmation:'confirmed'}]};chat.history=async()=>{chatReads++;return [{role:'user',text:'PRIVATE_CHAT'}]};
+ let memoryReads=0,chatReads=0;chat.memorySystem.recall=async()=>{memoryReads++;return [{text:'PRIVATE_MEMORY'}]};chat.history=async()=>{chatReads++;return [{role:'user',text:'PRIVATE_CHAT'}]};
  const result=await observe(v,{frame:{image:jpeg},question:'画面是什么？',history:[{text:'PRIVATE_OLD_OBSERVATION'}],signal:new AbortController().signal,onText:text=>texts.push(text)});
  assert.equal(result.text,'看到了');assert.deepEqual(texts,['看','看到了']);assert.deepEqual(result.usage,{inputTokens:12,outputTokens:3});
  assert.equal(requests[0].body.messages.at(-1).content[1].image_url.url,jpeg);assert.equal(memoryReads,0);assert.equal(chatReads,0);assert(!JSON.stringify(requests[0].body).includes('PRIVATE_'));
  assert.equal(requests[0].headers.authorization,'Bearer fixture-private');assert(!JSON.stringify(v.read()).includes('fixture-private'));
 });
 test('explicit consent is bound to exact API address and model, and changed destination fails closed',async t=>{
- const {vision:v,chat,requests,baseUrl}=await fixture(t);chat.opened.memory.list=async()=>[{personaId:'bigfish',text:'PRIVATE_MEMORY',confirmation:'confirmed'}];chat.history=async()=>[{role:'user',text:'PRIVATE_CHAT'}];
+ const {vision:v,chat,requests,baseUrl}=await fixture(t);chat.memorySystem.recall=async()=>[{text:'PRIVATE_MEMORY',kind:'fact',evidenceRefs:[]}];chat.history=async()=>[{role:'user',text:'PRIVATE_CHAT'}];
  const contextConsent={protocol:'openai-compatible',baseUrl:new URL(baseUrl).href.replace(/\/+$/, ''),model:'fixture-vision'};
  await observe(v,{frame:{image:jpeg},question:'what',contextConsent,signal:new AbortController().signal});const body=JSON.stringify(requests[0].body);assert(body.includes('PRIVATE_MEMORY'));assert(body.includes('PRIVATE_CHAT'));
  await v.save({mode:'custom',protocol:'openai-compatible',baseUrl,model:'other-model',key:{action:'replace',value:'separate-private'}});
  await assert.rejects(observe(v,{frame:{image:jpeg},contextConsent,signal:new AbortController().signal}),/重新确认/);assert.equal(requests.length,1);
+});
+test('memory recall failure does not send the screen to the provider',async t=>{
+ const {vision:v,chat,requests}=await fixture(t),target=visionTarget(chat.settings);
+ chat.memorySystem.recall=async()=>{throw Error('memory unavailable')};
+ await assert.rejects(v.observe({frame:{image:jpeg},target,contextConsent:target,signal:new AbortController().signal}));
+ assert.equal(requests.length,0);
 });
 test('custom Anthropic vision settings encrypt a separate key',async t=>{
  const {vision:v,baseUrl,requests}=await fixture(t);await v.save({mode:'custom',protocol:'anthropic',baseUrl,model:'fixture-anthropic',key:{action:'replace',value:'separate-private'}});
@@ -92,7 +99,7 @@ test('cancelling during key, memory or history access stops before the next priv
   const reads=[];let release,entered;const waiting=new Promise(resolve=>entered=resolve);
   const gate=(name,result)=>{reads.push(name);if(name!==waitOn)return Promise.resolve(result);entered();return new Promise(resolve=>release=()=>resolve(result));};
   chat.secretStore.get=()=>gate('key','fixture-private');
-  chat.opened.memory.list=()=>gate('memory',[]);
+  chat.memorySystem.recall=()=>gate('memory',[]);
   chat.history=()=>gate('history',[]);
   const pending=v.observe({frame:{image:jpeg},target,contextConsent:target,signal:controller.signal});
   await waiting;controller.abort();release();

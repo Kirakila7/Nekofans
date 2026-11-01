@@ -14,6 +14,13 @@ function readingGuard({ cwd, files, readOnlyFiles = [] }) {
     const target=path.resolve(cwd,raw)
     if(!allowed.has(normalize(target)))return '本次只读养鱼不允许访问该文件。'
     if(exec.name!=='read'&&readOnly.has(normalize(target)))return '采集材料只允许读取。'
+    // A permitted filename can still escape if any parent is replaced with a
+    // symlink or Windows junction after the scope was created.
+    for(let parent=path.dirname(target);;){
+      try{const stat=fs.lstatSync(parent);if(stat.isSymbolicLink()||!stat.isDirectory())return '本次只读养鱼拒绝链接文件。'}
+      catch{return '本次只读养鱼无法确认文件状态。'}
+      const next=path.dirname(parent);if(next===parent)break;parent=next;
+    }
     try{const stat=fs.lstatSync(target);if(!stat.isFile()||stat.isSymbolicLink()||stat.nlink!==1)return '本次只读养鱼拒绝链接文件。'}catch(error){if(error.code!=='ENOENT')return '本次只读养鱼无法确认文件状态。'}
   }
 }
