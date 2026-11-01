@@ -1,5 +1,9 @@
 # Local test workbench 0.28.18 (Windows panel opened locally)
 
+## Account-memory integration verification (2026-11-01)
+
+PR #39 is integrated with the Windows/macOS compatibility fixes, activity-memory consent and isolated Bilibili window experiment from main. Account-backed extraction remains opt-in and off by default; its settings disclose private excerpt sharing and possible account usage/cost. Task excerpts and explicitly consented screen observations retain their separate activity-memory rules. The final Windows source suite passes 1,008 tests with zero failures and 12 skips; source/skin checks pass. These results do not establish real account-provider access, quota or billing behavior, macOS device acceptance, or a newly built installer. Existing daily profiles and the running preview were not modified.
+
 ## Windows/macOS integration PR preparation (2026-10-31)
 
 The integration joins Windows `a8add5d02a173c83cc6c220e9294efc951afee38` and macOS `e1383b954020b7884ea32087923cab1bd482ad3f`, retaining the Windows native-window adaptations and the local interaction, privacy and logout fixes described below. The separate PR #47 UI integration is excluded from this submission and preserved in an ignored local recovery snapshot. The newer macOS merge of #47 is not an ancestor of this integration.
@@ -81,6 +85,9 @@ The daily artifact is built from this repository. `config/daily-release.json` is
 
 - Lobby suggestions filter recalled memories to entries with exclusively lobby-message provenance. Open and in-flight shared experiences are retained on shutdown; temporary memory-write failures remain pending. Synthetic tests verify isolation, retry and deduplication; a synthetic summary was written and recalled through the real local N.E.K.O. worker. On Windows pending text inherits the data-directory ACL and owner-only access remains unverified. Real OAuth and production chat service are not configured.
 
+- Local draft: completed DSH/Codex workbench task excerpts and opted-in screen observation text can enter the main persona's native N.E.K.O. memory ledger. Project and screen events are private inferred facts; raw images and tool output are not included. The result is a bounded excerpt rather than a semantic summary, and capture is limited to observed successful turns. Codex remains disabled in the shipping UI. A direct Python runtime and the official free model can be selected with explicit deployment environment variables. Real chat extraction and recall with the official free service still need end-to end validation.
+- Windows local test build: listener read-only guard now rejects symlink/junction parents as well as linked target files. Synthetic tests pass for real Windows junctions and hard links, and for a mocked symbolic-link result; the current user cannot create a real file symlink. This check is not atomic with subsequent tool execution. Windows configuration files inherit the data-directory ACL; the inspected test directory grants read access to the local CodexSandboxUsers group, so POSIX 0600 assertions do not prove owner-only access. These changes are local and need further review before release.
+
 - Friend text visits from Workbench PR #7 are integrated into the native application and workbench options menus. The model settings are shared with main chat, but community OAuth must currently be configured separately using the public values documented in `docs/TEXT_VISITS.md`; the ordinary launcher does not supply them. Isolated tests pass (83 cases, plus the Electron main-entry smoke). Real two-account sessions and TRTC remain unverified.
 - Dragging the left-content divider to the far right (or pressing End) collapses the work area to a compact native DSH composer with a restore button. The original input remains mounted, and the previous width and project chooser return on expansion. Community/Bilibili native views leave space for the floating control. DOM tests cover draft preservation and view geometry; a temporary DSH window verified the visual collapsed state and restore. The temporary profile was signed out, so message sending and a real active task have not been verified. Installation is pending disk-space recovery.
 - The work area shows a project and session chooser instead of the unbound native landing page. A genuinely active DSH session can be resumed; starting a project-bound session retains its input and drafts. DSH selection and active-session fields are feature-detected internal APIs of the installed version; isolated DOM and Electron tests cover navigation and layout, while real DSH session transitions and older-version fallback still need verification.
@@ -123,7 +130,7 @@ The daily artifact is built from this repository. `config/daily-release.json` is
 
 Claude integration remains a proposal. Real supplier credentials, QQ/Bilibili binding and community identity sync are not established by synthetic test success.
 
-Screen companion's optional private context uses confirmed legacy Chat API memories and recent Chat API messages; it does not yet recall the native N.E.K.O. memory added in Workbench PR #5.
+Screen companion's optional private context recalls native N.E.K.O. memory and recent Chat API messages only after consent for the exact visual provider and model.
 
 ## Public lobby (频道), pending
 

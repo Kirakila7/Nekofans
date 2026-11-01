@@ -14,11 +14,12 @@
   }
   function settingsMode() { $('custom-settings').hidden = form.elements.mode.value !== 'custom'; }
   function render(value) {
-    snapshot = value; const sharing = value.phase === 'sharing';
+    const wasSharing = snapshot?.phase === 'sharing'; snapshot = value; const sharing = value.phase === 'sharing';
+    if (wasSharing && !sharing) $('save-screen-memory').checked = false;
     if (!sharing && stream) release();
     $('start').disabled = sharing || sending; $('start').textContent = value.phase === 'paused' ? '继续共享' : '开始共享';
     $('pause').disabled = !sharing; $('stop').disabled = value.phase === 'idle'; $('send').disabled = !sharing; sources.disabled = sharing;
-    $('share-context').disabled = sharing;
+    $('share-context').disabled = sharing; $('save-screen-memory').disabled = sharing;
     const model = value.vision?.effective?.model || '未配置';
     let recipient = '尚未配置视觉服务';
     try { recipient = value.vision.effective.protocol + ' · ' + new URL(value.vision.effective.baseUrl).href.replace(/\/+$/, '') + ' · ' + model; } catch {}
@@ -82,7 +83,9 @@
       if (!effective?.protocol || !effective?.baseUrl || !effective?.model) throw new Error('请先配置视觉服务并确认接收方');
       const target = { protocol: effective.protocol, baseUrl: new URL(effective.baseUrl).href.replace(/\/+$/, ''), model: effective.model };
       const contextConsent = $('share-context').checked ? { ...target } : null;
-      const state = await call('start', { sourceId: sources.value, target, contextConsent });
+      const memoryConsent = $('save-screen-memory').checked === true;
+      $('save-screen-memory').checked = false;
+      const state = await call('start', { sourceId: sources.value, target, contextConsent, memoryConsent });
       if (epoch !== captureEpoch) return; begun = true; render(state); seq = 0;
       const captured = await navigator.mediaDevices.getDisplayMedia({ audio: false, video: { frameRate: 2, width: 1280, height: 720 } });
       if (epoch !== captureEpoch || snapshot.phase !== 'sharing') { for (const track of captured.getTracks()) track.stop(); return; }
@@ -93,8 +96,8 @@
       if (epoch === captureEpoch) { release(); if (begun) await call('capture-error').catch(() => {}); message(error); }
     } finally { if (snapshot?.phase !== 'sharing') $('start').disabled = false; }
   });
-  $('pause').addEventListener('click', () => { release(); void call('pause').then(render, message); });
-  $('stop').addEventListener('click', () => { release(); $('share-context').checked = false; void call('stop').then(render, message); });
+  $('pause').addEventListener('click', () => { $('save-screen-memory').checked = false; release(); void call('pause').then(render, message); });
+  $('stop').addEventListener('click', () => { $('save-screen-memory').checked = false; release(); $('share-context').checked = false; void call('stop').then(render, message); });
   $('back').addEventListener('click', () => { release(); void call('hide').catch(message); });
   $('question-form').addEventListener('submit', async event => {
     event.preventDefault(); const input = $('question'), text = input.value.trim(); if (!text) return;
