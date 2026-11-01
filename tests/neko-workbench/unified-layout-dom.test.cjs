@@ -39,7 +39,7 @@ function fixture(t, { accountBridge = false, savedLayout = null } = {}) {
     bridge.subscribeCommunityAccount = fn => { accountListener=fn; return()=>{accountListener=null;}; };
   }
   w.eval(source+'\nwindow.startUnified=installUnifiedLayout;');
-  const cleanup=w.startUnified({document:d,window:w,bridge,hideLegacy:()=>legacyClosed++,cssText:''});
+  const cleanup=w.startUnified({document:d,window:w,bridge,hideLegacy:()=>legacyClosed++,cssText:'',allowLegacyMultiPane:true});
   return {w,d,bridge,calls,cleanup,get saved(){return saved},get listener(){return listener},get accountListener(){return accountListener},get releaseAccount(){return releaseAccount},get legacyClosed(){return legacyClosed}};
 }
 async function openConfig(f) { f.d.querySelector('.neko-layout-entry').click(); await sleep(); }
@@ -118,8 +118,9 @@ test('collapsed work composer remains above the native social view and restores 
     sidebar.getBoundingClientRect=()=>({left:64,top:0,right:1084,bottom:780,width:1020,height:780});
     f.d.dispatchEvent(new f.w.Event('neko-collapsed-composer-geometry'));
     await waitFor(()=>f.calls.some(x=>x.action==='layout'&&x.slot==='side'&&x.bounds.width===1020),'collapsed view bounds');
-    const reduced=f.calls.filter(x=>x.action==='layout'&&x.slot==='side').at(-1).bounds;
-    assert(reduced.y+reduced.height<=472,'native view stops before both floating controls');
+    const placed=f.calls.filter(x=>x.action==='layout'&&x.slot==='side').at(-1);
+    assert.equal(placed.bounds.y+placed.bounds.height,780,'page continues below the floating controls');
+    for (const point of [[500,500],[1000,480]]) assert(placed.holes.some(r=>point[0]>=r.x&&point[0]<r.x+r.width&&point[1]>=r.y&&point[1]<r.y+r.height),'native page excludes each floating control');
     assert.equal(f.calls.filter(x=>x.action==='hide'&&x.slot==='side').length,0,'resize does not hide or cancel the view');
     f.d.body.removeAttribute('data-neko-workspace-collapsed'); frame.style.gridTemplateColumns='220px 800px 0px';
     sidebar.getBoundingClientRect=()=>({left:64,top:0,right:284,bottom:780,width:220,height:780});
@@ -267,6 +268,23 @@ test('hidden overlay and account ancestors neither block panels nor miss later v
   lateRole.removeAttribute('role'); await expectCount('open',6,'removing dialog role restores the view');
   f.cleanup();
 });
+for (const site of ['community','bilibili']) test(`${site} sidebar uses its full height without a hidden footer band`, {skip:!JSDOM}, async t=>{
+  const f=fixture(t); await sleep();
+  const footer=f.d.createElement('div'); footer.setAttribute('data-neko-companion-footer','');
+  footer.getBoundingClientRect=()=>({left:64,top:635,right:284,bottom:780,width:220,height:145});
+  f.d.querySelector('[data-slot="sidebar"]').appendChild(footer);
+  f.d.querySelector(site==='community'?'.neko-community-yui':'.neko-side-rail__bilibili').click(); await sleep();
+  let opened=f.calls.filter(x=>x.action==='open'&&x.slot==='side').at(-1);
+  assert.equal(opened.bounds.y+opened.bounds.height,780,'page reaches the bottom rather than stopping at the hidden footer');
+  const composer=f.d.createElement('div'); composer.dataset.nekoCollapsedComposer='';
+  composer.getBoundingClientRect=()=>({left:150,top:650,right:280,bottom:760,width:130,height:110}); f.d.body.append(composer);
+  f.d.body.setAttribute('data-neko-workspace-collapsed',''); f.d.dispatchEvent(new f.w.Event('neko-collapsed-composer-geometry')); await sleep();
+  const changed=f.calls.filter(x=>x.action==='layout'&&x.slot==='side').at(-1);
+  assert.equal(changed.bounds.y+changed.bounds.height,780,'collapsed composer does not reserve a full-width bottom band');
+  assert(changed.holes.some(r=>r.x<150&&r.y<650&&r.x+r.width>280&&r.y+r.height>760),'native page leaves the real input accessible');
+  assert.equal(f.d.querySelector('#draft').value,'coding draft'); f.cleanup();
+});
+
 test('display:contents sidebar uses the grid track and preserves the companion and settings footer', {skip:!JSDOM}, async t=>{
   const f=fixture(t); await sleep();
   const sidebar=f.d.querySelector('[data-slot="sidebar"]'), track=f.d.querySelector('#track');

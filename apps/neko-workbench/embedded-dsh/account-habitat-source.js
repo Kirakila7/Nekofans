@@ -140,7 +140,7 @@ function installNekoAccountHabitat(ctx, options) {
   const doc = options.document || (typeof document !== 'undefined' ? document : null);
   const win = options.window || (typeof window !== 'undefined' ? window : null);
   if (!doc || !doc.body || !win || typeof win.MutationObserver !== 'function') return () => {};
-  const triggerSelector = '[data-slot="settings.launcher"] button.hjANda_trigger[aria-haspopup="menu"][data-collapsed][data-signed-out]';
+  const triggerSelector = '[data-slot="settings.launcher"] button[aria-haspopup="menu"][data-collapsed][data-signed-out]';
   const menuSelector = '[data-menu-material][role="menu"], [data-menu-material]._list_4ub78_7';
   const style = doc.createElement('style');
   style.id = options.styleId || 'neko-account-habitat-style';

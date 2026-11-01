@@ -1,4 +1,4 @@
-// Chat rooms remain a visual preview; the home has a separate in-panel surface.
+// The room directory stays local; channel and home navigation use their own services.
 // Navigation and lifetime are owned by workspace shell.
 function createChatroomPreview(doc, avatar = () => '', options = {}) {
   const el = (tag, cls, text) => {
@@ -9,10 +9,10 @@ function createChatroomPreview(doc, avatar = () => '', options = {}) {
   };
   const panel = el('section', 'neko-chatroom-preview');
   panel.dataset.nekoChatroomPreview = '';
-  panel.setAttribute('aria-label', '聊天室界面预览');
+  panel.setAttribute('aria-label', typeof options.openLobby === 'function' ? '聊天室' : '聊天室界面预览');
 
   const heading = el('div', 'neko-chatroom-preview__heading');
-  heading.append(el('h2', '', '聊天室'), el('span', 'neko-chatroom-preview__badge', '界面预览'));
+  heading.append(el('h2', '', '聊天室'), el('span', 'neko-chatroom-preview__badge', typeof options.openLobby === 'function' ? '频道入口' : '界面预览'));
   const introduction = el('p', 'neko-chatroom-preview__intro', '和人、AI 一起相遇的地方');
 
   const search = el('input', 'neko-chatroom-preview__search');
@@ -22,7 +22,7 @@ function createChatroomPreview(doc, avatar = () => '', options = {}) {
   search.setAttribute('aria-label', '搜索聊天室，功能尚未开放');
 
   const label = el('div', 'neko-chatroom-preview__label', '聊天室');
-  label.appendChild(el('span', '', '示意'));
+  label.appendChild(el('span', '', typeof options.openLobby === 'function' ? '浏览' : '示意'));
   const rooms = el('div', 'neko-chatroom-preview__rooms');
   const addRoom = (name, description, symbol, kind, interactive = false) => {
     const row = el(interactive ? 'button' : 'div', 'neko-chatroom-preview__room');
@@ -35,7 +35,8 @@ function createChatroomPreview(doc, avatar = () => '', options = {}) {
     rooms.appendChild(row);
     return row;
   };
-  addRoom('公共聊天室', '一起交流与分享', '✦', 'is-public');
+  const publicRoom = addRoom('公共聊天室', '一起交流与分享', '✦', 'is-public', typeof options.openLobby === 'function');
+  if (typeof options.openLobby === 'function') { publicRoom.setAttribute('data-neko-public-room', ''); publicRoom.addEventListener('click', options.openLobby); }
   const home = addRoom('我的小窝', '进入 Yui 的家', '⌂', 'is-home', true);
   home.setAttribute('aria-label', '进入我的小窝，Yui 的家');
 
@@ -48,7 +49,7 @@ function createChatroomPreview(doc, avatar = () => '', options = {}) {
   if (src) portrait.src = src;
   else portrait.hidden = true;
   illustration.append(portrait, el('span', '', '✧'));
-  empty.append(illustration, el('strong', '', '期待在这里相遇'), el('p', '', '这里是聊天室的简化展示，聊天功能尚未开放。'));
+  empty.append(illustration, el('strong', '', '期待在这里相遇'), el('p', '', typeof options.openLobby === 'function' ? '从公共聊天室进入频道，连接状态会在进入后显示。' : '这里是聊天室的简化展示，聊天功能尚未开放。'));
 
   const room = el('div', 'neko-chatroom-preview__room-view');
   room.append(heading, introduction, search, label, rooms, empty);

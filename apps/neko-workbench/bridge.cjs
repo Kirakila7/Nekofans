@@ -8,7 +8,7 @@ const {catalogOrder,mergeCatalogOrder}=require('./pet-roster.cjs');
 const {cleanPrompt,historyContext}=require('./pet-context.js');
 const {resolveRuntimePaths}=require('./runtime-config.cjs');
 const {createTaskSessionTracker}=require('./task-session-tracker.cjs');
-const {readDshWorkspaceCatalog}=require('./dsh-workspace-catalog.cjs');
+const {readDshWorkspaceCatalog,checkDshWorkspaceSession,publicDshWorkspaceSessionIds}=require('./dsh-workspace-catalog.cjs');
 const {accountRoute}=require('./account-route.cjs');
 const {createChannelSessionPrivacy}=require('./channel-session-privacy.cjs');
 const {createCompanionAccountBridge}=require('./companion-account-bridge.cjs');
@@ -197,7 +197,9 @@ exports.apply=function(ctx){
     if(method==='companion-account-chat')return companionAccount.send({requestId:p.requestId,text:p.text,context:p.context,history:p.history,maxTokens:p.maxTokens});
     if(method==='memory-account-model')return companionAccount.send({requestId:p.requestId,text:p.text,context:p.context,history:p.history,maxTokens:p.maxTokens,purpose:'memory'});
     if(method==='companion-account-cancel')return companionAccount.cancel({requestId:p.requestId});
-    if(method==='workspace-catalog')return readDshWorkspaceCatalog(ctx,p);
+    if(method==='workspace-catalog')return readDshWorkspaceCatalog(ctx,p,{isPrivateSession:excludePrivate});
+    if(method==='workspace-session-check')return checkDshWorkspaceSession(ctx,p.id,{isPrivateSession:excludePrivate});
+    if(method==='workspace-session-privacy')return publicDshWorkspaceSessionIds(ctx,p.ids,{isPrivateSession:excludePrivate});
     if(method==='fish-care'){
       if(!['status','start','pause'].includes(p.action))throw new Error('未知养鱼操作');
       const fish=await import(require('node:url').pathToFileURL(require('node:path').join(__dirname,'vendor/dsh-bili-whale/lib/index.js')).href);

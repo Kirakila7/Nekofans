@@ -10,7 +10,7 @@ const source = fs.readFileSync(path.resolve(__dirname, '../../apps/neko-workbenc
 const preload = fs.readFileSync(path.resolve(__dirname, '../../apps/neko-workbench/workbench-preload.cjs'), 'utf8');
 
 test('workbench:lobby IPC delegates to lobbyController.request and calls assertWorkbenchCaller', async () => {
-  const handlers = new Map(), controllerCalls = [];
+  const handlers = new Map(), controllerCalls = [], siteCalls = [];
   const host = { webContents: { mainFrame: { url: 'http://127.0.0.1:59099/coding' }, getURL: () => 'http://127.0.0.1:59099/coding' }, isDestroyed: () => false };
   const caller = { sender: host.webContents, senderFrame: host.webContents.mainFrame };
   const validation = source.slice(source.indexOf('function isWorkbenchOrigin'), source.indexOf('function rolesState'));
@@ -19,11 +19,11 @@ test('workbench:lobby IPC delegates to lobbyController.request and calls assertW
     ${validation}
     const lobbyController = { request: async r => { controllerCalls.push(r); return { ok: true, state: {} }; } };
     const screenShare = { hide: () => {} };
-    const communityController = { action: async () => ({}) };
+    const communityController = { action: async (...args) => {siteCalls.push(args);return {};} };
     ${routes}
   `;
   vm.runInNewContext(injected, { URL, dshWindow: host, dshLaunchUrl: 'http://127.0.0.1:59099/', ipcMain: { handle: (name, fn) => handlers.set(name, fn) },
-    controllerCalls });
+    controllerCalls, siteCalls });
 
   const result = await handlers.get('workbench:lobby')(caller, { action: 'state' });
   assert.equal(result.ok, true);
@@ -37,6 +37,7 @@ test('workbench:lobby IPC delegates to lobbyController.request and calls assertW
   const openResult = await handlers.get('workbench:lobby')(caller, openReq);
   assert.equal(openResult.ok, true);
   assert.deepEqual(controllerCalls, [openReq], 'open was delegated to the controller');
+  assert.equal(siteCalls.length,0,'lobby IPC preserves independent video views');
 });
 
 test('preload exposes lobby/subscribeLobby', () => {

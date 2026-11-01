@@ -485,6 +485,78 @@ test('sign-out revokes best-effort, clears the store and drops an in-flight refr
   assert.equal(g.auth.state.status, 'signed-out');
 });
 
+test('failed credential deletion reports failure and cannot restore login after restart', async t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'neko-logout-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const file = path.join(dir, 'refresh.enc');
+  const storage = { isEncryptionAvailable: () => true, encryptString: s => Buffer.from(s), decryptString: b => b.toString() };
+  const store = new WorkbenchSecretStore(file, storage);
+  await store.set(tokenSet(1).refresh);
+  store.clear = async () => { throw Error('synthetic unlink denied with private detail'); };
+  const f = fixture({ store, revoke: () => json({}, 503) });
+  const result = await f.auth.signOut();
+  assert.equal(result.status, 'signed-out');
+  assert.equal(result.error, A.SAFE_ERROR.signout);
+  assert(store.has());
+  await assert.rejects(f.auth.getAccessToken(), { code: 'login' });
+  f.auth.dispose();
+  const restarted = fixture({ store: new WorkbenchSecretStore(file, storage) });
+  assert.equal(restarted.auth.state.signedIn, false);
+  assert.equal(restarted.auth.state.error, A.SAFE_ERROR.signout, 'retained credentials still offer cleanup after restart');
+  await assert.rejects(restarted.auth.getAccessToken(), { code: 'login' });
+  assert.equal(restarted.calls.length, 0);
+  assert.equal((await restarted.auth.signOut()).error, '');
+  assert.equal(restarted.store.has(), false);
+  const cleanedLaunch = fixture({ store: new WorkbenchSecretStore(file, storage) });
+  assert.equal(cleanedLaunch.auth.state.signedIn, false);
+  assert.equal(cleanedLaunch.auth.state.error, '');
+  cleanedLaunch.auth.dispose();
+  await signedIn(restarted);
+  assert.equal(fs.existsSync(file + '.signed-out'), false);
+  restarted.auth.dispose();
+  const nextLaunch = fixture({ store: new WorkbenchSecretStore(file, storage) });
+  assert.equal(nextLaunch.auth.state.signedIn, true, 'explicit sign-in releases the logout marker');
+  nextLaunch.auth.dispose();
+});
+
+test('a stale refresh cannot erase a new explicit sign-in after logout', async () => {
+  let n = 1, release;
+  const f = await signedIn(fixture({ token: () => grant(n++) }));
+  f.store.gate = new Promise(resolve => { release = resolve; });
+  f.auth.invalidateAccessToken();
+  const refresh = f.auth.getAccessToken();
+  const stale = assert.rejects(refresh, { code: 'canceled' });
+  for (let i = 0; i < 20; i++) await tick();
+  assert.equal(f.store.log.filter(entry => entry === 'set:start').length, 2);
+  await f.auth.signOut();
+  const login = f.auth.signIn();
+  assert.equal(f.opened.length, 1, 'new login waits for the old writer');
+  release();
+  await stale;
+  const url = new URL(await f.opened$(2)), redirect = url.searchParams.get('redirect_uri');
+  await hit(redirect, { path: callbackPath(redirect, { code: CODE, state: url.searchParams.get('state') }) });
+  assert.equal((await login).signedIn, true);
+  assert.equal(f.store.value, tokenSet(3).refresh);
+  f.auth.dispose();
+});
+
+test('canceling login during credential persistence removes the late grant', async () => {
+  let release;
+  const f = fixture();
+  f.store.gate = new Promise(resolve => { release = resolve; });
+  const login = f.auth.signIn();
+  const url = new URL(await f.opened$()), redirect = url.searchParams.get('redirect_uri');
+  await hit(redirect, { path: callbackPath(redirect, { code: CODE, state: url.searchParams.get('state') }) });
+  for (let i = 0; i < 20 && !f.store.log.includes('set:start'); i++) await tick();
+  assert(f.store.log.includes('set:start'));
+  const canceled = f.auth.cancelSignIn();
+  release();
+  assert.equal((await canceled).signedIn, false);
+  await login;
+  assert.equal(f.store.value, null);
+  f.auth.dispose();
+});
+
 test('tokens, code, verifier and state never appear in snapshots, errors or the callback page', async () => {
   let n = 1;
   const f = fixture({ token: () => grant(n++) });
