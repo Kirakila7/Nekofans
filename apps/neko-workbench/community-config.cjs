@@ -291,6 +291,7 @@ function createCommunityController({ WebContentsView, openExternal, copyText, en
   }
   function place(record) {
     if (current !== record || !record.wanted || !record.loaded || record.webContents.isDestroyed()) return false;
+    if (record.suspended) { muteWhileHidden(record); detach(record); return false; }
     const bounds = communityBounds(record.host, record.bounds);
     if (isYoutube) {
       const scale = record.host.webContents.getZoomFactor();
@@ -335,6 +336,12 @@ function createCommunityController({ WebContentsView, openExternal, copyText, en
     // will reconstruct it using the same persistent community session.
     listen(host, 'close', () => dispose(true));
     listen(host, 'closed', () => unbind(true));
+    for (const event of ['hide', 'minimize']) listen(host, event, () => {
+      if (current) { current.suspended = true; muteWhileHidden(current); detach(current); }
+    });
+    for (const event of ['show', 'restore']) listen(host, event, () => {
+      if (current) { current.suspended = false; if (place(current)) state(current, 'ready'); }
+    });
     listen(host, 'resize', () => { if (current) place(current); });
     listen(host.webContents, 'zoom-changed', () => { if (current) place(current); });
     listen(host.webContents, 'will-navigate', () => dispose(true));

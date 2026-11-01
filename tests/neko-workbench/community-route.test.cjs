@@ -72,6 +72,15 @@ function fixture(env = {}, useSocial = false, extra = {}) {
   return { controller, views, external, states, errors, copied, failCopy: () => { copyError = new Error('private clipboard failure'); }, MockHost, Popup, host, action, open };
 }
 
+test('minimizing a native video silences it and restores the same page and mute preference', async()=>{
+  const f=fixture({}, false, {site:'bilibili'});await f.open();const v=f.views[0];
+  f.host.emit('minimize');assert.equal(f.host.children.size,0);assert.equal(v.webContents.isAudioMuted(),true);
+  f.host.emit('resize');assert.equal(f.host.children.size,0,'layout cannot reattach a minimized view');
+  f.host.emit('restore');assert(f.host.children.has(v));assert.equal(v.webContents.isAudioMuted(),false);assert.equal(v.webContents.loads.length,1);
+  v.webContents.setAudioMuted(true);f.host.emit('hide');f.host.emit('show');assert.equal(v.webContents.isAudioMuted(),true);
+  f.controller.dispose();
+});
+
 test('YouTube links are sanitized into official embed URLs and invalid or credentialed URLs are rejected', () => {
   const id = 'M7lc1UVf-VE', expected = 'https://www.youtube.com/embed/'+id;
   for (const value of [

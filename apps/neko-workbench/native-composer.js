@@ -1,6 +1,9 @@
 'use strict';
 (() => {
   const api = window.nativeComposer, form = document.getElementById('composer'), message = document.getElementById('message'), send = document.getElementById('send'), expand = document.getElementById('expand'), files = document.getElementById('files'), copy = document.getElementById('copy'), status = document.getElementById('status'), target = document.getElementById('target');
+  const copyShortcut = api.platform && api.platform !== 'darwin' ? 'Ctrl+C' : '⌘C';
+  document.documentElement.dataset.platform = api.platform || '';
+  copy.title = '选中草稿后按 ' + copyShortcut + ' 复制';
   let state = { value:'', enabled:false, busy:false, sessionToken:'', revision:0 }, composing = false, dirty = false, conflict = false, blockedDraft = false, submitUnknown = false;
   let pendingEdit = null, pendingSubmit = null, submitQueued = false, expandQueued = false, expandAction = 'expand', confirmExpand = false, expandTimer = null, editSequence = 0, submitSequence = 0;
   let draftOwner = '', recoveryOwner = '', storageFailed = false;
@@ -136,7 +139,7 @@
   expand.addEventListener('click', () => requestExpand('expand'));
   files.addEventListener('click', () => requestExpand('files'));
 
-  copy.addEventListener('click', () => { message.focus(); message.select(); status.textContent = '草稿已选中，请按 ⌘C 复制'; status.hidden = false; });
+  copy.addEventListener('click', () => { message.focus(); message.select(); status.textContent = '草稿已选中，请按 ' + copyShortcut + ' 复制'; status.hidden = false; });
   api.onState(next => {
     if (!next || typeof next.value !== 'string' || typeof next.sessionToken !== 'string' || !Number.isSafeInteger(next.revision)) return;
     const changedSession = state.sessionToken !== next.sessionToken;

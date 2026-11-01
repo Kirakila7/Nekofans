@@ -2,6 +2,16 @@
 
 The daily artifact is built from this repository. `config/daily-release.json` is the version authority; every app includes `Contents/Resources/WORKBENCH_BUILD.json` with the source commit and SHA-256 of every shipped source file. Historical QA checkouts and profiles are not release inputs.
 
+## Windows Electron preview adaptation (2026-11-01)
+
+- The Windows visual pass uses a shared neutral blue-gray palette, explicit Windows/CJK fonts, white room cards, quieter borders, consistent input surfaces and SVG controls. The layout-scene navigation and site header also use SVG icons. Native composer recovery-only controls retain their hidden state. All original sessions, drafts, navigation and companion ownership are retained. The review screenshots use an explicitly labeled synthetic video page and the same local companion artwork used by the shipped skin.
+
+- Based on NEKOfuns preview `eb2eff0`. These source changes have not been installed into the daily app or released.
+- Windows startup fits the current display work area. A 36 DIP titlebar uses native Windows caption buttons over the workbench background; its safe area tracks page zoom and its content offset applies to navigation, workspace chooser and native site views. The site toolbar uses a 14px title and 32px buttons with wrapping. Fixed chat/video scenes enforce usable pane widths and use the existing tabs on small windows. Embedded sites reserve space for the actual floating work input, including its session/status rows; original drafts and pages remain mounted.
+- Trusted input follows host page zoom. Clipped input/divider views return after resize, and reordering a view no longer detaches the focused input. Hidden/minimized video is temporarily muted and reattached on restore without reloading or changing its previous mute preference. Windows copy hints use Ctrl+C.
+- `tests/neko-workbench/windows-electron-native-qa.cjs` uses real Electron 44.7.0 with synthetic sessions/pages and an isolated profile. It checks three content sizes/page zooms, caption-button safe area, toolbar sizing, absence of outer scrollbars, native view geometry, input focus, retained drafts, maximize/unmaximize and minimize/restore. This is not physical 125%/150% display-DPI, cross-monitor, remote playback, OAuth or daily-profile acceptance.
+- Full regression retains six failures reproduced against baseline `eb2eff0`: two hardcoded `/private/tmp` JSDOM imports, two POSIX permission assertions, a restricted Windows symlink and `/usr/bin/zip`. No production dependency is added.
+
 ## Pending source changes
 
 - Integrate PR #36 public lobby into the left chatroom area with a return control and narrow member access, preserving the local home, scene layout and native work composer. The composer identifies a verified work session before lobby-mode sends and retains recovery copies when send outcome is unknown. Isolated Electron QA checked lobby opening/return, home and scene layout; real channel configuration, authorization, server messages and work-provider replies remain unverified. PR #36 Windows shaped-view implementation was not integrated pending independent Windows validation.

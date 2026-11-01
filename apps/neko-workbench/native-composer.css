@@ -2,9 +2,12 @@
 html,body { margin:0; width:100%; height:100%; background:transparent; }
 body { display:flex; align-items:flex-end; padding:4px; font:14px/1.45 system-ui,sans-serif; }
 form { display:flex; align-items:center; gap:6px; width:100%; padding:6px; border:1px solid #c5d7e8; border-radius:20px; background:#fff; box-shadow:0 4px 16px #243a552a; }
+html[data-platform="win32"] form { flex:none; }
 textarea { flex:1; min-width:0; height:32px; max-height:72px; padding:6px; border:0; resize:none; outline:0; background:transparent; color:#233750; font:inherit; }
 textarea:disabled { color:#71829a; }
 button { flex:none; width:32px; height:32px; border:0; border-radius:50%; color:#44648a; background:#edf4fb; font:18px system-ui,sans-serif; cursor:pointer; }
+button svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; vertical-align:middle; pointer-events:none; }
+button[hidden] { display:none !important; }
 button[type=submit] { color:#fff; background:#5f8fd9; }
 button:disabled { opacity:.5; cursor:default; }
 button:focus-visible,textarea:focus-visible { outline:2px solid #468bd8; outline-offset:1px; }
@@ -30,3 +33,16 @@ form { order:2; }
 #records-status { padding:2px 8px; color:#526d89; font-size:12px; }
 #records-more { flex:none; align-self:center; margin:4px; }
 #records-more[hidden] { display:none; }
+
+html[data-platform="win32"] body { padding:6px; font:13px/1.45 "Segoe UI Variable","Segoe UI","Microsoft YaHei UI","Microsoft YaHei",sans-serif; }
+html[data-platform="win32"] form { gap:5px; padding:6px; border-color:#dfe6f0; border-radius:14px; box-shadow:0 4px 14px #29446b0b; }
+html[data-platform="win32"] textarea { padding:6px 5px; color:#28364d; font:inherit; }
+html[data-platform="win32"] button { display:grid; place-items:center; width:30px; height:30px; padding:6px; border-radius:9px; color:#8190a8; background:#f3f6fb; font-family:inherit; }
+html[data-platform="win32"] button svg { width:17px; height:17px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+html[data-platform="win32"] button:hover:not(:disabled) { color:#5278cf; background:#eaf0ff; }
+html[data-platform="win32"] button[type="submit"] { margin-left:3px; color:#fff; background:#6688dc; }
+html[data-platform="win32"] button[type="submit"]:hover:not(:disabled) { color:#fff; background:#5278cf; }
+html[data-platform="win32"] .target { align-self:flex-start; padding:0 10px 3px; background:transparent; color:#65748b; font:11px/16px "Segoe UI","Microsoft YaHei UI",sans-serif; }
+html[data-platform="win32"] .status { margin-bottom:4px; padding:3px 8px; border-radius:7px; font-size:10px; }
+html[data-platform="win32"] #records { border-color:#dfe6f0; background:#f7f9fd; }
+html[data-platform="win32"] #records header button,html[data-platform="win32"] #records-more { display:block; width:auto; height:auto; padding:4px 10px; font:12px/1.5 "Segoe UI","Microsoft YaHei UI",sans-serif; }

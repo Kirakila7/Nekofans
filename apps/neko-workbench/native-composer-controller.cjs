@@ -21,7 +21,8 @@ function createNativeComposerController({ WebContentsView, ipcMain, baseDir = __
     close(); host = window;
     const on = (obj, event, fn) => { obj.on(event, fn); listeners.push([obj, event, fn]); };
     on(window, 'hide', detach); on(window, 'minimize', detach); on(window, 'show', refresh); on(window, 'restore', refresh);
-    on(window, 'resize', () => { bounds(); }); on(window, 'closed', close);
+    for (const event of ['resize', 'maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen']) on(window, event, refresh);
+    on(window.webContents, 'zoom-changed', refresh); on(window, 'closed', close);
     on(window.webContents, 'will-navigate', close); on(window.webContents, 'destroyed', close); on(window.webContents, 'render-process-gone', close);
   }
   function bounds() {
@@ -30,6 +31,9 @@ function createNativeComposerController({ WebContentsView, ipcMain, baseDir = __
     const x = Math.max(0, Math.min(width, Math.round(rect.x * zoom))), y = Math.max(0, Math.min(height, Math.round(rect.y * zoom)));
     const right = Math.max(x, Math.min(width, Math.round((rect.x + rect.width) * zoom))), bottom = Math.max(y, Math.min(height, Math.round((rect.y + rect.height) * zoom)));
     if (right <= x || bottom <= y) { detach(); return; }
+    // setBounds uses DIP, not physical display pixels. Only page zoom belongs
+    // in this conversion; keep the trusted input's font and hit targets in sync.
+    if (view.webContents.getZoomFactor() !== zoom) view.webContents.setZoomFactor?.(zoom);
     view.setBounds({ x, y, width: right - x, height: bottom - y });
   }
   function publish() { if (ready && view && !view.webContents.isDestroyed()) view.webContents.send('neko-composer-state', state); }
@@ -99,6 +103,6 @@ function createNativeComposerController({ WebContentsView, ipcMain, baseDir = __
     if (!host.webContents.isDestroyed()) host.webContents.send('workbench:native-composer-event', message.type === 'expand' ? { type: 'expand' } : { type: message.type, value: message.value, sessionToken: state.sessionToken, revision: state.revision, ...(message.type === 'submit' ? {submissionId:message.submissionId} : {editId:message.editId}) });
   }
   ipcMain.on('neko-composer-input', input);
-  return Object.freeze({ bind, place, update, setEnabled(value) { enabled = value === true; refresh(); }, raise() { if (attached) { detach(); refresh(); } }, dispose() { close(); ipcMain.removeListener('neko-composer-input', input); } });
+  return Object.freeze({ bind, place, update, setEnabled(value) { enabled = value === true; refresh(); }, raise() { if (attached) host.contentView.addChildView(view); else refresh(); }, dispose() { close(); ipcMain.removeListener('neko-composer-input', input); } });
 }
 module.exports = { createNativeComposerController };

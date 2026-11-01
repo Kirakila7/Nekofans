@@ -3,6 +3,8 @@
 function installUnifiedLayout(options = {}) {
   const doc = options.document || document, win = options.window || window;
   const bridge = options.bridge || win.nekoWorkbench;
+  const windowsHost = bridge?.platform === 'win32';
+  let floatingComposerRect = null;
   if (!doc?.body || typeof bridge?.workspace !== 'function' || typeof bridge?.community !== 'function' || doc.querySelector('[data-neko-unified-style]')) return () => {};
   const rail = doc.querySelector('[data-neko-side-rail]');
   if (!rail) return () => {};
@@ -26,6 +28,10 @@ function installUnifiedLayout(options = {}) {
   const container = doc.querySelector('.neko-workspace-rail-controls') || rail;
   if (allowLegacyMultiPane) container.appendChild(trigger);
   const sceneButton = button('▧', 'neko-side-rail__button neko-fixed-scene-entry', openFixedScene);
+  if (windowsHost) {
+    const icon = doc.createElementNS('http://www.w3.org/2000/svg','svg'); icon.setAttribute('viewBox','0 0 24 24'); icon.setAttribute('aria-hidden','true');
+    const line = doc.createElementNS('http://www.w3.org/2000/svg','path'); line.setAttribute('d','M6 3.5h12A2.5 2.5 0 0 1 20.5 6v12a2.5 2.5 0 0 1-2.5 2.5H6A2.5 2.5 0 0 1 3.5 18V6A2.5 2.5 0 0 1 6 3.5ZM10 4v16M10 12h10'); line.setAttribute('fill','none'); line.setAttribute('stroke','currentColor'); line.setAttribute('stroke-width','1.6'); line.setAttribute('stroke-linejoin','round'); icon.appendChild(line); sceneButton.replaceChildren(icon);
+  }
   sceneButton.title = '聊天、视频与工作'; sceneButton.setAttribute('aria-label', '打开聊天、视频与工作布局'); sceneButton.setAttribute('aria-pressed', 'false');
   container.appendChild(sceneButton);
   let configReturnFocus = trigger;
@@ -210,6 +216,10 @@ function installUnifiedLayout(options = {}) {
     // in the title line instead of the body text that the site view covers.
     // The body status (role=status) is announced; this visible copy is not.
     const titleText = el('span', 'title'), note = el('span', 'note'); note.setAttribute('aria-hidden', 'true'); name.append(titleText, note);
+    if (windowsHost) {
+      const icon = doc.createElementNS('http://www.w3.org/2000/svg', 'svg'); icon.setAttribute('viewBox','0 0 24 24'); icon.setAttribute('class','neko-panel-icon'); icon.setAttribute('aria-hidden','true');
+      const line = doc.createElementNS('http://www.w3.org/2000/svg', 'path'); line.setAttribute('d','M5 4.5h14a1.5 1.5 0 0 1 1.5 1.5v12a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 18V6A1.5 1.5 0 0 1 5 4.5ZM10 8l6 4-6 4Z'); line.setAttribute('fill','none'); line.setAttribute('stroke','currentColor'); line.setAttribute('stroke-width','1.6'); line.setAttribute('stroke-linejoin','round'); icon.appendChild(line); name.prepend(icon);
+    }
     const reload = button('刷新', '', () => action(slot, 'reload'));
     const play = button('官方播放', '', () => action(slot, 'play-official'));
     const share = button('分享', '', () => action(slot, 'copy-video-link'));
@@ -506,6 +516,12 @@ function installUnifiedLayout(options = {}) {
     // setBounds; it is not reloaded when the divider moves.
     const inset = splitGutter && (slot === 'left' || slot === 'right') ? 6 : 0;
     const targetBounds = { x: rect.x + (slot === 'right' ? inset : 0), y: rect.y + bar, width: rect.width - inset, height: rect.height - bar };
+    // Windows native views must leave a real content strip for the working
+    // float: CSS padding on the host cannot protect a remote player's controls.
+    const floating = floatingComposerRect;
+    if (windowsHost && floating && floating.x < targetBounds.x + targetBounds.width && floating.x + floating.width > targetBounds.x && floating.y < targetBounds.y + targetBounds.height && floating.y + floating.height > targetBounds.y) {
+      targetBounds.height = Math.max(0, floating.y - 8 - targetBounds.y);
+    }
     if (targetBounds.height <= 1) { closeView(slot); return; }
     const key = JSON.stringify(targetBounds), current = placements.get(slot);
     if (current !== site) {
@@ -610,6 +626,7 @@ function installUnifiedLayout(options = {}) {
     if (measuredFooter > 0) flexFooterHeight = measuredFooter;
     const footerHeight=flexFooterHeight;
     const minByName={ social:{width:180,height:Math.max(220,Math.ceil(footerHeight+80))}, bilibili:{width:180,height:160}, coding:{width:180,height:180} };
+    if (windowsHost && fixedScene) { minByName.social.width = 280; minByName.bilibili.width = 600; }
     const [firstMin,secondMin,thirdMin]=flex.slots.map(name=>minByName[name]);
     const combine=(a,b,axis)=>axis==='x'?{width:a.width+b.width,height:Math.max(a.height,b.height)}:{width:Math.max(a.width,b.width),height:a.height+b.height};
     const stackMin=combine(secondMin,thirdMin,flex.stackAxis), totalMin=combine(firstMin,stackMin,flex.rootAxis);
@@ -829,7 +846,13 @@ function installUnifiedLayout(options = {}) {
   observer.observe(doc.body, { childList:true, subtree:true, attributes:true, attributeFilter:['aria-expanded','role','data-neko-account-habitat-menu'] });
   watchOverlayAncestors();
   win.addEventListener('resize', schedule); doc.addEventListener('scroll', schedule, true);
-  doc.addEventListener('neko-collapsed-composer-geometry', schedule);
+  function composerGeometryChanged(event) {
+    const r = event.detail?.floating;
+    floatingComposerRect = r && ['x','y','width','height'].every(key => Number.isFinite(r[key])) && r.width > 0 && r.height > 0 ? {...r} : null;
+    schedule();
+  }
+  doc.addEventListener('neko-collapsed-composer-geometry', composerGeometryChanged);
+  doc.dispatchEvent(new win.Event('neko-request-composer-geometry'));
   function visibilityChanged() { if (doc.visibilityState === 'hidden') hideAll(); else schedule(); }
   doc.addEventListener('visibilitychange', visibilityChanged); win.addEventListener('focus', visibilityChanged);
   divider.addEventListener('pointerdown', e => { if (layout.flex?.enabled) return; if (e.button !== 0) return; const geo = findGeometry(); if (!geo) return; drag = { pointerId: e.pointerId, left: geo.full.x, width: geo.full.width, started: layout.ratio }; divider.setPointerCapture?.(e.pointerId); divider.dataset.dragging = 'true'; e.preventDefault(); });
@@ -936,7 +959,7 @@ function installUnifiedLayout(options = {}) {
     exitFixedScene();
     closeSideSurface();
     disposed = true; revision++; hideAll(); clearCoding(); postNativeDivider(null); if (typeof unsubscribeNativeDivider === 'function') unsubscribeNativeDivider(); doc.body.removeAttribute('data-neko-unified-enabled');
-    observer.disconnect(); overlayObserver.disconnect(); resize?.disconnect(); win.removeEventListener('resize', schedule); doc.removeEventListener('scroll', schedule, true); doc.removeEventListener('click', sceneNavigation, true); doc.removeEventListener('click', shortcut, true); doc.removeEventListener('neko-unified-open-community', visitCommunity); doc.removeEventListener('neko-collapsed-composer-geometry', schedule); doc.removeEventListener('keydown', escapeConfig);
+    observer.disconnect(); overlayObserver.disconnect(); resize?.disconnect(); win.removeEventListener('resize', schedule); doc.removeEventListener('scroll', schedule, true); doc.removeEventListener('click', sceneNavigation, true); doc.removeEventListener('click', shortcut, true); doc.removeEventListener('neko-unified-open-community', visitCommunity); doc.removeEventListener('neko-collapsed-composer-geometry', composerGeometryChanged); doc.removeEventListener('keydown', escapeConfig);
     doc.removeEventListener('neko-workspace-expand', expandFlexWorkspace);
     doc.removeEventListener('neko-chatroom-mode-change', roomModeChanged);
     doc.removeEventListener('neko-unified-open-config', openConfigFromSettings);

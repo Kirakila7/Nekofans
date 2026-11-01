@@ -4,8 +4,19 @@ const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
 const {createNativeDividerController}=require('../../apps/neko-workbench/native-divider-controller.cjs');
 class Contents extends EventEmitter{constructor(){super();this.mainFrame={};this.destroyed=false;this.zoom=1;this.sent=[];}getZoomFactor(){return this.zoom;}isDestroyed(){return this.destroyed;}send(...args){this.sent.push(args);}setWindowOpenHandler(){}loadFile(){return Promise.resolve();}close(){this.destroyed=true;}}
 class View{constructor(options){this.options=options;this.webContents=new Contents();this.bounds=null;}setBackgroundColor(value){this.background=value;}setBounds(value){this.bounds=value;}}
-class Host extends EventEmitter{constructor(){super();this.webContents=new Contents();this.children=[];this.contentView={addChildView:v=>{if(!this.children.includes(v))this.children.push(v);},removeChildView:v=>{this.children=this.children.filter(x=>x!==v);}};}isDestroyed(){return false;}getContentSize(){return [1000,700];}getContentBounds(){return {x:100,y:50,width:1000,height:700};}}
+class Host extends EventEmitter{constructor(){super();this.webContents=new Contents();this.children=[];this.contentView={addChildView:v=>{this.children=this.children.filter(x=>x!==v);this.children.push(v);},removeChildView:v=>{this.children=this.children.filter(x=>x!==v);}};}isDestroyed(){return false;}getContentSize(){return [1000,700];}getContentBounds(){return {x:100,y:50,width:1000,height:700};}}
 const tick=()=>new Promise(r=>setImmediate(r));
+
+test('a clipped divider returns after resize and hidden windows reject pointer input',async()=>{
+ const ipc=new EventEmitter(),host=new Host(),c=createNativeDividerController({WebContentsView:View,ipcMain:ipc});
+ let size=[1000,700],visible=true;host.getContentSize=()=>size;host.isVisible=()=>visible;
+ c.place(host,{action:'place',id:'chat',rect:{x:600,y:20,width:12,height:600}});c.setEnabled(true);await tick();const v=host.children[0];
+ size=[400,300];host.emit('resize');assert.equal(host.children.length,0);
+ size=[1000,700];host.emit('resize');assert.equal(host.children[0],v);
+ visible=false;host.emit('hide');assert.equal(host.children.length,0);
+ ipc.emit('neko-divider-input',{sender:v.webContents,senderFrame:v.webContents.mainFrame},{type:'start',token:1});assert.equal(host.webContents.sent.length,0);
+ visible=true;host.emit('show');assert.equal(host.children[0],v);c.dispose();
+});
 test('native divider validates sources, tracks zoom and restores bounds on end and cancellation',async()=>{
  const ipc=new EventEmitter(),host=new Host(),c=createNativeDividerController({WebContentsView:View,ipcMain:ipc});c.bind(host);c.setEnabled(true);c.place(host,{action:'place',id:'chat',rect:{x:400,y:20,width:12,height:600}});await tick();assert.equal(host.children.length,1);const v=host.children[0],input=(m,frame=v.webContents.mainFrame,sender=v.webContents)=>ipc.emit('neko-divider-input',{sender,senderFrame:frame},m);
  assert.deepEqual(v.bounds,{x:400,y:20,width:12,height:600});assert.throws(()=>c.place(host,{action:'place',id:'evil',rect:{x:0,y:0,width:12,height:600}}));assert.throws(()=>c.place(host,{action:'place',id:'chat',rect:{x:0,y:0,width:500,height:600}}));

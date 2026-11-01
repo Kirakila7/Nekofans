@@ -110,6 +110,18 @@ function installWorkbenchSideRail(options = {}) {
     postNativeDivider(null);
     win.dispatchEvent(new win.Event('resize'));
   }
+  const windowsHost = bridge.platform === 'win32';
+  const titlebar = windowsHost ? doc.createElement('header') : null;
+  let windowDark = null;
+  if (titlebar) {
+    mark(doc.body, 'data-neko-window-chrome', 'windows');
+    titlebar.className = 'neko-window-titlebar'; titlebar.dataset.nekoWindowTitlebar = '';
+    const brand = doc.createElement('span'); brand.className = 'neko-window-titlebar__brand';
+    const iconSrc = options.accountAvatar || options.fishAvatar;
+    if (iconSrc) { const icon = doc.createElement('img'); icon.src = iconSrc; icon.alt = ''; brand.appendChild(icon); }
+    const name = doc.createElement('span'); name.textContent = 'NEKOfuns'; brand.appendChild(name);
+    titlebar.appendChild(brand); doc.body.prepend(titlebar);
+  }
   function findChatFrame(sidebar) {
     // On current DSH the sidebar slot is display:contents. The grid track is
     // owned by an ancestor whose next track is the native center column.
@@ -191,6 +203,10 @@ function installWorkbenchSideRail(options = {}) {
   }
   function sync() {
     queued = false; if (stopped) return;
+    if (windowsHost) {
+      const dark = doc.body.hasAttribute('data-ds-dark-theme');
+      if (dark !== windowDark) { windowDark = dark; if (typeof bridge.windowTheme === 'function') void Promise.resolve(bridge.windowTheme(dark)).catch(() => {}); }
+    }
     const sidebar = doc.querySelector('[data-slot="sidebar"]');
     syncChatGrid(sidebar);
     const frame = sidebar?.closest('[data-sidebar-collapsed="true"]');
@@ -366,7 +382,7 @@ function installWorkbenchSideRail(options = {}) {
   doc.addEventListener('pointerdown', onDragStart, true); doc.addEventListener('pointerup', onDragEnd); doc.addEventListener('pointercancel', onDragEnd);
   doc.head.appendChild(style); doc.body.prepend(rail); doc.body.appendChild(chatDivider); doc.body.setAttribute('data-neko-side-rail-layout', '');
   const observer = new win.MutationObserver(schedule);
-  observer.observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-label', 'aria-expanded', 'data-sidebar-collapsed', 'data-neko-chatroom-active', 'data-neko-side-social-active', 'data-neko-flex-mode', 'data-neko-fixed-scene', 'style'] });
+  observer.observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-label', 'aria-expanded', 'data-sidebar-collapsed', 'data-neko-chatroom-active', 'data-neko-side-social-active', 'data-neko-flex-mode', 'data-neko-fixed-scene', 'data-ds-dark-theme', 'style'] });
   sync();
   return () => {
     if (stopped) return; stopped = true; observer.disconnect();
@@ -383,6 +399,6 @@ function installWorkbenchSideRail(options = {}) {
       if (originalBodyMarker === null) doc.body.removeAttribute('data-neko-side-rail-layout');
       else doc.body.setAttribute('data-neko-side-rail-layout', originalBodyMarker);
     }
-    rail.remove(); chatDivider.remove(); style.remove();
+    titlebar?.remove(); rail.remove(); chatDivider.remove(); style.remove();
   };
 }

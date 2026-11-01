@@ -733,7 +733,9 @@ function installWorkspaceShell(options = {}) {
     // Keep a usable strip for main-agent chat alongside the floating work area.
     const limitWidth = Math.max(0, Math.min(win.innerWidth-right-240, flex ? parseFloat(style.getPropertyValue('--neko-flex-compact-width')) || 0 : win.innerWidth));
     const width = Math.min(nativeRecordsOpen ? nativeRecordsWidth : 480, limitWidth);
-    const height = nativeRecordsOpen ? Math.min(nativeRecordsHeight,Math.max(76,win.innerHeight-bottom-32)) : 76;
+    // Windows needs room for both the session label and an error/status row.
+    const compactHeight = bridge.platform === 'win32' ? 96 : 76;
+    const height = nativeRecordsOpen ? Math.min(nativeRecordsHeight,Math.max(compactHeight,win.innerHeight-bottom-32)) : compactHeight;
     return width >= 100 ? {x:Math.max(0,Math.round(win.innerWidth-right-width)),y:Math.max(0,Math.round(win.innerHeight-bottom-height)),width:Math.round(width),height:Math.round(height)} : null;
   }
   function syncFloatingComposer() {
@@ -753,9 +755,12 @@ function installWorkspaceShell(options = {}) {
   const collapseResize = win.ResizeObserver ? new win.ResizeObserver(() => schedule()) : null;
   function notifyCollapseGeometry() {
     const rect = node => { const r = node.getBoundingClientRect(); return [r.left,r.top,r.width,r.height].map(Math.round); };
-    const key = JSON.stringify([collapsedComposer && rect(collapsedComposer), !expandWorkspace.hidden && rect(expandWorkspace)]);
-    if (key !== collapseGeometry) { collapseGeometry = key; doc.dispatchEvent(new win.Event('neko-collapsed-composer-geometry')); }
+    const floating = hasNativeComposerBridge ? floatingBounds() : null;
+    const key = JSON.stringify([collapsedComposer && rect(collapsedComposer), !expandWorkspace.hidden && rect(expandWorkspace), floating]);
+    if (key !== collapseGeometry) { collapseGeometry = key; doc.dispatchEvent(new win.CustomEvent('neko-collapsed-composer-geometry', {detail:{floating}})); }
   }
+  const requestCollapseGeometry = () => { collapseGeometry = ''; notifyCollapseGeometry(); };
+  doc.addEventListener('neko-request-composer-geometry', requestCollapseGeometry);
   function clearCollapsedComposer() {
     if (collapsedComposer) {
       collapseResize?.unobserve(collapsedComposer);
@@ -1242,8 +1247,9 @@ function installWorkspaceShell(options = {}) {
       const chatCenter = (doc.body.hasAttribute('data-neko-chatroom-active') || doc.body.hasAttribute('data-neko-side-social-active')) ? doc.querySelector('[data-neko-chat-center]') : null;
       const centerRect = chatCenter?.getBoundingClientRect();
       const x = Math.ceil(centerRect && centerRect.width > 0 ? centerRect.left : r.right), bottom = strip?.top > 0 ? strip.top : win.innerHeight;
+      const contentTop = Math.max(0, doc.querySelector('[data-neko-window-titlebar]')?.getBoundingClientRect().bottom || 0);
       panel.toggleAttribute('data-neko-compact', win.innerWidth - x <= 400);
-      Object.assign(panel.style, { left: x + 'px', top: '0px', width: Math.max(0, win.innerWidth - x) + 'px', height: Math.max(0, bottom) + 'px' });
+      Object.assign(panel.style, { left: x + 'px', top: contentTop + 'px', width: Math.max(0, win.innerWidth - x) + 'px', height: Math.max(0, bottom - contentTop) + 'px' });
       // In unified mode only cover the actual coding track, never a native
       // community or video WebContentsView. The hidden track keeps the chooser
       // pending so it returns when the user switches back to coding.
@@ -1252,9 +1258,9 @@ function installWorkspaceShell(options = {}) {
       const codeRect = coding?.getBoundingClientRect();
       const codeVisible = !!coding && coding.getAttribute('data-neko-unified-coding') !== 'hidden' && !coding.hasAttribute('inert') && codeRect?.width > 0 && codeRect?.height > 0;
       const px = unified && codeVisible ? Math.ceil(codeRect.left) : x;
-      const py = unified && codeVisible ? Math.max(56, Math.ceil(codeRect.top)) : 56;
+      const py = unified && codeVisible ? Math.max(contentTop + 56, Math.ceil(codeRect.top)) : contentTop + 56;
       const pw = unified && codeVisible ? Math.floor(codeRect.width) : Math.max(0, win.innerWidth - x);
-      const ph = unified && codeVisible ? Math.max(0, Math.min(bottom, Math.floor(codeRect.bottom)) - py) : Math.max(0, bottom - 56);
+      const ph = unified && codeVisible ? Math.max(0, Math.min(bottom, Math.floor(codeRect.bottom)) - py) : Math.max(0, bottom - py);
       const sceneCoding = doc.body.hasAttribute('data-neko-fixed-scene') && codeVisible && !doc.body.hasAttribute('data-neko-flex-workspace-collapsed');
       sceneProjects.hidden = !sceneCoding;
       if (sceneCoding) Object.assign(sceneProjects.style, {left: Math.max(px, px + pw - 112) + 'px', top: (py + 4) + 'px'});
@@ -1346,6 +1352,7 @@ function installWorkspaceShell(options = {}) {
   const interval = win.setInterval(() => { if (doc.visibilityState !== 'hidden') refreshCatalog(true); }, 60000);
   place();
   return () => {
+    doc.removeEventListener('neko-request-composer-geometry', requestCollapseGeometry);
     clearCollapsedComposer(); collapseResize?.disconnect(); if (collapseNoticeTimer) win.clearTimeout(collapseNoticeTimer);
     if (disposed) return; disposed = true; hideCompanionReply(); floatingComposer?.dispose(); if (floatingGeometry) floatingCall({action:'remove'}); stopNativeNew(); motion?.removeEventListener?.('change', syncCharacter); motion?.removeEventListener?.('change', syncRailWalking); doc.removeEventListener('visibilitychange', syncCharacter); doc.removeEventListener('visibilitychange', syncRailWalking); stopRailWalking(); if (railClickTimer !== null) win.clearTimeout(railClickTimer); if (railSpace) { if (railSpaceBeforeAria === null) railSpace.removeAttribute('aria-hidden'); else railSpace.setAttribute('aria-hidden', railSpaceBeforeAria); } if (characterVideo) { characterVideo.pause(); characterVideo.removeAttribute('src'); characterVideo.load(); } observer.disconnect(); ancestorObserver.disconnect(); intersection?.disconnect(); resize?.disconnect(); win.clearInterval(interval);
     win.removeEventListener('resize', place); win.removeEventListener('pointerup', finishCompanionDrag, true); win.removeEventListener('pointercancel', finishCompanionDrag, true); win.removeEventListener('pointermove', finishCompanionOnUnpressedMove, true); win.removeEventListener('blur', finishCompanionOnBlur); doc.removeEventListener('scroll', schedule, true); doc.removeEventListener('click', nativeNew, true); doc.removeEventListener('keydown', escape, true);

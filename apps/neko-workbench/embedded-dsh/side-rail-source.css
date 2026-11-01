@@ -1,5 +1,26 @@
 /* One independent rail; the native session/sidebar/composer layout remains. */
 body[data-neko-side-rail-layout] { --neko-rail-width: 64px; }
+/* The native caption buttons keep Windows snap/resize behavior. The page owns
+   the matching drag surface and reserves the actual overlay height at any zoom. */
+body[data-neko-window-chrome="windows"] { --neko-titlebar-height:env(titlebar-area-height,36px); overflow:hidden; }
+body[data-neko-window-chrome="windows"] { --neko-font-ui:"Segoe UI Variable","Segoe UI","Microsoft YaHei UI","Microsoft YaHei",sans-serif; --neko-ui-accent:#5278cf; --neko-ui-accent-soft:#eaf0ff; }
+body[data-neko-window-chrome="windows"]:not([data-ds-dark-theme]) {
+  --dsw-alias-bg-base:#f7f9fd; --dsw-alias-bg-layer-1:#ffffff; --dsw-specific-sidebar-fill:#f4f7fc;
+  --dsw-alias-border-l1:#e3e9f2; --dsw-alias-label-primary:#28364d; --dsw-alias-label-secondary:#65748b;
+  --dsw-alias-brand-primary:#5278cf; --dsw-alias-primary:#5278cf;
+  --dsw-alias-interactive-bg-hover:#edf2fa; --dsw-alias-interactive-bg-active:#eaf0ff;
+}
+body[data-neko-window-chrome="windows"][data-ds-dark-theme] { --neko-ui-accent:#9ab5ff; --neko-ui-accent-soft:#273951; }
+body[data-neko-window-chrome="windows"] :is(button,input,textarea,select) { font-family:var(--neko-font-ui); }
+.neko-window-titlebar { position:fixed; inset:0 0 auto; height:var(--neko-titlebar-height); z-index:300; box-sizing:border-box; background:var(--dsw-alias-bg-layer-1,#fbfeff); color:var(--dsw-alias-label-primary,#263750); border-bottom:1px solid var(--dsw-alias-border-l1,#cbdbee); -webkit-app-region:drag; user-select:none; }
+.neko-window-titlebar__brand { display:flex; align-items:center; gap:9px; height:100%; margin-left:env(titlebar-area-x,0px); width:env(titlebar-area-width,calc(100% - 140px)); box-sizing:border-box; padding:0 16px; font:600 12px/1 var(--neko-font-ui,system-ui); letter-spacing:.025em; overflow:hidden; white-space:nowrap; }
+.neko-window-titlebar__brand img { width:22px; height:22px; object-fit:contain; }
+body[data-neko-window-chrome="windows"] [data-neko-rail-app] { margin-top:var(--neko-titlebar-height) !important; height:calc(100vh - var(--neko-titlebar-height)) !important; min-height:0 !important; }
+body[data-neko-window-chrome="windows"] .neko-side-rail { top:var(--neko-titlebar-height); }
+body[data-neko-window-chrome="windows"] .neko-avatar-anchor { top:calc(var(--neko-titlebar-height) + 14px); }
+body[data-neko-window-chrome="windows"] .neko-side-rail { padding-top:16px; border-right-color:var(--dsw-alias-border-l1); }
+body[data-neko-window-chrome="windows"] .neko-side-rail__button { border-radius:12px; color:var(--dsw-alias-label-secondary); }
+body[data-neko-window-chrome="windows"] .neko-side-rail__button:is([aria-pressed="true"],[aria-expanded="true"]) { background:var(--neko-ui-accent-soft); color:var(--neko-ui-accent); }
 body[data-neko-side-rail-layout] [data-neko-rail-app] {
   width: calc(100% - var(--neko-rail-width)) !important;
   margin-left: var(--neko-rail-width) !important; min-width: 0;
