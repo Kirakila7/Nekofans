@@ -31,7 +31,8 @@ if (harnessIndex < 0) {
   for (const [scenario, title] of Object.entries(SCENARIOS)) test(title, async () => {
     const env = { ...process.env };
     for (const name of Object.keys(env)) if (name.startsWith('NEKO_WORKBENCH_CHAT_')) delete env[name];
-    if (FAKE_LOBBY.has(scenario)) env.NEKO_WORKBENCH_CHAT_URL = 'https://chat.fixture.test/';
+    // An empty override disables the production default for offline fixtures.
+    env.NEKO_WORKBENCH_CHAT_URL = FAKE_LOBBY.has(scenario) ? 'https://chat.fixture.test/' : '';
     await new Promise((resolve, reject) => execFile(process.execPath, [__filename, '--isolation-harness', scenario],
       { env, timeout: 20000, maxBuffer: 2e6, windowsHide: true }, (error, stdout, stderr) => {
         if (error) return reject(new Error(stdout + '\n' + stderr));
