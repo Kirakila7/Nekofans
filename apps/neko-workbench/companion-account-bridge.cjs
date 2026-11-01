@@ -21,14 +21,18 @@ function createCompanionAccountBridge({ctx, route, createUserMessage, createAssi
     if(!active||active.requestId!==requestId)return {accepted:false};
     active.cancelled=true;active.abort.abort();active.reject(Error('陪伴聊天已取消。'));return {accepted:true};
   }
-  async function send({requestId,text,context='',history=[],maxTokens}={}) {
+  async function send({requestId,text,context='',history=[],maxTokens,purpose='chat'}={}) {
+    if(purpose!=='chat'&&purpose!=='memory')throw Error('账号请求用途无效。');
+    // A foreground user turn preempts background memory. Never queue memory behind recall.
+    if(purpose==='chat'&&active?.purpose==='memory'){const previous=active;cancel({requestId:previous.requestId});await previous.done;}
     if(cleanupFailed||pendingCleanup)throw cleanupError();
     if(disposed||active)throw Error('陪伴聊天暂不可用，请稍后重试。');
-    if(typeof requestId!=='string'||!/^companion-[a-zA-Z0-9_-]{1,100}$/.test(requestId)||typeof text!=='string'||!text.trim()||text.length>32000||typeof context!=='string'||context.length>64000||!Number.isSafeInteger(maxTokens)||maxTokens<1||maxTokens>32000)throw Error('聊天内容无效。');
-    if(!Array.isArray(history)||history.length>50||history.some(x=>!x||!['user','assistant'].includes(x.role)||typeof x.text!=='string'||x.text.length>32000)||history.reduce((sum,x)=>sum+x.text.length,0)>64000)throw Error('聊天历史无效。');
+    if(typeof requestId!=='string'||!(purpose==='memory'?/^memory-[a-zA-Z0-9_-]{1,100}$/:/^companion-[a-zA-Z0-9_-]{1,100}$/).test(requestId)||typeof text!=='string'||!text.trim()||text.length>(purpose==='memory'?150000:32000)||typeof context!=='string'||context.length>(purpose==='memory'?150000:64000)||!Number.isSafeInteger(maxTokens)||maxTokens<1||maxTokens>32000)throw Error('聊天内容无效。');
+    if(!Array.isArray(history)||history.length>50||history.some(x=>!x||!['user','assistant'].includes(x.role)||typeof x.text!=='string'||x.text.length>(purpose==='memory'?150000:32000))||history.reduce((sum,x)=>sum+x.text.length,0)>(purpose==='memory'?200000:64000))throw Error('聊天历史无效。');
     if(seen.has(requestId))throw Error('聊天请求已使用，请重试。');seen.add(requestId);
     let reject;const interrupted=new Promise((_,r)=>{reject=r;});interrupted.catch(()=>{});
-    const state=active={requestId,abort:new AbortController(),reject,cancelled:false};
+    let release;const done=new Promise(resolve=>{release=resolve;});
+    const state=active={requestId,purpose,abort:new AbortController(),reject,cancelled:false,done};
     let timer, iterator, pending, ended=false;
     const wait=async value=>{pending=Promise.resolve(value);try{return await Promise.race([pending,interrupted]);}finally{if(!state.abort.signal.aborted)pending=null;}};
     try {
@@ -93,7 +97,7 @@ function createCompanionAccountBridge({ctx, route, createUserMessage, createAssi
           if(!ok)cleanupFailed=true;
         } finally {clearTimeout(cleanupTimer);pendingCleanup--;}
       }
-      if(active===state)active=null;
+      if(active===state)active=null;release();
       if(cleanupFailed||pendingCleanup)throw cleanupError();
     }
   }

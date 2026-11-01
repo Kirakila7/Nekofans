@@ -6,6 +6,16 @@ const { randomUUID } = require('node:crypto');
 function createCompanionAccountProvider(rpc) {
   if (typeof rpc !== 'function') throw new TypeError('Account bridge is required');
   return {
+    async memory({requestId,messages,maxTokens,signal}) {
+      const systems=messages.filter(m=>m.role==='system').map(m=>m.content).join('\n\n');
+      const turns=messages.filter(m=>m.role!=='system').map(m=>({role:m.role,text:m.content}));
+      const last=turns.pop();if(!last||last.role!=='user'||systems.length>150000)throw Error('记忆模型请求格式不支持');
+      if(signal.aborted)throw Error('Cancelled');
+      let settled=false;const cancel=()=>{if(!settled)void Promise.resolve(rpc('companion-account-cancel',{requestId})).catch(()=>{});};
+      signal.addEventListener('abort',cancel,{once:true});
+      try{const result=await rpc('memory-account-model',{requestId,text:last.text,context:systems,history:turns,maxTokens});if(signal.aborted||typeof result?.text!=='string'||!result.text.trim())throw Error('记忆模型请求未完成');return result.text;}
+      finally{settled=true;signal.removeEventListener('abort',cancel);}
+    },
     async *stream(input) {
       const messages = Array.isArray(input.messages) ? input.messages : [];
       const last = messages.at(-1);

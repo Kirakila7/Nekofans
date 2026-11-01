@@ -45,3 +45,27 @@ test('independent Anthropic memory model keeps its key and protocol separate fro
   assert((await runtime.memories()).replication.records.some(r=>r.value?.nativeRef&&r.value.text==='独立记忆模型提取的合成事实'));
   assert(!fs.readFileSync(runtime.memoryConfigFile,'utf8').includes('synthetic-memory-only-key'));assert(!fs.readFileSync(runtime.memorySecretStore.file).includes(Buffer.from('synthetic-memory-only-key')));
 });
+test('account opt-in: synthetic chat extracts, confirms and recalls; switching revokes token and preserves independent key',{skip:process.env.NEKO_MEMORY_COMPONENT_TEST!=='1',timeout:180000},async t=>{
+ const directory=fs.mkdtempSync(path.join(os.tmpdir(),'neko-account-memory-workbench-'));let extractions=0;const inputs=[];
+ const provider={async *stream(input){inputs.push(input);yield {type:'delta',text:'synthetic reply'};yield {type:'complete',messageId:'synthetic-answer-'+inputs.length};},async memory({messages}){assert(messages.some(m=>m.role==='user'));extractions++;return JSON.stringify([{text:'合成用户最喜欢花茶',importance:6,entity:'master'}]);}};
+ let runtime=new WorkbenchMainChat({dataDir:directory,repositoryRoot:root,safeStorage:vault,initialBackend:'deepseek-account',accountProvider:provider});t.after(async()=>{await runtime.close();fs.rmSync(directory,{recursive:true,force:true});});
+ await runtime.start();assert.equal(runtime.readMemoryModel().useAccount,false);await runtime.memorySecretStore.set('synthetic-existing-key');
+ let settings=await runtime.memoryAction({action:'configure-neko',enabled:true,useChatApi:true,useAccount:true});assert.equal(settings.ok,true);assert.equal(settings.memoryModel.useAccount,true);
+ assert.equal((await runtime.send('我最喜欢花茶')).status,'completed');assert.equal((await runtime.memoryAction({action:'sync'})).ok,true);assert.equal((await runtime.memoryAction({action:'sync'})).ok,true);assert(extractions>0);
+ let view=await runtime.memories(),candidate=view.replication.records.find(r=>r.value?.nativeRef&&r.value.text==='合成用户最喜欢花茶');assert(candidate);assert.equal(candidate.value.certainty,'candidate');
+ assert.equal((await runtime.memoryAction({action:'event-confirm',id:candidate.itemId,revisionIds:candidate.heads.map(e=>e.eventId)})).ok,true);assert.equal((await runtime.memoryAction({action:'sync'})).ok,true);
+ assert.equal((await runtime.send('我的偏好是什么')).status,'completed');assert(Array.isArray(inputs.at(-1).memoryContext));assert((await runtime.memorySystem.neko.recall('花茶',512)).some(m=>m.text==='合成用户最喜欢花茶'));
+ const oldProxy=runtime.memoryAccountProxy,oldModel=await oldProxy.start();await runtime.selectBackend('chat-api');assert.equal(runtime.memoryAccountProxy,null);await assert.rejects(oldProxy.start(),/关闭/);await assert.rejects(runtime.memoryModel(),/切换到工作台账号/);assert.equal(await runtime.memorySecretStore.get(),'synthetic-existing-key');
+ await runtime.selectBackend('deepseek-account');const newModel=await runtime.memoryModel();assert.notEqual(newModel.apiKey,oldModel.apiKey);
+ await runtime.close();runtime=new WorkbenchMainChat({dataDir:directory,repositoryRoot:root,safeStorage:vault,initialBackend:'deepseek-account',accountProvider:provider});await runtime.start();assert.equal(runtime.readMemoryModel().useAccount,true);
+ assert((await runtime.memories()).replication.records.some(r=>r.value?.text==='合成用户最喜欢花茶'&&r.value.certainty==='user-confirmed'));
+});
+test('offline account leaves pending work across restart and retries it',{skip:process.env.NEKO_MEMORY_COMPONENT_TEST!=='1',timeout:180000},async t=>{
+ const directory=fs.mkdtempSync(path.join(os.tmpdir(),'neko-account-memory-offline-'));let online=false;
+ const provider={async *stream(){yield {type:'delta',text:'synthetic reply'};yield {type:'complete',messageId:'synthetic'};},async memory(){if(!online)throw Error('synthetic unavailable');return JSON.stringify([{text:'合成用户喜欢花茶',entity:'master',importance:6}]);}};
+ let runtime=new WorkbenchMainChat({dataDir:directory,repositoryRoot:root,safeStorage:vault,initialBackend:'deepseek-account',accountProvider:provider});t.after(async()=>{await runtime.close();fs.rmSync(directory,{recursive:true,force:true});});
+ await runtime.start();assert.equal((await runtime.memoryAction({action:'configure-neko',enabled:true,useChatApi:true,useAccount:true})).ok,true);
+ assert.equal((await runtime.send('我喜欢花茶')).status,'completed');await runtime.memorySystem.localSync();await runtime.memorySystem.activeSync?.catch(()=>{});assert(runtime.memorySystem.status().pending>0);
+ await runtime.close();runtime=new WorkbenchMainChat({dataDir:directory,repositoryRoot:root,safeStorage:vault,initialBackend:'deepseek-account',accountProvider:provider});await runtime.start();await runtime.memorySystem.activeSync?.catch(()=>{});assert(runtime.memorySystem.status().pending>0);
+ online=true;assert.equal((await runtime.memoryAction({action:'sync'})).ok,true);assert.equal((await runtime.memoryAction({action:'sync'})).ok,true);assert.equal(runtime.memorySystem.status().pending,0);assert((await runtime.memories()).replication.records.some(r=>r.value?.nativeRef&&r.value.text==='合成用户喜欢花茶'));
+});

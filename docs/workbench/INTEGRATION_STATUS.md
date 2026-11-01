@@ -1,5 +1,9 @@
 # Local test workbench 0.28.18 (Windows panel opened locally)
 
+## Account-memory integration verification (2026-11-01)
+
+PR #39 is integrated with the Windows/macOS compatibility fixes, activity-memory consent and isolated Bilibili window experiment from main. Account-backed extraction remains opt-in and off by default; its settings disclose private excerpt sharing and possible account usage/cost. Task excerpts and explicitly consented screen observations retain their separate activity-memory rules. The final Windows source suite passes 1,008 tests with zero failures and 12 skips; source/skin checks pass. These results do not establish real account-provider access, quota or billing behavior, macOS device acceptance, or a newly built installer. Existing daily profiles and the running preview were not modified.
+
 ## Windows/macOS integration PR preparation (2026-10-31)
 
 The integration joins Windows `a8add5d02a173c83cc6c220e9294efc951afee38` and macOS `e1383b954020b7884ea32087923cab1bd482ad3f`, retaining the Windows native-window adaptations and the local interaction, privacy and logout fixes described below. The separate PR #47 UI integration is excluded from this submission and preserved in an ignored local recovery snapshot. The newer macOS merge of #47 is not an ancestor of this integration.
@@ -54,6 +58,8 @@ The old 0.28.9 test instance exited through its native menu. Its 197 profile fil
 The daily artifact is built from this repository. `config/daily-release.json` is the version authority; every app includes `Contents/Resources/WORKBENCH_BUILD.json` with the source commit and SHA-256 of every shipped source file. Historical QA checkouts and profiles are not release inputs.
 
 ## Pending source changes
+
+- N.E.K.O. memory can optionally use the signed-in workbench account model without a separate API key. This option is **off by default** and must be enabled in memory settings while account chat is selected. Extraction sends the necessary private conversation excerpts to the chosen model provider and can consume account allowance or incur charges; actual usage and cost are unknown. The account bridge does not report model usage and no zero-usage value is fabricated. Only synthetic conversations, a fake account provider and isolated local profiles have been tested, including extraction, recall, restart, cancellation and offline retry. Real account access, provider response, allowance and billing remain unverified. Existing Chat API and independently configured memory keys remain separate.
 
 - The workbench filters obsolete per-port local DSH authentication cookies from requests to the active loopback service, preserving current authentication and all stored cookies, to avoid oversized headers after repeated restarts.
 
