@@ -32,7 +32,10 @@ test('listener guard blocks shell and other files until writes are explicitly en
   assert.match(guard({name:'bash',arguments:{}}),/只读/);
   current='true';
   assert.match(guard({name:'bash',arguments:{}}),/只读/);
-  fs.unlinkSync(diary);fs.symlinkSync(outside,diary);
+  fs.unlinkSync(diary);
+  // A directory junction exercises link rejection without Windows symlink privileges.
+  if(process.platform==='win32'){fs.mkdirSync(outside);fs.symlinkSync(outside,diary,'junction');}
+  else fs.symlinkSync(outside,diary);
   assert.match(guard({name:'write',arguments:{file_path:diary}}),/链接/);
   await scope.dispose();assert.equal(disposed,true);
 });

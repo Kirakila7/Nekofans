@@ -257,7 +257,7 @@ if (!process.argv.includes('--bridge-harness')) {
     const ctx = { on: (name, fn) => { if (!handlers.has(name)) handlers.set(name, []); handlers.get(name).push(fn); },
       get: name => name === 'loader' ? { await: async () => {} } : name === 'jobs' ? registry : undefined,
       agents: { get: id => agents.get(id), resume: async () => { resumes++; return { agent: root }; }, create: async () => { throw Error('must not create an agent for task restoration'); } },
-      sessionQuery: { observeSession: async id => { observations.push(id); if (!sessions.has(id)) throw Error('missing fixture'); return { header: sessions.get(id).header, events: histories.get(id), inheritedEventCount: 0, projections: { values: { title: id === 'catalog-child' ? 'Catalog title' : '' } }, [Symbol.dispose]() { released.push(id); } }; } },
+      sessionQuery: { listSessions: async () => [...sessions.values()], observeSession: async id => { observations.push(id); if (!sessions.has(id)) throw Error('missing fixture'); return { header: sessions.get(id).header, events: histories.get(id), inheritedEventCount: 0, projections: { values: { title: id === 'catalog-child' ? 'Catalog title' : '' } }, [Symbol.dispose]() { released.push(id); } }; } },
       subagents: { listChildren: async id => { parentQueries.push(id); return id === 'root' ? rows : []; }, interrupt: (id, reason) => interrupted.push([id, reason]), prompt: (...args) => prompts.push(args) },
       agentPresets: { mount: (...args) => mounted.push(args) }, connection: { authenticatedUrl: url => url }, webApp: { getAdvertisedUrl: () => 'http://127.0.0.1:59099/fixture' }, root: { dispose: async () => {} } };
     lines.close = () => lines.emit('close');
@@ -283,6 +283,14 @@ if (!process.argv.includes('--bridge-harness')) {
       assert.equal(last('agent-meta', 'catalog-child').source, 'dsh-subagent-catalog');
       assert.deepEqual(last('task-roster').sessionIds, ['restored', 'fork']); assert(observations.includes('empty')); assert(observations.includes('missing'));
       assert.equal(JSON.stringify(frames).includes(privateText), false, 'restored QQ content and catalog labels never cross the bridge');
+      const directoryResult = await invoke('workspace-catalog', {});
+      assert.deepEqual(directoryResult.result.sessions.map(row=>row.id).sort(), ['empty','restored','root']);
+      for(const id of ['qq-restored','fish-background','catalog-child','missing']) assert((await invoke('workspace-session-check',{id})).error);
+      assert.equal((await invoke('workspace-session-check',{id:'restored'})).result.allowed,true);
+      const beforePrivacyObservations = observations.length;
+      const privacy = await invoke('workspace-session-privacy',{ids:['restored','root','qq-restored','fish-background','catalog-child','missing']});
+      assert.deepEqual(privacy.result.sort(),['restored','root']);
+      assert.equal(observations.length,beforePrivacyObservations,'cached privacy checks never hydrate conversation history');
       for (const id of ['qq-restored', 'qq-parent', 'qq-catalog']) {
         assert(released.includes(id), `private observation must be released: ${id}`);
         assert.equal(frames.some(frame => frame.params?.sessionId === id), false);

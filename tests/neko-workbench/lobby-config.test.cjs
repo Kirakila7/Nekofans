@@ -9,13 +9,15 @@ const CHAT_ERROR = /频道服务地址/;
 const AUTH_ERROR = /频道登录地址/;
 const CHANNEL = '0f8e9d7c-6b5a-4c3d-8e2f-1a0b9c8d7e6f';
 
-test('an unset or empty chat URL leaves the lobby unconfigured without reading the other variables', () => {
+test('an unset chat URL uses the official service while an explicitly empty URL disables the lobby', () => {
   assert.equal(C.resolveChatUrl(undefined), null);
   assert.equal(C.resolveChatUrl(''), null);
-  assert.deepEqual(C.resolveChatConfig({}), { configured: false });
+  assert.deepEqual({ ...C.resolveChatConfig({}) }, {
+    configured: true, chatUrl: 'https://chat.nekotech.ai/', wsUrl: 'wss://chat.nekotech.ai/ws',
+    authUrl: OFFICIAL_AUTH_ORIGIN, clientId: 'neko-chat-desktop-prod', oauthPorts: [48921, 48922, 48923] });
   assert.deepEqual(C.resolveChatConfig({ NEKO_WORKBENCH_CHAT_URL: '' }), { configured: false });
-  // Invalid companions do not break the unconfigured state (the panel just says "unconfigured").
-  assert.deepEqual(C.resolveChatConfig({ NEKO_WORKBENCH_CHAT_CLIENT_ID: 'bad', NEKO_WORKBENCH_CHAT_AUTH_URL: 'http://evil.test',
+  // Invalid companions do not break an explicitly disabled lobby.
+  assert.deepEqual(C.resolveChatConfig({ NEKO_WORKBENCH_CHAT_URL: '', NEKO_WORKBENCH_CHAT_CLIENT_ID: 'bad', NEKO_WORKBENCH_CHAT_AUTH_URL: 'http://evil.test',
     NEKO_WORKBENCH_CHAT_OAUTH_PORTS: 'x' }), { configured: false });
   assert.ok(Object.isFrozen(C.resolveChatConfig({})));
 });
@@ -134,7 +136,7 @@ test('resolveChatConfig reads process.env by default and nothing else', () => {
   const saved = Object.fromEntries(keys.map(key => [key, process.env[key]]));
   try {
     for (const key of keys) delete process.env[key];
-    assert.deepEqual(C.resolveChatConfig(), { configured: false });
+    assert.equal(C.resolveChatConfig().chatUrl, 'https://chat.nekotech.ai/');
     process.env.NEKO_WORKBENCH_CHAT_URL = 'http://localhost:8091';
     assert.equal(C.resolveChatConfig().wsUrl, 'ws://localhost:8091/ws');
   } finally {

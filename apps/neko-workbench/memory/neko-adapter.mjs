@@ -24,7 +24,7 @@ export class NekoMemoryWorker {
     if(!model?.baseUrl||!model.model||!model.apiKey)throw Error('请先配置记忆整理模型');
     if(this.closed||generation!==this.generation)throw Error('记忆启动已取消');
     const directory=join(this.repositoryRoot,'services/neko-memory'),script=join(directory,'workbench_server.py');
-    const directPython=process.env.NEKO_WORKBENCH_MEMORY_PYTHON_DIRECT;
+    const directPython=process.platform==='win32'?process.env.NEKO_WORKBENCH_MEMORY_PYTHON_DIRECT:'';
     const configuredPython=this.python||process.env.NEKO_WORKBENCH_MEMORY_PYTHON;
     if(!directPython&&!configuredPython&&!existsSync(join(directory,'.venv',process.platform==='win32'?'Scripts/python.exe':'bin/python')))throw Error('请先运行 npm run setup:neko-memory 安装记忆组件');
     const args=directPython?['-B',join(directory,'workbench-direct-launcher.py')]:configuredPython?['run','--no-project','--offline','--no-python-downloads','--python',configuredPython,'python','-B',script]:['run','--frozen','--no-sync','python','-B',script];
