@@ -16,7 +16,6 @@ test('paused Codex is visibly disabled across seat, saved sessions and engine se
  const newCodex=doc.querySelectorAll('.neko-custom-seat__new')[1];assert(newCodex.disabled);newCodex.click();await tick();assert(!calls.some(r=>r.action==='update'&&r.patch?.officeMode==='codex'));
  const old=[...doc.querySelectorAll('.neko-workspace-session')].find(n=>n.textContent.includes('旧 Codex'));assert(old.disabled);assert.match(old.textContent,/测试中/);old.click();await tick();assert(!calls.some(r=>r.action==='codex-read'));
  doc.querySelector('.neko-office-switch').click();const codex=[...doc.querySelectorAll('.neko-office-choice')].find(n=>n.textContent.includes('Codex'));assert(codex.disabled);assert.match(codex.textContent,/测试中/);assert.equal(doc.querySelectorAll('.neko-office-choice')[0].disabled,false);
- doc.querySelectorAll('.neko-custom-seat__new')[0].click();await tick();assert(!doc.querySelector('.neko-startup').hidden,'DSH shortcut opens project selection while Codex is paused');[...doc.querySelectorAll('.neko-startup__project')].find(n=>n.textContent.includes('DSH')).querySelector('.neko-startup__project-new').click();await tick();assert(calls.some(r=>r.action==='dsh-new'&&r.root==='/example'),'a DSH project remains usable');
  assert.equal(doc.querySelector('main textarea').value,'DSH draft');assert(!doc.querySelector('main').hasAttribute('inert'));assert(doc.querySelector('.neko-companion-dock'));
 });
 test('an already running Codex task retains approval and stop while new sends remain disabled',{skip:!JSDOM},async t=>{

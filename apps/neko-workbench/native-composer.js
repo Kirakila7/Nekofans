@@ -202,7 +202,13 @@
     }
     if (pendingSubmit !== null && next.settledSubmitId === pendingSubmit.id) { clearTimeout(pendingSubmit.timer); clearRecovery(pendingSubmit.sessionToken, pendingSubmit.value); draftOwner = ''; pendingSubmit = null; }
     if (!composing && !dirty && pendingEdit === null && pendingSubmit === null && !conflict && !blockedDraft) message.value = next.value;
-    status.textContent = submitUnknown ? '发送结果未确认，可能已发送；请展开工作区核对，勿重复发送' : blockedDraft ? '会话已切换或发现未同步的本地草稿；请先复制再展开工作区处理' : conflict ? '原工作区草稿已变化；请先复制再展开工作区处理' : storageFailed && (dirty || composing || pendingEdit !== null || pendingSubmit !== null) ? '未同步输入暂不能保存到本机，请保持窗口打开' : (next.status || '');
+    const warning = submitUnknown ? '发送结果未确认，可能已发送；请展开工作区核对，勿重复发送' : blockedDraft ? '会话已切换或发现未同步的本地草稿；请先复制再展开工作区处理' : conflict ? '原工作区草稿已变化；请先复制再展开工作区处理' : storageFailed && (dirty || composing || pendingEdit !== null || pendingSubmit !== null) ? '未同步输入暂不能保存到本机，请保持窗口打开' : '';
+    // With nothing to report, name the bound project and session so a send
+    // never goes to a session the user cannot identify.
+    status.textContent = warning || next.status || next.context || '';
+    if (warning || !next.status && !next.context) delete status.dataset.tone;
+    else status.dataset.tone = next.status ? (next.running ? 'progress' : 'notice') : 'context';
+    status.title = next.context || '';
     status.hidden = !status.textContent;
     refresh();
     if (!changedSession && !conflict && !blockedDraft) { sendEdit(); sendSubmit(); refresh(); finishExpand(); }

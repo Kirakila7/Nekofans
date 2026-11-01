@@ -63,9 +63,8 @@ function installWorkbenchSideRail(options = {}) {
   chatDivider.setAttribute('aria-label', '调整左侧内容和工作区宽度');
   chatDivider.title = '拖动调整宽度 · 双击恢复 3:1 · 方向键调整';
   let preferredRatio = 1, restoreRatio = .75, chatFrame = null, chatCenter = null, oldChatGrid = null, chatDrag = null, lastChatGeometry = null;
-  // Office and social layouts have separate remembered widths. Office always
-  // keeps both the project list and work area visible.
-  let gridMode = null, officeRatio = null, socialRatio = 1;
+  // One remembered width shared by the Chat and Work layouts.
+  let gridMode = null;
   let nativeDividerKey = '';
   function postNativeDivider(rect) {
     if (typeof bridge.divider !== 'function') return;
@@ -130,7 +129,7 @@ function installWorkbenchSideRail(options = {}) {
     const reserve = center.width > 0 && center.right > bounds.left && center.right <= bounds.right ? Math.max(0, bounds.right - center.right) : 0;
     const width = bounds.width - reserve;
     if (!Number.isFinite(width) || width < 240 || bounds.height < 100) return null;
-    const min = Math.min(180, width * .2), max = mode === 'office' ? Math.max(min, width - Math.min(320, width * .4)) : width;
+    const min = Math.min(265, width), max = mode === 'office' ? Math.max(min, width - Math.min(320, width * .4)) : width;
     return { bounds, width, min, max };
   }
   function setChatRatio(next) {
@@ -144,19 +143,21 @@ function installWorkbenchSideRail(options = {}) {
   function syncChatGrid(sidebar) {
     const found = sidebar && findChatFrame(sidebar);
     const social = doc.body.hasAttribute('data-neko-chatroom-active') || doc.body.hasAttribute('data-neko-side-social-active');
-    const active = !doc.body.hasAttribute('data-neko-flex-mode') && !doc.body.hasAttribute('data-neko-fixed-scene') && found && !sidebar.closest('[data-sidebar-collapsed="true"]');
+    const active = !doc.body.hasAttribute('data-neko-flex-mode') && found && !sidebar.closest('[data-sidebar-collapsed="true"]');
     const mode = active ? (social ? 'social' : 'office') : null;
     const rawColumns = found?.frame.style.gridTemplateColumns || '';
     const rest = rawColumns.match(/^\s*\S+\s+([\s\S]+)$/)?.[1];
     const geometry = active && rest ? chatGeometry(found, mode) : null;
     if (!geometry) { clearChatGrid(); return; }
     if (gridMode !== mode) {
-      if (gridMode === 'office') officeRatio = preferredRatio;
-      else if (gridMode === 'social') socialRatio = preferredRatio;
+      const first = gridMode === null;
       clearChatGrid();
       gridMode = mode;
-      const nativeWidth = /^\s*(\d+(?:\.\d+)?)px(?:\s|$)/.exec(rawColumns);
-      preferredRatio = mode === 'office' ? (officeRatio ?? (nativeWidth ? Number(nativeWidth[1]) / geometry.width : .32)) : socialRatio;
+      if (first) {
+        const nativeWidth = /^\s*(\d+(?:\.\d+)?)px(?:\s|$)/.exec(rawColumns);
+        preferredRatio = nativeWidth ? Number(nativeWidth[1]) / geometry.width : .26;
+      }
+      // Both modes share one width; switching keeps the current ratio.
     }
     const dividerLabel = mode === 'office' ? '调整项目列表和工作区宽度' : '调整左侧内容和工作区宽度';
     if (chatDivider.getAttribute('aria-label') !== dividerLabel) chatDivider.setAttribute('aria-label', dividerLabel);
@@ -196,7 +197,7 @@ function installWorkbenchSideRail(options = {}) {
     const frame = sidebar?.closest('[data-sidebar-collapsed="true"]');
     nativeToggle = frame ? [...sidebar.querySelectorAll('button')].find(button => /^(打开侧边栏|展开侧边栏|open sidebar|expand sidebar)$/i.test((button.getAttribute('aria-label') || button.getAttribute('title') || '').trim())) : null;
     const columns = frame?.style.gridTemplateColumns || '';
-    const hiddenColumns = /^\s*\S+\s+/.test(columns) ? columns.replace(/^\s*\S+\s+/, '0px ') : '';
+    const hiddenColumns = /^\s*\S+\s+/.test(columns) ? columns.replace(/^\s*\S+\s+/, '72px ') : '';
     if (hiddenFrame && (hiddenFrame !== frame || !nativeToggle || !hiddenColumns)) releaseFrame();
     if (frame && nativeToggle && hiddenColumns) {
       if (!hiddenFrame) { hiddenFrame = frame; previousGrid = { value: frame.style.getPropertyValue('--neko-hidden-grid'), priority: frame.style.getPropertyPriority('--neko-hidden-grid') }; }
@@ -250,7 +251,7 @@ function installWorkbenchSideRail(options = {}) {
     if (stopped) return;
     if (videoMenuTimer) win.clearTimeout(videoMenuTimer); videoMenuTimer = null;
     videoMenu.hidden = !open; bili.setAttribute('aria-expanded',String(open));
-    if (open) { const rect = bili.getBoundingClientRect(); videoMenu.style.top = Math.max(8,Math.min(win.innerHeight - 112,rect.top - 12))+'px'; }
+    if (open) { const rect = bili.getBoundingClientRect(); videoMenu.style.top = Math.max(8,Math.min(win.innerHeight - 112,rect.top - 12))+'px'; videoMenu.style.left = Math.max(8, Math.round(rect.left))+'px'; }
     if (focus && open) videoOptions[videoPlatform].focus(); else if (focus) bili.focus();
   }
   function delayVideoMenuClose() { if (videoMenuTimer) win.clearTimeout(videoMenuTimer); videoMenuTimer = win.setTimeout(() => setVideoMenu(false),220); }
@@ -366,7 +367,7 @@ function installWorkbenchSideRail(options = {}) {
   doc.addEventListener('pointerdown', onDragStart, true); doc.addEventListener('pointerup', onDragEnd); doc.addEventListener('pointercancel', onDragEnd);
   doc.head.appendChild(style); doc.body.prepend(rail); doc.body.appendChild(chatDivider); doc.body.setAttribute('data-neko-side-rail-layout', '');
   const observer = new win.MutationObserver(schedule);
-  observer.observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-label', 'aria-expanded', 'data-sidebar-collapsed', 'data-neko-chatroom-active', 'data-neko-side-social-active', 'data-neko-flex-mode', 'data-neko-fixed-scene', 'style'] });
+  observer.observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-label', 'aria-expanded', 'data-sidebar-collapsed', 'data-neko-chatroom-active', 'data-neko-side-social-active', 'data-neko-flex-mode', 'style'] });
   sync();
   return () => {
     if (stopped) return; stopped = true; observer.disconnect();

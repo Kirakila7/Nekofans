@@ -450,8 +450,10 @@ function buildController(deps) {
   }
   function onAuthState() { reconcile(); schedulePublish(); }
 
-  async function ensureMe() {
-    if (me || !client || authStatus() !== 'signed-in') return;
+  // Opening the channel passes refresh so community profile edits (nickname and
+  // avatar) show up on the next open; a failed refresh keeps the cached profile.
+  async function ensureMe(refresh = false) {
+    if (!client || authStatus() !== 'signed-in' || (me && !refresh)) return;
     if (meLoading) return meLoading;
     const mine = session;
     meLoading = (async () => {
@@ -463,7 +465,10 @@ function buildController(deps) {
         if (settings.serverCatId !== id) { settings.serverCatId = id; saveSettings(); }
         void syncServerCat();
       } catch (error) {
-        if (!disposed && mine === session) { meFailed = true; lastError = safeText(error); }
+        if (!disposed && mine === session) {
+          meFailed = !me;
+          if (!me) lastError = safeText(error);
+        }
       } finally { meLoading = null; reconcile(); schedulePublish(); }
     })();
     return meLoading;
@@ -580,7 +585,7 @@ function buildController(deps) {
     if (action === 'open') {
       wantOpen = true; meFailed = false;
       quiet(() => client.connect());
-      await ensureMe();
+      await ensureMe(true);
       processPending();
       return me ? ok() : fail(lastError || ERR.loading);
     }

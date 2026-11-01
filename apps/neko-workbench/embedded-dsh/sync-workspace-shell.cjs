@@ -17,9 +17,13 @@ const block='// @neko-workspace-shell:start\nconst WORKSPACE_SHELL_CSS = '+JSON.
 let code=fs.readFileSync(file,'utf8');
 if(code.includes('// @neko-workspace-shell:start'))code=code.replace(/\/\/ @neko-workspace-shell:start[\s\S]*?\/\/ @neko-workspace-shell:end\n/,()=>block);
 else code=code.replace('// @neko-side-rail:start',()=>block+'\n// @neko-side-rail:start');
-// Account styles are embedded separately in the same client bundle.
+// Account styles and the adapter source are embedded together in the same client bundle.
 const accountCss=fs.readFileSync(path.join(base,'account-habitat-source.css'),'utf8');
-const accountPattern=/^const ACCOUNT_HABITAT_CSS = (?:"(?:[^"\\]|\\.)*");$/m;
-if(!accountPattern.test(code)) throw new Error('Missing account habitat CSS constant');
-code=code.replace(accountPattern,()=> 'const ACCOUNT_HABITAT_CSS = '+JSON.stringify(accountCss)+';');
+const accountJs=fs.readFileSync(path.join(base,'account-habitat-source.js'),'utf8');
+const accountBlock=/\/\/ @neko-account-habitat:start\n([\s\S]*?)\/\/ @neko-account-habitat:end\n/;
+const accountMatch=accountBlock.exec(code);
+if(!accountMatch) throw new Error('Missing account habitat block');
+const artLine=(accountMatch[1].match(/^const ACCOUNT_PET_ART = .*$/m)||[])[0];
+if(!artLine) throw new Error('Missing account habitat art constant');
+code=code.replace(accountBlock,()=> '// @neko-account-habitat:start\n'+artLine+'\nconst ACCOUNT_HABITAT_CSS = '+JSON.stringify(accountCss)+';\n'+accountJs+'\n// @neko-account-habitat:end\n');
 fs.writeFileSync(file,code);

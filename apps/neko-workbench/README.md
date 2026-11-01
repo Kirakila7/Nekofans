@@ -44,7 +44,7 @@ macOS 的 DSH 默认路径来自已安装的 DeepSeek Harness；其他安装位�
 | `NEKO_WORKBENCH_DSH_CREDENTIALS` | 可选：显式选定凭据文件。默认使用独立 `data/dsh/.credentials.yaml` |
 | `NEKO_WORKBENCH_COMMUNITY_URL` | 默认官方 `https://community.project-neko.cn/feed`；可显式配置无凭据的 HTTPS 目标 |
 | `PET_DSH_SKIN` | `neko-mist`（默认）、`bigfish` 或 `off` |
-| `NEKO_WORKBENCH_CHAT_URL` | 频道服务（N.E.K.O.Chat）地址，默认 `https://chat.nekotech.ai`；可设置其他无凭据的 HTTPS 地址，本机 `127.0.0.1`、`localhost`、`[::1]` 也允许 HTTP。显式设为空字符串可禁用频道服务 |
+| `NEKO_WORKBENCH_CHAT_URL` | 频道服务（N.E.K.O.Chat）地址；内置生产地址 `https://chat.nekotech.ai/`，必须是无凭据的 HTTPS，只有 `127.0.0.1`、`localhost`、`[::1]` 允许 HTTP；显式设为空字符串可关闭频道（面板显示「频道服务未配置」） |
 | `NEKO_WORKBENCH_CHAT_CLIENT_ID` | 频道 OAuth 公共客户端，默认 `neko-chat-desktop-prod`，须匹配 `neko-chat-desktop-<小写字母>` |
 | `NEKO_WORKBENCH_CHAT_AUTH_URL` | 频道登录的认证服务，默认官方社区认证地址；只有频道地址也是本机回环时才允许回环 HTTP |
 | `NEKO_WORKBENCH_CHAT_OAUTH_PORTS` | 可选：登录回调端口，逗号分隔的 1024–65535 端口，最多 8 个；依次尝试；不设时使用官方认证平台登记的 `48921,48922,48923` |

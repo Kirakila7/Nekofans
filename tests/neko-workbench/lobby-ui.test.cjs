@@ -79,40 +79,37 @@ function setup(t,{lobby=true,snap=snapshot(),respond,composer=true,home=false}={
 }
 const rowOf=(doc,n)=>doc.querySelector('.neko-lobby-message[data-id="'+mid(n)+'"]');
 const labelOf=(doc,n)=>rowOf(doc,n).querySelector('.neko-lobby-label').textContent;
-test('频道 opens in the left track, preserves the work area and draft, and returns without leaving the room',{skip:DOM_SKIP},async t=>{
- const f=setup(t),{doc,calls}=f;await tick();
- const rail=doc.querySelector('.neko-workspace-rail-controls'),lobbyButton=doc.querySelector('.neko-lobby-switch');
- assert(lobbyButton,'rail button installed');assert.equal(lobbyButton.parentElement,rail);
- assert.equal(lobbyButton.previousElementSibling,doc.querySelector('.neko-community'),'placed right after the community button');
- assert.equal(lobbyButton.getAttribute('aria-label'),'频道 · 公共大厅');assert.equal(lobbyButton.getAttribute('aria-expanded'),'false');
- const panel=doc.querySelector('.neko-lobby-panel');assert(panel.hidden);
- const dock=doc.querySelector('.neko-companion-dock'),draft=dock.querySelector('textarea');draft.value='私聊草稿';
- doc.querySelector('.neko-workspace-settings').click();await tick();assert(!doc.querySelector('.neko-workspace-modal').hidden);
- const before=calls.hideSocial;let sideCloses=0;doc.addEventListener('neko-side-surface-close',()=>sideCloses++);lobbyButton.click();await tick();
- assert.equal(calls.hideSocial,before,'opening the left panel does not close every video'); assert.equal(sideCloses,1);
- assert(doc.querySelector('.neko-workspace-modal').hidden,'opening the panel closes settings');
- assert(!panel.hidden);assert.equal(lobbyButton.getAttribute('aria-expanded'),'true');
- assert.equal(calls.lobby.filter(r=>r.action==='open').length,1,'joins the lobby once');
- assert.equal(panel.style.left,'64px','placed in the left track'); assert.equal(panel.style.width,'236px'); assert(!doc.querySelector('main').hasAttribute('inert'));
- const members=doc.querySelector('.neko-lobby-members-toggle');members.click();assert(panel.hasAttribute('data-members-open'));assert.equal(members.getAttribute('aria-expanded'),'true');members.click();assert(!panel.hasAttribute('data-members-open'));
- assert(doc.querySelector('.neko-office-panel').hidden,'office panel yields to the lobby');
- assert.equal(doc.querySelectorAll('.neko-companion-dock').length,1);assert.equal(doc.querySelector('.neko-companion-dock'),dock);
- assert.equal(dock.closest('[hidden],[inert],[aria-hidden="true"]'),null,'dock is neither hidden nor inert');
- assert(!panel.contains(dock));assert.equal(draft.value,'私聊草稿');assert.equal(draft.disabled,false);
- doc.querySelector('.neko-lobby-back').click();await tick();assert(panel.hidden);assert.equal(calls.lobby.at(-1).action,'close','returning leaves the lobby'); assert(!doc.body.hasAttribute('data-neko-lobby-active'));
- lobbyButton.click();await tick();assert(!panel.hidden);
- doc.querySelector('.neko-community').click();await tick();
- assert.equal(calls.community,1);assert(panel.hidden,'opening the community hides the lobby');assert.equal(calls.lobby.at(-1).action,'close');
- assert.equal(doc.querySelector('.neko-companion-dock'),dock);assert.equal(draft.value,'私聊草稿');
- f.cleanup();assert(!doc.querySelector('.neko-lobby-panel'));assert(!doc.querySelector('.neko-lobby-switch'));
+test('Chat opens the public room in the main area and preserves native and companion drafts across Work',{skip:DOM_SKIP},async t=>{
+ const f=setup(t,{home:true}),{doc,calls}=f;await tick();
+ const entry=doc.querySelector('[data-neko-public-room]'),panel=doc.querySelector('.neko-lobby-panel'),preview=doc.querySelector('.neko-chatroom-preview');
+ const native=doc.querySelector('main textarea'),dock=doc.querySelector('.neko-companion-dock'),draft=dock.querySelector('textarea');draft.value='私聊草稿';
+ assert.equal(entry.tagName,'BUTTON');assert(!panel.hidden,'Chat defaults to the real public room');assert(panel.hasAttribute('data-neko-lobby-in-room'));assert(!preview.hidden,'the room directory stays available');
+ assert(!preview.contains(panel),'the room conversation is separate from the sidebar directory');
+ assert.equal(doc.querySelector('.neko-chatroom-preview__badge').textContent,'频道入口');
+ const joins=calls.lobby.filter(r=>r.action==='open').length;assert.equal(joins,1,'default room joins after the initial account snapshot without waiting for an event');entry.click();entry.click();await tick();assert.equal(calls.lobby.filter(r=>r.action==='open').length,joins,'selecting the active room does not join twice');
+ const members=doc.querySelector('.neko-lobby-members-toggle');members.click();assert(panel.hasAttribute('data-members-open'));members.click();assert(!panel.hasAttribute('data-members-open'));
+ const switchMode=label=>[...doc.querySelectorAll('.neko-home-work-switch button')].find(button=>button.textContent===label).click();
+ const closes=calls.lobby.filter(r=>r.action==='close').length;
+ switchMode('Work');await tick();assert(panel.hidden);assert.equal(calls.lobby.filter(r=>r.action==='close').length,closes+1);assert(!doc.body.hasAttribute('data-neko-lobby-active'));
+ assert.equal(doc.querySelector('main textarea'),native);assert.equal(native.value,'native draft');assert.equal(doc.querySelector('.neko-companion-dock'),dock);assert.equal(draft.value,'私聊草稿');
+ switchMode('Chat');await tick();assert(!panel.hidden);assert.equal(calls.lobby.filter(r=>r.action==='open').length,joins+1);assert.equal(draft.value,'私聊草稿');assert.equal(draft.disabled,false);
+ doc.querySelector('.neko-community').click();
+ // The unified-layout host announces completion of social navigation.
+ doc.dispatchEvent(new f.w.CustomEvent('neko-side-surface-change',{detail:{surface:'community'}}));
+ await tick();assert.equal(calls.community,1);assert(panel.hidden);assert.equal(calls.lobby.filter(r=>r.action==='close').length,closes+2);assert.equal(doc.querySelector('.neko-companion-dock'),dock);assert.equal(native.value,'native draft');
 });
 
-test('public-room entry and return preserve the mounted home and independent work area',{skip:DOM_SKIP},async t=>{
- const f=setup(t,{home:true}),{doc}=f;await tick();const preview=doc.querySelector('.neko-chatroom-preview'),home=doc.querySelector('.neko-chatroom-preview__home-view'),entry=doc.querySelector('[data-neko-public-room]');
- assert.equal(entry.tagName,'BUTTON');entry.click();await tick();assert(!doc.querySelector('.neko-lobby-panel').hidden);assert(preview.hidden);assert(!doc.querySelector('main').hasAttribute('inert'));
- doc.querySelector('.neko-lobby-back').click();await tick();assert(!preview.hidden);assert.equal(doc.activeElement,entry);
- doc.querySelector('.neko-chatroom-preview__room-icon.is-home').closest('button').click();await tick();assert(!home.hidden);const stage=doc.querySelector('[data-neko-home-stage]'),mounted=stage.firstChild;
- doc.querySelector('.neko-lobby-switch').click();await tick();assert(preview.hidden);doc.querySelector('.neko-lobby-back').click();await tick();assert(!home.hidden);assert.equal(stage.firstChild,mounted);
+test('public-room and home navigation retain the mounted home and independent work draft',{skip:DOM_SKIP},async t=>{
+ const f=setup(t,{home:true}),{doc}=f;await tick();const preview=doc.querySelector('.neko-chatroom-preview'),home=doc.querySelector('.neko-chatroom-preview__home-view'),entry=doc.querySelector('[data-neko-public-room]'),panel=doc.querySelector('.neko-lobby-panel');
+ const native=doc.querySelector('main textarea');
+ assert.equal(entry.tagName,'BUTTON');assert(!panel.hidden);assert(!preview.hidden);
+ const homeButton=doc.querySelector('.neko-chatroom-preview__room-icon.is-home').closest('button');
+ homeButton.click();await tick();assert(!home.hidden);assert(panel.hidden);const stage=doc.querySelector('[data-neko-home-stage]'),mounted=stage.firstChild;assert(mounted);
+ entry.click();await tick();assert(home.hidden);assert(!panel.hidden);assert(!preview.hidden);
+ homeButton.click();await tick();assert(!home.hidden);assert(panel.hidden);assert.equal(stage.firstChild,mounted);
+ [...doc.querySelectorAll('.neko-home-work-switch button')].find(b=>b.textContent==='Work').click();await tick();
+ [...doc.querySelectorAll('.neko-home-work-switch button')].find(b=>b.textContent==='Chat').click();await tick();
+ assert(!home.hidden);assert.equal(stage.firstChild,mounted);assert.equal(doc.querySelector('main textarea'),native);assert.equal(native.value,'native draft');
 });
 
 test('message list: origin labels, own labels, badges by origin only, reply quote label, mentions, deleted, text-only rendering',{skip:DOM_SKIP},async t=>{

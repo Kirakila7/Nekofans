@@ -183,9 +183,14 @@ exports.apply=function(ctx){
       await ctx.get('loader')?.await();
       ({createUserMessage,createAssistantMessage}=await import(require('node:url').pathToFileURL(runtime+'/dsh-llm/lib/index.js').href));
       ({carrierKeyOf}=await import(require('node:url').pathToFileURL(runtime+'/dsh-scope/lib/index.js').href));
-      const sessionId=p.rootId||randomUUID();
+      let sessionId=p.rootId||randomUUID();
       const setup=async agentCtx=>{await ctx.agentPresets.mount(agentCtx,'standard');};
-      root=p.resume?await ctx.agents.resume({resumeSessionId:sessionId,agentOptions:options,setup}):await ctx.agents.create({sessionId,meta:{cwd:runtimePaths.workspaceDir,agentPreset:'standard'},agentOptions:options,setup});
+      const create=id=>ctx.agents.create({sessionId:id,meta:{cwd:runtimePaths.workspaceDir,agentPreset:'standard'},agentOptions:options,setup});
+      if(p.resume){
+        // A saved root can disappear when DSH history is cleared or the workspace is relinked; start a fresh root instead of failing init.
+        try{root=await ctx.agents.resume({resumeSessionId:sessionId,agentOptions:options,setup});}
+        catch(error){if(error?.name!=='ApiSessionNotFound'&&!/^session ".*" not found$/.test(String(error?.message||'')))throw error;sessionId=randomUUID();root=await create(sessionId);}
+      }else root=await create(sessionId);
       await hydrate({sessionId:root.agent.id,title:''});
       const parents=new Set([sessionId,...(p.parentIds||[])]),visited=new Set();
       for(const parentId of parents)await syncParent(parentId,visited);

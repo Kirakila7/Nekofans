@@ -1,6 +1,7 @@
 // The room directory stays local; channel and home navigation use their own services.
 // Navigation and lifetime are owned by workspace shell.
 function createChatroomPreview(doc, avatar = () => '', options = {}) {
+  const openPublicRoom = typeof options.openPublicRoom === 'function' ? options.openPublicRoom : null;
   const el = (tag, cls, text) => {
     const node = doc.createElement(tag);
     if (cls) node.className = cls;
@@ -9,10 +10,10 @@ function createChatroomPreview(doc, avatar = () => '', options = {}) {
   };
   const panel = el('section', 'neko-chatroom-preview');
   panel.dataset.nekoChatroomPreview = '';
-  panel.setAttribute('aria-label', typeof options.openLobby === 'function' ? '聊天室' : '聊天室界面预览');
+  panel.setAttribute('aria-label', openPublicRoom ? '聊天室' : '聊天室界面预览');
 
   const heading = el('div', 'neko-chatroom-preview__heading');
-  heading.append(el('h2', '', '聊天室'), el('span', 'neko-chatroom-preview__badge', typeof options.openLobby === 'function' ? '频道入口' : '界面预览'));
+  heading.append(el('h2', '', '聊天室'), el('span', 'neko-chatroom-preview__badge', openPublicRoom ? '频道入口' : '界面预览'));
   const introduction = el('p', 'neko-chatroom-preview__intro', '和人、AI 一起相遇的地方');
 
   const search = el('input', 'neko-chatroom-preview__search');
@@ -22,7 +23,7 @@ function createChatroomPreview(doc, avatar = () => '', options = {}) {
   search.setAttribute('aria-label', '搜索聊天室，功能尚未开放');
 
   const label = el('div', 'neko-chatroom-preview__label', '聊天室');
-  label.appendChild(el('span', '', typeof options.openLobby === 'function' ? '浏览' : '示意'));
+  label.appendChild(el('span', '', openPublicRoom ? '浏览' : '示意'));
   const rooms = el('div', 'neko-chatroom-preview__rooms');
   const addRoom = (name, description, symbol, kind, interactive = false) => {
     const row = el(interactive ? 'button' : 'div', 'neko-chatroom-preview__room');
@@ -35,8 +36,12 @@ function createChatroomPreview(doc, avatar = () => '', options = {}) {
     rooms.appendChild(row);
     return row;
   };
-  const publicRoom = addRoom('公共聊天室', '一起交流与分享', '✦', 'is-public', typeof options.openLobby === 'function');
-  if (typeof options.openLobby === 'function') { publicRoom.setAttribute('data-neko-public-room', ''); publicRoom.addEventListener('click', options.openLobby); }
+  const publicRoom = addRoom('公共聊天室', openPublicRoom ? '进入频道，一起交流与分享' : '一起交流与分享', '✦', 'is-public', !!openPublicRoom);
+  if (openPublicRoom) {
+    publicRoom.setAttribute('data-neko-public-room', '');
+    publicRoom.setAttribute('aria-label', '进入公共聊天室，频道');
+    publicRoom.addEventListener('click', () => { homeView.hidden = true; openPublicRoom(); });
+  }
   const home = addRoom('我的小窝', '进入 Yui 的家', '⌂', 'is-home', true);
   home.setAttribute('aria-label', '进入我的小窝，Yui 的家');
 
@@ -49,7 +54,7 @@ function createChatroomPreview(doc, avatar = () => '', options = {}) {
   if (src) portrait.src = src;
   else portrait.hidden = true;
   illustration.append(portrait, el('span', '', '✧'));
-  empty.append(illustration, el('strong', '', '期待在这里相遇'), el('p', '', typeof options.openLobby === 'function' ? '从公共聊天室进入频道，连接状态会在进入后显示。' : '这里是聊天室的简化展示，聊天功能尚未开放。'));
+  empty.append(illustration, el('strong', '', '期待在这里相遇'), el('p', '', openPublicRoom ? '公共聊天室已接入频道，其他聊天室尚未开放。' : '这里是聊天室的简化展示，聊天功能尚未开放。'));
 
   const room = el('div', 'neko-chatroom-preview__room-view');
   room.append(heading, introduction, search, label, rooms, empty);
@@ -86,10 +91,22 @@ function createChatroomPreview(doc, avatar = () => '', options = {}) {
       mounting = false; homeView.removeAttribute('aria-busy');
     }
   };
-  home.addEventListener('click', () => { room.hidden = true; homeView.hidden = false; back.focus(); void mount(); });
-  back.addEventListener('click', () => { homeView.hidden = true; room.hidden = false; home.focus(); });
+  const win = doc.defaultView;
+  function placeHome() {
+    if (homeView.hidden || !win) return;
+    const center = doc.querySelector('[data-neko-chat-center]');
+    const rect = center?.getBoundingClientRect();
+    const box = rect && rect.width > 80 ? rect : { left: 0, top: 0, width: win.innerWidth, height: win.innerHeight };
+    Object.assign(homeView.style, { left: Math.round(box.left) + 'px', top: Math.round(box.top) + 'px', width: Math.round(box.width) + 'px', height: Math.round(box.height) + 'px' });
+  }
+  const onHomeResize = () => placeHome();
+  // The home opens in the main work area; the room list stays in the sidebar.
+  home.addEventListener('click', () => { homeView.hidden = false; placeHome(); doc.dispatchEvent(new win.Event('neko-home-open')); back.focus(); void mount(); });
+  back.addEventListener('click', () => { homeView.hidden = true; doc.dispatchEvent(new win.Event('neko-home-close')); home.focus(); });
   retry.addEventListener('click', () => { void mount(); });
-  panel.disposeHome = () => { disposed = true; releaseHome?.(); releaseHome = null; };
+  if (win) win.addEventListener('resize', onHomeResize);
+  panel.focusPublicRoom = () => { if (!homeView.hidden) return; publicRoom.focus?.(); };
+  panel.disposeHome = () => { disposed = true; if (win) win.removeEventListener('resize', onHomeResize); releaseHome?.(); releaseHome = null; };
   panel.append(room, homeView);
   return panel;
 }

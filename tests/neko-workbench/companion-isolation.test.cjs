@@ -1,7 +1,8 @@
 'use strict';
 // W0: lock "和她私聊随时可用". The private companion chat (workbench:companion) must keep working with
-// no lobby module and no NEKO_WORKBENCH_CHAT_URL, and the workspace shell must never remove, hide,
-// inert or rebuild the companion dock when the user switches views. Synthetic data and local fixtures only.
+// no lobby module or an explicitly disabled channel (NEKO_WORKBENCH_CHAT_URL=''), and the workspace
+// shell must never remove, hide, inert or rebuild the companion dock when the user switches views.
+// Synthetic data and local fixtures only.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -14,7 +15,7 @@ const appDir = path.resolve(__dirname, '../../apps/neko-workbench');
 const WORKBENCH_TITLE = 'N.E.K.O. 工作台';
 
 const SCENARIOS = Object.freeze({
-  missing: 'actual main sends private companion chat with no lobby module and no NEKO_WORKBENCH_CHAT_URL',
+  missing: 'actual main sends private companion chat with no lobby module and an explicitly disabled channel',
   unconfigured: 'workbench:companion send works while the lobby controller is not configured',
   disconnected: 'workbench:companion send works while the lobby is disconnected',
   throws: 'workbench:companion send works when lobby controller initialisation throws',
@@ -222,7 +223,7 @@ async function runIsolationHarness(scenario) {
   for (const name of ['dsh-llm', 'dsh-scope']) { fs.mkdirSync(path.join(modules, name, 'lib'), { recursive: true }); fs.writeFileSync(path.join(modules, name, 'lib/index.js'), ''); }
   Object.assign(process.env, { NEKO_WORKBENCH_DATA_DIR: data, NEKO_WORKBENCH_WORKSPACE: path.join(temporary, 'work'), NEKO_WORKBENCH_DSH_CLI: cli,
     NEKO_WORKBENCH_DSH_MODULES: modules, PET_OPEN_WORKBENCH: '1', PET_WORKBENCH_ONLY: '0' });
-  if (FAKE_LOBBY.has(scenario)) process.env.NEKO_WORKBENCH_CHAT_URL = 'https://chat.fixture.test/';
+  process.env.NEKO_WORKBENCH_CHAT_URL = FAKE_LOBBY.has(scenario) ? 'https://chat.fixture.test/' : '';
   const lobby = FAKE_LOBBY.has(scenario) ? fakeLobby(scenario) : null;
 
   const handlers = new Map(), windows = [], chatRequires = [];
