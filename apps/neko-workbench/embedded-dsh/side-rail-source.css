@@ -3,8 +3,8 @@ body[data-neko-side-rail-layout] { --neko-rail-width: 0px; }
 /* The rail is gone: its entries moved into Home and the native settings dialog. */
 body[data-neko-side-rail-layout] .neko-side-rail,
 body[data-neko-side-rail-layout] .neko-avatar-portal { display: none !important; }
-/* Clear the native traffic lights now that the sidebar starts at the window edge. */
-body[data-neko-side-rail-layout] [data-neko-native-brand-row] { padding-top: 38px; }
+/* Only an inset native titlebar places window buttons inside page content. */
+body[data-neko-side-rail-layout][data-neko-inset-titlebar] [data-neko-native-brand-row] { padding-top: 38px; }
 /* The engine switch and workbench settings entry moved into the native settings dialog. */
 body[data-neko-side-rail-layout] .neko-office-switch,
 body[data-neko-side-rail-layout] .neko-workspace-settings { display: none !important; }

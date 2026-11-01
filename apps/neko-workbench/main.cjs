@@ -2,6 +2,7 @@ const {app,BrowserWindow,BaseWindow,WebContentsView,ipcMain,screen,shell,Menu,Tr
 const {spawn} = require('node:child_process');
 const {resolveRuntimePaths,prepareRuntimeDirectories,assertDshRuntime,buildDshPatch,buildDshLaunch}=require('./runtime-config.cjs');
 const {createDshLifecycle}=require('./dsh-lifecycle.cjs');
+const {workbenchWindowChrome,updateWindowChrome,toggleWindowFullscreen}=require('./window-chrome.cjs');
 const {createSocialController}=require('./community-config.cjs');
 const {createNativeDividerController}=require('./native-divider-controller.cjs');
 const {createNativeComposerController}=require('./native-composer-controller.cjs');
@@ -109,19 +110,24 @@ communityAccount=createCommunityAccount({getBaseUrl:()=>state.neko.baseUrl,
 // Public lobby (频道). Optional and contained: a missing module, bad config or any lobby failure leaves a
 // no-op controller, so workbench:companion and the private chat never depend on it.
 const lobbyOffline=Object.freeze({request:async()=>({ok:false,error:'频道暂不可用',state:null}),snapshot:()=>null,refresh(){},processPending(){},dispose(){}});
+const lobbyAccountOffline=Object.freeze({refresh:async()=>{},invalidate(){},dispose(){},provider:()=>null});
+let lobbyAccountGateway=lobbyAccountOffline;
 function createLobby(){
   try{
     const {createLobbyController}=require('./lobby-controller.cjs'),{providerGetter,readWorkbenchPersona}=require('./lobby-cat.cjs');
+    const {createLobbyAccountGateway}=require('./lobby-account-gateway.cjs');
+    lobbyAccountGateway=createLobbyAccountGateway({rpc,isReady:()=>state.connection==='ready'&&!quitting,onChange:()=>lobbyController.refresh()});
     const chatApi=()=>mainChatRuntime?.backend==='chat-api'&&!mainChatRuntime.closed?mainChatRuntime:null;
+    const getChatProvider=providerGetter({runtime:()=>mainChatRuntime,getAccountProvider:()=>lobbyAccountGateway.provider()});
     return createLobbyController({env:process.env,dataDir:path.join(data,'lobby'),
       secretStore:new WorkbenchSecretStore(path.join(data,'lobby','secrets','refresh-token.encrypted'),safeStorage),
       openExternal:url=>shell.openExternal(url),
-      getChatProvider:()=>{const runtime=chatApi(),create=runtime?.shared?.createChatApiProvider;return create?providerGetter({runtime,createChatApiProvider:create})():null;},
-      getPersona:id=>{const runtime=chatApi();return runtime&&id===PERSONA?readWorkbenchPersona(path.join(runtime.personasDir,PERSONA+'.json')):null;},
+      getChatProvider,
+      getPersona:id=>{const runtime=mainChatRuntime;return runtime&&!runtime.closed&&usesMainChatService(runtime.backend)&&id===PERSONA?readWorkbenchPersona(path.join(runtime.personasDir,PERSONA+'.json')):null;},
       recallMemory:async(query,budget,signal)=>{const memory=chatApi()?.lobbyMemory();return memory?memory.recall(query,budget,signal):[];},
       recordSharedExperience:async entry=>{const memory=chatApi()?.lobbyMemory();if(!memory)throw new Error('大厅记忆仅在聊天 API 模式可用');return memory.recordSharedExperience(entry);},
       onState:value=>{if(dshWindow&&!dshWindow.isDestroyed()&&isWorkbenchOrigin(dshWindow.webContents.getURL()))dshWindow.webContents.send('workbench:lobby-state',value);}});
-  }catch{return lobbyOffline;}
+  }catch{lobbyAccountGateway.dispose();lobbyAccountGateway=lobbyAccountOffline;return lobbyOffline;}
 }
 const lobbyController=createLobby();
 const pending=new Map(), petWindows=new Map(),renameWindows=new Map();
@@ -552,6 +558,7 @@ async function connect(){
   const r=await rpc('init',{rootId:state.rootId,resume:!!state.rootId,parentIds:[...new Set(state.actors.map(a=>a.parentSessionId).filter(Boolean))],taskIds:state.actors.filter(a=>a.kind==='task').map(a=>a.sessionId)});
   const url=new URL(r.uiUrl);if(url.protocol!=='http:'||url.hostname!=='127.0.0.1')throw new Error('DSH 窗口地址不在本机。');
   dshLaunchUrl=url.href;dshCookieFilter.setUrl(dshLaunchUrl);state.rootId=r.sessionId;state.dshRoot.sessionId=r.sessionId;state.connection='ready';state.error='';
+  void lobbyAccountGateway.refresh();
   await Promise.all(['fish','qqbot'].map(async name=>{const revision=channelRevisions[name];try{const value=await channelAction(name,fishQqCoordinator.snapshot().selection[name]?'status':'pause');if(revision===channelRevisions[name])acceptChannelState(name,value);}catch{acceptChannelState(name,{enabled:false,phase:'error',reason:'渠道服务尚未就绪，请稍后重试。'});}}));
   const frames=earlyFrames.get(r.sessionId);earlyFrames.delete(r.sessionId);for(const frame of frames||[])receive(frame,true);
   update();
@@ -572,6 +579,7 @@ function startEngine(){
       if(child!==ownedChild)return;
       for(const p of pending.values()){clearTimeout(p.timer);p.reject(new Error('DSH 已退出。'));}pending.clear();
       child=null;childLifecycle=null;dshLaunchUrl=null;dshCookieFilter.setUrl(null);startPromise=null;
+      lobbyAccountGateway.invalidate();
       if(!quitting&&!error)engineError(new Error('DSH 已退出 ('+code+')。'));
     }});
     let stderrReported=false;
@@ -595,9 +603,10 @@ async function openTaskSession(a){if(a.kind!=='task'||!a.metadataReady)throw new
 function popupMainMenu(){const w=petWindows.get('main');if(w){w.show();setTimeout(()=>{app.focus({steal:true});w.focus();mainMenu().popup({window:w});},0);}}
 async function openDsh(){
   if(dshWindow&&!dshWindow.isDestroyed()){dshWindow.show();app.focus({steal:true});dshWindow.focus();return;}
-  dshWindow=new BrowserWindow({width:1100,height:780,minWidth:800,minHeight:560,title:'N.E.K.O. 工作台',...(process.platform==='darwin'?{titleBarStyle:'hiddenInset',trafficLightPosition:{x:14,y:14}}:{}),backgroundColor:nativeTheme.shouldUseDarkColors?'#131C27':'#EDF3F8',show:false,webPreferences:{preload:path.join(base,'workbench-preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,partition:'persist:pet-dsh'}});
+  dshWindow=new BrowserWindow({width:1100,height:780,minWidth:800,minHeight:560,title:'N.E.K.O. 工作台',...workbenchWindowChrome(process.platform,nativeTheme.shouldUseDarkColors),backgroundColor:nativeTheme.shouldUseDarkColors?'#131C27':'#EDF3F8',show:false,webPreferences:{preload:path.join(base,'workbench-preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,partition:'persist:pet-dsh'}});
   dshCookieFilter.bind(dshWindow.webContents.session);
   communityController.bindHost(dshWindow);nativeDividerController.bind(dshWindow);nativeComposerController.bind(dshWindow);
+  dshWindow.webContents.on('before-input-event',(event,input)=>{if(input.type==='keyDown'&&input.key==='F11'&&!input.isAutoRepeat&&!input.control&&!input.alt&&!input.meta&&!input.shift){event.preventDefault();toggleWindowFullscreen(dshWindow);}});
   dshWindow.webContents.on('did-finish-load',()=>{if(isWorkbenchOrigin(dshWindow.webContents.getURL())&&typeof dshWindow.webContents.executeJavaScript==='function')void dshWindow.webContents.executeJavaScript(fs.readFileSync(path.join(base,'screen-share-host.js'),'utf8')).catch(()=>{});});
   dshWindow.on('close',event=>{if(!quitting){event.preventDefault();dshWindow.hide();}});
   dshWindow.webContents.on('will-navigate',(event,url)=>{if(!/^https?:/.test(url))event.preventDefault();});
@@ -789,6 +798,7 @@ ipcMain.handle('screen-share:call',(event,method,value)=>screenShare.action(even
 ipcMain.handle('workbench:screen-share',async(event,method)=>{assertWorkbenchCaller(event);if(method==='hide'){screenShare.hide();return {ok:true};}throw new Error('未知屏幕操作');});
 ipcMain.handle('workbench:lobby',async(event,request)=>{
   assertWorkbenchCaller(event);
+  if(['open','mode-set','cat-save'].includes(request?.action))await lobbyAccountGateway.refresh();
   if(request?.action==='open')screenShare.hide();
   return lobbyController.request(request);
 });
@@ -831,6 +841,8 @@ ipcMain.handle('workbench:roles',async(event,method,p={})=>{
 ipcMain.handle('workbench:call',async(event,method,value)=>{
   assertWorkbenchCaller(event);
   if(method==='state')return workbenchState();
+  if(method==='window-theme'){updateWindowChrome(dshWindow,value);return {ok:true};}
+  if(method==='toggle-fullscreen')return toggleWindowFullscreen(dshWindow);
   if(method==='workspace'){
     const p=value;
     if(!p||typeof p!=='object'||Array.isArray(p))throw Error('工作台请求无效');
@@ -977,7 +989,7 @@ app.on('before-quit',event=>{
   if(shutdownComplete)return;
   event.preventDefault();
   if(shutdownStarted)return;
-  shutdownStarted=true;quitting=true;nativeComposerController.dispose();nativeDividerController.dispose();communityController.dispose();communityAccount.cancel();lobbyController.dispose();screenShare.dispose();catMotion.dispose();clearTimeout(nekoRetry);clearTimeout(rosterTimer);for(const timer of terminalTimers.values())clearTimeout(timer);terminalTimers.clear();nekoChat.close();save();
+  shutdownStarted=true;quitting=true;nativeComposerController.dispose();nativeDividerController.dispose();communityController.dispose();communityAccount.cancel();lobbyController.dispose();lobbyAccountGateway.dispose();screenShare.dispose();catMotion.dispose();clearTimeout(nekoRetry);clearTimeout(rosterTimer);for(const timer of terminalTimers.values())clearTimeout(timer);terminalTimers.clear();nekoChat.close();save();
   const current=childLifecycle;
   Promise.allSettled([visitsController?.close(),mainChatRuntime?.close(),current?.stop(),codexAccount.dispose(),codexWorkspace.dispose()]).finally(()=>{shutdownComplete=true;app.quit();});
 });

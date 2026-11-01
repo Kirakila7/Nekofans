@@ -47,7 +47,7 @@ const ERR = Object.freeze({
   failed: '大厅操作失败，请稍后重试',
 });
 const REASON = Object.freeze({
-  provider: '需要聊天 API',
+  provider: '请连接聊天 API 或登录 DeepSeek 工作台账号',
   cat: '先在猫猫设置里保存她',
   catsDisabled: '频道暂未开放猫娘参与',
   adminDisabled: '猫娘已被管理员停用',
@@ -246,7 +246,7 @@ function fallbackSnapshot(error) {
  *  dataDir              data/lobby (cat.json, pending-experience.json); null keeps settings in memory
  *  secretStore          WorkbenchSecretStore for the refresh token (lobby-auth)
  *  openExternal(url)    system browser
- *  getChatProvider()    ChatProvider | null; non-null only for the chat-api backend with a stored key
+ *  getChatProvider()    ChatProvider | null; selected API or isolated authenticated account transport
  *  getPersona()         {name, prompt} of the workbench role named by cat.json personaId
  *  recallMemory(q,b,s)  assist only; the result never enters the snapshot
  *  recordSharedExperience(entry)  hub write-back used by lobby-experience

@@ -26,6 +26,7 @@ exports.apply=function(ctx){
   const options=accountRoute();
   const channelPrivacy=createChannelSessionPrivacy(runtimePaths.dataDir,{fishWorkspace:path.join(runtimePaths.workspaceDir,'fish-care')});
   const companionAccount=createCompanionAccountBridge({ctx,route:options,createUserMessage: input=>{if(typeof createUserMessage!=='function')throw Error('DSH 尚未就绪');return createUserMessage(input);},createAssistantMessage: input=>{if(typeof createAssistantMessage!=='function')throw Error('DSH 尚未就绪');return createAssistantMessage(input);}});
+  const lobbyAccount=createCompanionAccountBridge({ctx,route:options,createUserMessage: input=>{if(typeof createUserMessage!=='function')throw Error('DSH 尚未就绪');return createUserMessage(input);},createAssistantMessage: input=>{if(typeof createAssistantMessage!=='function')throw Error('DSH 尚未就绪');return createAssistantMessage(input);}});
   const emit=(method,params)=>process.stdout.write(JSON.stringify({method,params})+'\n');
   const qqbotState=value=>emit('qqbot-care-state',value);
   process.on('neko-qqbot-state',qqbotState);
@@ -202,6 +203,9 @@ exports.apply=function(ctx){
     if(method==='companion-account-chat')return companionAccount.send({requestId:p.requestId,text:p.text,context:p.context,history:p.history,maxTokens:p.maxTokens});
     if(method==='memory-account-model')return companionAccount.send({requestId:p.requestId,text:p.text,context:p.context,history:p.history,maxTokens:p.maxTokens,purpose:'memory'});
     if(method==='companion-account-cancel')return companionAccount.cancel({requestId:p.requestId});
+    if(method==='lobby-account-status')return lobbyAccount.status();
+    if(method==='lobby-account-chat')return lobbyAccount.send({requestId:p.requestId,text:p.text,context:p.context,history:p.history,maxTokens:p.maxTokens});
+    if(method==='lobby-account-cancel')return lobbyAccount.cancel({requestId:p.requestId});
     if(method==='workspace-catalog')return readDshWorkspaceCatalog(ctx,p,{isPrivateSession:excludePrivate});
     if(method==='workspace-session-check')return checkDshWorkspaceSession(ctx,p.id,{isPrivateSession:excludePrivate});
     if(method==='workspace-session-privacy')return publicDshWorkspaceSessionIds(ctx,p.ids,{isPrivateSession:excludePrivate});
@@ -245,6 +249,6 @@ exports.apply=function(ctx){
   const lines=readline.createInterface({input:process.stdin});
   lines.on('line',async line=>{let request;try{request=JSON.parse(line);const result=await dispatch(request.method,request.params||{});process.stdout.write(JSON.stringify({id:request.id,result})+'\n');}catch(error){process.stdout.write(JSON.stringify({id:request?.id,error:String(error?.message||error)})+'\n');}});
   lines.on('close',()=>{if(closing)return;closing=true;Promise.resolve().then(()=>typeof ctx.root?.dispose==='function'?ctx.root.dispose():ctx.dispose?.()).finally(()=>process.exit(0));});
-  ctx.on('dispose',()=>{closing=true;companionAccount.dispose();process.removeListener('neko-qqbot-state',qqbotState);taskSessions.dispose();lines.close();});
+  ctx.on('dispose',()=>{closing=true;companionAccount.dispose();lobbyAccount.dispose();process.removeListener('neko-qqbot-state',qqbotState);taskSessions.dispose();lines.close();});
   emit('ready',{version:2});
 };

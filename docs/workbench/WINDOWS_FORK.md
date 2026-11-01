@@ -1,4 +1,12 @@
-# Windows 工作台分叉
+# Windows 首版与历史分叉
+
+首版优先面向 Windows（win32-x64）。当前共用源码以 `main` 为准；Windows 使用 36px 的自定义顶栏，右侧保留系统最小化、最大化和关闭按钮，左侧另有全屏按钮（F11），菜单栏默认收起（Alt 可调出），页面内不预留 macOS 红黄绿按钮的空间。浅色使用中性的灰白配色，深色继续跟随主题，窗口按钮颜色和高度与页面主题、缩放同步。Chat/Work、账号、独立陪伴聊天和工作会话使用同一套共享实现。macOS 不作为首版布局和验收的基准。
+
+`codex/windows-0.28.18` 和下方配置、标签属于历史 Windows 基线，不应继续作为“最新版”启动目标。macOS 的日包版本也不能用来判断本机 Windows 是否已经更新。Windows 新安装包尚未在本次工作中构建。
+
+2026-11-01 的 Windows 界面与 DeepSeek 大厅修复整合在 `codex/unified-local-work-20261101`，基于 main `55ba491`。工作树整合范围和验证见 `LOCAL_CONSOLIDATION.md`。
+
+## 历史基线
 
 本分叉从上游 `ec32201615c51b0b6814328d54ebeb8a71576245`（0.28.18，build 54）开始，独立维护 Windows 适配。版本信息在 `config/windows-release.json`；macOS 日包配置仍保留在 `config/daily-release.json`。
 

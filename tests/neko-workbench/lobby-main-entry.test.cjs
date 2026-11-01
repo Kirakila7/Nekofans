@@ -10,7 +10,7 @@ const source = fs.readFileSync(path.resolve(__dirname, '../../apps/neko-workbenc
 const preload = fs.readFileSync(path.resolve(__dirname, '../../apps/neko-workbench/workbench-preload.cjs'), 'utf8');
 
 test('workbench:lobby IPC delegates to lobbyController.request and calls assertWorkbenchCaller', async () => {
-  const handlers = new Map(), controllerCalls = [], siteCalls = [];
+  const handlers = new Map(), controllerCalls = [], siteCalls = [], accountChecks = [];
   const host = { webContents: { mainFrame: { url: 'http://127.0.0.1:59099/coding' }, getURL: () => 'http://127.0.0.1:59099/coding' }, isDestroyed: () => false };
   const caller = { sender: host.webContents, senderFrame: host.webContents.mainFrame };
   const validation = source.slice(source.indexOf('function isWorkbenchOrigin'), source.indexOf('function rolesState'));
@@ -20,14 +20,16 @@ test('workbench:lobby IPC delegates to lobbyController.request and calls assertW
     const lobbyController = { request: async r => { controllerCalls.push(r); return { ok: true, state: {} }; } };
     const screenShare = { hide: () => {} };
     const communityController = { action: async (...args) => {siteCalls.push(args);return {};} };
+    const lobbyAccountGateway = { refresh: async () => { accountChecks.push('status'); } };
     ${routes}
   `;
   vm.runInNewContext(injected, { URL, dshWindow: host, dshLaunchUrl: 'http://127.0.0.1:59099/', ipcMain: { handle: (name, fn) => handlers.set(name, fn) },
-    controllerCalls, siteCalls });
+    controllerCalls, siteCalls, accountChecks });
 
   const result = await handlers.get('workbench:lobby')(caller, { action: 'state' });
   assert.equal(result.ok, true);
   assert.deepEqual(controllerCalls, [{ action: 'state' }]);
+  assert.equal(accountChecks.length, 0, 'reading state does not poll account credentials');
 
   await assert.rejects(handlers.get('workbench:lobby')({ ...caller, senderFrame: { url: 'https://example.com/' } }, { action: 'state' }), /工作台/);
   assert.deepEqual(controllerCalls, [{ action: 'state' }], 'the hostile frame was rejected');
@@ -38,6 +40,10 @@ test('workbench:lobby IPC delegates to lobbyController.request and calls assertW
   assert.equal(openResult.ok, true);
   assert.deepEqual(controllerCalls, [openReq], 'open was delegated to the controller');
   assert.equal(siteCalls.length,0,'lobby IPC preserves independent video views');
+  assert.equal(accountChecks.length, 1);
+  await handlers.get('workbench:lobby')(caller, {action:'mode-set',mode:'independent'});
+  await handlers.get('workbench:lobby')(caller, {action:'cat-save',mode:'independent'});
+  assert.equal(accountChecks.length, 3, 'real mode changes and cat settings refresh account status');
 });
 
 test('preload exposes lobby/subscribeLobby', () => {
@@ -85,6 +91,7 @@ test('before-quit disposes the lobby controller', () => {
     app: { on: (name, fn) => quitHandlers.set(name, fn), quit: () => calls.push('app.quit') },
     shutdownComplete: false, shutdownStarted: false, quitting: false,
     lobbyController: { dispose: () => calls.push('lobby.dispose') },
+    lobbyAccountGateway: { dispose: () => calls.push('lobby-account.dispose') },
     nativeComposerController: { dispose: () => calls.push('composer.dispose') },
     nativeDividerController: { dispose: () => calls.push('divider.dispose') },
     communityController: { dispose: () => calls.push('community.dispose') },
@@ -99,7 +106,7 @@ test('before-quit disposes the lobby controller', () => {
   assert(quitHandlers.has('before-quit'));
   const event = { preventDefault: () => calls.push('prevent') };
   quitHandlers.get('before-quit')(event);
-  assert.deepEqual(calls.slice(0, 7), ['prevent', 'composer.dispose', 'divider.dispose', 'community.dispose', 'community.cancel', 'lobby.dispose', 'screen.dispose'],
+  assert.deepEqual(calls.slice(0, 8), ['prevent', 'composer.dispose', 'divider.dispose', 'community.dispose', 'community.cancel', 'lobby.dispose', 'lobby-account.dispose', 'screen.dispose'],
     'lobby.dispose (which persists the open experience segment) runs before quit completes');
   quitHandlers.get('before-quit')(event);
   assert.equal(calls.filter(call => call === 'lobby.dispose').length, 1, 'a second before-quit does not dispose twice');

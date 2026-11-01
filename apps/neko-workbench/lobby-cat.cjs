@@ -1,6 +1,6 @@
 'use strict';
 // The companion in the lobby. Every model call here goes through an injected
-// ChatProvider (createChatApiProvider) with its own AbortController. Nothing in
+// ChatProvider (API or account) with its own AbortController. Nothing in
 // this module touches the private chat service, its turn lock or its history.
 // Message text is never logged.
 const fs = require('node:fs');
@@ -13,7 +13,7 @@ const PRIORITY = Object.freeze({ free: 0, owner: 1, mention: 2 });
 const RESTING = new Set(['cat_cooldown', 'cat_reply_limit', 'cat_depth_limit', 'cat_duplicate_reply',
   'cat_limiter_unavailable', 'cat_trigger_not_satisfied', 'rate_limited']);
 const ERRORS = Object.freeze({
-  unavailable: '需要聊天 API 才能让她参与大厅',
+  unavailable: '请连接聊天 API 或登录 DeepSeek 工作台账号后让她参与大厅',
   mode: '当前参与方式不支持这个操作',
   target: '要回复的消息已不存在',
   instruction: '给她的要求最多 500 字',
@@ -33,13 +33,16 @@ function readWorkbenchPersona(file) {
     prompt: [value.persona, ...value.boundaries.filter(line => typeof line === 'string')].join('\n') };
 }
 
-/** Lobby provider getter: a ChatProvider only for the chat-api backend with a stored key. */
-function providerGetter({ runtime, createChatApiProvider }) {
+/** Resolve only the selected backend; account transport must be explicitly isolated. */
+function providerGetter({ runtime, createChatApiProvider, getAccountProvider }) {
   return () => {
-    const settings = runtime?.settings;
-    if (!runtime || runtime.closed || runtime.backend !== 'chat-api' || !runtime.secretStore?.has() || !runtime.secretStore.available() || !settings?.baseUrl || !settings.model) return null;
-    return createChatApiProvider({ config: { protocol: settings.protocol, baseUrl: settings.baseUrl, model: settings.model,
-      requestTimeoutMs: settings.requestTimeoutMs }, getApiKey: () => runtime.secretStore.get() });
+    const current = typeof runtime === 'function' ? runtime() : runtime;
+    if (!current || current.closed) return null;
+    if (current.backend === 'deepseek-account') return getAccountProvider?.() || null;
+    const settings = current.settings, create = createChatApiProvider || current.shared?.createChatApiProvider;
+    if (current.backend !== 'chat-api' || typeof create !== 'function' || !current.secretStore?.has() || !current.secretStore.available() || !settings?.baseUrl || !settings.model) return null;
+    return create({ config: { protocol: settings.protocol, baseUrl: settings.baseUrl, model: settings.model,
+      requestTimeoutMs: settings.requestTimeoutMs }, getApiKey: () => current.secretStore.get() });
   };
 }
 

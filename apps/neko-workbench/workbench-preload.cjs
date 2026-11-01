@@ -3,6 +3,9 @@ const {contextBridge,ipcRenderer}=require('electron');
 // credentials, shell commands or arbitrary IPC are exposed to the web page.
 const call=(method,value)=>ipcRenderer.invoke('workbench:call',method,value);
 contextBridge.exposeInMainWorld('nekoWorkbench',Object.freeze({
+  windowChrome: typeof process === 'undefined' ? 'native' : process.platform === 'win32' ? 'overlay' : process.platform === 'darwin' ? 'inset' : 'native',
+  setWindowTheme:dark=>typeof dark==='boolean'?call('window-theme',dark):Promise.reject(new TypeError('Window theme must be a boolean')),
+  toggleFullscreen:()=>call('toggle-fullscreen'),
   getState:()=>call('state'),
   screenShare:method=>method==='hide'?ipcRenderer.invoke('workbench:screen-share','hide'):Promise.reject(new Error('未知屏幕操作')),
   getAccounts:({includeQuota=false,force=false}={})=>call('accounts',{includeQuota:includeQuota===true,force:force===true}),

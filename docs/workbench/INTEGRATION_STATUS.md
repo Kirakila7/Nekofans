@@ -1,4 +1,18 @@
-# Local test workbench 0.28.18 (Windows panel opened locally)
+# Workbench integration status
+
+## Local worktree and DeepSeek consolidation (2026-11-01)
+
+The current local destination is `codex/unified-local-work-20261101`, based on main `55ba491`. It retains the Windows candidate, integrates the DeepSeek lobby repair stash and preserves newer main implementations where old worktrees were already integrated or superseded. All 101 changed-file entries across seven dirty worktrees are accounted for in `LOCAL_CONSOLIDATION.md` and the local recovery inventory. The historical recovery stash is not applied, and both stash entries remain intact. The preserved diary adapter is inactive source; native memory remains the default. The lobby account provider exposes only streaming chat through a separate allowlisted bridge, preserving private-memory and cancellation boundaries.
+
+Consolidated validation: 1,043 tests total, 1,031 passed, zero failed and 12 skipped; 227 source syntax checks and the skin/generated-client and side-rail DOM checks pass. Actual isolated Electron/main passes three page zoom levels, Chat/Work and both themes without foreground focus. No production account/model/channel acceptance or installer build is claimed. This integration updates source only. Original source worktrees, profiles, the running old preview and recovery snapshots are preserved. Earlier sections record their original baselines.
+
+## Windows-first window and UI (2026-11-01, local changes)
+
+The first release prioritizes Windows. The local candidate is based on main `55ba491` and replaces the stacked Windows title/menu bars with one 36px themed overlay. Standard system minimize/maximize/close controls remain on the right, with a separate fullscreen toggle immediately to their left and an unmodified F11 shortcut. Fullscreen requests use the same authenticated main-frame IPC boundary. Their colours and height track the page theme and zoom; the optional native menu remains reachable with Alt. The page reserves the header space so room content, native panes and the collapsed sidebar stay below it. Windows light mode uses neutral grey/white surfaces, while dark mode follows the shared theme. macOS-specific inset padding and drag regions apply only to an inset host.
+
+The final source regression passes 1,019 tests, zero failures and 12 skips (1,031 total); 225 workbench source files and skin/generated-client checks pass. A separate optional QA entry loads the actual main and local DSH with a disposable empty profile, disables channel service access, avoids foreground focus and records real renderer screenshots. It checks 100%, 125% and 150% page zoom, Chat/Work, account visibility, titlebar clearance and both palettes. Page-render captures exclude the OS-owned caption buttons; the supplemental native-window.png capture includes them and confirms all four controls are visible. This does not establish physical button-click or window-drag acceptance. No login, supplier reply, production channel send or installer build is part of this check.
+
+The machine's ignored preview launcher now targets this Windows candidate while retaining its original data, workspace and Electron profile directories; its previous contents are backed up locally. The already running old preview and its drafts were not restarted or overwritten. These source changes have not been committed or pushed. Earlier entries below describe historical snapshots.
 
 ## Current consolidated source (2026-11-01)
 

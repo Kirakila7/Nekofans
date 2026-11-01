@@ -79,6 +79,26 @@ function setup(t,{lobby=true,snap=snapshot(),respond,composer=true,home=false}={
 }
 const rowOf=(doc,n)=>doc.querySelector('.neko-lobby-message[data-id="'+mid(n)+'"]');
 const labelOf=(doc,n)=>rowOf(doc,n).querySelector('.neko-lobby-label').textContent;
+test('replying to a cat displays and sends a real mention, while cancelling preserves the existing draft', {skip:DOM_SKIP}, async t=>{
+ const {doc,w,calls}=setup(t);await tick();doc.querySelector('.neko-lobby-switch').click();await tick();
+ const input=doc.querySelector('.neko-lobby-form textarea');input.value='合成问题';input.dispatchEvent(new w.Event('input'));
+ rowOf(doc,3).querySelector('.neko-lobby-reply-to').click();assert.equal(input.value,'@张三的小橘 合成问题');
+ doc.querySelector('.neko-lobby-reply__cancel').click();assert.equal(input.value,'合成问题');
+ rowOf(doc,3).querySelector('.neko-lobby-reply-to').click();input.closest('form').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));await tick();
+ const sent=calls.lobby.findLast(r=>r.action==='send');assert.equal(sent.text,'<@c:'+ZSCAT+'> 合成问题');assert.equal(sent.replyToId,mid(3));assert.equal(sent.origin,'human');
+ assert.equal(input.value,'');assert.equal(doc.querySelector('.neko-lobby-reply').hidden,true);
+});
+test('failed quoted send restores the mention and cancelling still retains the user text', {skip:DOM_SKIP}, async t=>{
+ const {doc,w}=setup(t,{respond:r=>r.action==='send'?{ok:false,error:'合成发送失败'}:null});await tick();doc.querySelector('.neko-lobby-switch').click();await tick();
+ const input=doc.querySelector('.neko-lobby-form textarea');input.value='保留合成草稿';input.dispatchEvent(new w.Event('input'));
+ rowOf(doc,3).querySelector('.neko-lobby-reply-to').click();input.closest('form').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));await tick();
+ assert.equal(input.value,'@张三的小橘 保留合成草稿');doc.querySelector('.neko-lobby-reply__cancel').click();assert.equal(input.value,'保留合成草稿');
+ rowOf(doc,1).querySelector('.neko-lobby-reply-to').click();assert.equal(input.value,'保留合成草稿','quoting a human does not insert a cat mention');
+});
+test('a full draft is never truncated to insert an automatic reply mention', {skip:DOM_SKIP}, async t=>{
+ const {doc,w}=setup(t);await tick();doc.querySelector('.neko-lobby-switch').click();await tick();const input=doc.querySelector('.neko-lobby-form textarea');
+ input.value='合'.repeat(2000);input.dispatchEvent(new w.Event('input'));rowOf(doc,3).querySelector('.neko-lobby-reply-to').click();assert.equal(input.value,'合'.repeat(2000));
+});
 test('Chat opens the public room in the main area and preserves native and companion drafts across Work',{skip:DOM_SKIP},async t=>{
  const f=setup(t,{home:true}),{doc,calls}=f;await tick();
  const entry=doc.querySelector('[data-neko-public-room]'),panel=doc.querySelector('.neko-lobby-panel'),preview=doc.querySelector('.neko-chatroom-preview');

@@ -14,6 +14,11 @@ function installWorkspaceShell(options = {}) {
   let nativeNewPending = false, nativeNewTimer = null, nativeNewBefore = null;
   let office = { status: 'idle', thread: null, items: [], approvals: [], error: '' };
   const nativeMarks = new Map(), nodes = [], releases = [], drafts = new Map(), groupOpen = new Set(), groupSearchCollapsed = new Set();
+  // Browser previews use native chrome; the host explicitly enables its own bar.
+  if (bridge.windowChrome === 'inset') markNative(doc.body, 'data-neko-inset-titlebar');
+  const windowHeaderHeight = bridge.windowChrome === 'overlay' ? 36 : 0;
+  if (windowHeaderHeight) markNative(doc.body, 'data-neko-overlay-titlebar');
+  let lastChromeTheme = null;
   // The embedded DSH themes its aliases inline; mirror the official dark palette.
   const OFFICIAL_DARK = {
     '--dsw-alias-bg-base':'#151517', '--dsw-alias-bg-layer-1':'#202329', '--dsw-alias-bg-layer-2':'#2c2c2e',
@@ -24,6 +29,12 @@ function installWorkspaceShell(options = {}) {
   const darkPaletteApplied = new Set();
   function applyOfficialDarkPalette() {
     const dark = doc.body.hasAttribute('data-ds-dark-theme');
+    const chromeTheme = `${dark}:${win.devicePixelRatio || 1}`;
+    if (windowHeaderHeight && typeof bridge.setWindowTheme === 'function' && chromeTheme !== lastChromeTheme) {
+      lastChromeTheme = chromeTheme;
+      try { Promise.resolve(bridge.setWindowTheme(dark)).catch(() => { lastChromeTheme = null; }); }
+      catch { lastChromeTheme = null; }
+    }
     for (const [name, value] of Object.entries(OFFICIAL_DARK)) {
       if (dark) {
         darkPaletteApplied.add(name);
@@ -46,6 +57,16 @@ function installWorkspaceShell(options = {}) {
   const effortLabel = value => ({ none: '关闭', minimal: '极低', low: '低', medium: '中', high: '高', xhigh: '很高', max: '极高', ultra: '最高' })[value] || value;
   const own = node => { node.dataset.nekoWorkspaceOwned = ''; nodes.push(node); return node; };
   const call = request => bridge.workspace(request);
+  if (windowHeaderHeight) {
+    const header = own(el('header', 'neko-window-titlebar'));
+    header.append(el('span', 'neko-window-titlebar__brand', 'N.E.K.O.'), el('span', 'neko-window-titlebar__label', '工作台'));
+    if (typeof bridge.toggleFullscreen === 'function') {
+      const fullscreen = button('⛶', 'neko-window-titlebar__fullscreen', () => { Promise.resolve(bridge.toggleFullscreen()).catch(() => {}); });
+      fullscreen.title = '切换全屏（F11）'; fullscreen.setAttribute('aria-label', fullscreen.title);
+      header.appendChild(fullscreen);
+    }
+    doc.body.appendChild(header);
+  }
   // The controller projects this flag without altering saved seat or session data.
   const codexPaused = () => layout?.codexAvailable === false;
   const hideSocial = () => { options.hideSocial?.(); socialOpen = false; };
@@ -1274,10 +1295,10 @@ function installWorkspaceShell(options = {}) {
         const centerBox = center?.getBoundingClientRect();
         const colBox = doc.querySelector('[class*="_sidebarCol"]')?.getBoundingClientRect();
         const fallbackBox = roomPreview?.parentElement?.getBoundingClientRect();
-        const columnBox = colBox && colBox.right > 0 && colBox.right < win.innerWidth - 80 ? { left: colBox.right, top: 0, width: win.innerWidth - colBox.right, height: win.innerHeight } : null;
+        const columnBox = colBox && colBox.right > 0 && colBox.right < win.innerWidth - 80 ? { left: colBox.right, top: windowHeaderHeight, width: win.innerWidth - colBox.right, height: win.innerHeight - windowHeaderHeight } : null;
         const box = centerBox && centerBox.width > 80 && centerBox.height > 80 ? centerBox : columnBox || fallbackBox;
         if (box && box.width > 80) lobby.place({ left: `${Math.round(box.left)}px`, top: `${Math.round(box.top)}px`, width: `${Math.round(box.width)}px`, height: `${Math.round(box.height)}px` });
-        else lobby.place({ left: '0px', top: '0px', width: `${win.innerWidth}px`, height: `${win.innerHeight}px` });
+        else lobby.place({ left: '0px', top: `${windowHeaderHeight}px`, width: `${win.innerWidth}px`, height: `${win.innerHeight - windowHeaderHeight}px` });
       }
     } else if (lobby?.inRoom()) lobby.hide();
     watchDockAncestors();
@@ -1295,7 +1316,7 @@ function installWorkspaceShell(options = {}) {
       const centerRect = chatCenter?.getBoundingClientRect();
       const x = Math.ceil(centerRect && centerRect.width > 0 ? centerRect.left : r.right), bottom = strip?.top > 0 ? strip.top : win.innerHeight;
       panel.toggleAttribute('data-neko-compact', win.innerWidth - x <= 400);
-      Object.assign(panel.style, { left: x + 'px', top: '0px', width: Math.max(0, win.innerWidth - x) + 'px', height: Math.max(0, bottom) + 'px' });
+      Object.assign(panel.style, { left: x + 'px', top: windowHeaderHeight + 'px', width: Math.max(0, win.innerWidth - x) + 'px', height: Math.max(0, bottom - windowHeaderHeight) + 'px' });
       if (!lobby?.inRoom()) lobby?.place(panel.style);
       // In unified mode only cover the actual coding track, never a native
       // community or video WebContentsView. The hidden track keeps the chooser
@@ -1597,13 +1618,32 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     return row;
   }
   // ---- composer: reply target, @ picker, Enter to send ----
+  let replyMention = null;
   /** A new reply target is a new draft epoch: the unadopted card is discarded (adopted text stays in the draft). */
   function setReply(id, { discard = true } = {}) {
     const next = id && findMessage(id) ? id : null, changed = next !== replyToId;
+    if (changed && replyMention) {
+      if (input.value.startsWith(replyMention.prefix)) input.value = input.value.slice(replyMention.prefix.length);
+      picked = picked.filter(item => item !== replyMention.item); replyMention = null;
+    }
     replyToId = next;
     if (C) { const before = draft.draftEpoch; draft = C.setReplyTarget(draft, replyToId); if (changed && discard && draft.draftEpoch !== before && snap?.suggestion && snap.suggestion.state !== 'generating' && snap.suggestion.targetId !== replyToId) call({ action: 'suggest-discard' }); }
     if (assist && !assist.hidden) renderAssist();
     const target = replyToId ? findMessage(replyToId) : null;
+    if (changed && target?.origin === 'cat' && target.author?.kind === 'cat' && !target.deleted) {
+      const item = {kind:'c',id:target.author.cat_id,name:authorName(target.author)}, needle = '@' + item.name;
+      // Show the mention before sending; the server must receive an actual cat
+      // mention, not an invented trigger attached only to the quoted message.
+      if (item.id && !picked.some(p => p.kind === item.kind && p.id === item.id)
+          && !picked.some(p => p.name === item.name) && !input.value.includes(needle)) {
+        const prefix = needle + ' ';
+        if (Array.from(prefix + input.value).length <= MAX_TEXT) {
+          input.value = prefix + input.value; picked.push(item); replyMention = {prefix,item};
+        } else { error = '草稿较长，请删减后使用 @ 选择要回复的猫猫'; }
+      }
+    }
+    if (changed && C) draft = C.edit(draft, input.value);
+    renderCounter();
     replyBar.hidden = !target; replyText.textContent = target ? '回复 ' + originLabel(target.origin, target.label, target.author) : '';
     if (target) input.focus?.();
   }
@@ -1671,12 +1711,12 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     if (C) draft = C.edit(draft, input.value);
     const payload = C ? C.sendPayload(draft) : null, catId = payload?.assistCatId;
     const request = { action: 'send', text, origin: catId ? 'human_ai' : 'human' }; if (replyToId) request.replyToId = replyToId; if (catId) request.assistCatId = catId;
-    const keepReply = replyToId, keepPicked = picked, keepDraft = draft;
+    const keepReply = replyToId, keepPicked = picked, keepDraft = draft, keepReplyMention = replyMention;
     sending = true; input.value = ''; picked = []; if (C) draft = C.sent(draft); setReply(null, { discard: false }); renderCounter(); renderDraft(); render();
     const result = await call(request);
     sending = false;
     const queued = (snap?.outbox || []).some(e => e.text === text);
-    if (result?.ok === false && !queued && !input.value) { input.value = typed; picked = keepPicked; if (C) draft = keepDraft; setReply(keepReply, { discard: false }); renderCounter(); renderDraft(); }
+    if (result?.ok === false && !queued && !input.value) { input.value = typed; picked = keepPicked; if (C) draft = keepDraft; setReply(keepReply, { discard: false }); replyMention = keepReplyMention; renderCounter(); renderDraft(); }
     render();
   });
   // ---- assist: 请她帮我回, private negotiation box, suggestion card. Nothing here sends to the channel. ----
@@ -1876,7 +1916,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     const startMode = settings.mode || part.mode || 'assist';
     const needsApi = !part.available;
     const api = el('p', 'neko-lobby-cat-api'); api.dataset.ready = String(!needsApi);
-    api.textContent = needsApi ? (part.reason || '需要聊天 API') + '。现在只能选「她不参与」，你自己照常聊天，私聊不受影响。' : '已连接你的聊天 API';
+    api.textContent = needsApi ? (part.reason || '请连接聊天模型') + '。现在只能选「她不参与」，你自己照常聊天，私聊不受影响。' : '已连接你的聊天模型';
     const mode = choiceGroup('参与方式', MODES, needsApi ? 'off' : startMode, value => value !== 'off' && needsApi); mode.classList.add('neko-lobby-cat-mode');
     const name = el('input', 'neko-lobby-cat-name'); name.maxLength = 32; name.value = startName; name.setAttribute('aria-label', '猫娘名字');
     const preview = el('span', 'neko-lobby-cat-preview');
@@ -1893,7 +1933,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     const note = el('textarea', 'neko-lobby-cat-note'); note.maxLength = 500; note.rows = 3; note.value = settings.note || '';
     note.placeholder = '可选：大厅里所有人都可能读到她按这段说明说的话'; note.setAttribute('aria-label', '频道补充说明');
     const usage = snap?.cat?.usage;
-    const cost = el('p', 'neko-lobby-cat-cost', '猫猫回复使用你自己的聊天 API，自由发言会消耗更多额度。' + (usage && Number.isFinite(usage.today) ? '今日已用 ' + usage.today + ' / ' + usage.limit + ' 次。' : ''));
+    const cost = el('p', 'neko-lobby-cat-cost', '猫猫回复使用你选择的聊天 API 或 DeepSeek 工作台账号，自由发言会消耗更多额度。' + (usage && Number.isFinite(usage.today) ? '今日已用 ' + usage.today + ' / ' + usage.limit + ' 次。' : ''));
     const nodes = [api, field('参与方式', mode), field('名字', name, ''), preview, field('头像', avatars), field('她自己说话时', trigger), field('频道补充说明（公开）', note, '最多 500 字。别写私事，这段会影响她在公共频道里的发言。'), cost];
     function request() {
       const out = { action: 'cat-save' }, n = name.value.trim();
