@@ -96,7 +96,7 @@ test('community status changes never disable a placed work composer', () => {
   const host = {webContents: contents, isDestroyed: () => false}, calls = [], social = {hasVisibleView:true};
   let options;
   vm.runInNewContext(factory, {dshWindow:host, isWorkbenchOrigin:() => true, communityAccount:null,
-    createSocialController: value => {options=value;return social;}, WebContentsView: function(){},
+    createSocialController: value => {options=value;return social;}, WebContentsView: function(){}, BaseWindow: function(){},
     shell:{openExternal(){}}, clipboard:{writeText(){}}, dialog:{showErrorBox(){}},
     nativeDividerController:{setEnabled(){},raise(){}},
     nativeComposerController:{setEnabled:value=>calls.push(['enabled',value]),raise:()=>calls.push(['raise'])}});

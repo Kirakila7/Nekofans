@@ -1,5 +1,5 @@
 body[data-neko-workspace-shell] { --nws-bg:var(--dsw-alias-bg-layer-1,#fbfeff); --nws-border:var(--dsw-alias-border-l1,#c4dbe6); --nws-text:var(--dsw-alias-label-primary,#17303d); --nws-muted:var(--dsw-alias-label-secondary,#637d8c); --nws-hover:var(--dsw-alias-interactive-bg-hover,#ddedf4); }
-body:is([data-neko-workspace-collapsed],[data-neko-flex-workspace-collapsed]) [data-neko-collapsed-composer] { position:fixed !important; z-index:2147481000 !important; right:16px !important; bottom:16px !important; left:auto !important; top:auto !important; box-sizing:border-box !important; width:min(480px, calc(100vw - 96px)) !important; max-width:calc(100vw - 96px) !important; max-height:45vh; overflow:auto; background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:20px; box-shadow:0 8px 28px #17303d24; }
+body:is([data-neko-workspace-collapsed],[data-neko-flex-workspace-collapsed]) [data-neko-collapsed-composer] { position:fixed !important; z-index:2147481000 !important; right:16px !important; bottom:16px !important; left:auto !important; top:auto !important; margin:0 !important; box-sizing:border-box !important; width:min(480px, calc(100vw - 96px)) !important; max-width:calc(100vw - 96px) !important; max-height:45vh; overflow:auto; background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:20px; box-shadow:0 8px 28px #17303d24; }
 body:is([data-neko-workspace-collapsed],[data-neko-flex-workspace-collapsed]) [data-neko-collapsed-composer] .neko-gallery { display:none !important; }
 /* The native seat remains in its React tree. Hide its decorative landing hero
    only in compact mode; native project and mode controls return on focus. */
@@ -78,6 +78,9 @@ body[data-neko-workspace-shell] .neko-chatroom-preview { position:fixed; z-index
    geometry is supplied by the workspace shell and follows its left pane. */
 .neko-companion-dock[data-neko-companion-expanded] { position:fixed; left:var(--neko-companion-left); bottom:var(--neko-companion-bottom); width:var(--neko-companion-width); max-width:none; margin:0; z-index:52; }
 .neko-companion-dock[data-neko-companion-expanded] .neko-companion-form { width:100%; box-sizing:border-box; }
+.neko-companion-dock[data-neko-companion-rail-chat] { position:fixed; inset:auto; left:var(--neko-rail-chat-left); top:var(--neko-rail-chat-top); width:var(--neko-rail-chat-width); max-height:calc(100vh - 32px); overflow:auto; z-index:2147481002; margin:0; padding:32px 10px 10px; border:1px solid var(--nws-border); border-radius:14px; background:var(--nws-bg); box-shadow:0 8px 28px #17303d2b; }
+.neko-companion-dock[data-neko-companion-rail-chat] .neko-companion-history { max-height:240px; }
+.neko-companion-rail-close { position:absolute; top:4px; right:6px; width:26px; height:26px; border:0; border-radius:8px; background:transparent; color:inherit; cursor:pointer; font:20px system-ui; }
 .neko-companion-character { justify-self:center; width:76px; height:90px; position:relative; transform:translateX(var(--neko-companion-offset,0px)); cursor:grab; touch-action:none; user-select:none; -webkit-user-select:none; }
 .neko-companion-character[data-dragging="true"] { cursor:grabbing; }
 .neko-companion-menu { position:fixed; z-index:60; display:grid; gap:3px; min-width:160px; max-width:240px; box-sizing:border-box; padding:6px; color:var(--nws-text); background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:12px; box-shadow:0 8px 28px #17303d20; font:13px/1.5 system-ui; }
@@ -88,10 +91,10 @@ body[data-neko-workspace-shell] .neko-chatroom-preview { position:fixed; z-index
 .neko-companion-menu__status { max-width:220px; margin:3px 8px; color:var(--nws-muted); font-size:11px; overflow-wrap:anywhere; }
 .neko-companion-menu__status:empty { display:none; }
 .neko-side-rail__space { position:relative; width:calc(100% + 24px); overflow:hidden; }
-.neko-rail-companion { flex:none; width:44px; height:52px; padding:0; cursor:pointer; }
+.neko-rail-companion { flex:none; width:56px; height:70px; padding:0; cursor:pointer; }
 .neko-rail-companion[data-neko-rail-roam] { position:absolute; left:0; top:0; z-index:1; max-width:100%; max-height:100%; touch-action:none; cursor:grab; }
 .neko-rail-companion[data-dragging="true"] { cursor:grabbing; }
-.neko-rail-companion .neko-companion-character { width:min(40px, 100%); height:min(50px, 100%); transform:none; cursor:inherit; }
+.neko-rail-companion .neko-companion-character { width:min(54px, 100%); height:min(68px, 100%); transform:none; cursor:inherit; }
 .neko-rail-companion img.neko-companion-poster,.neko-rail-companion video.neko-companion-video { width:100%; height:100%; border-radius:0; object-fit:contain; }
 .neko-rail-companion [hidden] { display:none !important; }
 .neko-companion-character:focus-visible { outline:2px dashed #4c89ad; outline-offset:-3px; border-radius:12px; }
@@ -111,7 +114,7 @@ body[data-neko-workspace-shell] .neko-chatroom-preview { position:fixed; z-index
 .neko-companion-form button:focus-visible { outline:2px solid #4c89ad; outline-offset:1px; }
 .neko-companion-history-toggle svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round; }
 .neko-office-panel { position:fixed; z-index:28; display:flex; flex-direction:column; box-sizing:border-box; container:neko-office / inline-size; padding:22px clamp(18px,5vw,75px) 24px; color:var(--nws-text); background:var(--dsw-alias-bg-base,#edf6fa); font:14px/1.65 system-ui,sans-serif; }
-.neko-office-panel[hidden],.neko-workspace-modal[hidden],.neko-companion-dock [hidden] { display:none !important; }
+.neko-office-panel[hidden],.neko-workspace-modal[hidden],.neko-companion-dock[hidden],.neko-companion-dock [hidden] { display:none !important; }
 .neko-office-panel[data-neko-compact] { padding:14px 12px 16px; }
 .neko-office-header { display:flex; align-items:center; gap:10px; min-height:42px; flex:none; }
 .neko-office-brand { width:32px; height:32px; object-fit:contain; }
@@ -306,6 +309,15 @@ body[data-neko-workspace-shell] [data-neko-companion-footer] { display:block !im
 .neko-lobby-dialog__error { margin:0; color:#bd5c4e; font-size:12px; }
 .neko-lobby-dialog__footer { display:flex; justify-content:flex-end; gap:8px; }
 @media(max-width:900px) { .neko-lobby-members { display:none; } }
+.neko-lobby-panel { padding:12px; overflow:hidden; }
+.neko-lobby-header { flex-wrap:wrap; gap:6px; }
+.neko-lobby-topic { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.neko-lobby-panel[data-neko-narrow] .neko-lobby-members { display:none; }
+.neko-lobby-panel:not([data-neko-narrow]) .neko-lobby-members { display:block; }
+.neko-lobby-panel:not([data-neko-narrow]) .neko-lobby-members-toggle { display:none; }
+.neko-lobby-panel[data-neko-narrow][data-members-open] .neko-lobby-members { display:block; position:absolute; z-index:3; top:100px; right:12px; bottom:120px; width:min(200px,calc(100% - 24px)); padding:12px; border:1px solid var(--nws-border); border-radius:10px; background:var(--nws-bg); box-shadow:0 6px 20px #17303d24; }
+.neko-lobby-panel[data-neko-narrow] .neko-lobby-header__actions { width:100%; flex-wrap:wrap; margin:0; }
+.neko-lobby-panel[data-neko-narrow] .neko-lobby-modes { flex-wrap:wrap; }
 
 /* Interaction states: hover/press cues on enabled controls only, visible focus
    rings, and busy/disabled cues. Disabled (e.g. Codex 测试中) never gets hover. */
@@ -329,6 +341,10 @@ body[data-neko-workspace-shell] [data-neko-companion-footer] { display:block !im
 .neko-workspace-directory__button:hover { background:var(--nws-hover); }
 .neko-workspace-directory__button:focus-visible { outline:2px solid #4c89ad; outline-offset:2px; }
 .neko-workspace-directory__status { position:absolute; right:0; bottom:42px; box-sizing:border-box; width:max-content; max-width:min(220px,70vw); padding:7px 10px; border:1px solid var(--nws-border); border-radius:8px; background:var(--nws-bg); color:var(--nws-text); font:12px/1.4 system-ui,sans-serif; }
+.neko-scene-projects { position:fixed; z-index:41; width:100px; height:36px; border:1px solid var(--nws-border); border-radius:9px; background:var(--nws-bg); color:var(--nws-text); font:12px system-ui,sans-serif; cursor:pointer; }
+.neko-scene-projects[hidden] { display:none !important; }
+.neko-scene-projects:hover { background:var(--nws-hover); }
+.neko-scene-projects:focus-visible { outline:2px solid #4c89ad; outline-offset:2px; }
 .neko-startup { position:fixed; z-index:40; box-sizing:border-box; overflow:auto; container-type:inline-size; color:var(--nws-text); background:var(--dsw-alias-bg-base,#edf4fb); font:14px/1.5 system-ui,sans-serif; }
 .neko-startup[hidden] { display:none !important; }
 .neko-startup__inner { width:min(760px,100%); margin:0 auto; box-sizing:border-box; padding:clamp(22px,5vw,54px); }

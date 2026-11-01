@@ -1,6 +1,9 @@
 'use strict';
 (() => {
   const api = window.nativeComposer, form = document.getElementById('composer'), message = document.getElementById('message'), send = document.getElementById('send'), expand = document.getElementById('expand'), files = document.getElementById('files'), copy = document.getElementById('copy'), status = document.getElementById('status');
+  const copyShortcut = /Mac/i.test(window.navigator.platform) ? '⌘C' : 'Ctrl+C';
+  copy.title = '选中草稿后按 ' + copyShortcut + ' 复制';
+  expand.title = '展开工作区，查看任务进度与结果';
   let state = { value:'', enabled:false, busy:false, sessionToken:'', revision:0 }, composing = false, dirty = false, conflict = false, blockedDraft = false, submitUnknown = false;
   let pendingEdit = null, pendingSubmit = null, submitQueued = false, expandQueued = false, expandAction = 'expand', confirmExpand = false, expandTimer = null, editSequence = 0, submitSequence = 0;
   let draftOwner = '', recoveryOwner = '', storageFailed = false;
@@ -127,7 +130,34 @@
     }
     recordsList.scrollTop = scroll; if (focused) Array.from(recordsList.querySelectorAll('button')).find(row => row.dataset.recordId === focused)?.focus();
   }
-  recordsToggle.addEventListener('click', () => { recordsOpen = !recordsOpen; recordsDesired = recordsOpen; renderRecords(); api.send({type:'records-toggle', open:recordsOpen}); });
+  const task = document.getElementById('task'), taskToggle = document.getElementById('task-toggle'), taskList = document.getElementById('task-list'), taskStatus = document.getElementById('task-status');
+  let taskDesired = null, taskKey = '', taskSession = '';
+  const taskScroll = new Map();
+  function renderTask(changedSession) {
+    const open = taskDesired === null ? state.taskOpen === true : taskDesired;
+    task.hidden = !open;
+    taskToggle.setAttribute('aria-expanded', String(open));
+    taskToggle.title = open ? '收起任务记录' : '查看任务进度与回复';
+    taskStatus.textContent = state.taskStatus || '任务记录暂不可用，请展开工作区查看';
+    taskStatus.setAttribute('aria-busy', String(state.taskRunning === true));
+    const rows = Array.isArray(state.taskMessages) ? state.taskMessages : [], key = JSON.stringify([state.sessionToken, rows]);
+    if (key === taskKey) return;
+    const previous = taskScroll.get(state.sessionToken);
+    const follow = changedSession ? previous?.follow !== false : taskList.scrollHeight - taskList.clientHeight - taskList.scrollTop < 32;
+    const scroll = changedSession ? previous?.top || 0 : taskList.scrollTop;
+    taskKey = key; taskSession = state.sessionToken; taskList.replaceChildren();
+    for (const row of rows) {
+      const item = document.createElement('article'), label = document.createElement('strong'), text = document.createElement('div');
+      item.dataset.role = row.role;
+      label.textContent = row.role === 'user' ? row.pending ? '你 · 待接收' : '你' : row.role === 'assistant' ? row.streaming ? '助手 · 回复中' : '助手' : '任务动态';
+      text.textContent = row.text; item.append(label,text); taskList.appendChild(item);
+    }
+    if (!rows.length) { const empty = document.createElement('p'); empty.textContent = '当前会话还没有可显示的消息'; taskList.appendChild(empty); }
+    taskList.scrollTop = follow ? taskList.scrollHeight : scroll;
+  }
+  taskList.addEventListener('scroll', () => { if (!taskSession) return; taskScroll.set(taskSession,{top:taskList.scrollTop,follow:taskList.scrollHeight-taskList.clientHeight-taskList.scrollTop<32}); if (taskScroll.size > 100) taskScroll.delete(taskScroll.keys().next().value); });
+  taskToggle.addEventListener('click', () => { taskDesired = task.hidden; if (taskDesired) { recordsOpen = false; recordsDesired = false; renderRecords(); } renderTask(false); api.send({type:'task-toggle',open:taskDesired}); });
+  recordsToggle.addEventListener('click', () => { recordsOpen = !recordsOpen; recordsDesired = recordsOpen; if (recordsOpen) { taskDesired = false; renderTask(false); } renderRecords(); api.send({type:'records-toggle', open:recordsOpen}); });
   resizeHandle.addEventListener('pointerdown', event => { if (event.button !== 0) return; resizing = {pointerId:event.pointerId, y:event.screenY,x:event.screenX}; resizeHandle.setPointerCapture(event.pointerId); event.preventDefault(); });
   resizeHandle.addEventListener('pointermove', event => { if (!resizing || resizing.pointerId !== event.pointerId) return; const delta = resizing.y - event.screenY, dx = resizing.x - event.screenX; if (delta || dx) { resizing.y = event.screenY; resizing.x = event.screenX; api.send({type:'records-resize', delta:Math.max(-4000,Math.min(4000,delta)), dx:Math.max(-4000,Math.min(4000,dx))}); } });
   resizeHandle.addEventListener('pointerup', () => { resizing = null; }); resizeHandle.addEventListener('pointercancel', () => { resizing = null; });
@@ -135,7 +165,7 @@
   expand.addEventListener('click', () => requestExpand('expand'));
   files.addEventListener('click', () => requestExpand('files'));
 
-  copy.addEventListener('click', () => { message.focus(); message.select(); status.textContent = '草稿已选中，请按 ⌘C 复制'; status.hidden = false; });
+  copy.addEventListener('click', () => { message.focus(); message.select(); status.textContent = '草稿已选中，请按 ' + copyShortcut + ' 复制'; status.hidden = false; });
   api.onState(next => {
     if (!next || typeof next.value !== 'string' || typeof next.sessionToken !== 'string' || !Number.isSafeInteger(next.revision)) return;
     const changedSession = state.sessionToken !== next.sessionToken;
@@ -153,7 +183,11 @@
       pendingEdit = null; pendingSubmit = null; submitQueued = false;
       if (blockedDraft) { expandQueued = false; confirmExpand = false; if (expandTimer !== null) clearTimeout(expandTimer); expandTimer = null; }
     }
+    const sessionLabel = document.getElementById('session-label');
+    if (sessionLabel) { sessionLabel.textContent = next.sessionLabel || '未选择会话'; sessionLabel.title = next.sessionLabel || '请先选择工作会话'; }
     state = next; if (recordOpenPending && next.settledRecordOpenId === recordOpenPending.id) { clearTimeout(recordOpenPending.timer); recordOpenPending = null; } if (recordsDesired !== null && recordsDesired === (next.recordsOpen === true)) recordsDesired = null; recordsOpen = recordsDesired === null ? next.recordsOpen === true : recordsDesired; renderRecords();
+    if (taskDesired !== null && taskDesired === (next.taskOpen === true)) taskDesired = null;
+    renderTask(changedSession);
     if (changedSession && !blockedDraft && next.sessionToken) {
       const saved = readRecovery(next.sessionToken);
       if (saved?.kind === 'submit-unknown') { blockedDraft = true; submitUnknown = true; recoveryOwner = next.sessionToken; message.value = saved.value; }

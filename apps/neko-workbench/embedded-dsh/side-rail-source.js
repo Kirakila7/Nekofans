@@ -63,6 +63,9 @@ function installWorkbenchSideRail(options = {}) {
   chatDivider.setAttribute('aria-label', '调整左侧内容和工作区宽度');
   chatDivider.title = '拖动调整宽度 · 双击恢复 3:1 · 方向键调整';
   let preferredRatio = 1, restoreRatio = .75, chatFrame = null, chatCenter = null, oldChatGrid = null, chatDrag = null, lastChatGeometry = null;
+  // Office and social layouts have separate remembered widths. Office always
+  // keeps both the project list and work area visible.
+  let gridMode = null, officeRatio = null, socialRatio = 1;
   let nativeDividerKey = '';
   function postNativeDivider(rect) {
     if (typeof bridge.divider !== 'function') return;
@@ -121,30 +124,43 @@ function installWorkbenchSideRail(options = {}) {
     }
     return null;
   }
-  function chatGeometry(found) {
+  function chatGeometry(found, mode) {
     const bounds = found.frame.getBoundingClientRect(), center = found.center.getBoundingClientRect();
     // Exclude an independent native right track (if open) from the 3:1 split.
     const reserve = center.width > 0 && center.right > bounds.left && center.right <= bounds.right ? Math.max(0, bounds.right - center.right) : 0;
     const width = bounds.width - reserve;
     if (!Number.isFinite(width) || width < 240 || bounds.height < 100) return null;
-    const min = Math.min(180, width * .2), max = width;
+    const min = Math.min(180, width * .2), max = mode === 'office' ? Math.max(min, width - Math.min(320, width * .4)) : width;
     return { bounds, width, min, max };
   }
   function setChatRatio(next) {
     if (!Number.isFinite(next)) return;
     // A small snap area at the edge lets a pointer reach the collapsed state
     // without requiring a pixel-perfect drag to the window boundary.
-    if (lastChatGeometry && next >= 1 - Math.min(24 / lastChatGeometry.width, .06)) next = 1;
+    if (gridMode === 'social' && lastChatGeometry && next >= 1 - Math.min(24 / lastChatGeometry.width, .06)) next = 1;
     preferredRatio = Math.min(1, Math.max(.01, next));
     schedule();
   }
   function syncChatGrid(sidebar) {
     const found = sidebar && findChatFrame(sidebar);
-    const active = !doc.body.hasAttribute('data-neko-flex-mode') && (doc.body.hasAttribute('data-neko-chatroom-active') || doc.body.hasAttribute('data-neko-side-social-active')) && found && !sidebar.closest('[data-sidebar-collapsed="true"]');
+    const social = doc.body.hasAttribute('data-neko-chatroom-active') || doc.body.hasAttribute('data-neko-side-social-active');
+    const active = !doc.body.hasAttribute('data-neko-flex-mode') && !doc.body.hasAttribute('data-neko-fixed-scene') && found && !sidebar.closest('[data-sidebar-collapsed="true"]');
+    const mode = active ? (social ? 'social' : 'office') : null;
     const rawColumns = found?.frame.style.gridTemplateColumns || '';
     const rest = rawColumns.match(/^\s*\S+\s+([\s\S]+)$/)?.[1];
-    const geometry = active && rest ? chatGeometry(found) : null;
+    const geometry = active && rest ? chatGeometry(found, mode) : null;
     if (!geometry) { clearChatGrid(); return; }
+    if (gridMode !== mode) {
+      if (gridMode === 'office') officeRatio = preferredRatio;
+      else if (gridMode === 'social') socialRatio = preferredRatio;
+      clearChatGrid();
+      gridMode = mode;
+      const nativeWidth = /^\s*(\d+(?:\.\d+)?)px(?:\s|$)/.exec(rawColumns);
+      preferredRatio = mode === 'office' ? (officeRatio ?? (nativeWidth ? Number(nativeWidth[1]) / geometry.width : .32)) : socialRatio;
+    }
+    const dividerLabel = mode === 'office' ? '调整项目列表和工作区宽度' : '调整左侧内容和工作区宽度';
+    if (chatDivider.getAttribute('aria-label') !== dividerLabel) chatDivider.setAttribute('aria-label', dividerLabel);
+    chatDivider.title = mode === 'office' ? '拖动调整宽度 · 双击恢复默认 · 方向键调整' : '拖动调整宽度 · 双击恢复 3:1 · 方向键调整';
     if (chatFrame !== found.frame) {
       clearChatGrid(); chatFrame = found.frame;
       oldChatGrid = { value:chatFrame.style.getPropertyValue('--neko-chat-sidebar-grid'), priority:chatFrame.style.getPropertyPriority('--neko-chat-sidebar-grid') };
@@ -193,7 +209,7 @@ function installWorkbenchSideRail(options = {}) {
     if (!next || next === doc.body || next === rail || next.parentElement !== doc.body) next = null;
     if (appRoot !== next) { if (appRoot) release(appRoot, 'data-neko-rail-app'); appRoot = next; }
     if (appRoot) mark(appRoot, 'data-neko-rail-app');
-    const nextAccount = doc.querySelector('[data-slot="settings.launcher"] button.hjANda_trigger[aria-haspopup="menu"]');
+    const nextAccount = doc.querySelector('[data-slot="settings.launcher"] button[aria-haspopup="menu"][data-collapsed][data-signed-out]');
     if (nativeAccount !== nextAccount) {
       if (nativeAccount) { release(nativeAccount, 'data-neko-rail-account-original'); release(nativeAccount, 'tabindex'); release(nativeAccount, 'aria-hidden'); }
       nativeAccount = nextAccount;
@@ -323,7 +339,7 @@ function installWorkbenchSideRail(options = {}) {
     else if (next < 1) restoreRatio = next;
     event.preventDefault(); setChatRatio(next);
   };
-  const onChatReset = () => setChatRatio(.75);
+  const onChatReset = () => setChatRatio(gridMode === 'office' ? .32 : .75);
   const onWorkspaceExpand = () => { if (doc.body.hasAttribute('data-neko-workspace-collapsed')) setChatRatio(restoreRatio < 1 ? restoreRatio : .75); };
   doc.addEventListener('neko-workspace-expand', onWorkspaceExpand);
   const unsubscribeNativeDivider = typeof bridge.subscribeDivider === 'function' ? bridge.subscribeDivider(event => {
@@ -350,7 +366,7 @@ function installWorkbenchSideRail(options = {}) {
   doc.addEventListener('pointerdown', onDragStart, true); doc.addEventListener('pointerup', onDragEnd); doc.addEventListener('pointercancel', onDragEnd);
   doc.head.appendChild(style); doc.body.prepend(rail); doc.body.appendChild(chatDivider); doc.body.setAttribute('data-neko-side-rail-layout', '');
   const observer = new win.MutationObserver(schedule);
-  observer.observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-label', 'aria-expanded', 'data-sidebar-collapsed', 'data-neko-chatroom-active', 'data-neko-side-social-active', 'data-neko-flex-mode', 'style'] });
+  observer.observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-label', 'aria-expanded', 'data-sidebar-collapsed', 'data-neko-chatroom-active', 'data-neko-side-social-active', 'data-neko-flex-mode', 'data-neko-fixed-scene', 'style'] });
   sync();
   return () => {
     if (stopped) return; stopped = true; observer.disconnect();

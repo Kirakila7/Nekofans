@@ -4,6 +4,8 @@ body { display:flex; align-items:flex-end; padding:4px; font:14px/1.45 system-ui
 form { display:flex; align-items:center; gap:6px; width:100%; padding:6px; border:1px solid #c5d7e8; border-radius:20px; background:#fff; box-shadow:0 4px 16px #243a552a; }
 textarea { flex:1; min-width:0; height:32px; max-height:72px; padding:6px; border:0; resize:none; outline:0; background:transparent; color:#233750; font:inherit; }
 textarea:disabled { color:#71829a; }
+#session-label { flex:none; max-width:82px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#526d89; font-size:11px; }
+@media(max-width:360px) { #session-label { display:none; } }
 button { flex:none; width:32px; height:32px; border:0; border-radius:50%; color:#44648a; background:#edf4fb; font:18px system-ui,sans-serif; cursor:pointer; }
 button[type=submit] { color:#fff; background:#5f8fd9; }
 button:disabled { opacity:.5; cursor:default; }
@@ -29,3 +31,15 @@ form { order:2; }
 #records-status { padding:2px 8px; color:#526d89; font-size:12px; }
 #records-more { flex:none; align-self:center; margin:4px; }
 #records-more[hidden] { display:none; }
+#task { order:0; width:100%; flex:1; min-height:0; display:flex; flex-direction:column; overflow:hidden; background:#f5f9ff; border:1px solid #c5d7e8; border-radius:12px; }
+#task[hidden] { display:none; }
+#task header { padding:8px 12px 2px; }
+#task-status { padding:2px 12px 6px; font-size:12px; color:#526d89; }
+#task-status[aria-busy=true] { color:#3068ac; }
+#task-list { min-height:0; flex:1; overflow:auto; padding:4px 10px 10px; overflow-wrap:anywhere; }
+#task-list article { margin:6px 0; padding:8px; border-radius:10px; background:#fff; color:#233750; }
+#task-list article[data-role=user] { background:#e1edfc; }
+#task-list article[data-role=activity] { font-size:12px; color:#526d89; }
+#task-list strong { display:block; font-size:11px; color:#526d89; }
+#task-list article div { white-space:pre-wrap; user-select:text; }
+@media(max-width:260px) { #files { display:none; } form { gap:2px; padding:4px; } button { width:28px; height:28px; } }

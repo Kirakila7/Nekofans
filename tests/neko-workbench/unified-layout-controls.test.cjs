@@ -52,6 +52,18 @@ test('production temporarily disables every multi-pane entry without rewriting o
   assert.equal(q(f,'.neko-companion-dock textarea').value,'pet draft'); f.cleanup();
 });
 
+test('settings can explicitly opt into adjustable panes while compact startup preserves saved preferences', {skip:!JSDOM}, async t=>{
+ const old={enabled:true,side:'workspace',left:'community',right:'coding',ratio:.61,flex:{enabled:true,rootAxis:'x',stackAxis:'y',rootRatio:.62,stackRatio:.46,slots:['social','bilibili','coding']}};
+ const f=fixture(t,old,{allowLegacyMultiPane:false});await tick();await tick();
+ assert.equal(q(f,'.neko-layout-entry'),null);assert.equal(f.calls.filter(c=>c.action==='set-pane-layout').length,0);
+ f.d.dispatchEvent(new f.w.CustomEvent('neko-unified-open-config',{detail:{optIn:true}}));await tick();await tick();
+ assert(q(f,'.neko-layout-entry'));assert.equal(q(f,'.neko-unified-config').hidden,false);
+ const restore=[...f.d.querySelectorAll('.neko-unified-config button')].find(b=>b.textContent==='恢复上次多栏布局');assert.equal(restore.hidden,false);restore.click();await tick();
+ assert.equal(f.d.body.hasAttribute('data-neko-flex-mode'),true);assert.equal(q(f,'#draft').value,'coding draft');assert.equal(f.saved.flex.rootRatio,.62);
+ const before=f.d.querySelectorAll('.neko-layout-entry').length;f.d.dispatchEvent(new f.w.CustomEvent('neko-unified-open-config',{detail:{optIn:true}}));await tick();assert.equal(f.d.querySelectorAll('.neko-layout-entry').length,before);
+ f.cleanup();
+});
+
 test('three-pane video entry switches B站 and YouTube in one slot, preserves other regions and opens the entered video', { skip:!JSDOM }, async t => {
   const f=fixture(t); let social=null;
   f.d.addEventListener('neko-flex-social-geometry', event=>{ if (event.detail) social=event.detail; });

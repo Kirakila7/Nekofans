@@ -11,6 +11,22 @@ let JSDOM;
 for(const dir of [process.env.NEKO_DOM_DEPS,'/private/tmp/neko-sidebar-dom-20261026','/private/tmp/neko-lobby-dom-7mKS'].filter(Boolean)){try{({JSDOM}=require(path.join(dir,'node_modules/jsdom')));break;}catch{}}
 const DOM_SKIP=JSDOM?false:'set NEKO_DOM_DEPS to a directory with jsdom installed';
 
+for(const restarted of [false,true])test(`failed logout stays retryable without another login (restarted: ${restarted})`,{skip:DOM_SKIP},async t=>{
+ const text='频道凭据未能完全清除，请重试退出登录。';
+ const signedOut=error=>snapshot({connection:'signed-out',auth:{status:'signed-out',message:'登录后即可进入频道。',error,signingIn:false,canRetrySignOut:!!error},me:null,messages:[],members:[],channel:null});
+ let attempts=restarted?1:0;
+ const f=setup(t,{snap:restarted?signedOut(text):snapshot(),respond:r=>{if(r.action==='sign-out'){const failed=++attempts===1;const state=signedOut(failed?text:'');f.setCurrent(state);return{ok:!failed,error:failed?text:'',state};}}});
+ await tick();f.doc.querySelector('.neko-lobby-switch').click();await tick();
+ const button=f.doc.querySelector('.neko-lobby-sign-out');
+ if(!restarted){button.click();await tick();}
+ assert(!button.hidden);assert.equal(button.textContent,'重试退出登录');
+ const notice=f.doc.querySelector('.neko-lobby-error');assert(!notice.hidden);assert.equal(notice.textContent,text);
+ button.click();await tick();
+ assert(button.hidden);assert(notice.hidden);
+ assert.equal(f.calls.lobby.filter(r=>r.action==='sign-out').length,restarted?1:2);
+ assert(!f.calls.lobby.some(r=>r.action==='sign-in'),'cleanup does not require authorizing again');
+});
+
 const ME='11111111-1111-4111-8111-111111111111',ZS='22222222-2222-4222-8222-222222222222',FAKE='33333333-3333-4333-8333-333333333333';
 const MYCAT='44444444-4444-4444-8444-444444444444',ZSCAT='55555555-5555-4555-8555-555555555555',CH='66666666-6666-4666-8666-666666666666';
 const mid=n=>'aaaaaaaa-aaaa-4aaa-8aaa-'+String(n).padStart(12,'0');
@@ -42,7 +58,7 @@ function snapshot(over={}){
 function setup(t,{lobby=true,snap=snapshot(),respond,composer=true,home=false}={}){
  const dom=new JSDOM('<body><aside data-neko-side-rail><div class="neko-side-rail__theme"></div></aside><div data-slot="sidebar"><button data-neko-new-session="plus">+</button><div data-neko-seat-mount></div><div data-slot="sidebar.workspaces">native</div><div data-slot="settings.launcher"></div></div><main><textarea>native draft</textarea></main></body>',{runScripts:'outside-only'});
  t.after(()=>dom.window.close());
- const {window:w}=dom,doc=w.document;doc.querySelector('[data-slot="sidebar"]').getBoundingClientRect=()=>({right:300});
+ const {window:w}=dom,doc=w.document;doc.querySelector('[data-slot="sidebar"]').getBoundingClientRect=()=>({left:64,top:0,right:300,bottom:800,width:236,height:800});doc.querySelector('[data-neko-side-rail]').getBoundingClientRect=()=>({left:0,top:0,right:64,bottom:800,width:64,height:800});
  let layout={seats:[{id:'seat-1',name:'DSH',provider:'dsh',avatarId:'bigfish',projectRoot:''}],activeSeatId:null,officeMode:'dsh',companionCollapsed:false,companionHistoryOpen:false};
  const state={workspaceRoot:'/fixture',workspaceRevision:0,companion:{name:'主agent',ready:true,working:false,messages:[]}};
  const calls={lobby:[],hideSocial:0,community:0};let lobbySub,community,current=snap;
@@ -63,7 +79,7 @@ function setup(t,{lobby=true,snap=snapshot(),respond,composer=true,home=false}={
 }
 const rowOf=(doc,n)=>doc.querySelector('.neko-lobby-message[data-id="'+mid(n)+'"]');
 const labelOf=(doc,n)=>rowOf(doc,n).querySelector('.neko-lobby-label').textContent;
-test('频道 rail button opens the lobby beside the dock: hideSocial first, dock untouched, community hides it',{skip:DOM_SKIP},async t=>{
+test('频道 opens in the left track, preserves the work area and draft, and returns without leaving the room',{skip:DOM_SKIP},async t=>{
  const f=setup(t),{doc,calls}=f;await tick();
  const rail=doc.querySelector('.neko-workspace-rail-controls'),lobbyButton=doc.querySelector('.neko-lobby-switch');
  assert(lobbyButton,'rail button installed');assert.equal(lobbyButton.parentElement,rail);
@@ -72,22 +88,31 @@ test('频道 rail button opens the lobby beside the dock: hideSocial first, dock
  const panel=doc.querySelector('.neko-lobby-panel');assert(panel.hidden);
  const dock=doc.querySelector('.neko-companion-dock'),draft=dock.querySelector('textarea');draft.value='私聊草稿';
  doc.querySelector('.neko-workspace-settings').click();await tick();assert(!doc.querySelector('.neko-workspace-modal').hidden);
- const before=calls.hideSocial;lobbyButton.click();await tick();
- assert(calls.hideSocial>before,'opening the panel calls hideSocial');
+ const before=calls.hideSocial;let sideCloses=0;doc.addEventListener('neko-side-surface-close',()=>sideCloses++);lobbyButton.click();await tick();
+ assert.equal(calls.hideSocial,before,'opening the left panel does not close every video'); assert.equal(sideCloses,1);
  assert(doc.querySelector('.neko-workspace-modal').hidden,'opening the panel closes settings');
  assert(!panel.hidden);assert.equal(lobbyButton.getAttribute('aria-expanded'),'true');
  assert.equal(calls.lobby.filter(r=>r.action==='open').length,1,'joins the lobby once');
- assert.equal(panel.style.left,'300px','placed like the office panel');
+ assert.equal(panel.style.left,'64px','placed in the left track'); assert.equal(panel.style.width,'236px'); assert(!doc.querySelector('main').hasAttribute('inert'));
+ const members=doc.querySelector('.neko-lobby-members-toggle');members.click();assert(panel.hasAttribute('data-members-open'));assert.equal(members.getAttribute('aria-expanded'),'true');members.click();assert(!panel.hasAttribute('data-members-open'));
  assert(doc.querySelector('.neko-office-panel').hidden,'office panel yields to the lobby');
  assert.equal(doc.querySelectorAll('.neko-companion-dock').length,1);assert.equal(doc.querySelector('.neko-companion-dock'),dock);
  assert.equal(dock.closest('[hidden],[inert],[aria-hidden="true"]'),null,'dock is neither hidden nor inert');
  assert(!panel.contains(dock));assert.equal(draft.value,'私聊草稿');assert.equal(draft.disabled,false);
- lobbyButton.click();await tick();assert(panel.hidden);assert.equal(calls.lobby.at(-1).action,'close','toggling leaves the lobby');
+ doc.querySelector('.neko-lobby-back').click();await tick();assert(panel.hidden);assert.equal(calls.lobby.at(-1).action,'close','returning leaves the lobby'); assert(!doc.body.hasAttribute('data-neko-lobby-active'));
  lobbyButton.click();await tick();assert(!panel.hidden);
  doc.querySelector('.neko-community').click();await tick();
  assert.equal(calls.community,1);assert(panel.hidden,'opening the community hides the lobby');assert.equal(calls.lobby.at(-1).action,'close');
  assert.equal(doc.querySelector('.neko-companion-dock'),dock);assert.equal(draft.value,'私聊草稿');
  f.cleanup();assert(!doc.querySelector('.neko-lobby-panel'));assert(!doc.querySelector('.neko-lobby-switch'));
+});
+
+test('public-room entry and return preserve the mounted home and independent work area',{skip:DOM_SKIP},async t=>{
+ const f=setup(t,{home:true}),{doc}=f;await tick();const preview=doc.querySelector('.neko-chatroom-preview'),home=doc.querySelector('.neko-chatroom-preview__home-view'),entry=doc.querySelector('[data-neko-public-room]');
+ assert.equal(entry.tagName,'BUTTON');entry.click();await tick();assert(!doc.querySelector('.neko-lobby-panel').hidden);assert(preview.hidden);assert(!doc.querySelector('main').hasAttribute('inert'));
+ doc.querySelector('.neko-lobby-back').click();await tick();assert(!preview.hidden);assert.equal(doc.activeElement,entry);
+ doc.querySelector('.neko-chatroom-preview__room-icon.is-home').closest('button').click();await tick();assert(!home.hidden);const stage=doc.querySelector('[data-neko-home-stage]'),mounted=stage.firstChild;
+ doc.querySelector('.neko-lobby-switch').click();await tick();assert(preview.hidden);doc.querySelector('.neko-lobby-back').click();await tick();assert(!home.hidden);assert.equal(stage.firstChild,mounted);
 });
 
 test('message list: origin labels, own labels, badges by origin only, reply quote label, mentions, deleted, text-only rendering',{skip:DOM_SKIP},async t=>{
