@@ -8,7 +8,7 @@ let active;
 (async () => {
   const dom = new JSDOM(`<!doctype html><html><head></head><body><div id="app">
     <div id="frame" style="display:grid;grid-template-columns:280px minmax(0px, 1fr) minmax(0px, 320px)"><aside data-slot="sidebar"><button id="sidebar-toggle" aria-label="收起侧边栏">侧栏</button><button id="new">新建会话</button><button id="fish" aria-label="养鱼设置">养鱼</button>
-      <div data-slot="settings.launcher"><button class="hjANda_trigger" aria-haspopup="menu" aria-expanded="false" aria-label="账号与额度：DSH 已登录，Codex 已登录">Native account</button></div></aside>
+      <div data-slot="settings.launcher"><button id="native-account" class="current_trigger_HASH" aria-haspopup="menu" aria-expanded="false" data-collapsed="false" data-signed-out="false" aria-label="账号与额度：DSH 已登录，Codex 已登录">Native account</button></div></aside>
     <main><textarea>unsent draft</textarea></main><div data-side="sidebar"></div></div></div></body></html>`, { url: 'http://127.0.0.1/', runScripts: 'outside-only', pretendToBeVisual: true });
   active = dom; const win = dom.window, doc = win.document;
   const flush = () => new Promise(resolve => win.setTimeout(resolve, 0));
@@ -17,7 +17,7 @@ let active;
   win.eval(fs.readFileSync(path.join(__dirname, 'b0-skin/packages/dsh-client-ui-white-label/lib/client.js'), 'utf8'));
   const api = win.__ModuleLoader__.entry.factory(name => name === 'react' ? { createElement() {} } : { createPortal() {} });
   assert.equal(api.installWorkbenchSideRail.toString(), win.installWorkbenchSideRail.toString(), 'installed side rail matches the checked source');
-  const original = doc.querySelector('.hjANda_trigger'), parent = original.parentNode, app = doc.querySelector('#app');
+  const original = doc.querySelector('#native-account'), parent = original.parentNode, app = doc.querySelector('#app');
   let clicks = 0, closes = 0, home = 0, actions = [], finish;
   original.addEventListener('click', () => { clicks++; original.setAttribute('aria-expanded', 'true'); });
   const stop = win.installWorkbenchSideRail({ document: doc, window: win,

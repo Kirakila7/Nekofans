@@ -233,7 +233,7 @@ const blankCat = () => ({ mode: 'off', independentTrigger: 'mention', available:
   suggestion: null, nudge: null, usage: { today: 0, limit: CAT_LIMITS.dailyLimit } });
 
 function fallbackSnapshot(error) {
-  return { connection: 'unconfigured', auth: { status: 'unconfigured', message: ERR.unconfigured, error: '', signingIn: false },
+  return { connection: 'unconfigured', auth: { status: 'unconfigured', message: ERR.unconfigured, error: '', signingIn: false, canRetrySignOut: false },
     participation: { mode: 'off', available: false, reason: REASON.offline }, loading: false,
     me: null, channel: null, messages: [], hasMore: false, members: [], outbox: [], catSettings: settingsView(defaultSettings()),
     cat: blankCat(), suggestion: null, nudge: null, error };
@@ -393,7 +393,8 @@ function buildController(deps) {
     const conn = connection();
     return {
       connection: conn,
-      auth: { status: a?.status || 'unconfigured', message: a?.message || ERR.unconfigured, error: a?.error || '', signingIn },
+      auth: { status: a?.status || 'unconfigured', message: a?.message || ERR.unconfigured, error: a?.error || '', signingIn,
+        canRetrySignOut: a?.status === 'signed-out' && a?.error === AUTH_ERRORS.signout },
       participation: participation(),
       loading: conn === 'online' && !me,
       me: meView(),
@@ -567,7 +568,10 @@ function buildController(deps) {
         if (cat) quiet(() => cat.invalidate());
         if (experience) quiet(() => experience.close());
         quiet(() => client.reset());
-        try { await auth.signOut(); } catch { /* local state is cleared either way */ }
+        try {
+          const result = await auth.signOut();
+          if (result?.error) return fail(result.error);
+        } catch (error) { return fail(error); }
         return ok();
       default: break;
     }

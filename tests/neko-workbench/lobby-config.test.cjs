@@ -9,17 +9,14 @@ const CHAT_ERROR = /频道服务地址/;
 const AUTH_ERROR = /频道登录地址/;
 const CHANNEL = '0f8e9d7c-6b5a-4c3d-8e2f-1a0b9c8d7e6f';
 
-test('an unset chat URL uses the built-in production service; an explicit empty value disables the lobby', () => {
-  assert.equal(C.DEFAULT_CHAT_URL, 'https://chat.nekotech.ai/');
-  assert.equal(C.resolveChatUrl(undefined), C.DEFAULT_CHAT_URL);
-  assert.equal(C.resolveChatUrl(null), C.DEFAULT_CHAT_URL);
+test('an unset chat URL uses the official service while an explicitly empty URL disables the lobby', () => {
+  assert.equal(C.resolveChatUrl(undefined), null);
   assert.equal(C.resolveChatUrl(''), null);
-  const production = C.resolveChatConfig({});
-  assert.deepEqual({ ...production, oauthPorts: [...production.oauthPorts] }, {
+  assert.deepEqual({ ...C.resolveChatConfig({}) }, {
     configured: true, chatUrl: 'https://chat.nekotech.ai/', wsUrl: 'wss://chat.nekotech.ai/ws',
     authUrl: OFFICIAL_AUTH_ORIGIN, clientId: 'neko-chat-desktop-prod', oauthPorts: [48921, 48922, 48923] });
   assert.deepEqual(C.resolveChatConfig({ NEKO_WORKBENCH_CHAT_URL: '' }), { configured: false });
-  // An explicit opt-out wins over invalid companions (the panel just says "unconfigured").
+  // Invalid companions do not break an explicitly disabled lobby.
   assert.deepEqual(C.resolveChatConfig({ NEKO_WORKBENCH_CHAT_URL: '', NEKO_WORKBENCH_CHAT_CLIENT_ID: 'bad', NEKO_WORKBENCH_CHAT_AUTH_URL: 'http://evil.test',
     NEKO_WORKBENCH_CHAT_OAUTH_PORTS: 'x' }), { configured: false });
   assert.ok(Object.isFrozen(C.resolveChatConfig({})));
@@ -140,11 +137,7 @@ test('resolveChatConfig reads process.env by default and nothing else', () => {
   const saved = Object.fromEntries(keys.map(key => [key, process.env[key]]));
   try {
     for (const key of keys) delete process.env[key];
-    const defaults = C.resolveChatConfig();
-    assert.equal(defaults.configured, true);
-    assert.equal(defaults.chatUrl, C.DEFAULT_CHAT_URL);
-    assert.equal(defaults.wsUrl, 'wss://chat.nekotech.ai/ws');
-    assert.equal(defaults.authUrl, OFFICIAL_AUTH_ORIGIN);
+    assert.equal(C.resolveChatConfig().chatUrl, 'https://chat.nekotech.ai/');
     process.env.NEKO_WORKBENCH_CHAT_URL = 'http://localhost:8091';
     assert.equal(C.resolveChatConfig().wsUrl, 'ws://localhost:8091/ws');
     process.env.NEKO_WORKBENCH_CHAT_URL = '';

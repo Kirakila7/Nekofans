@@ -33,7 +33,7 @@
   --nws-muted:var(--nk-text-2);
   --nws-hover:var(--nk-hover);
 }
-body:is([data-neko-workspace-collapsed],[data-neko-flex-workspace-collapsed]) [data-neko-collapsed-composer] { position:fixed !important; z-index:2147481000 !important; right:16px !important; bottom:16px !important; left:auto !important; top:auto !important; box-sizing:border-box !important; width:min(480px, calc(100vw - 96px)) !important; max-width:calc(100vw - 96px) !important; max-height:45vh; overflow:auto; background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:20px; box-shadow:0 8px 28px #17303d24; }
+body:is([data-neko-workspace-collapsed],[data-neko-flex-workspace-collapsed]) [data-neko-collapsed-composer] { position:fixed !important; z-index:2147481000 !important; right:16px !important; bottom:16px !important; left:auto !important; top:auto !important; margin:0 !important; box-sizing:border-box !important; width:min(480px, calc(100vw - 96px)) !important; max-width:calc(100vw - 96px) !important; max-height:45vh; overflow:auto; background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:20px; box-shadow:0 8px 28px #17303d24; }
 body:is([data-neko-workspace-collapsed],[data-neko-flex-workspace-collapsed]) [data-neko-collapsed-composer] .neko-gallery { display:none !important; }
 /* The native seat remains in its React tree. Hide its decorative landing hero
    only in compact mode; native project and mode controls return on focus. */
@@ -80,17 +80,17 @@ body[data-ds-dark-theme] .neko-home-work-switch { background:#1b1a1f; border-col
 body[data-ds-dark-theme] .neko-home-work-switch__button { color:var(--nk-text-3); font-weight:500; }
 body[data-ds-dark-theme] .neko-home-work-switch__button[aria-pressed="true"] { background:#3a3941; color:#ffffff; font-weight:600; box-shadow:0 1px 3px #00000073; }
 /* The embedded DSH sidebar uses a quiet vertical gradient in dark mode. */
-body[data-ds-dark-theme] .PIRFFq_sidebarCol { background:linear-gradient(180deg,#212023 0%,#1f1f21 58%,#26262a 100%) !important; }
+body[data-ds-dark-theme] [data-neko-native-sidebar-column] { background:linear-gradient(180deg,#212023 0%,#1f1f21 58%,#26262a 100%) !important; }
 /* Keep the Work session list on the same content edge as the seats. */
 body[data-neko-workspace-shell] .neko-session-browser { margin:0 12px 0 4px; }
 /* Drag the window from the brand row now that the native title bar is hidden. */
-body[data-neko-workspace-shell] .kB3qhq_logoRow { -webkit-app-region:drag; }
-body[data-neko-workspace-shell] .kB3qhq_logoRow button,
-body[data-neko-workspace-shell] .kB3qhq_logoRow a,
-body[data-neko-workspace-shell] .kB3qhq_logoRow input { -webkit-app-region:no-drag; }
+body[data-neko-workspace-shell] [data-neko-native-brand-row] { -webkit-app-region:drag; }
+body[data-neko-workspace-shell] [data-neko-native-brand-row] button,
+body[data-neko-workspace-shell] [data-neko-native-brand-row] a,
+body[data-neko-workspace-shell] [data-neko-native-brand-row] input { -webkit-app-region:no-drag; }
 /* Keep the collapse/expand toggle level with the native traffic lights. */
-body[data-neko-workspace-shell] .kB3qhq_root { position:relative; }
-body[data-neko-workspace-shell] .kB3qhq_root .kB3qhq_toggle { position:absolute; top:2px; right:12px; z-index:5; display:flex !important; -webkit-app-region:no-drag; }
+body[data-neko-workspace-shell] [data-neko-native-sidebar] { position:relative; }
+body[data-neko-workspace-shell] [data-neko-native-sidebar] [data-neko-native-sidebar-toggle] { position:absolute; top:2px; right:12px; z-index:5; display:flex !important; -webkit-app-region:no-drag; }
 /* Collapsed: show the native rail (expand + new session), hide our column content. */
 [data-sidebar-collapsed="true"] .neko-chatroom-preview,
 [data-sidebar-collapsed="true"] .neko-home-work-switch,
@@ -125,7 +125,7 @@ body[data-neko-chatroom-active] .neko-chatroom-preview { padding-bottom:136px; }
 body[data-neko-workspace-shell] .neko-role-host { display:flex; flex-direction:column; min-height:0; }
 /* The native sidebar keeps its intrinsic width; stretch it to the split track
    so the Home column, the divider and the account row share one edge. */
-body[data-neko-workspace-shell] .kB3qhq_root { width:100% !important; max-width:none !important; flex:1 1 auto !important; min-width:0 !important; }
+body[data-neko-workspace-shell] [data-neko-native-sidebar] { width:100% !important; max-width:none !important; flex:1 1 auto !important; min-width:0 !important; }
 body[data-neko-workspace-shell] .neko-role-host { min-width:0; }
 /* While Home is active, masked native branches must not reserve layout space. */
 body[data-neko-chatroom-active] [data-neko-room-masked] { display:none !important; }
@@ -204,6 +204,9 @@ html body[data-ds-dark-theme] {
    geometry is supplied by the workspace shell and follows its left pane. */
 .neko-companion-dock[data-neko-companion-expanded] { position:fixed; left:var(--neko-companion-left); bottom:var(--neko-companion-bottom); width:var(--neko-companion-width); max-width:none; margin:0; z-index:52; }
 .neko-companion-dock[data-neko-companion-expanded] .neko-companion-form { width:100%; box-sizing:border-box; }
+.neko-companion-dock[data-neko-companion-rail-chat] { position:fixed; inset:auto; left:var(--neko-rail-chat-left); top:var(--neko-rail-chat-top); width:var(--neko-rail-chat-width); max-height:calc(100vh - 32px); overflow:auto; z-index:2147481002; margin:0; padding:32px 10px 10px; border:1px solid var(--nws-border); border-radius:14px; background:var(--nws-bg); box-shadow:0 8px 28px #17303d2b; }
+.neko-companion-dock[data-neko-companion-rail-chat] .neko-companion-history { max-height:240px; }
+.neko-companion-rail-close { position:absolute; top:4px; right:6px; width:26px; height:26px; border:0; border-radius:8px; background:transparent; color:inherit; cursor:pointer; font:20px system-ui; }
 .neko-companion-character { justify-self:center; width:76px; height:90px; position:relative; transform:translateX(var(--neko-companion-offset,0px)); cursor:grab; touch-action:none; user-select:none; -webkit-user-select:none; }
 .neko-companion-character[data-dragging="true"] { cursor:grabbing; }
 .neko-companion-menu { position:fixed; z-index:60; display:grid; gap:3px; min-width:160px; max-width:240px; box-sizing:border-box; padding:6px; color:var(--nws-text); background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:12px; box-shadow:0 8px 28px #17303d20; font:13px/1.5 system-ui; }
@@ -214,10 +217,10 @@ html body[data-ds-dark-theme] {
 .neko-companion-menu__status { max-width:220px; margin:3px 8px; color:var(--nws-muted); font-size:11px; overflow-wrap:anywhere; }
 .neko-companion-menu__status:empty { display:none; }
 .neko-side-rail__space { position:relative; width:calc(100% + 24px); overflow:hidden; }
-.neko-rail-companion { flex:none; width:44px; height:52px; padding:0; cursor:pointer; }
+.neko-rail-companion { flex:none; width:56px; height:70px; padding:0; cursor:pointer; }
 .neko-rail-companion[data-neko-rail-roam] { position:absolute; left:0; top:0; z-index:1; max-width:100%; max-height:100%; touch-action:none; cursor:grab; }
 .neko-rail-companion[data-dragging="true"] { cursor:grabbing; }
-.neko-rail-companion .neko-companion-character { width:min(40px, 100%); height:min(50px, 100%); transform:none; cursor:inherit; }
+.neko-rail-companion .neko-companion-character { width:min(54px, 100%); height:min(68px, 100%); transform:none; cursor:inherit; }
 .neko-rail-companion img.neko-companion-poster,.neko-rail-companion video.neko-companion-video { width:100%; height:100%; border-radius:0; object-fit:contain; }
 .neko-rail-companion [hidden] { display:none !important; }
 .neko-companion-character:focus-visible { outline:2px dashed #4c89ad; outline-offset:-3px; border-radius:12px; }
@@ -237,7 +240,7 @@ html body[data-ds-dark-theme] {
 .neko-companion-form button:focus-visible { outline:2px solid #4c89ad; outline-offset:1px; }
 .neko-companion-history-toggle svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round; }
 .neko-office-panel { position:fixed; z-index:28; display:flex; flex-direction:column; box-sizing:border-box; container:neko-office / inline-size; padding:var(--nk-pane-pad-y) clamp(18px,5vw,75px) var(--nk-pane-pad-y); color:var(--nws-text); background:var(--nk-surface); font:14px/1.65 system-ui,sans-serif; }
-.neko-office-panel[hidden],.neko-workspace-modal[hidden],.neko-companion-dock [hidden] { display:none !important; }
+.neko-office-panel[hidden],.neko-workspace-modal[hidden],.neko-companion-dock[hidden],.neko-companion-dock [hidden] { display:none !important; }
 .neko-office-panel[data-neko-compact] { padding:14px 12px 16px; }
 .neko-office-header { display:flex; align-items:center; gap:10px; min-height:var(--nk-pane-header); flex:none; border-bottom:1px solid var(--nws-border); }
 .neko-office-brand { width:32px; height:32px; object-fit:contain; }
@@ -437,6 +440,15 @@ body[data-neko-workspace-shell] [data-neko-companion-footer] { display:block !im
 .neko-lobby-dialog__error { margin:0; color:#bd5c4e; font-size:12px; }
 .neko-lobby-dialog__footer { display:flex; justify-content:flex-end; gap:8px; }
 @media(max-width:900px) { .neko-lobby-members { display:none; } }
+.neko-lobby-panel { padding:12px; overflow:hidden; }
+.neko-lobby-header { flex-wrap:wrap; gap:6px; }
+.neko-lobby-topic { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.neko-lobby-panel[data-neko-narrow] .neko-lobby-members { display:none; }
+.neko-lobby-panel:not([data-neko-narrow]) .neko-lobby-members { display:block; }
+.neko-lobby-panel:not([data-neko-narrow]) .neko-lobby-members-toggle { display:none; }
+.neko-lobby-panel[data-neko-narrow][data-members-open] .neko-lobby-members { display:block; position:absolute; z-index:3; top:100px; right:12px; bottom:120px; width:min(200px,calc(100% - 24px)); padding:12px; border:1px solid var(--nws-border); border-radius:10px; background:var(--nws-bg); box-shadow:0 6px 20px #17303d24; }
+.neko-lobby-panel[data-neko-narrow] .neko-lobby-header__actions { width:100%; flex-wrap:wrap; margin:0; }
+.neko-lobby-panel[data-neko-narrow] .neko-lobby-modes { flex-wrap:wrap; }
 
 /* Interaction states: hover/press cues on enabled controls only, visible focus
    rings, and busy/disabled cues. Disabled (e.g. Codex 测试中) never gets hover. */

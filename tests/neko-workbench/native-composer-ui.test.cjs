@@ -5,6 +5,17 @@ const base=path.join(__dirname,'../../apps/neko-workbench');
 function setup(t,options={}){const dom=new JSDOM(fs.readFileSync(path.join(base,'native-composer.html'),'utf8'),{runScripts:'outside-only',url:'https://native-workbench.invalid/'});t.after(()=>dom.window.close());const {window:w}=dom, events=[];if(options.storage)Object.defineProperty(w,'localStorage',{value:options.storage});if(options.setTimeout)w.setTimeout=options.setTimeout;if(options.clearTimeout)w.clearTimeout=options.clearTimeout;let receive;w.nativeComposer={send:x=>events.push(x),onState:cb=>{receive=cb;}};w.eval(fs.readFileSync(path.join(base,'native-composer.js'),'utf8'));const el=w.document.getElementById('message');const snap=(revision,value,extra={})=>receive({enabled:true,busy:false,sessionToken:'s1',revision,value,...extra});snap(1,'',options.initial||{});return {w,el,events,snap,form:w.document.getElementById('composer'),status:w.document.getElementById('status'),expand:w.document.getElementById('expand'),copy:w.document.getElementById('copy')};}
 function type(t,value){t.el.value=value;t.el.dispatchEvent(new t.w.Event('input',{bubbles:true}));}
 function submit(t){t.form.dispatchEvent(new t.w.Event('submit',{bubbles:true,cancelable:true}));}
+
+test('floating task view streams safe text while preserving input, scrolling and session boundaries',{skip:!JSDOM},t=>{
+ const x=setup(t),d=x.w.document;
+ x.snap(2,'kept draft',{taskOpen:true,taskStatus:'任务运行中',taskRunning:true,taskMessages:[{id:'a',role:'assistant',text:'<img src=x onerror=alert(1)>',streaming:true}]});
+ assert.equal(d.querySelector('#task').hidden,false);assert.equal(d.querySelector('#task-list img'),null);assert.match(d.querySelector('#task-list').textContent,/<img/);assert.equal(x.el.value,'kept draft');
+ const list=d.querySelector('#task-list');Object.defineProperty(list,'scrollHeight',{value:900,configurable:true});Object.defineProperty(list,'clientHeight',{value:200});list.scrollTop=52;list.dispatchEvent(new x.w.Event('scroll'));
+ x.snap(2,'kept draft',{taskOpen:true,taskStatus:'任务运行中',taskMessages:[{id:'a',role:'assistant',text:'next chunk'}]});assert.equal(list.scrollTop,52);assert.equal(x.el.value,'kept draft');
+ x.snap(1,'',{sessionToken:'s2',taskOpen:true,taskMessages:[{id:'b',role:'user',text:'other project'}]});assert.equal(list.textContent.includes('next chunk'),false);assert.match(list.textContent,/other project/);
+ d.querySelector('#records-toggle').click();assert.equal(d.querySelector('#task').hidden,true);assert.equal(x.events.at(-1).type,'records-toggle');
+ d.querySelector('#task-toggle').click();assert.equal(d.querySelector('#records').hidden,true);assert.equal(x.events.at(-1).type,'task-toggle');
+});
 test('floating composer serializes edits and submits only the latest acknowledged draft',{skip:!JSDOM},t=>{
  const x=setup(t);type(x,'a');type(x,'ab');assert.equal(x.events.length,1);assert.equal(x.events[0].value,'a');submit(x);assert.equal(x.events.length,1);assert.equal(x.el.readOnly,true);
  x.snap(2,'a',{settledEditId:x.events[0].editId});assert.equal(x.events.length,2);assert.equal(x.events[1].value,'ab');assert.equal(x.events[1].revision,2);
@@ -35,7 +46,7 @@ test('unsynced drafts survive a recreated view per session without automatic rep
  const old=setup(t,{storage});type(old,'私人未确认');assert.equal(records.size,1);
  const other=setup(t,{storage,initial:{sessionToken:'s2'}});assert.equal(other.el.value,'');assert.equal(other.events.length,0);
  const restored=setup(t,{storage});assert.equal(restored.el.value,'私人未确认');assert.equal(restored.el.readOnly,true);assert.match(restored.status.textContent,/未同步的本地草稿/);assert.equal(restored.events.length,0);assert.equal(restored.copy.hidden,false);
- restored.copy.click();assert.match(restored.status.textContent,/⌘C/);restored.expand.click();assert.equal(records.size,1);restored.expand.click();assert.equal(restored.events.at(-1).type,'expand');assert.equal(records.size,1);
+ restored.copy.click();assert(restored.status.textContent.includes(/Mac/i.test(restored.w.navigator.platform)?'⌘C':'Ctrl+C'));restored.expand.click();assert.equal(records.size,1);restored.expand.click();assert.equal(restored.events.at(-1).type,'expand');assert.equal(records.size,1);
 });
 test('confirmed expansion retains an uncopied draft across reopening until native state matches',{skip:!JSDOM},t=>{
  const records=new Map(),storage={getItem:k=>records.get(k)??null,setItem:(k,v)=>records.set(k,v),removeItem:k=>records.delete(k)};

@@ -1,6 +1,7 @@
-// Chat rooms remain a visual preview; the home has a separate in-panel surface.
+// The room directory stays local; channel and home navigation use their own services.
 // Navigation and lifetime are owned by workspace shell.
 function createChatroomPreview(doc, avatar = () => '', options = {}) {
+  const openPublicRoom = typeof options.openPublicRoom === 'function' ? options.openPublicRoom : null;
   const el = (tag, cls, text) => {
     const node = doc.createElement(tag);
     if (cls) node.className = cls;
@@ -9,10 +10,10 @@ function createChatroomPreview(doc, avatar = () => '', options = {}) {
   };
   const panel = el('section', 'neko-chatroom-preview');
   panel.dataset.nekoChatroomPreview = '';
-  panel.setAttribute('aria-label', '聊天室界面预览');
+  panel.setAttribute('aria-label', openPublicRoom ? '聊天室' : '聊天室界面预览');
 
   const heading = el('div', 'neko-chatroom-preview__heading');
-  heading.append(el('h2', '', '聊天室'), el('span', 'neko-chatroom-preview__badge', '界面预览'));
+  heading.append(el('h2', '', '聊天室'), el('span', 'neko-chatroom-preview__badge', openPublicRoom ? '频道入口' : '界面预览'));
   const introduction = el('p', 'neko-chatroom-preview__intro', '和人、AI 一起相遇的地方');
 
   const search = el('input', 'neko-chatroom-preview__search');
@@ -22,7 +23,7 @@ function createChatroomPreview(doc, avatar = () => '', options = {}) {
   search.setAttribute('aria-label', '搜索聊天室，功能尚未开放');
 
   const label = el('div', 'neko-chatroom-preview__label', '聊天室');
-  label.appendChild(el('span', '', '示意'));
+  label.appendChild(el('span', '', openPublicRoom ? '浏览' : '示意'));
   const rooms = el('div', 'neko-chatroom-preview__rooms');
   const addRoom = (name, description, symbol, kind, interactive = false) => {
     const row = el(interactive ? 'button' : 'div', 'neko-chatroom-preview__room');
@@ -35,9 +36,9 @@ function createChatroomPreview(doc, avatar = () => '', options = {}) {
     rooms.appendChild(row);
     return row;
   };
-  const openPublicRoom = typeof options.openPublicRoom === 'function' ? options.openPublicRoom : null;
   const publicRoom = addRoom('公共聊天室', openPublicRoom ? '进入频道，一起交流与分享' : '一起交流与分享', '✦', 'is-public', !!openPublicRoom);
   if (openPublicRoom) {
+    publicRoom.setAttribute('data-neko-public-room', '');
     publicRoom.setAttribute('aria-label', '进入公共聊天室，频道');
     publicRoom.addEventListener('click', () => { homeView.hidden = true; openPublicRoom(); });
   }

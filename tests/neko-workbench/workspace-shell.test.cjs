@@ -10,6 +10,33 @@ const tick=()=>new Promise(r=>setTimeout(r,15));
 const until=async(check,ms=3000)=>{const end=Date.now()+ms;while(!check()&&Date.now()<end)await tick();};
 function temp(t){const p=fs.mkdtempSync(path.join(os.tmpdir(),'neko-workspace-test-'));t.after(()=>fs.rmSync(p,{recursive:true,force:true}));return p;}
 let JSDOM;try{({JSDOM}=require(path.join(process.env.NEKO_DOM_DEPS||'/private/tmp/neko-sidebar-dom-20261026','node_modules/jsdom')));}catch{}
+
+test('shipped settings callback opens native settings across account CSS class changes', {skip:!JSDOM}, t => {
+ const bundle=fs.readFileSync(path.join(base,'embedded-dsh/b0-skin/packages/dsh-client-ui-white-label/lib/client.js'),'utf8');
+ const start=bundle.indexOf('openNativeSettings: () => {'),end=bundle.indexOf(" }), 'neko-brand: workspace shell')",start);
+ assert(start>0&&end>start);
+ const callback=bundle.slice(start+'openNativeSettings: '.length,end);
+ for(const signedOut of ['true','false'])for(const label of ['设置','Settings'])for(const keys of [[],['Ctrl','Alt',','],['⌘',',']]){
+  const dom=new JSDOM(`<body><div data-slot="settings.launcher"><button class="arbitrary_new_hash" aria-haspopup="menu" data-collapsed="false" data-signed-out="${signedOut}">Account</button></div></body>`);
+  t.after(()=>dom.window.close());const d=dom.window.document;let opened=0,clicked=0;
+  d.querySelector('button').onclick=()=>{clicked++;const item=d.createElement('button');item.setAttribute('role','menuitem');if(keys.length)item.setAttribute('aria-keyshortcuts','Control+Alt+,');item.innerHTML=`<span aria-hidden="true"><svg><title>Settings icon</title></svg></span><span class="new_label_hash">${label}</span>`+(keys.length?`<span class="new_shortcut_hash" aria-hidden="true"><span>${keys.map(key=>`<kbd>${key}</kbd>`).join('')}</span></span>`:'');item.onclick=()=>opened++;d.body.append(item);};
+  vm.runInNewContext('('+callback+')()',{document:d,setTimeout:fn=>fn()});
+  assert.equal(clicked,1);assert.equal(opened,1);
+ }
+});
+
+test('shipped session callback requires a successful host privacy check before native opening',async()=>{
+ const bundle=fs.readFileSync(path.join(base,'embedded-dsh/b0-skin/packages/dsh-client-ui-white-label/lib/client.js'),'utf8');
+ const start=bundle.indexOf('openDshSession: async id =>'),end=bundle.indexOf(', openDshNew:',start);
+ assert(start>0&&end>start);let allowed=false,reject=false;const opened=[],checked=[];
+ const callback=vm.runInNewContext('('+bundle.slice(start+'openDshSession: '.length,end)+')',{
+  ctx:{uiWorkspace:{openSession:id=>opened.push(id)}},window:{nekoWorkbench:{workspace:async request=>{checked.push(request);if(reject)throw Error('synthetic unavailable');return{allowed};}}},
+ });
+ await assert.rejects(callback('private'));assert.equal(opened.length,0);
+ allowed=true;await callback('work');assert.deepEqual(opened,['work']);
+ reject=true;await assert.rejects(callback('offline'));assert.deepEqual(opened,['work']);
+ assert(checked.every(r=>r.action==='dsh-session-check'));
+});
 test('project directory shortcut uses the current native session and preserves the draft',{skip:!JSDOM},async t=>{
  const dom=new JSDOM('<body><aside data-neko-side-rail><div class="neko-side-rail__theme"></div></aside><aside data-slot="sidebar"><div data-slot="settings.launcher"></div></aside><main data-neko-chat-center><div data-composer-seat><div data-composer-card><textarea>未发送草稿</textarea></div></div></main></body>',{runScripts:'outside-only',pretendToBeVisual:true});t.after(()=>dom.window.close());
  const w=dom.window,d=w.document,sidebar=d.querySelector('[data-slot="sidebar"]'),center=d.querySelector('main'),composer=d.querySelector('[data-composer-card]'),store=createWorkspaceLayout(path.join(temp(t),'layout.json'));let active=false,opened=0,fail=false;
@@ -38,7 +65,7 @@ test('three seats persist independent names, avatars, platform and project scope
  s.updateSeat('seat-3',{name:'设计小助手',provider:'codex',avatarId:'gemini',projectRoot:'/my/project'});s.update({activeSeatId:'seat-3',companionCollapsed:true,companionHistoryOpen:true,officeMode:'codex'});
  const saved=createWorkspaceLayout(p).get();assert.equal(saved.seats[2].name,'设计小助手');assert.equal(saved.seats[2].provider,'codex');assert.equal(saved.seats[2].projectRoot,'/my/project');assert.equal(saved.activeSeatId,'seat-3');assert.equal(saved.companionHistoryOpen,true);
  assert.throws(()=>s.update({token:'no'}));assert.throws(()=>s.updateSeat('seat-3',{provider:'shell'}));assert.throws(()=>s.updateSeat('seat-1',{name:'x\u202ey'}));assert.throws(()=>s.updateSeat('seat-1',{projectRoot:'../private'}));
- assert.equal(fs.statSync(p).mode&0o777,0o600);saved.seats[0].name='tampered';assert.notEqual(s.get().seats[0].name,'tampered');
+ if(process.platform!=='win32')assert.equal(fs.statSync(p).mode&0o777,0o600);saved.seats[0].name='tampered';assert.notEqual(s.get().seats[0].name,'tampered');
 });
 test('DSH catalog lists native roots and disposes observations with bounded concurrency',async()=>{
  let active=0,max=0,disposed=0;const rows=Array.from({length:12},(_,i)=>({header:{id:'s'+i,cwd:'/p',createdAt:i,parentSession:i===11?'parent':null}}));

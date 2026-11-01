@@ -210,7 +210,7 @@ function installWorkbenchSideRail(options = {}) {
     if (!next || next === doc.body || next === rail || next.parentElement !== doc.body) next = null;
     if (appRoot !== next) { if (appRoot) release(appRoot, 'data-neko-rail-app'); appRoot = next; }
     if (appRoot) mark(appRoot, 'data-neko-rail-app');
-    const nextAccount = doc.querySelector('[data-slot="settings.launcher"] button.hjANda_trigger[aria-haspopup="menu"]');
+    const nextAccount = doc.querySelector('[data-slot="settings.launcher"] button[aria-haspopup="menu"][data-collapsed][data-signed-out]');
     if (nativeAccount !== nextAccount) {
       if (nativeAccount) { release(nativeAccount, 'data-neko-rail-account-original'); release(nativeAccount, 'tabindex'); release(nativeAccount, 'aria-hidden'); }
       nativeAccount = nextAccount;

@@ -38,3 +38,11 @@ test('resizing an attached native view does not detach it',async()=>{
  const t=setup();await init(t);const v=FakeView.latest;let removals=0;const remove=t.window.contentView.removeChildView;t.window.contentView.removeChildView=x=>{removals++;remove(x)};
  t.controller.place(t.window,{action:'place',rect:{x:400,y:400,width:500,height:360}});assert.deepEqual(t.children,[v]);assert.equal(removals,0);assert.deepEqual(v.bounds,{x:400,y:400,width:500,height:360});t.controller.dispose();
 });
+
+test('native task state is bounded and task toggles require the trusted attached frame',async()=>{
+ const t=setup();await init(t);const v=FakeView.latest,ev={sender:v.webContents,senderFrame:v.webContents.mainFrame};
+ t.controller.update({value:'',sessionToken:'s',revision:1,taskOpen:true,taskMessages:[{id:'a',role:'system',text:'hidden'},{id:'b',role:'assistant',text:'x'.repeat(7000),secret:'not forwarded'}],taskStatus:'running'});
+ const state=v.webContents.sent.at(-1)[1];assert.equal(state.taskMessages.length,1);assert.equal(state.taskMessages[0].text.length,6000);assert.equal(state.taskMessages[0].secret,undefined);
+ t.ipcMain.emit('neko-composer-input',{...ev,senderFrame:{}},{type:'task-toggle',open:true});assert.equal(t.window.webContents.sent.length,0);
+ t.ipcMain.emit('neko-composer-input',ev,{type:'task-toggle',open:true});assert.deepEqual(t.window.webContents.sent.at(-1)[1],{type:'task-toggle',open:true});t.controller.dispose();
+});

@@ -1,4 +1,4 @@
-const {app,BrowserWindow,WebContentsView,ipcMain,screen,shell,Menu,Tray,nativeImage,dialog,nativeTheme,safeStorage,clipboard,desktopCapturer,systemPreferences} = require('electron');
+const {app,BrowserWindow,BaseWindow,WebContentsView,ipcMain,screen,shell,Menu,Tray,nativeImage,dialog,nativeTheme,safeStorage,clipboard,desktopCapturer,systemPreferences} = require('electron');
 const {spawn} = require('node:child_process');
 const {resolveRuntimePaths,prepareRuntimeDirectories,assertDshRuntime,buildDshPatch,buildDshLaunch}=require('./runtime-config.cjs');
 const {createDshLifecycle}=require('./dsh-lifecycle.cjs');
@@ -66,6 +66,8 @@ const codexWorkspace=createCodexWorkspace({defaultCwd:workspace,onState:value=>{
 }});
 const workspaceController=createWorkspaceController({layout:workspaceLayout,codex:codexWorkspace,readDsh:params=>{
   if(state.connection!=='ready')throw Error('DSH 尚未就绪');return rpc('workspace-catalog',params);
+},validateDsh:ids=>{
+  if(state.connection!=='ready')throw Error('DSH 尚未就绪');return rpc('workspace-session-privacy',{ids});
 }});
 app.setName('N.E.K.O. 桌宠工作台');
 app.setPath('userData',runtimePaths.userDataDir);
@@ -88,13 +90,14 @@ migrateChatRouting(state);
 state.connection='starting';state.error='';
 state.fish={enabled:false,phase:'paused',reason:'已暂停'};
 state.qqbot={enabled:false,phase:'paused',reason:'QQ 机器人已暂停。',bound:false,connected:false,scopeConfigured:false};
-let memoryWindow,settingsWindow,nekoSettingsWindow,chatSettingsWindow,chatMemoryWindow,nekoWindow,dshWindow,dshLaunchUrl,tray,child,childLifecycle,quitting=false,rpcId=0,startPromise,stderr='',rosterTimer,nekoRetry,mainChatRuntime,activeApiRequest,workbenchNavigation=null;
+let memoryWindow,settingsWindow,nekoSettingsWindow,chatSettingsWindow,chatMemoryWindow,nekoWindow,dshWindow,dshLaunchUrl,tray,child,childLifecycle,quitting=false,rpcId=0,startPromise,rosterTimer,nekoRetry,mainChatRuntime,activeApiRequest,workbenchNavigation=null;
 const localWindows=new WeakMap();
 const nekoChat=new NekoChat();
 let communityAccount;
 const nativeDividerController=createNativeDividerController({WebContentsView,ipcMain});
-const nativeComposerController=createNativeComposerController({WebContentsView,ipcMain});
-const communityController=createSocialController({WebContentsView,openExternal:url=>shell.openExternal(url),copyText:text=>clipboard.writeText(text),
+const nativeComposerController=createNativeComposerController({WebContentsView,ipcMain,getOverlayParent:()=>communityController.overlayWindow});
+const communityController=createSocialController({WebContentsView,BaseWindow,openExternal:url=>shell.openExternal(url),copyText:text=>clipboard.writeText(text),
+  onOverlayClosing:window=>nativeComposerController.releaseParent(window),
   onHide:()=>communityAccount?.cancel(),
   onState:(host,value)=>{if(host===dshWindow&&!host.isDestroyed()&&isWorkbenchOrigin(host.webContents.getURL())){host.webContents.send('workbench:community-state',value);nativeDividerController.setEnabled(communityController.hasVisibleView);nativeDividerController.raise(value.status==='ready');nativeComposerController.raise();}},
   onExternalError:()=>dialog.showErrorBox('链接未打开','系统浏览器未能打开这个链接，请稍后重试。')});
@@ -250,6 +253,7 @@ async function workbenchAction(name){
     case 'fish-settings':await openFishSettings();break;
     case 'screen-share':await openDsh();await screenShare.open();break;
     case 'chat-settings':editChatSettings();break;
+    case 'open-companion-chat':showInput();break;
     case 'open-visits':openVisits();break;
     case 'open-community':throw new Error('请使用工作台社区入口打开内嵌社区');
     case 'neko-settings':editChatSettings();break;
@@ -480,7 +484,8 @@ function receive(message,replay=false){
   if(message.method==='fish-care-state'){acceptChannelState('fish',p);return;}
   if(message.method==='qqbot-care-state'){acceptChannelState('qqbot',p);return;}
   if(message.method==='ready'){connect().catch(engineError);return;}
-  if(!replay)fs.appendFileSync(path.join(data,'events.jsonl'),JSON.stringify({at:new Date().toISOString(),...message})+'\n');
+  // Bridge events include private messages and tool arguments. Process them in
+  // memory only; conversation persistence belongs to the owning service.
   if(message.method==='agent-meta'){syncAgent(p);return;}
   if(message.method==='task-meta'){syncTask(p);return;}
   if(message.method==='task-roster'&&acceptTaskRoster(state,p)){update();return;}
@@ -562,10 +567,11 @@ function startEngine(){
       if(child!==ownedChild)return;
       for(const p of pending.values()){clearTimeout(p.timer);p.reject(new Error('DSH 已退出。'));}pending.clear();
       child=null;childLifecycle=null;dshLaunchUrl=null;dshCookieFilter.setUrl(null);startPromise=null;
-      if(!quitting&&!error)engineError(new Error('DSH 已退出 ('+code+')。'+stderr.slice(-600)));
+      if(!quitting&&!error)engineError(new Error('DSH 已退出 ('+code+')。'));
     }});
-    child.stderr.on('data',d=>{stderr=(stderr+d.toString()).slice(-20000);fs.appendFileSync(path.join(data,'engine.log'),d);});
-    readline.createInterface({input:child.stdout}).on('line',line=>{if(child!==ownedChild)return;try{receive(JSON.parse(line));}catch{fs.appendFileSync(path.join(data,'engine.log'),line+'\n');}});
+    let stderrReported=false;
+    child.stderr.on('data',()=>{if(child!==ownedChild||stderrReported)return;stderrReported=true;fs.appendFileSync(path.join(data,'engine.log'),'DSH emitted diagnostic output; raw content omitted.\n');});
+    readline.createInterface({input:child.stdout}).on('line',line=>{if(child!==ownedChild)return;try{receive(JSON.parse(line));}catch{fs.appendFileSync(path.join(data,'engine.log'),'DSH bridge event could not be processed; raw content omitted.\n');}});
   })();
   startPromise.catch(()=>{if(!child)startPromise=null;});
   return startPromise;
@@ -778,7 +784,7 @@ ipcMain.handle('screen-share:call',(event,method,value)=>screenShare.action(even
 ipcMain.handle('workbench:screen-share',async(event,method)=>{assertWorkbenchCaller(event);if(method==='hide'){screenShare.hide();return {ok:true};}throw new Error('未知屏幕操作');});
 ipcMain.handle('workbench:lobby',async(event,request)=>{
   assertWorkbenchCaller(event);
-  if(request?.action==='open'){screenShare.hide();await communityController.action(dshWindow,{action:'hide'});}
+  if(request?.action==='open')screenShare.hide();
   return lobbyController.request(request);
 });
 ipcMain.handle('workbench:community',async(event,request)=>{
@@ -823,7 +829,7 @@ ipcMain.handle('workbench:call',async(event,method,value)=>{
   if(method==='workspace'){
     const p=value;
     if(!p||typeof p!=='object'||Array.isArray(p))throw Error('工作台请求无效');
-    assertCodexActionAllowed(p.action);
+    assertCodexActionAllowed(p.action,workspaceController.state().codexAvailable);
     if(p.action==='state')return workspaceController.state();
     if(p.action==='pane-layout')return paneLayout.get();
     if(p.action==='set-pane-layout')return paneLayout.set(p.layout);
@@ -831,6 +837,10 @@ ipcMain.handle('workbench:call',async(event,method,value)=>{
     if(p.action==='set-video-platform')return videoPlatform.set(p.platform);
     if(p.action==='update'){workspaceController.update(p.patch);workspaceRevision++;broadcast();return workspaceController.state();}
     if(p.action==='catalog')return workspaceController.catalog({force:p.force===true,dshOffset:p.dshOffset??0});
+    if(p.action==='dsh-session-check'){
+      if(state.connection!=='ready')throw Error('DSH 尚未就绪');
+      return rpc('workspace-session-check',{id:p.id});
+    }
     if(p.action==='update-seat'){workspaceController.updateSeat(p.id,p.patch);workspaceRevision++;broadcast();return workspaceController.state();}
     if(p.action==='upload-seat'){
       if(!workspaceLayout.get().seats.some(s=>s.id===p.id))throw Error('工作入口不存在');
@@ -838,8 +848,8 @@ ipcMain.handle('workbench:call',async(event,method,value)=>{
     }
     if(p.action==='codex-read')return codexWorkspace.read(p.id);
     if(p.action==='codex-state')return codexWorkspace.snapshot();
-    if(p.action==='codex-models')return CODEX_AVAILABLE?codexWorkspace.models({force:p.force===true}):{models:[]};
-    if(p.action==='codex-model-choices')return CODEX_AVAILABLE?codexModelChoices.get():{};
+    if(p.action==='codex-models')return workspaceController.state().codexAvailable?codexWorkspace.models({force:p.force===true}):{models:[]};
+    if(p.action==='codex-model-choices')return workspaceController.state().codexAvailable?codexModelChoices.get():{};
     if(p.action==='codex-model-choice')return codexModelChoices.set(p.id,{model:p.model,effort:p.effort});
     if(p.action==='codex-send')return codexWorkspace.send({id:p.id,cwd:p.cwd,message:p.message,model:p.model,effort:p.effort});
     if(p.action==='codex-stop')return codexWorkspace.stop();

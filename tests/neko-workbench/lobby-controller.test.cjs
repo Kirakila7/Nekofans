@@ -166,10 +166,10 @@ function mockCat(deps) {
 }
 
 function setup({ clock = fakeTimers(), config = CONFIG, secretStore = null, provider = null, persona: personaValue = persona(),
-  recallMemory = null, recordSharedExperience = null, dataDir = null, env = {}, onClient = null } = {}) {
+  recallMemory = null, recordSharedExperience = null, dataDir = null, env = {}, onClient = null, onAuth = null } = {}) {
   const states = [];
   const factories = {
-    auth: deps => mockAuth(deps),
+    auth: deps => { const auth = mockAuth(deps); onAuth?.(auth); return auth; },
     client: deps => { const value = mockClient(deps); onClient?.(value, deps); return value; },
     avatars: () => mockAvatars(),
     cat: deps => mockCat(deps),
@@ -190,6 +190,39 @@ test('controller unconfigured when config missing', async () => {
   const res = await controller.request({ action: 'state' });
   assert.equal(res.ok, true);
   assert.equal(res.state.connection, 'unconfigured');
+});
+
+test('controller reports failed sign-out instead of returning success', async () => {
+  const { SAFE_ERROR } = require('../../apps/neko-workbench/lobby-auth.cjs');
+  for (const throws of [false, true]) {
+    const { controller } = setup({ onAuth: auth => {
+      auth.signOut = async () => {
+        if (throws) throw Error('synthetic private filesystem detail');
+        return { status: 'signed-out', error: SAFE_ERROR.signout };
+      };
+    } });
+    const result = await controller.request({ action: 'sign-out' });
+    assert.equal(result.ok, false);
+    assert(!JSON.stringify(result).includes('synthetic private'));
+    if (!throws) assert.equal(result.error, SAFE_ERROR.signout);
+    controller.dispose();
+  }
+});
+
+test('controller projects a retry action only for pending credential cleanup', async () => {
+  const { SAFE_ERROR } = require('../../apps/neko-workbench/lobby-auth.cjs');
+  let state = { status: 'signed-out', error: SAFE_ERROR.signout };
+  const { controller } = setup({ onAuth: auth => {
+    Object.defineProperty(auth, 'state', { get: () => state });
+    auth.signOut = async () => { state = { status: 'signed-out', error: '' }; return state; };
+  } });
+  assert.equal(controller.snapshot().auth.canRetrySignOut, true);
+  const result = await controller.request({ action: 'sign-out' });
+  assert.equal(result.ok, true);
+  assert.equal(result.state.auth.canRetrySignOut, false);
+  state = { status: 'signed-out', error: SAFE_ERROR.expired };
+  assert.equal(controller.snapshot().auth.canRetrySignOut, false);
+  controller.dispose();
 });
 
 test('controller sign-in and sign-out', async () => {

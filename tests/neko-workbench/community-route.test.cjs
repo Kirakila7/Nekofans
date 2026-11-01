@@ -11,6 +11,14 @@ const { DEFAULT_COMMUNITY_URL, COMMUNITY_PARTITION, resolveCommunityUrl,
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const bounds = { x: 300, y: 80, width: 800, height: 650 };
 const desktopUA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7871.212 Safari/537.36';
+
+test('social control cutouts reject malformed input and are copied at the IPC boundary', () => {
+  const hole={x:500,y:500,width:300,height:70};
+  const request={action:'open',site:'bilibili',slot:'side',bounds,holes:[hole]};
+  const parsed=validateCommunityRequest(request); hole.x=0; assert.equal(parsed.holes[0].x,500);
+  for (const holes of [null,[{...hole,width:0}],[{...hole,x:NaN}],[{...hole,extra:1}],Array(4).fill(hole)]) assert.throws(()=>validateCommunityRequest({...request,holes}),/布局/);
+  assert.throws(()=>validateCommunityRequest({action:'hide',holes:[]}),/布局/);
+});
 function deferred() { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; }
 function fixture(env = {}, useSocial = false, extra = {}) {
   const views = [], external = [], states = [], errors = [], copied = [];
@@ -880,4 +888,13 @@ test('failure from a canceled hidden view cannot publish an error or reattach co
   gate.reject(Error('fixture failure')); await tick();
   assert.equal(f.states.length, stateCount + 1); assert.equal(f.states.at(-1).status, 'hidden');
   assert.equal(f.host.children.size, 0); f.controller.dispose();
+});
+
+test('without window shaping the original composer stays accessible and removing it restores full page height', async () => {
+  const f=fixture({},true); const holes=[{x:500,y:500,width:300,height:70}];
+  await f.action({action:'open',site:'bilibili',slot:'side',bounds,holes});
+  const view=f.views[0]; assert.equal(view.bounds.y+view.bounds.height,492);
+  await f.action({action:'layout',slot:'side',bounds,holes:[]});
+  assert.equal(view.bounds.y+view.bounds.height,730); assert.equal(view.webContents.loads.length,1);
+  f.controller.dispose();
 });

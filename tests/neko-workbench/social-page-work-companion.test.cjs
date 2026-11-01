@@ -75,7 +75,7 @@ test('on a social page the rail companion parks beside its chat box, drags freel
  pointer('pointerdown',20,400);pointer('pointermove',20,260);pointer('pointerup',20,260);const dragged=pet.style.top;
  pet.click();assert(d.querySelector('.neko-companion-menu').hidden,'dragging must not open the menu');
  boxTop=360;w.dispatchEvent(new w.Event('resize'));await tick();assert.equal(pet.style.top,dragged,'a manual drag holds while the page stays');
- await tick();pet.click();assert.equal(d.querySelector('.neko-companion-menu').hidden,false,'a plain click still opens the menu');
+ await tick();pet.click();await tick();assert(d.querySelector('.neko-companion-dock').hasAttribute('data-neko-companion-rail-chat'),'a plain click opens the existing private chat');assert.equal(input.value,'unsent fixture');
  d.querySelector('.neko-companion-menu').hidden=true;
  surface(w,d,'hidden');w.dispatchEvent(new w.Event('resize'));await tick();
  assert.equal(pet.hasAttribute('data-neko-rail-parked'),false,'leaving the page releases the parking');

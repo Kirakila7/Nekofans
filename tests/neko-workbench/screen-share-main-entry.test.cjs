@@ -22,6 +22,7 @@ test('screen panel IPC delegates to its own authority; workbench may only hide f
 test('state serialization never persists screen feedback',()=>{
  const calls=[],saved={actors:[{id:'main',chatBackend:'neko',screenReply:{text:'PRIVATE_SCREEN'},name:'cat'}]};
  const save=source.slice(source.indexOf('function save(){'),source.indexOf('function broadcast(){'));
- const saveFn=vm.runInNewContext(save+';save',{state:saved,data:'/tmp/fixture',path,fs:{writeFileSync:(_file,value)=>calls.push(value),renameSync(){}}});
+ const helper=source.match(/const usesMainChatService=[^;]+;/)[0];
+ const saveFn=vm.runInNewContext(helper+save+';save',{state:saved,data:'/tmp/fixture',path,fs:{writeFileSync:(_file,value)=>calls.push(value),renameSync(){}}});
  saveFn();assert(!calls[0].includes('PRIVATE_SCREEN'));assert.equal(JSON.parse(calls[0]).actors[0].name,'cat');
 });

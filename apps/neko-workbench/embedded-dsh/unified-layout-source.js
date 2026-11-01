@@ -11,7 +11,7 @@ function installUnifiedLayout(options = {}) {
   const style = el('style'); style.dataset.nekoUnifiedStyle = ''; style.textContent = options.cssText || ''; doc.head.appendChild(style);
   // Keep the legacy multi-pane engine for compatibility, but do not expose it
   // in the daily UI while the compact floating work area is in use.
-  const allowLegacyMultiPane = options.allowLegacyMultiPane === true;
+  let allowLegacyMultiPane = options.allowLegacyMultiPane === true;
   const SLOT_NAMES = { side: '侧栏', left: '左面板', right: '右面板' };
   const MIN_RATIO = 0.25, MAX_RATIO = 0.75;
   const clampRatio = value => Math.max(MIN_RATIO, Math.min(MAX_RATIO, Number.isFinite(value) ? value : 0.5));
@@ -325,7 +325,16 @@ function installUnifiedLayout(options = {}) {
     if (suspended) hideAll(); else schedule();
   }
   function toggleConfig() { configReturnFocus = trigger; void setConfig(config.hidden); }
-  function openConfigFromSettings(event) {
+  async function openConfigFromSettings(event) {
+    if (!allowLegacyMultiPane && event.detail?.optIn === true) {
+      allowLegacyMultiPane = true;
+      container.appendChild(trigger); doc.body.appendChild(config);
+      try {
+        const saved = await bridge.workspace({action:'pane-layout'});
+        if (disposed) return;
+        if (saved?.enabled) { startupSaved = clean(saved); restore.hidden = false; }
+      } catch { showNotice('上次布局暂不可读取，可重新选择布局'); }
+    }
     configReturnFocus = event.detail?.returnFocus || doc.querySelector('.neko-workspace-settings') || trigger;
     void setConfig(true);
   }
@@ -410,7 +419,7 @@ function installUnifiedLayout(options = {}) {
     const launcher = sidebar.querySelector('[data-slot="settings.launcher"]') || item.querySelector('[data-slot="settings.launcher"]');
     // The native settings slot may itself be display:contents; its parent is
     // the visible footer containing both the companion and account area.
-    for (const node of [settingsSlot?.parentElement, footer, dock, launcher]) {
+    if (!sideSurface) for (const node of [settingsSlot?.parentElement, footer, dock, launcher]) {
       const part = node?.getBoundingClientRect();
       if (part && part.height > 0 && part.top > sideRect.top + 60) sideBottom = Math.min(sideBottom, part.top);
     }
@@ -418,7 +427,7 @@ function installUnifiedLayout(options = {}) {
     // collapsed layout the real work composer floats in the bottom-right;
     // reserve its whole horizontal band so that it remains usable over a
     // community or video view. Do not detach, reload or cover the composer.
-    if (collapsed) for (const node of doc.querySelectorAll('[data-neko-collapsed-composer], [data-neko-workspace-expand-control]')) {
+    if (!sideSurface && collapsed) for (const node of doc.querySelectorAll('[data-neko-collapsed-composer], [data-neko-workspace-expand-control]')) {
       const part = node.getBoundingClientRect();
       if (part.width > 0 && part.height > 0 && part.left < sideRect.right && part.right > sideRect.left && part.bottom > sideRect.top && part.top < sideBottom) {
         sideBottom = Math.min(sideBottom, Math.max(sideRect.top, part.top - 8));
@@ -473,17 +482,21 @@ function installUnifiedLayout(options = {}) {
     const inset = splitGutter && (slot === 'left' || slot === 'right') ? 6 : 0;
     const targetBounds = { x: rect.x + (slot === 'right' ? inset : 0), y: rect.y + bar, width: rect.width - inset, height: rect.height - bar };
     if (targetBounds.height <= 1) { closeView(slot); return; }
-    const key = JSON.stringify(targetBounds), current = placements.get(slot);
+    // Clip only controls that overlap a full-height social page, preserving
+    // the original composer and divider without a blank strip underneath.
+    const holes = slot === 'side' && sideSurface && (doc.body.hasAttribute('data-neko-workspace-collapsed') || doc.querySelector('[data-neko-companion-rail-chat]'))
+      ? [...doc.querySelectorAll('[data-neko-companion-rail-chat], [data-neko-collapsed-composer], [data-neko-workspace-expand-control], .neko-chat-sidebar-divider')].filter(node=>!node.hidden).map(node=>node.getBoundingClientRect()).filter(r=>r.width>0&&r.height>0).slice(0,3).map(r=>({x:r.left-3,y:r.top-3,width:r.width+6,height:r.height+6})) : [];
+    const key = JSON.stringify({targetBounds,holes}), current = placements.get(slot);
     if (current !== site) {
       closeView(slot); placements.set(slot, site); panelNote(slot, `正在加载${title}…`, 'loading');
       p.play.disabled = p.share.disabled = true; p.site = site;
       p.account.textContent = '连接桌面身份'; p.account.disabled = site === 'community';
       const ticket = ++requestId; openTickets[slot] = ticket;
       const home = slot === 'side' && site === 'bilibili' && sideHome; if (home) sideHome = false;
-      void Promise.resolve(bridge.community({ action: 'open', site, slot, bounds: targetBounds, requestId: ticket, ...(home ? { home:true } : {}) })).catch(() => {
+      void Promise.resolve(bridge.community({ action: 'open', site, slot, bounds: targetBounds, requestId: ticket, ...(holes.length ? {holes} : {}), ...(home ? { home:true } : {}) })).catch(() => {
         if (!disposed && placements.get(slot) === site && openTickets[slot] === ticket) panelNote(slot, '页面未能打开，请检查网络后点「刷新」', 'error');
       });
-    } else if (lastRects[slot] !== key) void Promise.resolve(bridge.community({ action: 'layout', slot, bounds: targetBounds })).catch(() => {});
+    } else if (lastRects[slot] !== key) void Promise.resolve(bridge.community({ action: 'layout', slot, bounds: targetBounds, ...(holes.length ? {holes} : {}) })).catch(() => {});
     lastRects[slot] = key;
   }
   // A three-pane layout is a binary split: one root region and two children.
