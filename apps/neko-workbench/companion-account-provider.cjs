@@ -5,7 +5,7 @@ const { randomUUID } = require('node:crypto');
 // bridge. The bridge must enforce privacy and tool restrictions independently.
 function createCompanionAccountProvider(rpc, { namespace = 'companion' } = {}) {
   if (typeof rpc !== 'function') throw new TypeError('Account bridge is required');
-  if (!['companion', 'lobby'].includes(namespace)) throw new TypeError('Account namespace is invalid');
+  if (!['companion', 'lobby', 'proactive'].includes(namespace)) throw new TypeError('Account namespace is invalid');
   const method = suffix => namespace + '-account-' + suffix;
   return {
     // The status RPC reads the existing account owner; it never prepares a model call.

@@ -1,5 +1,13 @@
 # Local test workbench 0.28.37 / build 73 (Windows installer verified)
 
+## Channel experience memory and optional proactive desktop speech (2026-11-03, local source)
+
+B站 structured activity logs and accepted QQ text now feed a durable main-process queue and the main persona's private N.E.K.O. memory. Stable source IDs deduplicate retries, and tombstones prevent deleted observations from reappearing. QQ pairing and generation fences remain in force; adapter revision 17 adds the inbound observation hook. Channel frames bypass generic raw event logs and remain excluded from public-lobby recall.
+
+The pet's 养鱼 → 渠道经历与主动搭话 menu offers separate persistent memory and speech switches. Speech defaults off and uses the selected main-chat provider only for local desktop comments. It respects Shanghai daytime hours, one minute of user inactivity, busy work, a 30-minute attempt cooldown and six attempts per day. Cancellation and a final source/backend check block stale delivery. An independent receipt retains recent self-initiated speech for subsequent private-chat context without forging user history. Details, source coverage and limits are in `CHANNEL_MEMORY_CHECK.md`.
+
+Validation: 76 targeted channel/runtime/memory/menu regressions pass, including the adapted upstream QQ inbound handler, real main memory persistence/recall, model generation with synthetic providers, deletion/restart and public-source isolation. An isolated real Electron main-entry check verifies the desktop menu toggles persist, the pet remains visible and no model request occurs by default. The independent installed-npm probe is unavailable because this machine has no npm-cli.js; this is not production QQ installation or account verification. No installer, real supplier request or external channel message was produced.
+
 ## Desktop interaction and channel-memory checks (2026-11-03, local source)
 
 Main desktop replies now use a bounded text viewport with up/down buttons for all three chat backends. This fixes clipping in the default account backend and removes the NEKO two-line clamp for the main pet. Text is retained as text, streaming additions preserve the reading position, and controls disappear for short replies. A narrow trusted pet IPC action opens the workbench on double click, while single click and dragging retain their existing actions.

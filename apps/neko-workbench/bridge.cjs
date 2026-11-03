@@ -33,10 +33,13 @@ exports.apply=function(ctx){
   const companionAccount=createCompanionAccountBridge(accountDeps);
   // Same authenticated model/credit owner, separate in-flight lock and cancellation.
   const lobbyAccount=createCompanionAccountBridge({...accountDeps,namespace:'lobby'});
+  const proactiveAccount=createCompanionAccountBridge({...accountDeps,namespace:'proactive'});
   const emit=(method,params)=>process.stdout.write(JSON.stringify({method,params})+'\n');
   const loginWatch=createDshLoginWatch({getAccount:()=>ctx.get?.('deepseekAccount'),emit});
   const qqbotState=value=>emit('qqbot-care-state',value);
   process.on('neko-qqbot-state',qqbotState);
+  const channelExperience=value=>{const {validExperience}=require('./channel-experiences.cjs');if(validExperience(value))emit('channel-experience',value);};
+  process.on('neko-channel-experience',channelExperience);
   const taskSessions=createTaskSessionTracker({emit,getAgent:id=>ctx.agents.get(id),observeSession:observePublicSession,
     getLiveJobs:id=>ctx.get('jobs')?.list(id)});
   const signal=()=>new AbortController().signal;
@@ -208,6 +211,9 @@ exports.apply=function(ctx){
     if(method==='lobby-account-status')return lobbyAccount.status();
     if(method==='lobby-account-chat')return lobbyAccount.send({requestId:p.requestId,text:p.text,context:p.context,history:p.history,maxTokens:p.maxTokens});
     if(method==='lobby-account-cancel')return lobbyAccount.cancel({requestId:p.requestId});
+    if(method==='proactive-account-status')return proactiveAccount.status();
+    if(method==='proactive-account-chat')return proactiveAccount.send({requestId:p.requestId,text:p.text,context:p.context,history:p.history,maxTokens:p.maxTokens});
+    if(method==='proactive-account-cancel')return proactiveAccount.cancel({requestId:p.requestId});
     if(method==='workspace-catalog')return readDshWorkspaceCatalog(ctx,p,{readInstalledProjects:options=>projectDiscovery.list(options)});
     if(method==='home-session'){
       if(homeAgent)return {sessionId:homeAgent.agent.id};
@@ -257,6 +263,6 @@ exports.apply=function(ctx){
   const lines=readline.createInterface({input:process.stdin});
   lines.on('line',async line=>{let request;try{request=JSON.parse(line);const result=await dispatch(request.method,request.params||{});process.stdout.write(JSON.stringify({id:request.id,result})+'\n');}catch(error){process.stdout.write(JSON.stringify({id:request?.id,error:String(error?.message||error)})+'\n');}});
   lines.on('close',()=>{if(closing)return;closing=true;Promise.resolve().then(()=>typeof ctx.root?.dispose==='function'?ctx.root.dispose():ctx.dispose?.()).finally(()=>process.exit(0));});
-  ctx.on('dispose',()=>{closing=true;loginWatch.dispose();companionAccount.dispose();lobbyAccount.dispose();process.removeListener('neko-qqbot-state',qqbotState);taskSessions.dispose();lines.close();});
+  ctx.on('dispose',()=>{closing=true;loginWatch.dispose();companionAccount.dispose();lobbyAccount.dispose();proactiveAccount.dispose();process.removeListener('neko-qqbot-state',qqbotState);process.removeListener('neko-channel-experience',channelExperience);taskSessions.dispose();lines.close();});
   emit('ready',{version:2});
 };
