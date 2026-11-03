@@ -2,7 +2,7 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
 const source=fs.readFileSync(path.join(__dirname,'../../apps/neko-workbench/main.cjs'),'utf8');
 test('community menu persists opt-in without posting; explicit check uses the same daily limiter',async()=>{
- const configured=[],checks=[],notes=[];const context={communityDaily:{status:()=>({enabled:true,today:'published'}),configure:v=>configured.push(v),tick:async v=>checks.push(v)},state:{actors:[{}]},notice:(_a,text)=>notes.push(text),broadcast(){},openVisits(){}};
+ const configured=[],checks=[],notes=[];const context={communityDaily:{status:()=>({enabled:true,today:'published'}),configure:v=>configured.push(v),tick:async v=>checks.push(v)},state:{actors:[{}]},notice:(_a,text)=>notes.push(text),broadcast(){},openVisits(){},editCommunityDailySettings(){}};
  const start=source.indexOf('function communityDailyMenu(){'),end=source.indexOf('\nfunction mainMenu()',start);vm.createContext(context);vm.runInContext(source.slice(start,end),context);
  const menu=context.communityDailyMenu();menu[0].click({checked:true});assert.deepEqual(configured,[true]);assert.equal(checks.length,0);assert.match(menu[0].label,/公开/);
  menu.find(x=>x.label==='立即检查并分享今日小记').click();await new Promise(r=>setImmediate(r));assert.equal(checks[0].force,true);assert.match(notes[0],/已发布/);

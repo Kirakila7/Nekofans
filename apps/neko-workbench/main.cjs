@@ -58,6 +58,7 @@ const codexAccount=createCodexAccountService();
 let dshSkin=null;
 const dshCookieFilter=createDshLoopbackCookieFilter();
 let visitsWindow,visitsController;
+let communityDailySettingsWindow;
 const workbenchOnly=process.env.PET_WORKBENCH_ONLY==='1'; // Local visual QA only; normal launches show every pet.
 const {cleanPrompt,humanMessage,activity,acceptHuman}=require('./pet-context.js');
 const base=__dirname, runtimePaths=resolveRuntimePaths({baseDir:base});
@@ -178,7 +179,7 @@ function save(){const f=path.join(data,'state.json');const actors=state.actors.m
 const communityDaily=createCommunityDaily({dataDir:data,
   getIdentity:()=>visitsController?.communityIdentity()||null,
   getInteractions:()=>mainChatRuntime.history(),
-  generate:(rows,signal)=>mainChatRuntime.generateCommunityDaily(rows,signal),
+  generate:(rows,signal,options)=>mainChatRuntime.generateCommunityDaily(rows,signal,options),
   publish:request=>visitsController.publishDaily(request),
   isBusy:()=>quitting||workbenchOnly||!usesMainChatService(mainChatRuntime?.backend)||(mainChatRuntime?.backend==='deepseek-account'&&state.connection!=='ready')||!!activeApiRequest||!!mainChatRuntime?.proactiveAbort||state.actors.some(a=>busy(a))||!!(state.dshRoot&&busy(state.dshRoot))||motionInputs.has('main')||screenShare.read().phase==='sharing'||mainChatRuntime?.opened?.service.state().phase==='replying'||channelLife.status().generating
 });
@@ -188,6 +189,19 @@ function publishPetQuestions(){if(!questionRelay||!petQuestionController)return;
 function broadcast(){for(const w of [...petWindows.values(),...renameWindows.values(),memoryWindow,settingsWindow,nekoSettingsWindow,chatSettingsWindow,chatMemoryWindow])if(w&&!w.isDestroyed()&&localWindows.has(w))w.webContents.send('pet:state',state);publishPetQuestions();if(dshWindow&&!dshWindow.isDestroyed()&&isWorkbenchOrigin(dshWindow.webContents.getURL()))dshWindow.webContents.send('workbench:state',workbenchState());}
 function loadLocalFile(window,query){const url=pathToFileURL(path.join(base,'index.html'));for(const [key,value] of Object.entries(query))url.searchParams.set(key,value);localWindows.set(window,url.href);window.webContents.on('will-navigate',(event,target)=>{if(target!==url.href)event.preventDefault();});window.webContents.setWindowOpenHandler(()=>({action:'deny'}));return window.loadURL(url.href);}
 function assertLocalCaller(event,window){if(!trustedLocalCaller(event,window,localWindows.get(window)))throw new Error('请从本应用的原始窗口操作');}
+function editCommunityDailySettings(){
+  if(communityDailySettingsWindow&&!communityDailySettingsWindow.isDestroyed()){communityDailySettingsWindow.show();communityDailySettingsWindow.focus();return;}
+  const w=new BrowserWindow({width:520,height:540,minWidth:420,minHeight:460,title:'社区日常设置',show:false,backgroundColor:'#f7fbff',webPreferences:{preload:path.join(base,'community-daily-settings-preload.cjs'),sandbox:true,contextIsolation:true,nodeIntegration:false}});
+  communityDailySettingsWindow=w;const url=pathToFileURL(path.join(base,'community-daily-settings.html')).href;localWindows.set(w,url);
+  w.webContents.setWindowOpenHandler(()=>({action:'deny'}));w.webContents.on('will-navigate',event=>event.preventDefault());
+  w.webContents.on('did-finish-load',()=>w.show());w.on('closed',()=>{localWindows.delete(w);if(communityDailySettingsWindow===w)communityDailySettingsWindow=null;});void w.loadURL(url).catch(()=>{if(!w.isDestroyed())w.destroy();});
+}
+ipcMain.handle('workbench:community-daily-settings',async(event,action,payload)=>{
+  assertLocalCaller(event,communityDailySettingsWindow);
+  if(action==='read')return communityDaily.status();
+  if(action==='save'){communityDaily.saveSettings(payload);return communityDaily.status();}
+  throw Error('未知社区日常设置操作');
+});
 function ensureVisitsController(){
   return visitsController??=createVisitsController({dataDir:data,repositoryRoot:path.resolve(base,'../..'),safeStorage,
     openExternal:url=>shell.openExternal(url),getModelConfig:()=>mainChatRuntime?.read().settings,
@@ -732,7 +746,7 @@ function childMenu(a){return Menu.buildFromTemplate([
   {label:'修改名字…',click:()=>editName(a)},
   {label:'恢复 DSH 名称',enabled:!!a.nickname,click:()=>{a.nickname='';a.name=displayName(a);update();}},
   {type:'separator'},
-  {label:'停止当前任务',enabled:busy(a),click:()=>stop(a)}
+  {label:'说话显示时长',submenu:speechDurationMenu()}
 ]);}
 function artifacts(){
   const files=[];
@@ -801,25 +815,30 @@ function communityDailyMenu(){
   const report=()=>{const s=communityDaily.status();notice(state.actors[0],s.error||(s.today==='published'?'今天的社区日常已发布':s.today==='none'?'暂无可发布内容，或主角色正在忙':'今天已提交过发布，请到社区核对'));broadcast();};
   return [
     {label:'自动公开分享今日主聊天摘要',type:'checkbox',checked:snapshot.enabled,click:item=>{try{communityDaily.configure(item.checked);}catch(error){notice(state.actors[0],error.message);broadcast();}}},
-    {label:'北京时间 20–23 点；每个账号每天最多一条；工作时避让',enabled:false},
+    {label:`北京时间 ${snapshot.sendTime||'20:00'}；每个账号每天最多一条；工作时避让`,enabled:false},
     {label:'仅当前主会话的今日互动；不读取 QQ 私聊或私人记忆',enabled:false},
     {label:'社区登录（猫娘串门）…',click:openVisits},
     {label:'立即检查并分享今日小记',enabled:snapshot.enabled&&!snapshot.generating,click:()=>void communityDaily.tick({force:true}).then(report)},
     {label:`今日状态：${({none:'尚未发布',sending:'已提交待核对',published:'已发布',uncertain:'结果待核对'})[snapshot.today]}${snapshot.generating?' · 正在生成':''}`,enabled:false},
-    ...(snapshot.error?[{label:snapshot.error,enabled:false}]:[])
+    ...(snapshot.error?[{label:snapshot.error,enabled:false}]:[]),
+    {label:'发送时间与内容风格…',click:editCommunityDailySettings}
   ];
+}
+function speechDurationMenu(){
+  const configured=state.preferences.petSpeechDurationMs,duration=Number.isFinite(configured)&&configured>=5000&&configured<=3600000?configured:60000;
+  return [[5000,'5 秒'],[15000,'15 秒'],[30000,'30 秒'],[60000,'1 分钟（默认）'],[120000,'2 分钟'],[300000,'5 分钟'],[600000,'10 分钟']].map(([ms,label])=>({label,type:'radio',checked:duration===ms,click:()=>{state.preferences.petSpeechDurationMs=ms;update();}}));
 }
 function mainMenu(){return Menu.buildFromTemplate([
   {label:fishQqActive()?'暂停养鱼':'开始养鱼',enabled:state.connection==='ready',click:()=>fishQqAction({action:fishQqActive()?'pause':'start'}).catch(()=>{notice(state.actors[0],'养鱼与 QQ 操作未完成，请在连接与生活设置中重试。');update();})},
   {label:'形象',submenu:appearanceMenu(state.actors.find(a=>a.id==='main'))},
   {label:'养鱼',submenu:[{label:'聊天 API 设置…',click:editChatSettings},{label:'N.E.K.O. 记忆',submenu:memoryMenu()},{label:'渠道经历与主动搭话',submenu:channelLifeMenu()},{label:'社区日常',submenu:communityDailyMenu()},{label:'生活与 QQ 设置…',click:()=>openFishSettings().catch(engineError)}]},
-  {label:'停止聊天回复',enabled:usesMainChatService(state.actors[0].chatBackend)&&(busy(state.actors[0])||channelLife.status().generating||communityDaily.status().generating),click:()=>cancelMainChat()},
   {type:'separator'},
   {label:'打开工作台',click:()=>openDsh().catch(engineError)},
-  {label:'工作台选项',submenu:workbenchOptions()},
-  {label:'产出文件',submenu:[...artifacts().slice(0,15).map(name=>({label:name,click:()=>preview(name)})),{type:'separator'},{label:'打开文件夹',click:()=>shell.openPath(workspace)}]},
+  {label:'串门',click:openVisits},
+  {label:'说话显示时长',submenu:speechDurationMenu()},
   {type:'separator'},
   {label:'设置',submenu:[
+    {label:'社区日常发送时间与风格…',click:editCommunityDailySettings},
     {label:'主角色默认形象',submenu:defaultAppearanceMenu('main')},
     {label:'任务默认形象',submenu:defaultAppearanceMenu('task')},
     {label:'子代理默认形象',submenu:defaultAppearanceMenu('subagent')},
@@ -834,8 +853,7 @@ function mainMenu(){return Menu.buildFromTemplate([
     {label:'子代理小猫自由探索',type:'checkbox',checked:state.preferences.subagentExploration!==false,click:item=>{state.preferences.subagentExploration=item.checked;update();}},
     {label:'保存桌宠截图',accelerator:'CommandOrControl+Shift+S',click:capture}
   ]},
-  {label:'停止任务',submenu:[...new Map([state.dshRoot,...state.actors.filter(a=>a.id!=='main'&&(a.present||busy(a)))].map(a=>[a.sessionId,a])).values()].map(a=>({label:a.name,enabled:busy(a),click:()=>stop(a)}))},
-  {label:'最近回复',submenu:state.actors.filter(a=>a.present).map(a=>({label:a.name,click:()=>{const m=a.messages.filter(m=>['assistant','error'].includes(m.role)).at(-1);dialog.showMessageBox({type:'info',title:a.name,message:a.name,detail:m?.text||'还没有回复。',buttons:['好']});}}))},
+  {label:'记忆',submenu:memoryMenu()},
   {label:'重新连接工作台',click:restart},
   {type:'separator'},
   {label:'退出',click:()=>app.quit()}
@@ -846,7 +864,7 @@ function createPetWindow(a,geometry){
   if(!geometry){const actors=[state.actors.find(item=>item.id==='main'),...state.actors.filter(item=>item.id!=='main'&&(item.present||item===a))];geometry=desktopGeometry(a,Math.max(0,actors.indexOf(a)),actors.map(item=>petLayout(actorKind(item),state.originalPet,petAppearance.layoutOptions(state,item))));}
   const {width,height,x,y}=geometry.bounds,stageWidth=geometry.stageWidth;a.stageWidth=stageWidth;
   const w=new BrowserWindow({...options(),width,height,x,y,title:a.name,transparent:true,frame:false,resizable:false,hasShadow:false,alwaysOnTop:true,skipTaskbar:true,fullscreenable:false});
-  if(motionPet(a))w.setIgnoreMouseEvents?.(true,{forward:true});
+  w.setIgnoreMouseEvents?.(true,{forward:true});
   w.webContents.setZoomFactor?.(geometry.scale);
   w.setAlwaysOnTop(true,'floating');w.setVisibleOnAllWorkspaces(true,{visibleOnFullScreen:true});
   loadLocalFile(w,{view:'pet',actor:a.id,stageWidth:String(stageWidth)});
@@ -1041,7 +1059,7 @@ ipcMain.handle('pet:call',async(event,method,p={})=>{
   if(method==='move'){if(senderId){draggingPets.add(senderId);const [x,y]=sender.getPosition();sender.setPosition(x+Math.round(Math.max(-500,Math.min(500,p.dx||0))),y+Math.round(Math.max(-500,Math.min(500,p.dy||0))));}return true;}
   if(method==='move-end'){if(senderId){draggingPets.delete(senderId);catMotion.resumeFromDrag(senderId);const [x,y]=sender.getPosition();state.positions[senderId]={x,y};save();}return true;}
   if(method==='motion-input'){if(senderId){if(p.active===true)motionInputs.add(senderId);else motionInputs.delete(senderId);}return true;}
-  if(method==='pass-through'){if(senderId){const a=state.actors.find(a=>a.id===senderId);sender.setIgnoreMouseEvents?.(!!a&&motionPet(a)&&p.ignore===true,{forward:true});}return true;}
+  if(method==='pass-through'){if(senderId)sender.setIgnoreMouseEvents?.(p.ignore===true,{forward:true});return true;}
   if(method==='memory'){if(sender!==memoryWindow)throw new Error('请从主角色右键菜单打开记忆。');state.memory=String(p.text||'').split('\n').map(x=>x.trim()).filter(Boolean).slice(0,40);update();return true;}
   if(method==='prompt'){
     const a=state.actors.find(x=>x.id===senderId),text=String(p.text||'').trim();

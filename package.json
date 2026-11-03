@@ -1,6 +1,6 @@
 {
   "name": "nekofans",
-  "version": "0.28.39",
+  "version": "0.28.41",
   "private": true,
   "main": "apps/desktop/main.cjs",
   "type": "module",

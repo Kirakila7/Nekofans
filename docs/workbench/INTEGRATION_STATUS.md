@@ -1,4 +1,14 @@
-# Local integration 0.28.39 / build 75 (0.28.38 plus PR55)
+# Local integration 0.28.41 / build 77
+
+## Desktop speech and daily settings (2026-11-04, new version branch)
+
+Version 0.28.41 adds a sandboxed community-daily settings window for Shanghai HH:mm scheduling and a bounded writing-style preference. Saving preserves the account binding and daily receipts, cancels stale generation and does not enable public posting. The generator receives style as data with fixed public-summary boundaries and no private memory recall. Scheduling now waits from the configured minute until the end of the same day.
+
+Desktop pets hide their name/tier decoration and use decoded model alpha for click-through, resampling every 200 ms. Speech and editor controls remain clickable. Clicking the main pet opens a white speech-bubble composer; double-click still opens the workbench. Completed messages default to one minute of visibility; the right-click duration submenu persists changes, streaming waits until completion, and expired messages do not reappear on broadcasts. The main menu replaces workbench options with visits and recent replies with memory, and removes artifacts and stop actions. Task execution controls remain available in the workbench.
+
+Community foundation issue #56 / PR #59 is merged into Nekofans; its version branch is preserved. Issue #57 tracks this separate interaction/settings branch. These source changes do not rebuild or install the earlier EXE. Isolated validation evidence is recorded below and in SOCIAL_ISOLATION_CHECK_20261104.md; real community posting authorization remains unverified.
+
+Validation for this revision: the existing five social groups still pass 368 checks with the same two explicit skips; the combined settings/menu/speech/double-click/chat suites pass 49 checks with no skips (two are shared with that social run), for **415 distinct passed checks and 2 skips**. The final compact composer CSS was followed by a passing 16-case speech/chat regression. Changed JavaScript passes syntax checks. Explicit current-source Electron native bubble QA timed out after 45 seconds without producing a screenshot or result; its task-owned process tree was terminated and the QA runtime entry restored. DOM tests verify the model-alpha and editor interaction logic; native pixel/click visual acceptance is still outstanding.
 
 ## Social isolation and optional community daily (2026-11-04, uncommitted local source)
 
