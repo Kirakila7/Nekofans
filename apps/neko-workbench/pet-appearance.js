@@ -12,7 +12,7 @@
   const kind=actor=>actor?.id==='main'?'main':actor?.kind==='task'?'task':'subagent';
   const preferenceKey=tier=>({main:'mainAppearance',task:'taskAppearance',subagent:'subagentAppearance'})[tier]||null;
   function normalizePreferences(preferences={}){
-    const next={...preferences};for(const tier of ['main','task','subagent']){const key=preferenceKey(tier);next[key]=valid(next[key])?normalizeId(next[key]):ORIGINAL;}return next;
+    const next={...preferences,subagentExploration:preferences.subagentExploration===true};for(const tier of ['main','task','subagent']){const key=preferenceKey(tier);next[key]=valid(next[key])?normalizeId(next[key]):ORIGINAL;}return next;
   }
   function validImageDataUrl(value){
     const url=value?.dataUrl;if(typeof url!=='string'||url.length>Math.ceil(MAX_CUSTOM_BYTES/3)*4+40)return false;

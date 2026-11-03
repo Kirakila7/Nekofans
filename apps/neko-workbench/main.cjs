@@ -31,13 +31,14 @@ const {randomUUID} = require('node:crypto');
 const {writeAtomicStateFileSync}=require('./atomic-state-file.cjs');
 const readline = require('node:readline');
 const originalWork = require('./original/work-status.cjs');
-const {normalizeLimit,orderedHelpers,displayName,nickname,actorKind,orderedDesktopPets,orderedTaskPets,selectDesktopPets,nextDesktopRefreshAt,beginReturnHome,expireReturnHomes}=require('./pet-roster.cjs');
+const {normalizeLimit,orderedHelpers,displayName,nickname,actorKind,desktopHomeId,orderedDesktopPets,orderedTaskPets,selectDesktopPets,nextDesktopRefreshAt,beginReturnHome,expireReturnHomes}=require('./pet-roster.cjs');
 const {readOriginalSize,petLayout,petPlacement}=require('./pet-layout.cjs');
 const {migrateChatRouting,actorBySession:findDshActor}=require('./chat-routing.cjs');
 const petAppearance=require('./pet-appearance.js');
 const {importAppearanceImage}=require('./pet-appearance-import.cjs');
 const {decodeAnimationPoster}=require('./pet-image-decoder.cjs');
 const {prepareFishCare}=require('./fish-care.cjs');
+const {createChannelLife}=require('./channel-life.cjs');
 const {createCoordinator}=require('./fish-qq-coordinator.cjs');
 const {restoreDesktopActor,syncTaskRecord,acceptTaskRoster,promoteTaskRecord}=require('./task-pets.cjs');
 const {NekoChat,localBase}=require('./neko-chat.cjs');
@@ -142,7 +143,7 @@ const pending=new Map(), petWindows=new Map(),renameWindows=new Map();
 const draggingPets=new Set(),petGeometry=new Map();
 const motionInputs=new Set();
 const catMotion=createSubagentMotion({
-  getHome:()=>{const w=petWindows.get('main');if(!w||w.isDestroyed())return null;const bounds=windowBounds(w);return {...bounds,body:motionBody(state.actors.find(a=>a.id==='main'),w,bounds)};},
+  getHome:id=>{const actor=state.actors.find(a=>a.id===id),homeId=desktopHomeId(actor,state.actors);let home=state.actors.find(a=>a.id===homeId),w=petWindows.get(homeId);if(!w||w.isDestroyed()||!w.isVisible()){home=state.actors.find(a=>a.id==='main');w=petWindows.get('main');}if(!w||w.isDestroyed())return null;const bounds=windowBounds(w);return {...bounds,anchorId:home.id,body:motionBody(home,w,bounds)};},
   getArea:bounds=>screen.getDisplayMatching?.(bounds)?.workArea||screen.getPrimaryDisplay().workArea,
   getCursor:()=>screen.getCursorScreenPoint?.(),reducedMotion:()=>nativeTheme.shouldUseReducedMotion===true,
   isPaused:id=>draggingPets.has(id)||motionInputs.has(id)||petQuestionController?.isOpen(id),
@@ -165,6 +166,12 @@ const fishQqCoordinator=createCoordinator({
   getSelection:()=>state.preferences.fishQqSelection,
   saveSelection:selection=>{const previous=state.preferences.fishQqSelection;state.preferences.fishQqSelection=selection;try{save();}catch(error){state.preferences.fishQqSelection=previous;throw error;}},
   notify:()=>broadcast()
+});
+const channelLife=createChannelLife({dataDir:data,fishLog:path.join(workspace,'fish-care/profile/whale-log.jsonl'),
+  getMemory:()=>usesMainChatService(mainChatRuntime?.backend)?mainChatRuntime?.memorySystem:null,
+  isBusy:()=>quitting||!!activeApiRequest||state.actors.some(a=>busy(a))||(state.dshRoot&&busy(state.dshRoot))||motionInputs.has('main')||screenShare.read().phase==='sharing'||workbenchOnly||(mainChatRuntime?.backend==='deepseek-account'&&state.connection!=='ready'),
+  generate:(entry,signal)=>mainChatRuntime.generateProactive(entry,signal),
+  present:reply=>{if(quitting)return;const a=state.actors[0];a.notice=null;a.screenReply=null;a.chatReply={id:reply.id,text:reply.text,streaming:false,proactive:true};a.messages.push({id:reply.id,role:'assistant',text:reply.text,time:Date.now(),proactive:true});broadcast();const w=createPetWindow(a);if(!workbenchOnly){if(w.isMinimized?.())w.restore();if(!w.webContents.isLoading())w.showInactive();}}
 });
 function save(){const f=path.join(data,'state.json');const actors=state.actors.map(a=>a.id==='main'&&usesMainChatService(a.chatBackend)?{...a,messages:[],chatReply:undefined,lastUserMessage:undefined}:a).map(a=>({...a,screenReply:undefined,returningHome:undefined}));writeAtomicStateFileSync(f,JSON.stringify({...state,actors,mainChat:undefined,connection:undefined},null,2));}
 questionRelay=createAgentQuestionRelay({getHost:()=>dshWindow,getSessionId:id=>id!=='main'?state.actors.find(a=>a.id===id)?.sessionId:null,onChange:()=>publishPetQuestions()});
@@ -334,19 +341,21 @@ async function refreshApiHistory(){
 }
 async function startMainChat(){
   await homeReady;
-  mainChatRuntime=new WorkbenchMainChat({dataDir:data,repositoryRoot:path.resolve(base,'../..'),safeStorage,accountProvider:createCompanionAccountProvider(rpc),lobbyAccountProvider:createCompanionAccountProvider(rpc,{namespace:'lobby'}),environmentContext:()=>ourHomeRuntime.context(),initialBackend:state.neko.enabled?'neko':'deepseek-account'});
+  mainChatRuntime=new WorkbenchMainChat({dataDir:data,repositoryRoot:path.resolve(base,'../..'),safeStorage,accountProvider:createCompanionAccountProvider(rpc),lobbyAccountProvider:createCompanionAccountProvider(rpc,{namespace:'lobby'}),proactiveAccountProvider:createCompanionAccountProvider(rpc,{namespace:'proactive'}),environmentContext:()=>[ourHomeRuntime.context(),channelLife.context()].filter(Boolean).join('\n\n'),initialBackend:state.neko.enabled?'neko':'deepseek-account'});
   await mainChatRuntime.start();mainChatRuntime.subscribe(value=>{applyMainChat(value);lobbyController.refresh();});await refreshApiHistory();
   if(state.connection==='ready')await mainChatRuntime.refreshLobbyAccount();
   lobbyController.processPending();
 }
 function mainChatFailure(){state.mainChat={ready:false,backend:'chat-api',error:'聊天服务未能装配，请检查 Electron 的 Node 24 与 SQLite 支持',voiceStatus:'未接入'};state.actors[0].chatBackend='chat-api';notice(state.actors[0],state.mainChat.error);update();}
 function cancelMainChat(){
+  channelLife.interrupt();
   if(activeApiRequest?.preflight){
     activeApiRequest=null;const a=state.actors[0];a.active=false;a.status='idle';a.currentActivity='';setWork(a,null);update();return true;
   }
   return mainChatRuntime?.cancel()||false;
 }
 async function startApiPrompt(text){
+  channelLife.touch();
   if(!mainChatRuntime||!state.mainChat?.ready)throw new Error(state.mainChat?.error||'聊天服务尚未就绪');
   if(typeof text!=='string'||!text.trim()||text.length>8000)throw new Error('请输入 1～8000 字的消息');
   screenShare.interrupt();
@@ -398,7 +407,8 @@ function motionBody(a,w,bounds){
     height:height*(original?.78:.94),bottomInset:Math.max(0,bounds.height-76*zoom-height*(original?.94:1))};
 }
 function keepMainInFront(id){
-  const main=petWindows.get('main'),helper=petWindows.get(id);
+  const actor=state.actors.find(a=>a.id===id),homeId=desktopHomeId(actor,state.actors);
+  const main=petWindows.get(homeId)||petWindows.get('main'),helper=petWindows.get(id);
   if(!main||!helper||main.isDestroyed()||helper.isDestroyed())return;
   // Electron moveAbove changes z-order without focusing the main character.
   try{const source=helper.getMediaSourceId?.();if(source)main.moveAbove?.(source);}catch{}
@@ -499,6 +509,8 @@ function rpc(method,params={}){return new Promise((resolve,reject)=>{
 function textContent(value){if(!value)return '';if(typeof value==='string')return value;if(Array.isArray(value))return value.map(textContent).join('');if(value.type==='text')return value.text||'';return textContent(value.content||value.message?.content||value.blocks);}
 function shortReply(text){return text.replace(/```[\s\S]*?```/g,'').replace(/[*#`]/g,'').trim().slice(0,100);}
 function receive(message,replay=false){
+  if(message?.method==='channel-experience'){if(!replay)try{channelLife.accept(message.params);}catch{}return;}
+  if(message?.method==='event'&&message.params?.event?.type==='turn/start')channelLife.interrupt();
   // Consume private authorization projections before generic event logging.
   if(message?.method==='dsh-login-attempt'){if(!replay)dshLoginBrowser.accept(message.params);return;}
   if(message.id){const p=pending.get(message.id);if(p){clearTimeout(p.timer);pending.delete(message.id);message.error?p.reject(new Error(message.error)):p.resolve(message.result);}return;}
@@ -610,6 +622,13 @@ function showInput(id='main'){const a=state.actors.find(a=>a.id===id);if(!a)retu
 async function openTaskSession(a){if(a.kind!=='task'||!a.metadataReady)throw new Error('这个任务会话尚未就绪');screenShare.hide();workbenchNavigation={sessionId:a.sessionId,revision:(workbenchNavigation?.revision||0)+1};await openDsh();broadcast();}
 function popupMainMenu(){const w=petWindows.get('main');if(w){w.show();setTimeout(()=>{app.focus({steal:true});w.focus();mainMenu().popup({window:w});},0);}}
 async function openDsh(){
+  // Reopening the workbench must also recover a hidden/minimized desktop pet.
+  // Do this before loading the engine so an offline engine cannot hide her.
+  if(!workbenchOnly){const main=state.actors.find(a=>a.id==='main');if(main){
+    const pet=createPetWindow(main);
+    if(pet.isMinimized?.())pet.restore();
+    if(!pet.webContents.isLoading())pet.showInactive();
+  }}
   if(dshWindow&&!dshWindow.isDestroyed()){dshWindow.show();app.focus({steal:true});dshWindow.focus();return;}
   const workArea=screen.getDisplayNearestPoint?.(screen.getCursorScreenPoint?.())?.workArea || screen.getPrimaryDisplay().workArea;
   dshWindow=new BrowserWindow({...workbenchWindowOptions(process.platform,workArea,nativeTheme.shouldUseDarkColors),title:'NEKOfuns',backgroundColor:nativeTheme.shouldUseDarkColors?'#131C27':'#EDF3F8',show:false,webPreferences:{preload:path.join(base,'workbench-preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,partition:'persist:pet-dsh'}});
@@ -754,11 +773,22 @@ function memoryMenu(){
     {label:'记忆与模型设置…',click:editChatMemory}
   ];
 }
+function channelLifeMenu(){
+  const snapshot=channelLife.status(),change=patch=>{try{channelLife.configure(patch);}catch{notice(state.actors[0],'渠道记忆设置未能保存');broadcast();}};
+  return [
+    {label:'保存 B站 / QQ 经历到主角色记忆',type:'checkbox',checked:snapshot.memoryEnabled,click:item=>change({memoryEnabled:item.checked})},
+    {label:'根据经历主动搭话（仅桌面）',type:'checkbox',checked:snapshot.proactiveEnabled,enabled:snapshot.memoryEnabled,click:item=>change({proactiveEnabled:item.checked})},
+    {label:'检查经历并同步',click:()=>void channelLife.tick()},
+    {label:`已存 ${snapshot.remembered} 条 · 待存 ${snapshot.pending} 条${snapshot.generating?' · 正在酝酿回复':''}`,enabled:false},
+    {label:'北京时间 08–23 点；间隔 30 分钟；每天最多 6 次；忙碌时避让',enabled:false},
+    ...(snapshot.error?[{label:snapshot.error,enabled:false}]:[])
+  ];
+}
 function mainMenu(){return Menu.buildFromTemplate([
   {label:fishQqActive()?'暂停养鱼':'开始养鱼',enabled:state.connection==='ready',click:()=>fishQqAction({action:fishQqActive()?'pause':'start'}).catch(()=>{notice(state.actors[0],'养鱼与 QQ 操作未完成，请在连接与生活设置中重试。');update();})},
   {label:'形象',submenu:appearanceMenu(state.actors.find(a=>a.id==='main'))},
-  {label:'养鱼',submenu:[{label:'聊天 API 设置…',click:editChatSettings},{label:'N.E.K.O. 记忆',submenu:memoryMenu()},{label:'生活与 QQ 设置…',click:()=>openFishSettings().catch(engineError)}]},
-  {label:'停止聊天回复',enabled:usesMainChatService(state.actors[0].chatBackend)&&busy(state.actors[0]),click:()=>cancelMainChat()},
+  {label:'养鱼',submenu:[{label:'聊天 API 设置…',click:editChatSettings},{label:'N.E.K.O. 记忆',submenu:memoryMenu()},{label:'渠道经历与主动搭话',submenu:channelLifeMenu()},{label:'生活与 QQ 设置…',click:()=>openFishSettings().catch(engineError)}]},
+  {label:'停止聊天回复',enabled:usesMainChatService(state.actors[0].chatBackend)&&(busy(state.actors[0])||channelLife.status().generating),click:()=>cancelMainChat()},
   {type:'separator'},
   {label:'打开工作台',click:()=>openDsh().catch(engineError)},
   {label:'工作台选项',submenu:workbenchOptions()},
@@ -947,8 +977,11 @@ ipcMain.handle('pet:call',async(event,method,p={})=>{
   const renameId=[...renameWindows.entries()].find(([,w])=>w===sender)?.[0];
   if(!senderId&&!renameId&&sender!==memoryWindow&&sender!==settingsWindow&&sender!==nekoSettingsWindow&&sender!==chatSettingsWindow&&sender!==chatMemoryWindow)throw new Error('未知窗口');
   assertLocalCaller(event,sender);
+  if(method==='open-workbench'){if(!senderId)throw new Error('请从桌宠打开工作台');await openDsh();return true;}
   if(method==='state')return state;
   if(method==='question-reveal'){const actor=state.actors.find(a=>a.id===senderId);return !!actor&&actor.id!=='main'&&nativePet(actor)&&petQuestionController.reveal(senderId);}
+  if(method==='motion-input'&&senderId==='main'&&p.active)channelLife.touch();
+  if(method==='prompt')channelLife.touch();
   if(method==='chat-settings-read'){if(sender!==chatSettingsWindow)throw new Error('请从聊天设置操作');return mainChatRuntime?.read({checkSecureStorage:true})||state.mainChat;}
   if(method==='chat-open-neko-settings'){if(sender!==chatSettingsWindow)throw new Error('请从聊天设置操作');editNekoSettings();return true;}
   if(method==='chat-open-memory'){if(sender!==chatSettingsWindow)throw new Error('请从聊天设置操作');editChatMemory();return true;}
@@ -1017,13 +1050,14 @@ app.whenReady().then(async()=>{
   prepareRuntimeDirectories(runtimePaths);
   Menu.setApplicationMenu(Menu.buildFromTemplate([{label:'N.E.K.O.',submenu:[{label:'和大肥鱼说话',click:()=>showInput()},{label:'猫娘串门…',click:openVisits},{label:'主角色菜单',click:popupMainMenu},{label:'保存桌宠截图',accelerator:'CommandOrControl+Shift+S',click:capture},{label:'退出',role:'quit'}]},{label:'编辑',submenu:[{role:'undo'},{role:'redo'},{type:'separator'},{role:'cut'},{role:'copy'},{role:'paste'},{role:'selectAll'}]}]));
   createWindows();try{await startMainChat();}catch{if(!quitting)mainChatFailure();}
-  if(quitting)return;startEngine().catch(engineError);connectNeko();if(process.env.PET_OPEN_WORKBENCH==='1')openDsh().catch(engineError);
+  if(quitting)return;channelLife.start();startEngine().catch(engineError);connectNeko();if(process.env.PET_OPEN_WORKBENCH==='1')openDsh().catch(engineError);
 });
 let shutdownStarted=false,shutdownComplete=false;
 app.on('before-quit',event=>{
   if(shutdownComplete)return;
   event.preventDefault();
   if(shutdownStarted)return;
+  channelLife.dispose();
   dshLoginBrowser.dispose();
   questionRelay.dispose();petQuestionController.dispose();
   shutdownStarted=true;quitting=true;unifiedNekoLogin.dispose();nekoSsoWindow.dispose();ourHomeRuntime.dispose();videoFloatController.dispose();nativeComposerController.dispose();nativeDividerController.dispose();communityController.dispose();communityAccount.cancel();lobbyController.dispose();screenShare.dispose();catMotion.dispose();clearTimeout(nekoRetry);clearTimeout(rosterTimer);for(const timer of terminalTimers.values())clearTimeout(timer);terminalTimers.clear();nekoChat.close();save();

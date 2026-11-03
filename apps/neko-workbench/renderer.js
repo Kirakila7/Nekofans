@@ -57,6 +57,7 @@ if(view==='chat-settings'){
   const character = host.querySelector('.character');
   const videos = host.querySelectorAll('video');
   const bubble = host.querySelector('.pet-bubble');
+  let lastDragEndedAt=0;
   const inspector=document.createElement('dl');inspector.className='task-inspector';inspector.hidden=true;
   inspector.innerHTML='<div><dt>任务</dt><dd data-field="task"></dd></div><div><dt>工作</dt><dd data-field="work"></dd></div><div><dt>你说</dt><dd data-field="lastUser"></dd></div>';
   inspector.setAttribute('aria-label','任务与上一条消息');host.querySelector('.pet').append(inspector);
@@ -72,6 +73,7 @@ if(view==='chat-settings'){
   nameTag.hidden=true;host.querySelector('.pet').append(nameTag);
   const tierTag=document.createElement('div');tierTag.className='pet-tier';host.querySelector('.pet').append(tierTag);
   const feedback = new window.DshPetFeedback(actorId,videos,bubble);
+  window.addEventListener('unload',()=>feedback.bubbleScroll?.dispose(),{once:true});
   const appearance=window.PetAppearance.install({character,videos,feedback,document,matchMedia:query=>window.matchMedia(query),onHeadInset:value=>host.querySelector('.pet').style.setProperty('--media-head-inset',String(value))});
   let desktopMotion=null,runningPresentation=false;
   const stopMotion=window.pet.onMotion?.(value=>{
@@ -207,11 +209,16 @@ if(view==='chat-settings'){
   character.addEventListener('pointerup',async()=>{
     if(!dragStart)return;
     dragStart=null;
-    if(dragged){feedback.dragState.active=false;dragged=false;overCharacter=false;hideInspector();resumeAnimation();await window.pet.call('move-end');}
+    if(dragged){lastDragEndedAt=Date.now();feedback.dragState.active=false;dragged=false;overCharacter=false;hideInspector();resumeAnimation();await window.pet.call('move-end');}
     else setInput(!inputVisible);
   });
   character.addEventListener('pointercancel',()=>{const wasDragged=dragged;dragStart=null;dragged=false;overCharacter=false;hideInspector();feedback.dragState.active=false;resumeAnimation();if(wasDragged)window.pet.call('move-end').catch(()=>{});});
   character.addEventListener('click',event=>{if(event.detail===0)setInput(!inputVisible);});
+  character.addEventListener('dblclick',event=>{
+    if(event.button!==0||Date.now()-lastDragEndedAt<400)return;
+    event.preventDefault();setInput(false);
+    window.pet.call('open-workbench').catch(error=>showBubble(error.message));
+  });
   document.addEventListener('contextmenu',event=>{event.preventDefault();hideInspector();window.pet.call('menu');});
   input.addEventListener('keydown',event=>{
     if(event.isComposing||event.keyCode===229)return;

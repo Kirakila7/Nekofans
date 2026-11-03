@@ -34,6 +34,17 @@ export async function buildWindowsDaily({root,release,args}){
   renameSync(join(dir,'electron.exe'),join(dir,'NEKOfuns.exe'));
   mkdirSync(join(dir,'node'),{recursive:true});
   for(const name of ['node.exe','LICENSE'])if(existsSync(join(node,name)))cpSync(join(node,name),join(dir,'node',name));
+  // QQ's official adapter installs its dependencies through npm-cli.js.
+  // Keep the npm bundled by the verified Node distribution, including its
+  // nested dependencies and licenses; node.exe alone is insufficient.
+  let bundledNpm=null;
+  const npmRoot=join(node,'node_modules/npm');
+  if(existsSync(npmRoot)){
+    const npm=JSON.parse(readFileSync(join(npmRoot,'package.json'),'utf8'));
+    if(npm.name!=='npm'||typeof npm.version!=='string'||!/^\d+\.\d+\.\d+/.test(npm.version)||!existsSync(join(npmRoot,'bin/npm-cli.js')))throw Error('Incomplete bundled npm in Node runtime');
+    cpSync(npmRoot,join(dir,'node/node_modules/npm'),{recursive:true});
+    bundledNpm={version:npm.version,cli:'node/node_modules/npm/bin/npm-cli.js'};
+  }
   for(const [flag,name] of [['--memory-runtime','memory-runtime'],['--memory-python-libs','memory-python-libs']]){
     const source=value(flag);if(source)cpSync(resolve(source),join(dir,name),{recursive:true,filter:src=>!src.split(/[\\/]/).some(p=>['__pycache__','.git'].includes(p))&&!/\.(?:pyc|log)$/i.test(src)});
   }
@@ -66,7 +77,7 @@ export async function buildWindowsDaily({root,release,args}){
   if(dshResources)local.bundledDshOnly=true;
   if(Object.keys(local).length)writeFileSync(join(dir,'NEKOfuns.local.json'),JSON.stringify(local,null,2)+'\n');
   const commit=sourceManifest?.sourceCommit||run('git',['rev-parse','HEAD'],{cwd:root}).trim();
-  const manifest={version:release.version,build:release.build,platform:'win32-x64',sourceCommit:commit,sourceVariant:sourceManifest?.variant||'local',sourcePullRequest:sourceManifest?.pullRequest||null,packagingAdditions:packagingFiles,bundledDsh:dshResources?{version:value('--dsh-version')||'unknown',archiveSha256:sha(join(dir,'resources/dsh/app.asar'))}:null,localChanges:run('git',['status','--porcelain'],{cwd:root}).trim().split('\n').filter(Boolean),builtAt:new Date().toISOString(),electronSha256:sha(join(dir,'NEKOfuns.exe')),nodeSha256:sha(join(dir,'node/node.exe')),files:hashes};
+  const manifest={version:release.version,build:release.build,platform:'win32-x64',sourceCommit:commit,sourceVariant:sourceManifest?.variant||'local',sourcePullRequest:sourceManifest?.pullRequest||null,packagingAdditions:packagingFiles,bundledDsh:dshResources?{version:value('--dsh-version')||'unknown',archiveSha256:sha(join(dir,'resources/dsh/app.asar'))}:null,bundledNpm,localChanges:run('git',['status','--porcelain'],{cwd:root}).trim().split('\n').filter(Boolean),builtAt:new Date().toISOString(),electronSha256:sha(join(dir,'NEKOfuns.exe')),nodeSha256:sha(join(dir,'node/node.exe')),files:hashes};
   writeFileSync(join(dir,'resources/WORKBENCH_BUILD.json'),JSON.stringify(manifest,null,2)+'\n');
   // Inventory the entire shipped application, including cached official runtimes.
   const integrity={};for(const file of inventory(dir)){

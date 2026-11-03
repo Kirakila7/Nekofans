@@ -4,6 +4,8 @@ Windows 默认输出由官方 NSIS 编译器生成的当前用户安装程序。
 
 账号、会话和项目仍由现有 bootstrap 管理。保留 `--profile-name NEKOfuns-PR52-Trial`，无需迁移存档。卸载只删除安装器逐项登记的程序文件，保留账号存档、项目以及安装目录内未登记的其它文件。安装程序不接管没有对应安装标记的非空目录，不沿目录联接或符号链接写入、卸载文件。
 
+0.28.39 的 Node 输入使用完整官方发行目录。若该目录包含 `node_modules/npm`，构建器连同其依赖和许可证完整打包，并在 `WORKBENCH_BUILD.json` 记录 `bundledNpm`；QQ 适配器通过 Node 直接运行 `npm-cli.js`，无需依赖系统 `npm.cmd`。本次发行应核对 `bundledNpm.version` 为 `11.17.0`，并用包内 Node 和 PATH 执行一次只读 `npm --version` 探针。不要仅复制 `node.exe` 而遗漏此依赖。
+
 ## 编译器来源
 
 使用 [NSIS 官方 SourceForge 项目的 3.13 ZIP](https://sourceforge.net/projects/nsis/files/NSIS%203/3.13/nsis-3.13.zip/download)，该下载页公布的 SHA-256 为：

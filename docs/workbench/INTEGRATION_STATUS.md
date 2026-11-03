@@ -1,4 +1,14 @@
-# Local test workbench 0.28.38 / build 74 (compact native questions)
+# Local integration 0.28.39 / build 75 (0.28.38 plus PR55)
+
+2026-11-03: the user explicitly requested a local merge of the shipped 0.28.38 and PR #55, followed by a Windows installer for user testing. The independent local branch is `codex/nekofuns-0.28.39-pr55-local-20261103`; the original dirty canonical worktree and earlier installers are retained. All 1,098 shipped 0.28.38 source hashes were verified before creating baseline commit `2b6f3fc`.
+
+PR55 is pinned at `799d8d2f69a4f6d95b07da624f51b574aeb58eea` (its existing remote merge is `479b093a5113910c38a50cc8ce608d8cd61f79e9`). Its ancestry also carries the desktop-reopen repair, bounded reply scrolling, workbench double-click and per-task-family pet homes. The two actual merge conflicts retain both the 0.28.38 question-reveal IPC and PR55 input-cancellation hooks, plus the trusted open-workbench action. Compact records, native choice cards, drafts and account/profile boundaries remain intact.
+
+The first combined regression found 244 passing cases and one environment failure: the installed-npm probe could not find npm-cli.js. The verified official Node v24.19.0 Windows distribution already includes npm 11.17.0; Windows packaging now retains that complete npm directory with nested dependencies and licenses, and records its version/CLI in the build manifest. The cached Node ZIP matches its saved official SHASUMS256 entry (`57f71ab3652e797d84acddc79c81cc9ff1c6ddb2a1974cdb83f00fee9bff4c73`), and its node.exe hash equals the previous delivered runtime. No global npm install or real QQ dependency installation is used for this check.
+
+PR55 channel-memory collection defaults on and proactive speech defaults off for fresh profiles. B站 observations come from structured activity logs and QQ text passes existing access/pairing fences; public-lobby recall excludes these private sources. Speech is local-only, opt-in, rate-limited and canceled on user input or busy work. The final combined suite passed 255 cases with zero failures/skips, including the original creation/question regressions, PR55 memory/QQ integration, desktop interactions, npm execution and a compiled tiny synthetic installer. Results and the full installer receipt are recorded in the delivery; no real account authorization, paid model request or external channel post is part of validation. This is a local integration, not a new merge/push to the remote repository.
+
+## Previous local 0.28.38 / build 74 (compact native questions)
 
 2026-11-03 follow-up: remove the duplicate “本项目会话” list from creation-desk details. The current-session, read-only ordinary chat history uses the available panel height, defaults to 320 CSS pixels and scrolls internally; manual arrow resizing remains available. The project/history chooser still exposes the original sessions. Existing work drafts, project IDs, native sessions and office/daily placement are preserved.
 
@@ -11,6 +21,30 @@ Verification: 160 targeted canonical Windows cases and the same 160 independentl
 Local release: `交付/NEKOfuns-0.28.38-一键安装版-20261103/NEKOfuns-0.28.38-Windows-Setup-20261103.exe`, 433,733,336 bytes; SHA-256 `c8b92913010d95ce713e91b21826db4b5df7f3ff169ae0216f7a4f084601b95e`. All 1,098 packaged source files match the independent stage (with the two canonical packaging additions), and all 13,843 program files passed final hash verification after isolated startup. It uses the existing standard per-user installer and preserves the `NEKOfuns-PR52-Trial` data location. This follow-up has not been pushed to the previously published 0.28.37 branch.
 
 ## Previous 0.28.37 / build 73 (Windows installer verified)
+
+## Channel experience memory and optional proactive desktop speech (2026-11-03, local source)
+
+B站 structured activity logs and accepted QQ text now feed a durable main-process queue and the main persona's private N.E.K.O. memory. Stable source IDs deduplicate retries, and tombstones prevent deleted observations from reappearing. QQ pairing and generation fences remain in force; adapter revision 17 adds the inbound observation hook. Channel frames bypass generic raw event logs and remain excluded from public-lobby recall.
+
+The pet's 养鱼 → 渠道经历与主动搭话 menu offers separate persistent memory and speech switches. Speech defaults off and uses the selected main-chat provider only for local desktop comments. It respects Shanghai daytime hours, one minute of user inactivity, busy work, a 30-minute attempt cooldown and six attempts per day. Cancellation and a final source/backend check block stale delivery. An independent receipt retains recent self-initiated speech for subsequent private-chat context without forging user history. Details, source coverage and limits are in `CHANNEL_MEMORY_CHECK.md`.
+
+Validation: 76 targeted channel/runtime/memory/menu regressions pass, including the adapted upstream QQ inbound handler, real main memory persistence/recall, model generation with synthetic providers, deletion/restart and public-source isolation. An isolated real Electron main-entry check verifies the desktop menu toggles persist, the pet remains visible and no model request occurs by default. The independent installed-npm probe is unavailable because this machine has no npm-cli.js; this is not production QQ installation or account verification. No installer, real supplier request or external channel message was produced.
+
+## Desktop interaction and channel-memory checks (2026-11-03, local source)
+
+Main desktop replies now use a bounded text viewport with up/down buttons for all three chat backends. This fixes clipping in the default account backend and removes the NEKO two-line clamp for the main pet. Text is retained as text, streaming additions preserve the reading position, and controls disappear for short replies. A narrow trusted pet IPC action opens the workbench on double click, while single click and dragging retain their existing actions.
+
+Subagents select the nearest visible ancestor task pet as their home. Cluster layouts are maintained per task family rather than sharing the main pet's anchor; missing/hidden task windows fall back to main. Roaming now defaults off unless explicitly enabled. Unit regressions cover independent families, ancestor/cycle fallback, IPC boundaries and existing motion behavior. Real Electron validation passed nine backend/zoom combinations (three backends at 100/125/150%), including actual scroll-button clicks, full text retention, window bounds, stream position retention and a desktop double-click event. Test profiles were independent and used only synthetic messages; no installer has been rebuilt.
+
+The B站/QQBot memory check found that channel operation remains separate from main-agent memory and does not trigger proactive desktop conversation. The channel/memory suite passed 60 of 62 tests; two full-main fixtures failed with temporary-directory cleanup EPERM, including on retry. Details and the unverified live-account scope are recorded in `CHANNEL_MEMORY_CHECK.md`. No channel-memory synchronization or autonomous messaging was enabled by these changes.
+
+## Desktop pet reopening repair (2026-11-03, local source)
+
+Based on `codex/nekofuns-0.28.37-creation-installer-20261103` at `87fc69dbd7c8aea5bb60aae1b93daad8d1caec32`. Tracked in issue #53.
+
+Reopening the workbench now recreates/reveals the main desktop pet and restores it when minimized, before returning to an existing workbench window or loading the work engine. The original behavior reproduced in real Windows Electron: after hiding/minimizing Bigfish and emitting a second-instance event, the workbench appeared while Bigfish stayed hidden despite its video decoding successfully. After the repair the same scenario makes both windows visible. Workbench-only QA and the existing loading handler remain respected.
+
+Validation: all 11 pet reopening/runtime tests pass; the main entry passes syntax checking. Real Electron checks used independent synthetic profiles and an unavailable engine path, with no real model/account request. The unchanged three-tier-layout suite still fails its compact frame/name gutter assertion; broader existing main-entry fixtures also encountered a timeout and temporary-directory cleanup permission error. This repair has not been packaged into a new installer or validated against a daily user profile.
 
 2026-11-03 frontend/backend collaboration: the user authorized the actual Claude Code desktop workspace to implement the frontend while Codex handled the host/backend. This remains an independently staged PR52 trial, not a merge. The new release request supersedes the earlier source-only/no-EXE instructions below; historical deliveries are retained.
 

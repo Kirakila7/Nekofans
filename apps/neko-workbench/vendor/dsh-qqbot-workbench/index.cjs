@@ -5,6 +5,7 @@ const { install } = require('./install.cjs');
 const { RUNTIME, hasScope } = require('./runtime-state.cjs');
 const { qqDiagnostics } = require('./diagnostics.cjs');
 const { createPrivatePairing } = require('./private-pairing.cjs');
+const {qqExperience}=require('../../channel-experiences.cjs');
 const privatePairing = createPrivatePairing({ readConfig: config });
 const GUARD = Symbol.for('neko.qqbot.connection.guard');
 let context = null, entryId = null, entryContext = null, enabled = false, generation = 0;
@@ -69,6 +70,7 @@ function runtimeFor(revision) {
     mark(key) {
       if (enabled && revision === generation && counterKeys.includes(key)) counters[key] = Math.min(counters[key] + 1, 1000000);
     },
+    experience(input){if(!enabled||revision!==generation||pairingTransition||privatePairing.status().active)return;const entry=qqExperience(input);if(entry)process.emit('neko-channel-experience',entry);},
     report(phase) {
       if (!enabled || revision !== generation || !Object.hasOwn(reasons, phase)) return;
       const connected = phase === 'running';

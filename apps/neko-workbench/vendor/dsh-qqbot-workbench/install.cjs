@@ -269,7 +269,7 @@ function __nekoWritePrivate(file, value) {
     s=replaceOnce(s,'record.agent.followup(message);',"if (!manager.__nekoRuntime.active()) return;\n    record.agent.model.select(__nekoAccountRoute());\n    record.agent.followup(message);",'per-message account route');
     const line='logger.info(`Processing: scope=${scope} peerId=${peerId} body="${agentBody.slice(0, 200)}"`);';
     s=replaceOnce(s,line,"manager.__nekoRuntime.mark('bodyReady');\n    logger.info('Processing an incoming QQ message');",'message logging');
-    return replaceOnce(s,'record.agent.followup(message);',"record.agent.followup(message);\n    manager.__nekoRuntime.mark('modelQueued');",'model queued counter');
+    return replaceOnce(s,'record.agent.followup(message);',"record.agent.followup(message);\n    manager.__nekoRuntime.mark('modelQueued');\n    manager.__nekoRuntime.experience?.({messageId:msg.messageId,text:msg.content,scope});",'model queued counter');
   });
   change(path.join(pluginDir,'dist/transport/outbound.js'),s=>{
     const policyPath=JSON.stringify(path.join(__dirname,'chat-policy.cjs'));
@@ -298,7 +298,7 @@ function __nekoWritePrivate(file, value) {
     // the workbench owns mounting the aliased QR and settings section.
     return s+'\nwindow.__ModuleLoader__.load({id:"@tencent-connect/dsh-qqbot",factory:()=>({apply(){}})});\n';
   });
-  fs.writeFileSync(path.join(root,'installed-adapter.json'),JSON.stringify({version:'0.5.3',revision:16})+'\n',{encoding:'utf8',mode:0o600});
+  fs.writeFileSync(path.join(root,'installed-adapter.json'),JSON.stringify({version:'0.5.3',revision:17})+'\n',{encoding:'utf8',mode:0o600});
 }
 async function install(root, modulesDir, options={}) {
   checkInstallAbort(options.signal);
@@ -306,7 +306,7 @@ async function install(root, modulesDir, options={}) {
   if(actual!==SHA)throw Error('QQ 官方插件包校验失败');
   const profile=prepareProfile(root), pkg=path.join(root,'node_modules/@tencent-connect/dsh-qqbot');
   const marker=path.join(root,'installed-adapter.json');
-  let ready=false; try{const m=JSON.parse(fs.readFileSync(marker,'utf8'));ready=m.version==='0.5.3'&&m.revision===16&&fs.existsSync(path.join(pkg,'dist/index.js'));}catch{}
+  let ready=false; try{const m=JSON.parse(fs.readFileSync(marker,'utf8'));ready=m.version==='0.5.3'&&m.revision===17&&fs.existsSync(path.join(pkg,'dist/index.js'));}catch{}
   if(!ready){
     fs.writeFileSync(path.join(root,'package.json'),JSON.stringify({name:'neko-qqbot-runtime',version:'1.0.0',private:true,dependencies:{'@tencent-connect/dsh-qqbot':'file:./dsh-qqbot.tgz'}})+'\n',{mode:0o600});
     fs.copyFileSync(ARCHIVE,path.join(root,'dsh-qqbot.tgz'));
