@@ -124,6 +124,17 @@ export class WorkbenchMemory {
     try{return await task;}catch(error){this.error='同步未完成，记录已保留，可稍后重试';this.publish();throw error;}finally{if(this.activeSync===task)this.activeSync=null;}
   }
   async view(){if(!this.activeSync)await this.localSync();return {...this.status(),records:this.hub.records()};}
+  async graph(){
+    if(this.closed)throw Error('记忆服务已关闭');
+    // A map read must not start a worker or trigger extraction. The existing
+    // runtime owns startup; offline views are explicitly marked as ledger-only.
+    if(!this.worker.url)return {version:1,nodes:[],edges:[],available:false};
+    try{
+      const graph=await this.worker.request('/graph',undefined,15000,false);
+      if(graph.personaId!=='bigfish'||graph.version!==1||!Array.isArray(graph.nodes)||!Array.isArray(graph.edges))throw Error('invalid graph');
+      return {...graph,available:true};
+    }catch{return {version:1,nodes:[],edges:[],available:false};}
+  }
   async recall(personaId,query,budget,signal){
     if(personaId!=='bigfish'||this.closed||signal?.aborted)return [];
     await this.localSync();if(signal?.aborted||this.closed)return [];

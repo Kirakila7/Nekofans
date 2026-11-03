@@ -392,7 +392,7 @@ function editChatSettings(){
 }
 function editChatMemory(){
   if(chatMemoryWindow&&!chatMemoryWindow.isDestroyed()){chatMemoryWindow.show();chatMemoryWindow.focus();return;}
-  const w=new BrowserWindow({...options(),width:620,height:680,minWidth:440,minHeight:450,title:'聊天记忆',backgroundColor:'#f1f8fe'});chatMemoryWindow=w;
+  const w=new BrowserWindow({...options(),width:1180,height:780,minWidth:640,minHeight:480,title:'聊天记忆',backgroundColor:'#080b12'});chatMemoryWindow=w;
   loadLocalFile(w,{view:'chat-memory'});w.webContents.on('did-finish-load',()=>{broadcast();w.show();});w.on('closed',()=>{if(chatMemoryWindow===w)chatMemoryWindow=null;});
 }
 const pinnedCount=()=>orderedDesktopPets(state.actors,{taskOrder:state.taskOrder,catalogOrder:state.catalogOrder}).filter(a=>a.pinned).length;

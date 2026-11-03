@@ -321,6 +321,28 @@ class NativeMemoryGateway:
                 used+=cost;values.append(deepcopy(value))
             return dict(values=values)
 
+    async def graph(self):
+        """Snapshot only: opening the map never repairs, extracts, or calls an LLM."""
+        from memory_graph import project_graph
+        async with self.lock:
+            active = await self.runtime.fact_store.aload_facts_strict(self.name)
+            facts = await self.native_facts()
+            reflections = await self.runtime.reflection_engine.aload_reflections(self.name, include_archived=True)
+            path = Path(self.runtime.persona_manager._config_manager.memory_dir) / self.name / "persona.json"
+            def read_persona():
+                if not path.exists():
+                    return {}
+                value = json.loads(path.read_text(encoding="utf-8"))
+                if not isinstance(value, dict):
+                    raise ValueError("invalid persona")
+                return value
+            persona = await asyncio.to_thread(read_persona)
+            events = self.events()
+            result = project_graph(facts, reflections, persona, events,
+                list(self.db.execute("SELECT item,event,native_id,kind FROM projections")),
+                records(events), self.blocked_native(), {f.get("id") for f in active})
+            return dict(**result, personaId=self.persona_id, coverage="live-and-fact-archive")
+
 
 def install_gateway(app,runtime,state_dir,persona_id="bigfish",character_name="大肥鱼"):
     gateway=NativeMemoryGateway(runtime,state_dir,persona_id,character_name)
@@ -362,6 +384,11 @@ def install_gateway(app,runtime,state_dir,persona_id="bigfish",character_name="�
         try:return await gateway.recall(data.get("query"),data.get("tokenBudget"))
         except ValueError:raise HTTPException(422,detail="invalid_memory_query") from None
         except Exception:raise HTTPException(503,detail="memory_recall_unavailable") from None
+
+    @app.get("/workbench-memory/graph")
+    async def graph():
+        try:return await gateway.graph()
+        except Exception:raise HTTPException(503,detail="memory_graph_unavailable") from None
 
     @app.on_event("shutdown")
     async def close():
