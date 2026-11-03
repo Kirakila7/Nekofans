@@ -255,8 +255,9 @@ class WorkbenchMainChat {
   async memories() {
     if (this.closed || !usesChatService(this.backend) || !this.opened?.memory) throw new Error('请在主聊天模式管理 N.E.K.O. 记忆');
     const [items, summaries] = await Promise.all([this.opened.memory.list(), this.opened.summaries?.list() || []]);
-    return { items: items.map(({ audioRef, ...item }) => item), summaries, replication:await this.memorySystem.view(),
-      memoryModel:this.readMemoryModel() };
+    const replication=await this.memorySystem.view();
+    return { items: items.map(({ audioRef, ...item }) => item), summaries, replication,
+      graph:await this.memorySystem.graph(), memoryModel:this.readMemoryModel() };
   }
   readMemoryModel() {
     let settings={useChatApi:true};
@@ -291,6 +292,17 @@ class WorkbenchMainChat {
   async memoryAction(input) {
     if (!input || typeof input !== 'object' || Object.keys(input).some(key => !['action', 'id', 'text','mode','enabled','revisionIds','useChatApi','protocol','baseUrl','model','requestTimeoutMs','key'].includes(key))) throw new Error('记忆操作无效');
     if (this.closed || !usesChatService(this.backend) || !this.opened?.memory) throw new Error('记忆服务未就绪');
+    if(input.action==='event-sources'){
+      const record=this.memorySystem.hub.records().find(r=>r.itemId===input.id);
+      if(!record||record.deleted||record.conflict||!record.value)throw new Error('来源暂不可用');
+      const ids=[...new Set(record.value.evidenceRefs||[])].slice(0,256),file=path.join(this.dataDir,'conversations.sqlite');
+      if(!ids.length||!fs.existsSync(file))return [];
+      const {DatabaseSync}=require('node:sqlite'),db=new DatabaseSync(file,{readOnly:true});
+      try{
+        const read=db.prepare('SELECT id,role,text,created_at FROM messages WHERE persona_id=? AND id=?');
+        return ids.flatMap(id=>{const row=read.get(PERSONA,id);return row?[{id:row.id,role:row.role,text:row.text,createdAt:row.created_at}]:[];});
+      }finally{db.close();}
+    }
     if(['configure-neko','sync'].includes(input.action)||String(input.action).startsWith('event-')){
       try{
         if(input.action==='configure-neko')await this.configureMemory(input);
