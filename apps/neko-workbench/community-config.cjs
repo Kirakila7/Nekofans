@@ -1,4 +1,5 @@
 'use strict';
+const path = require('node:path');
 
 // Existing N.E.K.O. production base (utils/social_base.py) and /feed entry
 // used by static/app/app-ui/surface-floating-controls.js.
@@ -238,7 +239,7 @@ function communityBounds(host, bounds) {
 const LOAD_ERROR = '社区页面未能打开，请检查网络后重试';
 const CANCEL_ERROR = '社区已隐藏或工作台页面已离开';
 function createCommunityController({ WebContentsView, openExternal, copyText, env = process.env, site = 'community', youtubeAppId = YOUTUBE_APP_ID,
-  onState = () => {}, onHide = () => {}, onExternalError } = {}) {
+  onState = () => {}, onHide = () => {}, onDispose = () => {}, onExternalError, adaptiveVideoViewport = false } = {}) {
   if (!['community', 'bilibili', 'youtube'].includes(site)) throw new Error('未知内容入口');
   const isBilibili = site === 'bilibili';
   const isYoutube = site === 'youtube';
@@ -299,6 +300,11 @@ function createCommunityController({ WebContentsView, openExternal, copyText, en
       if (record.tooSmall) { muteWhileHidden(record); detach(record); return false; }
     }
     if (!bounds.width || !bounds.height) { detach(record); return false; }
+    if (adaptiveVideoViewport && isBilibili && typeof record.webContents.setZoomFactor === 'function') {
+      const scale=record.host.webContents.getZoomFactor()||1;
+      const zoom=Math.max(.25,Math.min(1,bounds.width/scale/1100));
+      if(record.videoViewportZoom!==zoom){record.videoViewportZoom=zoom;record.webContents.setZoomFactor(zoom);}
+    }
     record.view.setBounds(bounds);
     if (!record.attached) { record.host.contentView.addChildView(record.view); record.attached = true; }
     restoreAudio(record);
@@ -317,6 +323,7 @@ function createCommunityController({ WebContentsView, openExternal, copyText, en
       record.cleanupNavigation();
       for (const popup of record.popups) if (!popup.isDestroyed()) popup.destroy();
       if (!record.webContents.isDestroyed()) record.webContents.close({ waitForBeforeUnload: false });
+      onDispose();
     }
   }
   function unbind(notifyHidden = false) {
@@ -357,7 +364,7 @@ function createCommunityController({ WebContentsView, openExternal, copyText, en
   }
   function create(host, bounds, requestId) {
     const communityUrl = isYoutube ? YOUTUBE_SAMPLE_URL : isBilibili ? BILIBILI_URL : resolveCommunityUrl(env.NEKO_WORKBENCH_COMMUNITY_URL);
-    const view = new WebContentsView({ webPreferences: communityWebPreferences(isYoutube ? YOUTUBE_PARTITION : isBilibili ? BILIBILI_PARTITION : COMMUNITY_PARTITION) });
+    const view = new WebContentsView({ webPreferences: {...communityWebPreferences(isYoutube ? YOUTUBE_PARTITION : isBilibili ? BILIBILI_PARTITION : COMMUNITY_PARTITION),...(!isYoutube&&!isBilibili?{preload:path.join(__dirname,'community-session-preload.cjs')}:adaptiveVideoViewport?{preload:path.join(__dirname,'video-gesture-preload.cjs')}:{})} });
     const record = { host, view, webContents: view.webContents, communityUrl, bounds, requestId,
       epoch: 0, loadId: 0, loading: null, loaded: false, failed: false, wanted: true,
       attached: false, popups: new Set(), responseCode: 0 };
@@ -384,7 +391,7 @@ function createCommunityController({ WebContentsView, openExternal, copyText, en
     contents.on('did-start-navigation', (_event, _url, isInPlace, isMainFrame) => {
       if (!isMainFrame || isInPlace || current !== record) return;
       record.failed = false; record.loaded = false; record.responseCode = 0;
-      if (isBilibili && record.wanted && !record.loading) state(record, 'loading');
+      if (!isYoutube && record.wanted && !record.loading) state(record, 'loading');
     });
     contents.on('did-navigate', (_event, _url, responseCode) => {
       if (current !== record) return;
@@ -573,15 +580,24 @@ function createCommunityController({ WebContentsView, openExternal, copyText, en
 // different providers to coexist while moving a view never reloads it.
 // Calls without a slot keep the original single-active-view behaviour.
 function createSocialController(options = {}) {
+  let accountState = {status:'unknown'};
+  let loginWanted = false;
+  let communityReady = false;
+  function accountChanged(value){accountState=value;try{options.onAccountState?.({...value});}catch{}}
+  function sendState(){const contents=controllers.community.view?.webContents;if(contents&&!contents.isDestroyed())contents.send('workbench:community-web-state');}
+  function sendLogin(){const contents=controllers.community.view?.webContents;if(contents&&!contents.isDestroyed()){contents.send('workbench:community-web-login');loginWanted=false;}}
   const publish = options.onState || (() => {});
   const slots = new Map(), slotVersion = new Map(), siteVersion = new Map();
   const bump = slot => { const v = (slotVersion.get(slot) || 0) + 1; slotVersion.set(slot, v); return v; };
   const bumpSite = site => { const v = (siteVersion.get(site) || 0) + 1; siteVersion.set(site, v); return v; };
   const slotOf = site => [...slots].find(([, entry]) => entry.site === site)?.[0];
   const controllers = Object.fromEntries(['community', 'bilibili', 'youtube'].map(site => [site,
-    createCommunityController({ ...options, site, onHide: site === 'community' ? options.onHide : undefined, onState: (host, value) => {
+    createCommunityController({ ...options, site, onHide: site === 'community' ? options.onHide : undefined,
+      onDispose:site==='community'?()=>{communityReady=false;accountChanged({status:'unknown'});}:undefined,onState: (host, value) => {
+      if(site==='community')communityReady=value.status==='ready';
       const slot = slotOf(site);
       publish(host, { ...value, site, ...(slot ? { slot } : {}) });
+      if(site==='community'&&value.status==='ready'){if(loginWanted)sendLogin();else sendState();}
     } })]));
   let active = 'community', generation = 0, activeRequestId, legacyVisible = false;
   async function clearSlots(host, exceptSite, version) {
@@ -680,6 +696,16 @@ function createSocialController(options = {}) {
     return controllers[active].action(host, request);
   }
   return Object.freeze({ action,
+    get accountState(){return {...accountState};},
+    acceptAccountState(event,value){
+      const contents=controllers.community.view?.webContents;
+      if(!contents||contents.isDestroyed()||event.sender!==contents||event.senderFrame!==contents.mainFrame||!['signed-in','signed-out','checking','unavailable'].includes(value?.status))return false;
+      try{if(new URL(contents.getURL()).origin!=='https://community.project-neko.cn'||new URL(event.senderFrame.url).origin!=='https://community.project-neko.cn')return false;}catch{return false;}
+      if(value.status==='signed-in'&&(typeof value.userId!=='string'||!value.userId||value.userId.length>128))return false;
+      accountChanged({status:value.status,...(value.status==='signed-in'&&typeof value.name==='string'?{name:value.name.slice(0,80)}:{}),...(value.status==='signed-in'?{userId:value.userId}:{})});return true;
+    },
+    requestLogin(){loginWanted=true;if(controllers.community.isOpen&&communityReady)sendLogin();},
+    cancelLoginRequest(){loginWanted=false;const contents=controllers.community.view?.webContents;if(contents&&!contents.isDestroyed())contents.send('workbench:community-web-login-cancel');},
     async handoff(host, url) {
       if (!controllers.community.isOpen) throw new Error(CANCEL_ERROR);
       // A Bilibili operation in another slot must not invalidate the community

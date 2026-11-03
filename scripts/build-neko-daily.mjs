@@ -7,6 +7,11 @@ const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const release=JSON.parse(readFileSync(join(root,'config/daily-release.json'),'utf8'));
 function run(command,args,options={}){const r=spawnSync(command,args,{encoding:'utf8',...options});if(r.status!==0)throw Error(r.stderr||'Build command failed: '+command);return r.stdout;}
 const args=process.argv.slice(2),value=name=>{const i=args.indexOf(name);return i<0?null:args[i+1];};
+if(process.platform==='win32'){
+  const {buildWindowsDaily}=await import('./build-neko-windows.mjs');
+  await buildWindowsDaily({root,release,args});
+  process.exit(0);
+}
 const runtime=value('--electron-zip'),output=value('--output');
 if(!runtime||!output)throw Error('Usage: node scripts/build-neko-daily.mjs --electron-zip <official cached runtime.zip> --output <new staging directory>');
 if(process.platform!=='darwin'||process.arch!=='arm64')throw Error('The current daily build targets darwin-arm64.');

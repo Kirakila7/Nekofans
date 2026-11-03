@@ -1,0 +1,103 @@
+// The room, first-person camera and agent observation share one saved scene.
+async function mountOurHome(stage,options={}){
+ const doc=stage.ownerDocument,win=options.window||doc.defaultView,bridge=options.bridge||win.nekoWorkbench;
+ if(typeof bridge?.home!=='function')throw Error('小窝连接暂不可用');
+ const el=(tag,cls,text)=>{const n=doc.createElement(tag);n.className=cls||'';if(text!==undefined)n.textContent=text;return n;};
+ const root=el('section','neko-our-home'),canvas=el('canvas','neko-our-home__canvas');root.dataset.environment='ocean';canvas.tabIndex=0;canvas.setAttribute('aria-label','浮在海面上的小窝木平台');
+ const top=el('div','neko-our-home__top'),invite=el('button','neko-our-home__invite','共建我们的家！');invite.type='button';invite.title='打开共建会话';
+ const controls=el('div','neko-our-home__controls');
+ function button(label,fn){const b=el('button','',label);b.type='button';b.addEventListener('click',fn);controls.append(b);return b;}
+ const orbit=button('小窝全景',()=>void command({action:'perspective',mode:'orbit'}));
+ const first=button('大肥鱼第一视角',async()=>{if(!state?.avatar?.atHome&&!await command({action:'return-home'}))return;await command({action:'perspective',mode:'agent'});});
+ const callHome=button('叫大肥鱼回家',()=>void command({action:'return-home'}));
+ const status=el('p','neko-our-home__status');status.setAttribute('role','status');
+ const hint=el('p','neko-our-home__hint'),inventory=el('p','neko-our-home__inventory');top.append(invite,controls);root.append(canvas,top,status,inventory,hint);stage.append(root);
+ let state=null,disposed=false,drag=null,w=1,h=1,azimuth=42,elevation=34,zoom=1,lookYaw=0,lookPitch=-10,pendingLook=null,lookTimer=null;
+ const waterLevel=-.11,motion=win.matchMedia?.('(prefers-reduced-motion: reduce)');let seaTime=0,platformLift=0,frame=null,lastFrame=0,onScreen=true;
+ const radians=d=>d*Math.PI/180,clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
+ const dot=(a,b)=>a.reduce((sum,n,i)=>sum+n*b[i],0),sub=(a,b)=>a.map((n,i)=>n-b[i]);
+ const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+ const normal=a=>{const l=Math.hypot(...a)||1;return a.map(n=>n/l);};
+ let eye,forward,right,up,focal,faces=[];
+ const avatar=new win.Image();avatar.src=options.posterSrc||options.avatar?.('bigfish')||'';avatar.onload=()=>draw();
+ function camera(){
+  const a=state?.avatar||{},p=a.position||{x:0,y:0,z:2.5},fp=state?.perspective==='agent'||state?.perspective==='yui';
+  if(fp){eye=[p.x,(p.y||0)+1.1+platformLift,p.z];const yaw=radians(lookYaw),pitch=radians(lookPitch);forward=[Math.sin(yaw)*Math.cos(pitch),Math.sin(pitch),-Math.cos(yaw)*Math.cos(pitch)];focal=w/(2*Math.tan(radians(43)));}
+  else{const yaw=radians(azimuth),pitch=radians(elevation),distance=17/zoom;eye=[Math.sin(yaw)*Math.cos(pitch)*distance,Math.sin(pitch)*distance,Math.cos(yaw)*Math.cos(pitch)*distance];forward=normal(sub([0,0,0],eye));focal=Math.min(w*.95,h*1.5)*.9;}
+  right=normal(cross(forward,[0,1,0]));up=cross(right,forward);
+ }
+ const space=p=>{const d=sub(p,eye);return [dot(d,right),dot(d,up),dot(d,forward)];};
+ function screen(p){return [w/2+p[0]*focal/p[2],h*.55-p[1]*focal/p[2]];}
+ function clipped(points){const out=[];for(let i=0;i<points.length;i++){const a=points[i],b=points[(i+1)%points.length],inside=a[2]>=.08,next=b[2]>=.08;if(inside)out.push(a);if(inside!==next){const t=(.08-a[2])/(b[2]-a[2]);out.push(a.map((v,k)=>v+(b[k]-v)*t));}}return out;}
+ function face(vertices,color,edge){const p=clipped(vertices.map(space));if(p.length<3)return;faces.push({p:p.map(screen),depth:p.reduce((n,p)=>n+p[2],0)/p.length,color,edge});}
+ function shade(color,amount){const s=/^#([0-9a-f]{6})$/i.exec(color);if(!s)return color;const n=parseInt(s[1],16);return '#'+[n>>16,(n>>8)&255,n&255].map(v=>Math.round(clamp(v*amount,0,255)).toString(16).padStart(2,'0')).join('');}
+ function box(x,y,z,width,height,depth,color,rotation=0){const angle=radians(rotation),cs=Math.cos(angle),sn=Math.sin(angle);const p=(dx,dy,dz)=>[x+dx*cs+dz*sn,y+dy,z-dx*sn+dz*cs];const v=[p(-width/2,0,-depth/2),p(width/2,0,-depth/2),p(width/2,0,depth/2),p(-width/2,0,depth/2),p(-width/2,height,-depth/2),p(width/2,height,-depth/2),p(width/2,height,depth/2),p(-width/2,height,depth/2)];for(const [indices,light] of [[[0,1,5,4],.68],[[1,2,6,5],.85],[[2,3,7,6],.92],[[3,0,4,7],.76],[[4,5,6,7],1.12]])face(indices.map(i=>v[i]),shade(color,light));}
+ function furniture(o){
+  const {x,z,y,width:W,height:H,depth:D,rotation:r,color:c,kind}=o;
+  const part=(dx,dy,dz,a,b,d,col)=>{const angle=radians(r);box(x+dx*Math.cos(angle)+dz*Math.sin(angle),y+dy+platformLift,z-dx*Math.sin(angle)+dz*Math.cos(angle),a,b,d,col,r);};
+  if(kind==='rug'){part(0,0,0,W,.025,D,c);part(0,.027,0,W*.82,.008,D*.8,shade(c,1.13));}
+  else if(['desk','table'].includes(kind)){part(0,H*.83,0,W,H*.16,D,c);for(const dx of [-W*.4,W*.4])for(const dz of [-D*.36,D*.36])part(dx,0,dz,.09,H*.85,.09,shade(c,.75));if(kind==='desk'){part(W*.3,0,0,W*.28,H*.82,D*.85,shade(c,.94));for(let n=1;n<=3;n++)part(W*.3,H*n*.19,D*.44,W*.15,.018,.025,'#bcb3a6');}}
+  else if(kind==='bed'){part(0,0,0,W,H*.42,D,shade(c,.72));part(0,H*.42,0,W*.97,H*.42,D*.97,'#dedbd0');part(0,H*.82,D*.12,W*.98,H*.17,D*.7,c);part(0,H*.82,-D*.32,W*.75,H*.17,D*.21,'#eee7dc');}
+  else if(kind==='chair'){part(0,H*.38,0,W,H*.12,D,c);part(0,H*.47,-D*.43,W,H*.53,.1,c);for(const dx of [-W*.35,W*.35])for(const dz of [-D*.35,D*.35])part(dx,0,dz,.07,H*.4,.07,'#434d53');}
+  else if(kind==='sofa'){part(0,0,0,W,H*.38,D,shade(c,.8));part(0,H*.38,D*.05,W*.8,H*.22,D*.8,c);part(0,H*.38,-D*.4,W,H*.62,D*.22,c);for(const dx of [-W*.45,W*.45])part(dx,H*.3,0,W*.1,H*.4,D,c);}
+  else if(kind==='shelf'){part(-W*.46,0,0,W*.08,H,D,c);part(W*.46,0,0,W*.08,H,D,c);for(let i=0;i<=3;i++){part(0,H*i/3,0,W,.06,D,c);if(i<3)for(let n=0;n<4;n++)part(-W*.32+n*W*.2,H*i/3+.07,0,W*.13,H*.23,D*.65,['#b88d85','#69869b','#d4bd93','#809e8e'][n]);}}
+  else if(kind==='plant'){part(0,0,0,W*.7,H*.3,D*.7,'#a68c76');part(0,H*.3,0,.05,H*.6,.05,'#556b49');part(0,H*.48,0,W,H*.42,D,'#657e62');part(-W*.2,H*.66,D*.1,W*.65,H*.28,D*.6,'#88a27a');}
+  else if(kind==='lamp'){part(0,0,0,W*.8,.06,D*.8,'#5c6061');part(0,.05,0,.055,H*.72,.055,'#7f7b70');part(0,H*.72,0,W,H*.25,D,'#efe0bb');}
+  else if(kind==='screen'){part(0,0,0,W*.5,.04,D*2,'#374754');part(0,.03,0,.06,H*.18,.06,'#374754');part(0,H*.2,0,W,H*.8,D,'#293c4b');part(0,H*.25,D*.53,W*.91,H*.68,.018,'#7699b5');}
+  else if(kind==='window'){part(0,0,0,W,H,D,'#d4c6af');part(0,H*.06,D*.55,W*.88,H*.88,.025,'#4f718d');part(0,H*.06,D*.65,.05,H*.88,.03,'#ddcfb5');part(0,H*.46,D*.65,W*.88,.05,.03,'#ddcfb5');}
+  else if(kind==='plush'){part(0,0,0,W*.8,H*.6,D*.8,c);part(0,H*.45,0,W,H*.48,D,c);for(const dx of [-W*.32,W*.32])part(dx,H*.84,0,W*.25,H*.2,D*.5,c);for(const dx of [-W*.18,W*.18])part(dx,H*.72,D*.51,.04,.05,.02,'#24384c');}
+  else part(0,0,0,W,H,D,c);
+ }
+ function ocean(ctx,paintFace){
+  // This is world geometry below the platform, shared by orbit and first
+  // person. Water continues far beyond the room and intersects its draft.
+  face([[-600,waterLevel,-600],[600,waterLevel,-600],[600,waterLevel,600],[-600,waterLevel,600]],'#67b7c9');
+  faces.forEach(paintFace);faces=[];
+  function stroke(points,color,width=1){let connected=false;ctx.beginPath();for(const point of points){const p=space(point);if(p[2]<.1){connected=false;continue;}const s=screen(p);if(connected)ctx.lineTo(...s);else ctx.moveTo(...s);connected=true;}ctx.strokeStyle=color;ctx.lineWidth=width;ctx.stroke();}
+  for(let row=-20;row<=20;row++){
+   const points=[],z=row*1.35;for(let step=-28;step<=28;step++){const x=step*1.25;points.push([x,waterLevel+.012*Math.sin(x*.6+z*.4+seaTime),z+.12*Math.sin(x*.8+seaTime*.7+row)]);}
+   const alpha=.22/(1+Math.abs(row)*.07);stroke(points,`rgba(227,252,255,${alpha})`,1.1);
+  }
+  for(let i=0;i<95;i++){const x=((i*17.73)%54)-27,z=((i*11.31)%48)-24,p=space([x,waterLevel+.015,z]);if(p[2]<=.1)continue;const s=screen(p),glow=.11+.1*Math.sin(seaTime*1.1+i*2.3);ctx.fillStyle=`rgba(238,255,255,${glow})`;ctx.beginPath();ctx.arc(s[0],s[1],Math.max(.5,Math.min(2,focal/p[2]*.012)),0,Math.PI*2);ctx.fill();}
+  // Ripples touch the exposed edges at the actual waterline, not under a
+  // detached floor shadow. The submerged part of the base stays underwater.
+  for(const side of [-1,1])for(let axis=0;axis<2;axis++){
+   const points=[];for(let i=0;i<=60;i++){const n=i/60,offset=.07+.025*Math.sin(n*24-seaTime*1.2);points.push(axis?[side*(4.5+offset),waterLevel+.01,-3.5+n*7]:[-4.5+n*9,waterLevel+.01,side*(3.5+offset)]);}stroke(points,'rgba(235,255,255,.5)',1.4);
+  }
+ }
+ function draw(){if(disposed||!state)return;const ctx=canvas.getContext('2d');if(!ctx)return;seaTime=motion?.matches?0:win.performance.now()/1000;platformLift=motion?.matches?0:Math.sin(seaTime*.8)*.014;const scale=Math.min(win.devicePixelRatio||1,2);ctx.setTransform(scale,0,0,scale,0,0);ctx.clearRect(0,0,w,h);camera();faces=[];
+  const paintFace=f=>{ctx.beginPath();ctx.moveTo(...f.p[0]);for(const p of f.p.slice(1))ctx.lineTo(...p);ctx.closePath();ctx.fillStyle=f.color;ctx.fill();if(f.edge){ctx.strokeStyle=f.edge;ctx.lineWidth=.5;ctx.stroke();}};
+  ocean(ctx,paintFace);
+  box(0,waterLevel,0,9,platformLift-.01-waterLevel,7,'#8b7860');
+  // Floor layers are below every object. Sorting the slab's large top face
+  // together with the boards would incorrectly cover the far half of them.
+  faces.sort((a,b)=>b.depth-a.depth).forEach(paintFace);faces=[];
+  for(let row=0;row<20;row++)for(let col=-1;col<7;col++){const left=Math.max(-4.5,-4.5+col*1.5+(row%2)*.75),right=Math.min(4.5,-4.5+(col+1)*1.5+(row%2)*.75),back=-3.5+row*.35;if(right<=left)continue;face([[left,platformLift,back],[right,platformLift,back],[right,platformLift,back+.35],[left,platformLift,back+.35]],shade('#b6a083',.96+((row*7+col*3)%5)*.013),'#8c765c55');}
+  faces.sort((a,b)=>b.depth-a.depth).forEach(paintFace);faces=[];
+  for(const item of state.items||[])furniture(item);
+  const a=state.avatar||{},fp=state.perspective==='agent'||state.perspective==='yui';let pet=null;
+  if(a.atHome&&!fp){const p=a.position,foot=space([p.x,.03+platformLift,p.z]),head=space([p.x,1.3+platformLift,p.z]);if(foot[2]>.08&&head[2]>.08){const f=screen(foot),t=screen(head);pet={p:f,height:Math.max(20,f[1]-t[1]),depth:foot[2]};}}
+  function paintPet(){if(!pet)return;const size=pet.height;if(avatar.complete&&avatar.naturalWidth)ctx.drawImage(avatar,pet.p[0]-size*.53,pet.p[1]-size,size*1.06,size);else{ctx.fillStyle='#829dbf';ctx.beginPath();ctx.arc(pet.p[0],pet.p[1]-size*.45,size*.3,0,Math.PI*2);ctx.fill();}pet=null;}
+  faces.sort((a,b)=>b.depth-a.depth);for(const f of faces){if(pet&&pet.depth>f.depth)paintPet();paintFace(f);}paintPet();
+ }
+ function updateUi(){const a=state.avatar||{},fp=['agent','yui'].includes(state.perspective);orbit.setAttribute('aria-pressed',String(!fp));first.setAttribute('aria-pressed',String(fp));callHome.hidden=a.atHome===true;hint.textContent=fp?'拖动环顾 · W A S D 移动':'拖动旋转 · 滚轮缩放';inventory.textContent=(state.items||[]).length?`${state.items.length} 件一起添置的东西`:'';const p=state.persistence;status.textContent=state.buildError||(p?.status==='save-error'||p?.status==='load-error'?p.error||'小窝暂未保存':'');canvas.setAttribute('aria-label',fp?'大肥鱼第一视角，海面木平台，拖动环顾，W A S D 移动':'浮在海面上的小窝木平台，拖动旋转，滚轮缩放');}
+ function setState(next){if(disposed||!next?.ok)return;state=next;if(!drag){lookYaw=state.avatar?.yaw||0;lookPitch=state.avatar?.pitch??-10;}updateUi();draw();}
+ function animate(now){frame=null;if(disposed||doc.hidden||!onScreen||motion?.matches)return;if(now-lastFrame>=50){lastFrame=now;draw();}frame=win.requestAnimationFrame(animate);}
+ function syncAnimation(){if(frame!==null)win.cancelAnimationFrame?.(frame);frame=null;if(!disposed&&!doc.hidden&&onScreen&&!motion?.matches&&typeof win.requestAnimationFrame==='function')frame=win.requestAnimationFrame(animate);}
+ function motionChanged(){draw();syncAnimation();}
+ async function command(request){try{const result=await bridge.home(request);if(!disposed)setState(result);return result;}catch(e){if(!disposed)status.textContent=e.message||'小窝暂未更新';return null;}}
+ function resize(){const r=root.getBoundingClientRect();w=Math.max(1,Math.floor(r.width));h=Math.max(1,Math.floor(r.height));const scale=Math.min(win.devicePixelRatio||1,2);canvas.width=Math.round(w*scale);canvas.height=Math.round(h*scale);draw();}
+ invite.addEventListener('click',async()=>{if(invite.disabled)return;invite.disabled=true;status.textContent='';const detail={};try{doc.dispatchEvent(new win.CustomEvent('neko-home-build-workspace',{detail}));if(!detail.handled)throw Error('共建工作会话暂不可用');await detail.promise;}catch(e){status.textContent=e.message||'共建会话未能打开';}finally{invite.disabled=false;}});
+ canvas.addEventListener('pointerdown',e=>{if(e.button!==0)return;canvas.focus();drag={id:e.pointerId,x:e.clientX,y:e.clientY};canvas.setPointerCapture?.(e.pointerId);});
+ canvas.addEventListener('pointermove',e=>{if(!drag||drag.id!==e.pointerId)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;drag.x=e.clientX;drag.y=e.clientY;if(state?.perspective==='agent'||state?.perspective==='yui'){lookYaw+=dx*.35;lookPitch=clamp(lookPitch-dy*.25,-55,45);pendingLook={action:'avatar_look',yaw:lookYaw,pitch:lookPitch};clearTimeout(lookTimer);lookTimer=win.setTimeout(()=>{if(pendingLook)void command(pendingLook);pendingLook=null;},100);}else{azimuth-=dx*.4;elevation=clamp(elevation+dy*.25,18,70);}draw();});
+ const end=()=>{drag=null;if(pendingLook){clearTimeout(lookTimer);void command(pendingLook);pendingLook=null;}};canvas.addEventListener('pointerup',end);canvas.addEventListener('pointercancel',end);
+ canvas.addEventListener('wheel',e=>{if(state?.perspective!=='orbit')return;e.preventDefault();zoom=clamp(zoom*(e.deltaY<0?1.08:1/1.08),.6,2);draw();},{passive:false});
+ canvas.addEventListener('keydown',e=>{if(!['agent','yui'].includes(state?.perspective))return;const key=e.key.toLowerCase();if(!['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(key))return;e.preventDefault();const yaw=radians(lookYaw),forwardStep=['w','arrowup'].includes(key)?1:['s','arrowdown'].includes(key)?-1:0,side=['d','arrowright'].includes(key)?1:['a','arrowleft'].includes(key)?-1:0;void command({action:'avatar_walk',dx:(Math.sin(yaw)*forwardStep+Math.cos(yaw)*side)*.25,dz:(-Math.cos(yaw)*forwardStep+Math.sin(yaw)*side)*.25});});
+ const observer=win.ResizeObserver?new win.ResizeObserver(resize):null;observer?.observe(root);win.addEventListener('resize',resize);const unsubscribe=bridge.subscribeHome?.(setState);
+ const intersection=win.IntersectionObserver?new win.IntersectionObserver(entries=>{onScreen=entries[0]?.isIntersecting!==false;syncAnimation();}):null;intersection?.observe(root);doc.addEventListener('visibilitychange',syncAnimation);motion?.addEventListener?.('change',motionChanged);
+ const release=()=>{disposed=true;clearTimeout(lookTimer);if(frame!==null)win.cancelAnimationFrame?.(frame);observer?.disconnect();intersection?.disconnect();unsubscribe?.();win.removeEventListener('resize',resize);doc.removeEventListener('visibilitychange',syncAnimation);motion?.removeEventListener?.('change',motionChanged);avatar.onload=null;root.remove();};
+ try{setState(await bridge.home({action:'status'}));resize();syncAnimation();}catch(error){release();throw error;}
+ return release;
+}
+
+function mountYuiHome(stage,options={}){return mountOurHome(stage,options);}

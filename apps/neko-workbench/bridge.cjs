@@ -9,24 +9,32 @@ const {cleanPrompt,historyContext}=require('./pet-context.js');
 const {resolveRuntimePaths}=require('./runtime-config.cjs');
 const {createTaskSessionTracker}=require('./task-session-tracker.cjs');
 const {readDshWorkspaceCatalog}=require('./dsh-workspace-catalog.cjs');
+const {createDshProjectDiscovery}=require('./dsh-project-discovery.cjs');
 const {accountRoute}=require('./account-route.cjs');
 const {createChannelSessionPrivacy}=require('./channel-session-privacy.cjs');
 const {createCompanionAccountBridge}=require('./companion-account-bridge.cjs');
+const {createDshLoginWatch}=require('./dsh-login-watch.cjs');
 const runtimePaths=resolveRuntimePaths();
 const runtime=runtimePaths.modulesDir;
 let createUserMessage,createAssistantMessage,carrierKeyOf;
 exports.name='pet-lab-bridge';
 exports.inject=['agents','subagents','sessionQuery','sessionController','agentPresets','webApp','connection','llm','workingDirectory'];
 exports.apply=function(ctx){
+  const projectDiscovery=createDshProjectDiscovery();
   let root,closing=false;
+  let homeAgent=null;
   const catalog=new Map();
   const initialPrompts=new Map();
   const children=new Map();
   const syncingParents=new Map();let lastRoster='';
   const options=accountRoute();
   const channelPrivacy=createChannelSessionPrivacy(runtimePaths.dataDir,{fishWorkspace:path.join(runtimePaths.workspaceDir,'fish-care')});
-  const companionAccount=createCompanionAccountBridge({ctx,route:options,createUserMessage: input=>{if(typeof createUserMessage!=='function')throw Error('DSH 尚未就绪');return createUserMessage(input);},createAssistantMessage: input=>{if(typeof createAssistantMessage!=='function')throw Error('DSH 尚未就绪');return createAssistantMessage(input);}});
+  const accountDeps={ctx,route:options,createUserMessage: input=>{if(typeof createUserMessage!=='function')throw Error('DSH 尚未就绪');return createUserMessage(input);},createAssistantMessage: input=>{if(typeof createAssistantMessage!=='function')throw Error('DSH 尚未就绪');return createAssistantMessage(input);}};
+  const companionAccount=createCompanionAccountBridge(accountDeps);
+  // Same authenticated model/credit owner, separate in-flight lock and cancellation.
+  const lobbyAccount=createCompanionAccountBridge({...accountDeps,namespace:'lobby'});
   const emit=(method,params)=>process.stdout.write(JSON.stringify({method,params})+'\n');
+  const loginWatch=createDshLoginWatch({getAccount:()=>ctx.get?.('deepseekAccount'),emit});
   const qqbotState=value=>emit('qqbot-care-state',value);
   process.on('neko-qqbot-state',qqbotState);
   const taskSessions=createTaskSessionTracker({emit,getAgent:id=>ctx.agents.get(id),observeSession:observePublicSession,
@@ -181,6 +189,7 @@ exports.apply=function(ctx){
   async function dispatch(method,p){
     if(method==='init'){
       await ctx.get('loader')?.await();
+      loginWatch.start();
       ({createUserMessage,createAssistantMessage}=await import(require('node:url').pathToFileURL(runtime+'/dsh-llm/lib/index.js').href));
       ({carrierKeyOf}=await import(require('node:url').pathToFileURL(runtime+'/dsh-scope/lib/index.js').href));
       const sessionId=p.rootId||randomUUID();
@@ -196,7 +205,18 @@ exports.apply=function(ctx){
     if(method==='companion-account-status')return companionAccount.status();
     if(method==='companion-account-chat')return companionAccount.send({requestId:p.requestId,text:p.text,context:p.context,history:p.history,maxTokens:p.maxTokens});
     if(method==='companion-account-cancel')return companionAccount.cancel({requestId:p.requestId});
-    if(method==='workspace-catalog')return readDshWorkspaceCatalog(ctx,p);
+    if(method==='lobby-account-status')return lobbyAccount.status();
+    if(method==='lobby-account-chat')return lobbyAccount.send({requestId:p.requestId,text:p.text,context:p.context,history:p.history,maxTokens:p.maxTokens});
+    if(method==='lobby-account-cancel')return lobbyAccount.cancel({requestId:p.requestId});
+    if(method==='workspace-catalog')return readDshWorkspaceCatalog(ctx,p,{readInstalledProjects:options=>projectDiscovery.list(options)});
+    if(method==='home-session'){
+      if(homeAgent)return {sessionId:homeAgent.agent.id};
+      const cwd=path.join(runtimePaths.workspaceDir,'our-home'),setup=async agentCtx=>{await ctx.agentPresets.mount(agentCtx,'standard');};
+      const sessionId=typeof p.sessionId==='string'&&/^[a-z0-9-]{1,64}$/i.test(p.sessionId)?p.sessionId:randomUUID();
+      if(p.sessionId){try{homeAgent=await ctx.agents.resume({resumeSessionId:sessionId,agentOptions:options,setup});}catch{throw Error('共建会话暂时无法恢复，原会话已保留');}}
+      else homeAgent=await ctx.agents.create({sessionId,meta:{cwd,agentPreset:'standard',title:'共建我们的家'},agentOptions:options,setup});
+      return {sessionId:homeAgent.agent.id};
+    }
     if(method==='fish-care'){
       if(!['status','start','pause'].includes(p.action))throw new Error('未知养鱼操作');
       const fish=await import(require('node:url').pathToFileURL(require('node:path').join(__dirname,'vendor/dsh-bili-whale/lib/index.js')).href);
@@ -237,6 +257,6 @@ exports.apply=function(ctx){
   const lines=readline.createInterface({input:process.stdin});
   lines.on('line',async line=>{let request;try{request=JSON.parse(line);const result=await dispatch(request.method,request.params||{});process.stdout.write(JSON.stringify({id:request.id,result})+'\n');}catch(error){process.stdout.write(JSON.stringify({id:request?.id,error:String(error?.message||error)})+'\n');}});
   lines.on('close',()=>{if(closing)return;closing=true;Promise.resolve().then(()=>typeof ctx.root?.dispose==='function'?ctx.root.dispose():ctx.dispose?.()).finally(()=>process.exit(0));});
-  ctx.on('dispose',()=>{closing=true;companionAccount.dispose();process.removeListener('neko-qqbot-state',qqbotState);taskSessions.dispose();lines.close();});
+  ctx.on('dispose',()=>{closing=true;loginWatch.dispose();companionAccount.dispose();lobbyAccount.dispose();process.removeListener('neko-qqbot-state',qqbotState);taskSessions.dispose();lines.close();});
   emit('ready',{version:2});
 };

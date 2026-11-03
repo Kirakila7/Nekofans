@@ -165,9 +165,10 @@ async function shellViewsCase(t, JSDOM, { lobby = false } = {}) {
   }
 
   layout = { ...layout, officeMode: 'codex' }; subscriber({ ...state, workspaceRevision: 1 }); await tick();
-  assert(!doc.querySelector('.neko-office-panel').hidden, 'fixture reached the Codex view');
-  assert(doc.querySelector('main').hasAttribute('inert'), 'only the native DSH main is inert under Codex');
-  expectIntact('Codex workspace view');
+  assert.equal(doc.querySelector('.neko-office-panel'),null,'the retired engine view is not mounted');
+  assert(!doc.querySelector('main').hasAttribute('inert'),'DSH remains available under a legacy saved engine selection');
+  assert.equal(layout.officeMode,'codex','the shell does not overwrite saved engine data');
+  expectIntact('legacy saved engine projected into the DSH workspace');
 
   doc.querySelector('.neko-community').click(); await tick();
   assert.equal(communityOpens, 1, 'fixture reached the community view');
@@ -175,7 +176,7 @@ async function shellViewsCase(t, JSDOM, { lobby = false } = {}) {
   community({ status: 'hidden' }); await tick();
   expectIntact('back from community');
 
-  doc.querySelector('.neko-workspace-settings').click(); await tick();
+  doc.dispatchEvent(new w.CustomEvent('neko-workbench-open-settings',{detail:{section:'general'}})); await tick();
   assert(!doc.querySelector('.neko-workspace-modal').hidden, 'fixture reached the settings view');
   expectIntact('settings view');
   doc.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await tick();
@@ -273,7 +274,7 @@ async function runIsolationHarness(scenario) {
     static fromWebContents(wc) { return windows.find(window => window.webContents === wc); }
   }
   class Tray extends EventEmitter { setTitle() {} setToolTip() {} popUpContextMenu() {} }
-  const electron = { app, BrowserWindow: Window, ipcMain: { handle: (name, fn) => handlers.set(name, fn), on: () => {}, removeListener: () => {} },
+  const electron = { app, BrowserWindow: Window, ipcMain: { handle: (name, fn) => handlers.set(name, fn), removeHandler:name=>handlers.delete(name), on: () => {}, removeListener: () => {} },
     screen: { getPrimaryDisplay: () => ({ workArea: { x: 0, y: 0, width: 1440, height: 1000 } }) },
     shell: { openExternal: async () => {}, openPath: async () => {} }, Menu: { buildFromTemplate: template => ({ template, popup() {} }), setApplicationMenu() {} }, Tray,
     nativeImage: { createEmpty: () => ({}) }, dialog: { showErrorBox() {}, showMessageBox: async () => {}, showOpenDialog: async () => ({ canceled: true, filePaths: [] }) },

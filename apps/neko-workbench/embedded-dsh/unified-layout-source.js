@@ -33,7 +33,7 @@ function installUnifiedLayout(options = {}) {
     const line = doc.createElementNS('http://www.w3.org/2000/svg','path'); line.setAttribute('d','M6 3.5h12A2.5 2.5 0 0 1 20.5 6v12a2.5 2.5 0 0 1-2.5 2.5H6A2.5 2.5 0 0 1 3.5 18V6A2.5 2.5 0 0 1 6 3.5ZM10 4v16M10 12h10'); line.setAttribute('fill','none'); line.setAttribute('stroke','currentColor'); line.setAttribute('stroke-width','1.6'); line.setAttribute('stroke-linejoin','round'); icon.appendChild(line); sceneButton.replaceChildren(icon);
   }
   sceneButton.title = '聊天、视频与工作'; sceneButton.setAttribute('aria-label', '打开聊天、视频与工作布局'); sceneButton.setAttribute('aria-pressed', 'false');
-  container.appendChild(sceneButton);
+  sceneButton.hidden = doc.body.hasAttribute('data-neko-workbench-edition'); container.appendChild(sceneButton);
   let configReturnFocus = trigger;
   const config = el('section', 'neko-unified-config'); config.dataset.nekoUnifiedConfig = ''; config.hidden = true; config.id = 'neko-unified-config';
   config.setAttribute('role', 'dialog'); config.setAttribute('aria-labelledby', 'neko-unified-config-title'); config.setAttribute('aria-describedby', 'neko-unified-config-help');
@@ -120,12 +120,6 @@ function installUnifiedLayout(options = {}) {
   // Social surfaces temporarily occupy the existing sidebar track.  This is
   // navigation, not a saved pane layout; the right-hand work session stays put.
   let sideSurface = null, sideHome = false, videoSite = 'bilibili', videoSelectionRevision = 0;
-  if (typeof bridge.workspace === 'function') {
-    const initialRevision = videoSelectionRevision;
-    Promise.resolve().then(() => bridge.workspace({action:'video-platform'})).then(value => {
-      if (!disposed && initialRevision === videoSelectionRevision && ['bilibili','youtube'].includes(value?.platform)) { videoSite = value.platform; renderConfig(); updateVideoLabels(); schedule(); }
-    }).catch(() => {});
-  }
   function announceSideSurface(surface) {
     for (const [selector, name] of [['.neko-community-yui','community'],['.neko-side-rail__bilibili','bilibili']]) {
       const entry = doc.querySelector(selector);
@@ -143,7 +137,8 @@ function installUnifiedLayout(options = {}) {
   // This deliberately transient preset does not enable or overwrite saved
   // legacy layouts. It reuses the real chatroom, site view and DSH surface.
   function openFixedScene() {
-    if (disposed || fixedScene) return;
+    if (disposed || fixedScene || isOfficeEdition()) return;
+    if (doc.body.hasAttribute('data-neko-daily-compact') && typeof bridge.videoWindow === 'function') { void openSideSurface(videoSite); return; }
     closeSideSurface();
     doc.dispatchEvent(new win.Event('neko-workspace-expand'));
     activateFlexRoom();
@@ -171,7 +166,10 @@ function installUnifiedLayout(options = {}) {
     hideAll(); clearFlex(); clearCoding(); doc.dispatchEvent(new win.Event('neko-fixed-scene-exit')); schedule();
   }
   function openSideSurface(site, { home = false } = {}) {
-    if (disposed || !['community', 'bilibili', 'youtube'].includes(site)) return;
+    if (disposed || isOfficeEdition() || !['community', 'bilibili'].includes(site)) return;
+    if (doc.body.hasAttribute('data-neko-daily-compact') && site !== 'community' && typeof bridge.videoWindow === 'function') {
+      return Promise.resolve(bridge.videoWindow({action:'open',site})).catch(()=>{if(!disposed)showNotice('视频浮窗未能打开，请重试');});
+    }
     if (layout.enabled && layout.flex?.enabled) {
       if (site === 'bilibili' || site === 'youtube') {
         videoSite = site;
@@ -508,7 +506,11 @@ function installUnifiedLayout(options = {}) {
     p.account.hidden = site !== 'community' || typeof bridge.communityAccount !== 'function';
     const boundsStyle = { left: `${Math.round(rect.x)}px`, top: `${Math.round(rect.y)}px`, width: `${Math.round(rect.width)}px`, height: `${Math.round(rect.height)}px` };
     for (const [key, value] of Object.entries(boundsStyle)) if (p.node.style[key] !== value) p.node.style[key] = value;
-    const bar = Math.max(42, Math.ceil(p.header.getBoundingClientRect().height));
+    const borderlessCommunity = site === 'community' && doc.body.hasAttribute('data-neko-daily-compact');
+    p.header.hidden = borderlessCommunity;
+    p.header.inert = borderlessCommunity; p.header.setAttribute('aria-hidden',String(borderlessCommunity));
+    p.header.style.setProperty('display',borderlessCommunity?'none':'flex','important');
+    const bar = borderlessCommunity ? 0 : Math.max(42, Math.ceil(p.header.getBoundingClientRect().height));
     // Electron child views are composited above renderer DOM, including the
     // divider. Leave its hit area uncovered on both sides of a split so the
     // user can grab it even when a community/video page occupies either pane.
@@ -519,7 +521,7 @@ function installUnifiedLayout(options = {}) {
     // Windows native views must leave a real content strip for the working
     // float: CSS padding on the host cannot protect a remote player's controls.
     const floating = floatingComposerRect;
-    if (windowsHost && floating && floating.x < targetBounds.x + targetBounds.width && floating.x + floating.width > targetBounds.x && floating.y < targetBounds.y + targetBounds.height && floating.y + floating.height > targetBounds.y) {
+    if (!(doc.body.hasAttribute('data-neko-daily-compact') && site === 'community') && windowsHost && floating && floating.x < targetBounds.x + targetBounds.width && floating.x + floating.width > targetBounds.x && floating.y < targetBounds.y + targetBounds.height && floating.y + floating.height > targetBounds.y) {
       targetBounds.height = Math.max(0, floating.y - 8 - targetBounds.y);
     }
     if (targetBounds.height <= 1) { closeView(slot); return; }
@@ -548,6 +550,7 @@ function installUnifiedLayout(options = {}) {
     for (const key of ['--neko-flex-compact-right','--neko-flex-compact-width','--neko-flex-compact-bottom']) doc.body.style.removeProperty(key);
   }
   function expandFlexWorkspace() {
+    if (doc.body.hasAttribute('data-neko-daily-compact')) return;
     if (!flexCompact) return;
     if (fixedScene) { exitFixedScene(); doc.dispatchEvent(new win.Event('neko-chatroom-show-workspace')); return; }
     clearFlexCompact(); schedule();
@@ -741,6 +744,7 @@ function installUnifiedLayout(options = {}) {
   }
   function place() {
     frame = 0; if (disposed) return;
+    if (isOfficeEdition()) { hideAll(); clearFlex(); clearCoding(); for (const p of Object.values(panels)) p.node.hidden = true; divider.hidden = mobile.hidden = true; postNativeDivider(null); return; }
     if (layout.enabled && layout.flex?.enabled) { placeFlex(); return; }
     clearFlex();
     if (sideSurface) {
@@ -751,7 +755,11 @@ function installUnifiedLayout(options = {}) {
       const geo = findGeometry();
       for (const slot of ['left', 'right']) { panels[slot].node.hidden = true; closeView(slot); }
       if (!geo) { panels.side.node.hidden = true; closeView('side'); return; }
-      placePanel('side', geo.side, sideSurface); return;
+      if (doc.body.hasAttribute('data-neko-daily-compact') && sideSurface === 'community') {
+        const railRect=rail.getBoundingClientRect(),title=doc.querySelector('.neko-window-titlebar')?.getBoundingClientRect();
+        const x=Math.max(0,railRect.right||64),y=title?.height>0?Math.max(0,title.bottom):Math.max(0,geo.frameNode.getBoundingClientRect().top||0);
+        placePanel('side',{x,y,width:Math.max(0,win.innerWidth-x),height:Math.max(0,win.innerHeight-y)},sideSurface);
+      } else placePanel('side', geo.side, sideSurface); return;
     }
     if (!layout.enabled) { for (const p of Object.values(panels)) p.node.hidden = true; divider.hidden = mobile.hidden = true; postNativeDivider(null); return; }
     if (doc.visibilityState === 'hidden' || suspended || hasOverlay()) {
@@ -794,6 +802,30 @@ function installUnifiedLayout(options = {}) {
     }
   }
   function schedule() { if (disposed || frame) return; frame = (win.requestAnimationFrame || (fn => win.setTimeout(fn, 16)))(place); }
+  const isOfficeEdition = () => doc.body.getAttribute('data-neko-workbench-edition') === 'office';
+  let dailyCompact = false;
+  function editionChanged() {
+    const daily=doc.body.hasAttribute('data-neko-daily-compact');
+    sceneButton.hidden = doc.body.hasAttribute('data-neko-workbench-edition');
+    sceneButton.title=daily?'打开视频浮窗':'聊天、视频与工作';sceneButton.setAttribute('aria-label',daily?'打开视频浮窗':'打开聊天、视频与工作布局');
+    if(typeof bridge.videoWindow==='function')void Promise.resolve(bridge.videoWindow({action:isOfficeEdition()?'suspend':'resume'})).catch(()=>{});
+    if (isOfficeEdition()) {
+      dailyCompact = flexCompact;
+      void setConfig(false); hideAll(); clearFlex(); clearCoding(); hideDrops();
+      for (const p of Object.values(panels)) p.node.hidden = true;
+      divider.hidden = mobile.hidden = true; postNativeDivider(null);
+      for (const name of ['data-neko-unified-enabled','data-neko-flex-mode','data-neko-fixed-scene','data-neko-side-social-active']) doc.body.removeAttribute(name);
+    } else {
+      flexCompact = dailyCompact;
+      doc.body.toggleAttribute('data-neko-unified-enabled', !!layout.enabled);
+      doc.body.toggleAttribute('data-neko-flex-mode', !!(layout.enabled && layout.flex?.enabled));
+      doc.body.toggleAttribute('data-neko-fixed-scene', fixedScene);
+      doc.body.toggleAttribute('data-neko-side-social-active', !!sideSurface);
+      if (sideSurface) announceSideSurface(sideSurface);
+    }
+    schedule();
+  }
+  doc.addEventListener('neko-workbench-edition-change', editionChanged);
   function hideDrops() {
     for (const [, { zone }] of Object.entries(drops)) {
       zone.hidden = true; zone.removeAttribute('data-active');
@@ -896,10 +928,10 @@ function installUnifiedLayout(options = {}) {
   doc.addEventListener('click', shortcut, true);
   function videoOpen(event) {
     const detail = event.detail;
-    if (disposed || !detail || !['bilibili','youtube'].includes(detail.platform)) return;
+    if (disposed || !detail || detail.platform !== 'bilibili') return;
     if (fixedScene) exitFixedScene();
     ++videoSelectionRevision; videoSite = detail.platform; detail.handled = true; renderConfig(); updateVideoLabels();
-    openSideSurface(videoSite, {home:videoSite === 'bilibili'}); detail.promise = Promise.resolve();
+    detail.promise = Promise.resolve(openSideSurface(videoSite, {home:videoSite === 'bilibili'}));
   }
   doc.addEventListener('neko-video-open', videoOpen);
   // A companion's community visit must not invoke the legacy single-pane
@@ -915,6 +947,7 @@ function installUnifiedLayout(options = {}) {
   doc.addEventListener('neko-unified-open-community', visitCommunity);
   doc.addEventListener('neko-side-surface-close', closeSideSurface);
   function roomModeChanged() {
+    if (isOfficeEdition()) return;
     if (layout.enabled && layout.flex?.enabled && !sideSurface && !flexRestoringRoom) {
       if (!doc.body.hasAttribute('data-neko-chatroom-active')) { if (!flexTabs.hidden) flexActive='coding'; showNotice('工作区已在三面板中打开'); activateFlexRoom(); }
       else if (!flexTabs.hidden) flexActive='social';
@@ -944,6 +977,8 @@ function installUnifiedLayout(options = {}) {
     if (typeof state.canPlayOfficial === 'boolean') p.play.disabled = !state.canPlayOfficial || !!state.isOfficialPlayer;
   });
   if (typeof bridge.subscribeCommunityAccount === 'function') unsubscribeAccount = bridge.subscribeCommunityAccount(paintAccount);
+  const unsubscribeVideoWindow=typeof bridge.subscribeVideoWindow==='function'?bridge.subscribeVideoWindow(state=>{if(doc.body.hasAttribute('data-neko-daily-compact'))sceneButton.setAttribute('aria-pressed',String(!!state?.open));}):null;
+  if(doc.body.hasAttribute('data-neko-daily-compact')){sceneButton.title='打开视频浮窗';sceneButton.setAttribute('aria-label','打开视频浮窗');}
   Promise.resolve(bridge.workspace({ action:'pane-layout' })).then(saved => {
     if (disposed || revision) return;
     // Keep the durable layout intact. Each newly opened workbench starts with
@@ -959,6 +994,8 @@ function installUnifiedLayout(options = {}) {
     exitFixedScene();
     closeSideSurface();
     disposed = true; revision++; hideAll(); clearCoding(); postNativeDivider(null); if (typeof unsubscribeNativeDivider === 'function') unsubscribeNativeDivider(); doc.body.removeAttribute('data-neko-unified-enabled');
+    doc.removeEventListener('neko-workbench-edition-change', editionChanged);
+    if(typeof unsubscribeVideoWindow==='function')unsubscribeVideoWindow();
     observer.disconnect(); overlayObserver.disconnect(); resize?.disconnect(); win.removeEventListener('resize', schedule); doc.removeEventListener('scroll', schedule, true); doc.removeEventListener('click', sceneNavigation, true); doc.removeEventListener('click', shortcut, true); doc.removeEventListener('neko-unified-open-community', visitCommunity); doc.removeEventListener('neko-collapsed-composer-geometry', composerGeometryChanged); doc.removeEventListener('keydown', escapeConfig);
     doc.removeEventListener('neko-workspace-expand', expandFlexWorkspace);
     doc.removeEventListener('neko-chatroom-mode-change', roomModeChanged);

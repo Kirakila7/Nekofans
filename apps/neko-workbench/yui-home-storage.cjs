@@ -9,16 +9,26 @@ const {createYuiHomeSession} = require('./yui-home-session.cjs');
 // The storage path is fixed and independent of the original Yui/Minecraft data.
 function createYuiHomeFileStore(userDataDirectory, io = fs) {
   if (typeof userDataDirectory !== 'string' || !path.isAbsolute(userDataDirectory)) throw new Error('工作台数据目录无效');
-  const directory = path.join(userDataDirectory, 'yui-home');
+  const directory = path.join(userDataDirectory, 'our-home');
   const target = path.join(directory, 'world.json');
+  async function atomicCommit(operation) {
+    // Windows scanners can briefly retain a handle to an otherwise writable
+    // save. Retry the atomic operation; never delete the previous save first.
+    for(let attempt=0;;attempt++){
+      try{return await operation();}catch(error){
+        if(process.platform!=='win32'||attempt>=4||!['EPERM','EACCES','EBUSY'].includes(error.code))throw error;
+        await new Promise(resolve=>setTimeout(resolve,25*2**attempt));
+      }
+    }
+  }
   async function write(text, initial) {
     await io.mkdir(directory, {recursive: true, mode: 0o700});
     const tmp = path.join(directory, `.world-${crypto.randomBytes(12).toString('hex')}.tmp`);
     try {
       await io.writeFile(tmp, text, {encoding: 'utf8', mode: 0o600, flag: 'wx'});
       // A newly-created world must never replace a file created concurrently.
-      if (initial) await io.link(tmp, target);
-      else await io.rename(tmp, target);
+      if (initial) await atomicCommit(()=>io.link(tmp, target));
+      else await atomicCommit(()=>io.rename(tmp, target));
     } finally {
       await io.unlink(tmp).catch(() => {});
     }
@@ -40,13 +50,13 @@ function createYuiHomeFileStore(userDataDirectory, io = fs) {
 }
 
 function worldDocument(state) {
-  return {version: 1, blocks: state.blocks, camera: state.camera, perspective: state.perspective, avatar: state.avatar};
+  return {version: 2, blocks: state.blocks,items:state.items||[], camera: state.camera, perspective: state.perspective, avatar: state.avatar};
 }
 
 function restoreWorld(text) {
   if (typeof text !== 'string' || Buffer.byteLength(text) > 4_000_000) throw new Error('存档格式无效');
   const data = JSON.parse(text);
-  if (!data || data.version !== 1 || !Array.isArray(data.blocks) || data.blocks.length > 10000 || !data.camera || !data.avatar || !['orbit','yui'].includes(data.perspective)) throw new Error('存档格式无效');
+  if (!data || ![1,2].includes(data.version) || !Array.isArray(data.blocks) || data.blocks.length > 10000 || !data.camera || !data.avatar || !['orbit','yui','agent'].includes(data.perspective)) throw new Error('存档格式无效');
   const world = createYuiHomeSession({empty:true});
   const seen = new Set();
   for (const block of data.blocks) {
@@ -59,6 +69,7 @@ function restoreWorld(text) {
   for (const k of ['azimuth','elevation','zoom']) if (typeof data.camera[k] !== 'number' || !Number.isFinite(data.camera[k])) throw new Error('存档视角无效');
   world.command({action:'camera', azimuth:data.camera.azimuth, elevation:data.camera.elevation, zoom:data.camera.zoom});
   world.command({action:'avatar', position:data.avatar});
+  if(data.version===2)world.command({action:'furnish',items:data.items});
   world.command({action:'perspective', mode:data.perspective});
   return world;
 }

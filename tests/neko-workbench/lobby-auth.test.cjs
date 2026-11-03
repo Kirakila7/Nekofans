@@ -87,6 +87,28 @@ async function signedIn(f = fixture()) {
   return { ...f, url, redirect };
 }
 
+test('forced authorization is single-flight and cancel preserves the prior grant and access token',async()=>{
+ const f=await signedIn();const first=f.auth.signIn({force:true}),second=f.auth.signIn({force:true});assert.equal(first,second);await f.opened$(2);await f.auth.cancelSignIn();assert.equal((await first).status,'signed-in');assert.equal(f.store.value,tokenSet(1).refresh);assert.equal(await f.auth.getAccessToken(),tokenSet(1).access);f.auth.dispose();
+});
+test('forced authorization replaces the grant only after a successful independent code exchange',async()=>{
+ let issued=0;const f=await signedIn(fixture({token:()=>grant(++issued)}));const done=f.auth.signIn({force:true}),url=new URL(await f.opened$(2)),redirect=url.searchParams.get('redirect_uri');await hit(redirect,{path:callbackPath(redirect,{code:CODE,state:url.searchParams.get('state')})});assert.equal((await done).status,'signed-in');assert.equal(f.store.value,tokenSet(2).refresh);assert.equal(await f.auth.getAccessToken(),tokenSet(2).access);f.auth.dispose();
+});
+test('cancel during replacement persistence rolls back the previous grant; concurrent sign-out cannot revive it',async()=>{
+ for(const signingOut of [false,true]){
+  let issued=0;const f=await signedIn(fixture({token:()=>grant(++issued)}));let release;f.store.gate=new Promise(r=>release=r);
+  const done=f.auth.signIn({force:true}),url=new URL(await f.opened$(2)),redirect=url.searchParams.get('redirect_uri');await hit(redirect,{path:callbackPath(redirect,{code:CODE,state:url.searchParams.get('state')})});while(f.calls.filter(c=>c.body.grant_type==='authorization_code').length<2)await tick();await tick();
+  const interrupted=signingOut?f.auth.signOut():f.auth.cancelSignIn();release();await interrupted;await done;assert.equal(f.store.value,signingOut?null:tokenSet(1).refresh);assert.equal(f.auth.state.status,signingOut?'signed-out':'signed-in');f.auth.dispose();
+ }
+});
+test('a replacement waits for in-flight refresh rotation, then cancellation preserves the rotated grant',async()=>{
+ let finishRefresh;const f=await signedIn(fixture({token:body=>body.grant_type==='refresh_token'?new Promise(r=>finishRefresh=r):grant(1)}));f.clock.t+=3600000;
+ const refreshing=f.auth.getAccessToken();while(!finishRefresh)await tick();const replacement=f.auth.signIn({force:true});await tick();assert.equal(f.opened.length,1);finishRefresh(grant(2));await refreshing;await f.opened$(2);await f.auth.cancelSignIn();await replacement;assert.equal(f.store.value,tokenSet(2).refresh);assert.equal(await f.auth.getAccessToken(),tokenSet(2).access);f.auth.dispose();
+});
+
+test('replacement token endpoint failure retains the original usable authorization',async()=>{
+ let issued=0;const f=await signedIn(fixture({token:()=>++issued===1?grant(1):json({error:'invalid_grant'},400)}));const done=f.auth.signIn({force:true}),url=new URL(await f.opened$(2)),redirect=url.searchParams.get('redirect_uri');await hit(redirect,{path:callbackPath(redirect,{code:CODE,state:url.searchParams.get('state')})});assert.equal((await done).status,'signed-in');assert(f.auth.state.error);assert.equal(f.store.value,tokenSet(1).refresh);assert.equal(await f.auth.getAccessToken(),tokenSet(1).access);f.auth.dispose();
+});
+
 // Everything the module may expose to the renderer or to logs, flattened.
 function exposed(f, errors = []) {
   return JSON.stringify({ states: f.states, state: f.auth.state, errors: errors.map(error => ({ message: error?.message, code: error?.code })) });

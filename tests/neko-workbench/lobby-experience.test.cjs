@@ -16,6 +16,17 @@ function setup(t, { reply = '我和主人在大厅里聊了合成的乌龙茶，
 }
 const ctx = (mode = 'assist') => ({ channelId: 'ch-lobby', ownerId: F.OWNER, catId: F.CAT, mode });
 
+test('changing model route retains the interrupted public segment instead of storing a late summary',async t=>{
+  const s=setup(t);let current=true,started;
+  const begin=new Promise(resolve=>{started=resolve;});let finish;
+  const held=new Promise(resolve=>{finish=resolve;});
+  const provider={isCurrent:()=>current,async *stream(){started();await held;throw Object.assign(new Error('fixed route changed'),{code:'provider_changed'});}};
+  const exp=s.make({getProvider:()=>provider});exp.observe(F.owner({text:RAW,created_at:s.clock.now()}),ctx());exp.close();
+  await begin;current=false;finish();await exp.idle();
+  assert.equal(s.writes.length,0);const queue=JSON.parse(fs.readFileSync(s.file,'utf8'));assert.equal(queue.segments.length,1);
+  const retry=s.make();assert.equal(await retry.processPending(),1);assert.equal(s.writes.length,1);assert(!s.writes[0].text.includes(RAW));exp.dispose();retry.dispose();
+});
+
 test('a segment collects the owner, her cat and replies, then summarizes after 10 idle minutes', async t => {
   const s = setup(t);
   const asked = F.message({ text: '谁喜欢乌龙茶？', created_at: s.clock.now() });

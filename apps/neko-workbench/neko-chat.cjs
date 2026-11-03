@@ -40,12 +40,13 @@ class NekoChat extends EventEmitter{
       this.emit('connection',{connection:'ready',error:''});
     }catch(error){if(generation!==this.generation)return;this.emit('connection',{connection:'disconnected',error:error.message.startsWith('N.E.K.O.')||error.message.startsWith('没有找到')?error.message:'N.E.K.O. 未启动，右键可重新连接。'});throw error;}
   }
-  send(text){
+  send(text,{environmentContext}={}){
     if(this.socket?.readyState!==1)throw new Error('N.E.K.O. 未连接，右键可以重新连接。');
     if(this.pending)throw new Error('我还在回复，等我一下。');
     const requestId='dshpet-'+randomUUID();
     this.pending={requestId,text:'',turnId:null,timer:setTimeout(()=>this.fail(new Error('N.E.K.O. 回复超时，请在原界面查看后重试。')),this.timeout)};
-    this.socket.send(JSON.stringify({action:'stream_data',input_type:'text',data:text,request_id:requestId,render_language:'zh-CN'}));
+    const data=typeof environmentContext==='string'&&environmentContext?text+'\n\n'+environmentContext.slice(0,18000):text;
+    this.socket.send(JSON.stringify({action:'stream_data',input_type:'text',data,request_id:requestId,render_language:'zh-CN'}));
     this.emit('start',{requestId});return {requestId,character:this.character};
   }
   receive(message){

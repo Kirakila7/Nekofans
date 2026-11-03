@@ -65,13 +65,14 @@ test('临时角色状态和第一视角与原场景接口兼容', () => {
   assert.equal(world.command({action:'avatar_reset'}).avatar.form, 'human');
 });
 
-test('新世界有木地板、墙、窗和可通行的门洞', () => {
+test('新世界只有木地板，不预置墙壁、窗或家具', () => {
   const state = createYuiHomeSession().state();
   const at = (x,y,z)=>state.blocks.find(b=>b.x===x&&b.y===y&&b.z===z);
   assert.equal(at(0,0,0).material,'oak_planks');
-  assert.equal(at(-3,1,0).material,'oak_planks');
-  assert.equal(at(-3,2,0).material,'glass');
+  assert.equal(at(-3,1,0),undefined);
+  assert.equal(at(-3,2,0),undefined);
   assert.equal(at(0,1,2),undefined);
   assert.equal(at(0,2,2),undefined);
-  assert.equal(at(0,3,2).material,'oak_planks');
+  assert.equal(at(0,3,2),undefined);
+  assert.equal(state.items.length,0);
 });

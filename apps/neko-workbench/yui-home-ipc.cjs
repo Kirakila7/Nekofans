@@ -6,6 +6,7 @@ const fields = Object.freeze({
   status: [], textures: [], 'textures-retry': [], 'retry-save': [], place: ['x','y','z','material'], remove: ['x','y','z'], clear: [],
   camera: ['azimuth','elevation','zoom'], perspective: ['mode'],
   avatar: ['position'], avatar_checkpoint: ['position'], avatar_reset: [],
+  'return-home':[],'avatar_look':['yaw','pitch'],'avatar_walk':['dx','dz'],
 });
 
 function validateRequest(request) {
@@ -27,7 +28,7 @@ function createYuiHomeIpc({assertCaller, userDataDirectory, publish, createStora
     }
     return initialization;
   }
-  return async function handle(event, request) {
+  const handle=async function handle(event, request) {
     assertCaller(event);
     validateRequest(request);
     if (request.action === 'textures' || request.action === 'textures-retry') {
@@ -40,5 +41,6 @@ function createYuiHomeIpc({assertCaller, userDataDirectory, publish, createStora
     assertCaller(event);
     return request.action === 'status' ? storage.state() : storage.command(request);
   };
+  handle.getStorage=getStorage;return handle;
 }
 module.exports = {createYuiHomeIpc};

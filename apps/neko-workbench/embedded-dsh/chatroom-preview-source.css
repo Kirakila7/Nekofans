@@ -39,6 +39,19 @@ button.neko-chatroom-preview__room:focus-visible { outline:2px solid #4c89ad; ou
 .neko-chatroom-preview__illustration span { position:absolute; right:0; top:2px; color:#90bfe3; font-size:18px; }
 .neko-chatroom-preview__empty strong { color:#647e98; font-size:12px; }
 .neko-chatroom-preview__empty p { max-width:190px; margin:5px 0 0; color:#96a7b8; font-size:11px; line-height:1.6; }
+.neko-chatroom-preview__content[hidden]{display:none!important}
+.neko-chatroom-preview__empty[hidden]{display:none!important}
+/* Daily navigation stays mounted beside the selected room and its content. */
+.neko-chatroom-preview[data-neko-room-split],.neko-chatroom-preview[data-neko-room-split][data-home-open]{display:grid!important;grid-template-columns:var(--neko-room-selector-width,280px) minmax(0,1fr);grid-template-rows:minmax(0,1fr);gap:0;padding:0!important;overflow:hidden;border-radius:0;background:var(--dsw-specific-sidebar-fill,#e5edf8);color:var(--nws-text,#263750)}
+.neko-chatroom-preview[data-neko-room-split] .neko-chatroom-preview__room-view{display:block!important;min-width:0;height:100%;box-sizing:border-box;overflow:auto;padding:20px 16px var(--neko-room-chat-reserve,200px);border-right:1px solid var(--nws-border,#cbdbee)}
+.neko-chatroom-preview[data-neko-room-split] .neko-chatroom-preview__heading{flex-wrap:wrap;gap:5px}.neko-chatroom-preview[data-neko-room-split] .neko-chatroom-preview__heading h2{font-size:17px}
+.neko-chatroom-preview[data-neko-room-split] .neko-chatroom-preview__intro{font-size:11px;margin:8px 0 18px}.neko-chatroom-preview[data-neko-room-split] .neko-chatroom-preview__search{font-size:12px;padding:9px}
+.neko-chatroom-preview[data-neko-room-split] .neko-chatroom-preview__room{padding:11px 8px;margin-bottom:5px;gap:9px;border:1px solid transparent}.neko-chatroom-preview[data-neko-room-split] .neko-chatroom-preview__room[aria-current=page]{background:#ffffffa6;border-color:var(--nws-border,#cbdbee)}
+.neko-chatroom-preview[data-neko-room-split] .neko-chatroom-preview__room-copy strong{font-size:13px}.neko-chatroom-preview[data-neko-room-split] .neko-chatroom-preview__room-copy small{font-size:10px}.neko-chatroom-preview[data-neko-room-split] .neko-chatroom-preview__room-icon{width:30px;height:30px;font-size:17px}
+.neko-chatroom-preview[data-neko-room-split] .neko-chatroom-preview__content{display:flex;min-width:0;min-height:0;height:100%;overflow:hidden;background:var(--dsw-alias-bg-layer-1,#f3f7fc)}
+.neko-chatroom-preview[data-neko-room-split] .neko-chatroom-preview__content>.neko-chatroom-preview__empty:not([hidden]){display:flex;flex:1;flex-direction:column;align-items:center;justify-content:center;gap:6px;margin:0;padding:24px;border:0;border-radius:0;background:transparent}.neko-chatroom-preview[data-neko-room-split] .neko-chatroom-preview__empty p{max-width:260px}
+.neko-chatroom-preview[data-neko-room-split] .neko-chatroom-preview__home-view:not([hidden]){display:flex;flex:1;min-width:0;min-height:0;height:100%;box-sizing:border-box;overflow:hidden;padding:0}
+.neko-chatroom-preview[data-neko-room-split] [data-neko-home-stage]{min-height:0!important;flex:1;height:auto!important}
 
 /* Windows workbench surfaces share one quiet blue-gray palette and type scale. */
 body[data-neko-window-chrome="windows"] .neko-chatroom-preview { padding:24px 22px; background:var(--dsw-specific-sidebar-fill); font-family:var(--neko-font-ui); border-right:1px solid var(--nws-border); }

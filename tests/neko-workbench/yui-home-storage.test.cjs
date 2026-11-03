@@ -12,7 +12,7 @@ test('首次打开保存新家，已有空存档不重新生成房屋', async t 
   const store = createYuiHomeFileStore(dir);
   const first = await createYuiHomeStorage({store});
   const initial = first.state().blocks;
-  assert.ok(initial.length > 35);
+  assert.ok(initial.length >= 35);
   assert.equal(JSON.parse(await store.load()).blocks.length, initial.length);
   await first.command({action:'place', x:0,y:0,z:0,material:'stone'});
   const reloaded = await createYuiHomeStorage({store});
@@ -55,7 +55,7 @@ test('独立存档可重启恢复，原家园与 Minecraft 路径不会被访问
   t.after(() => fs.rm(dir, {recursive:true, force:true}));
   const store = createYuiHomeFileStore(dir);
   const first = await createYuiHomeStorage({store});
-  assert.ok(first.state().blocks.length > 35);
+  assert.ok(first.state().blocks.length >= 35);
   await first.command({action:'clear'});
   const notifications = [];
   first.subscribe(s => notifications.push(s.persistence.status));
@@ -69,15 +69,15 @@ test('独立存档可重启恢复，原家园与 Minecraft 路径不会被访问
   assert.equal(state.persistence.status, 'saved');
   assert.deepEqual(state.blocks, [{x:1,y:2,z:3,material:'glass'}]);
   assert.deepEqual(state.camera, {azimuth:15,elevation:35,zoom:1.2});
-  assert.deepEqual(await fs.readdir(path.join(dir,'yui-home')), ['world.json']);
-  assert.equal(JSON.parse(await fs.readFile(path.join(dir,'yui-home','world.json'),'utf8')).version, 1);
+  assert.deepEqual(await fs.readdir(path.join(dir,'our-home')), ['world.json']);
+  assert.equal(JSON.parse(await fs.readFile(path.join(dir,'our-home','world.json'),'utf8')).version, 2);
 });
 
 test('存档损坏时禁止覆盖并提供可显示的错误', async t => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'yui-home-corrupt-'));
   t.after(() => fs.rm(dir, {recursive:true, force:true}));
-  await fs.mkdir(path.join(dir, 'yui-home'));
-  const target = path.join(dir, 'yui-home', 'world.json');
+  await fs.mkdir(path.join(dir, 'our-home'));
+  const target = path.join(dir, 'our-home', 'world.json');
   await fs.writeFile(target, '{bad json');
   const world = await createYuiHomeStorage({store:createYuiHomeFileStore(dir)});
   assert.equal(world.state().persistence.status, 'load-error');

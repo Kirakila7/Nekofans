@@ -116,7 +116,7 @@ function mockClient({ config, auth, onEvent, onChange, now }) {
       history: async () => ({ messages: [], has_more: false, next_before_seq: null }),
       members: async () => ({ members: [] }),
       getCat: async () => null,
-      putCat: async input => ({ id: CAT, owner_user_id: ME, name: input.name, display_name: input.name, avatar_key: input.avatarKey,
+      putCat: async input => ({ id: CAT_ID, owner_user_id: ME, name: input.name, display_name: input.name, avatar_key: input.avatarKey,
         reply_mode: input.replyMode, enabled: input.enabled, admin_disabled: false, deleted: false }),
       deleteCat: async () => {},
       deleteMessage: async () => {},
@@ -166,7 +166,7 @@ function mockCat(deps) {
 }
 
 function setup({ clock = fakeTimers(), config = CONFIG, secretStore = null, provider = null, persona: personaValue = persona(),
-  recallMemory = null, recordSharedExperience = null, dataDir = null, env = {}, onClient = null } = {}) {
+  recallMemory = null, recordSharedExperience = null, dataDir = null, env = {}, onClient = null,getChatProvider,getChatProviderState } = {}) {
   const states = [];
   const factories = {
     auth: deps => mockAuth(deps),
@@ -175,7 +175,7 @@ function setup({ clock = fakeTimers(), config = CONFIG, secretStore = null, prov
     cat: deps => mockCat(deps),
     experience: () => null,
   };
-  const controller = createLobbyController({ env, config, dataDir, secretStore, openExternal: () => {}, getChatProvider: () => provider,
+  const controller = createLobbyController({ env, config, dataDir, secretStore, openExternal: () => {}, getChatProvider: getChatProvider||(() => provider),getChatProviderState,
     getPersona: () => personaValue, recallMemory, recordSharedExperience, onState: s => states.push(s), timers: clock.timers,
     now: clock.now, random: () => 0.01, newId: () => 'test-id-' + states.length, randomBytes: n => Buffer.alloc(n),
     fetchImpl: globalThis.fetch, factories });
@@ -190,6 +190,13 @@ test('controller unconfigured when config missing', async () => {
   const res = await controller.request({ action: 'state' });
   assert.equal(res.ok, true);
   assert.equal(res.state.connection, 'unconfigured');
+});
+
+test('main-only account verification is read-only and reauthorization does not expand the public request schema',async()=>{
+ let signedIn=true,force=null,gets=0,resets=0,connections=0,writes=0;
+ const controller=createLobbyController({config:CONFIG,factories:{auth:()=>({get state(){return {status:signedIn?'signed-in':'signed-out',error:''};},async signIn(options){force=options;signedIn=true;},dispose(){}}),client:()=>({snapshot:()=>({status:'idle'}),rest:{me:async()=>{gets++;return {user:{user_id:ME}};},putCat:async()=>writes++},reset:()=>resets++,connect:()=>connections++,dispose(){}}),avatars:()=>mockAvatars(),cat:deps=>mockCat(deps),experience:()=>null}});
+ assert.deepEqual(await controller.verifyIdentity(),{userId:ME});assert.equal(gets,1);assert.equal(connections,0);assert.equal(writes,0);assert.equal(controller.snapshot().me,null);
+ assert.equal((await controller.reauthorize()).ok,true);assert.deepEqual(force,{force:true});assert.equal(resets,1);assert.throws(()=>validateLobbyRequest({action:'sign-in',force:true}));controller.dispose();
 });
 
 test('controller sign-in and sign-out', async () => {
@@ -242,6 +249,21 @@ test('participation.available is false without provider', async () => {
   const snap = controller.snapshot();
   assert.equal(snap.participation.available, false);
   assert.equal(snap.participation.reason, REASON.provider);
+});
+
+test('account readiness reports fixed login errors and a route switch never enables a different participation mode',async()=>{
+  let state={backend:'deepseek-account',revision:1,reason:'account-signed-out'},ready=false;
+  const {controller}=setup({getChatProvider:()=>ready?fakeProvider('fixture'):null,getChatProviderState:()=>state});
+  assert.equal(controller.snapshot().participation.reason,REASON.accountLogin);
+  assert.equal((await controller.request({action:'mode-set',mode:'independent'})).error,REASON.accountLogin);
+  assert.equal(controller.snapshot().catSettings.mode,'assist','a refused action never silently selects independent');
+  state={...state,revision:2,reason:'account-unavailable'};controller.refresh();assert.equal(controller.snapshot().participation.reason,REASON.accountUnavailable);
+  ready=true;state={...state,revision:3,reason:''};controller.refresh();
+  assert.equal((await controller.request({action:'mode-set',mode:'off'})).ok,true);
+  const epoch=controller.snapshot().cat.modeEpoch;
+  state={backend:'chat-api',revision:4,reason:''};controller.refresh();
+  assert.equal(controller.snapshot().catSettings.mode,'off');assert.equal(controller.snapshot().cat.mode,'off');assert(controller.snapshot().cat.modeEpoch>epoch);
+  controller.dispose();
 });
 
 test('send action dispatches to client.send', async () => {

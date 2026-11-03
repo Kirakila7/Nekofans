@@ -11,7 +11,7 @@ async function mount(t, backend, options={}){
  const dom=new JSDOM('<div id="stage"></div>',{runScripts:'outside-only',pretendToBeVisual:true});t.after(()=>dom.window.close());const w=dom.window;
  if(options.Image)w.Image=options.Image;
  w.HTMLCanvasElement.prototype.getContext=()=>canvasContext(options.calls);w.HTMLElement.prototype.getBoundingClientRect=()=>({left:0,top:0,width:400,height:300,right:400,bottom:300});
- w.eval(textures+'\n'+src+'\nwindow.mountHome=mountYuiHome');let count=0;const bridge={home:request=>['textures','textures-retry'].includes(request.action) && options.getTextures ? options.getTextures(request.action) : backend.command(request),subscribeHome:fn=>{count++;const un=backend.subscribe(fn);return ()=>{count--;un();};}};
+ w.eval(textures+'\n'+src+'\nwindow.mountHome=mountYuiBlockHome');let count=0;const bridge={home:request=>['textures','textures-retry'].includes(request.action) && options.getTextures ? options.getTextures(request.action) : backend.command(request),subscribeHome:fn=>{count++;const un=backend.subscribe(fn);return ()=>{count--;un();};}};
  const stage=w.document.querySelector('#stage'),release=await w.mountHome(stage,{window:w,bridge,avatar:()=>'/avatar.png'});return {w,stage,release,count:()=>count};
 }
 test('local home places, removes and reloads blocks while reporting save status',{skip:!JSDOM},async t=>{

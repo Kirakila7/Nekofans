@@ -2,14 +2,55 @@
 const {test}=require('node:test'), assert=require('node:assert/strict'), fs=require('node:fs'),path=require('node:path');
 let JSDOM;try{({JSDOM}=require(path.join(process.env.NEKO_DOM_DEPS||'/private/tmp/neko-sidebar-dom-20261026','node_modules/jsdom')));}catch{}
 const base=path.join(__dirname,'../../apps/neko-workbench');
-function setup(t,options={}){const dom=new JSDOM(fs.readFileSync(path.join(base,'native-composer.html'),'utf8'),{runScripts:'outside-only',url:'https://native-workbench.invalid/'});t.after(()=>dom.window.close());const {window:w}=dom, events=[];if(options.storage)Object.defineProperty(w,'localStorage',{value:options.storage});if(options.setTimeout)w.setTimeout=options.setTimeout;if(options.clearTimeout)w.clearTimeout=options.clearTimeout;let receive;w.nativeComposer={send:x=>events.push(x),onState:cb=>{receive=cb;}};w.eval(fs.readFileSync(path.join(base,'native-composer.js'),'utf8'));const el=w.document.getElementById('message');const snap=(revision,value,extra={})=>receive({enabled:true,busy:false,sessionToken:'s1',revision,value,...extra});snap(1,'',options.initial||{});return {w,el,events,snap,form:w.document.getElementById('composer'),status:w.document.getElementById('status'),expand:w.document.getElementById('expand'),copy:w.document.getElementById('copy')};}
+function setup(t,options={}){const dom=new JSDOM(fs.readFileSync(path.join(base,'native-composer.html'),'utf8'),{runScripts:'outside-only',url:'https://native-workbench.invalid/'});t.after(()=>dom.window.close());const {window:w}=dom, events=[];if(options.storage)Object.defineProperty(w,'localStorage',{value:options.storage});if(options.setTimeout)w.setTimeout=options.setTimeout;if(options.clearTimeout)w.clearTimeout=options.clearTimeout;let receive;w.nativeComposer={send:x=>events.push(x),onState:cb=>{receive=cb;}};w.eval(fs.readFileSync(path.join(base,'hold-drag.js'),'utf8'));w.eval(fs.readFileSync(path.join(base,'native-composer.js'),'utf8'));const el=w.document.getElementById('message');const snap=(revision,value,extra={})=>receive({enabled:true,busy:false,sessionToken:'s1',revision,value,...extra});snap(1,'',options.initial||{});return {w,el,events,snap,form:w.document.getElementById('composer'),status:w.document.getElementById('status'),expand:w.document.getElementById('expand'),copy:w.document.getElementById('copy')};}
 function type(t,value){t.el.value=value;t.el.dispatchEvent(new t.w.Event('input',{bubbles:true}));}
 function submit(t){t.form.dispatchEvent(new t.w.Event('submit',{bubbles:true,cancelable:true}));}
+
+test('creation desk is a compact input with accessible model and closable history menus',{skip:!JSDOM},t=>{
+ const x=setup(t,{initial:{chatOnly:true}}),d=x.w.document;
+ assert.equal(x.el.placeholder,'创造台');assert(d.getElementById('window-drag').hidden);assert(d.getElementById('target').hidden);
+ const toggle=d.getElementById('model-toggle');assert.equal(x.form.firstElementChild,toggle);toggle.click();assert(!d.getElementById('model-panel').hidden);assert.equal(x.events.at(-1).type,'model-toggle');
+ d.getElementById('records-toggle').click();assert(!d.getElementById('records').hidden);assert(d.getElementById('model-panel').hidden);
+ d.getElementById('records-close').click();assert(d.getElementById('records').hidden);assert.equal(x.events.at(-1).open,false);
+ toggle.click();d.dispatchEvent(new x.w.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));assert(d.getElementById('model-panel').hidden);assert.equal(x.events.at(-1).open,false);
+});
+
+test('model choice is catalog-bound and holds sends until the matching selection acknowledgement',{skip:!JSDOM},t=>{
+ const options=[{id:'flash',label:'DeepSeek-V4.1-Flash',reasoningOptions:[{id:'high',label:'High'}]},{id:'other',label:'Other model',reasoningOptions:[{id:'high',label:'High'}]}];
+ const fields={chatOnly:true,modelOptions:options,modelId:'flash',modelLabel:'DeepSeek-V4.1-Flash',reasoningId:'high',reasoningLabel:'High'};
+ const x=setup(t,{initial:fields}),d=x.w.document;x.snap(1,'保留任务草稿',fields);
+ const select=d.getElementById('model-select');select.value='other';select.dispatchEvent(new x.w.Event('change',{bubbles:true}));
+ const request=x.events.at(-1);assert.equal(request.type,'model-select');assert.equal(request.modelId,'other');assert.equal(request.reasoningId,'high');assert.equal(request.sessionToken,'s1');assert(request.selectionId>0);
+ assert(d.getElementById('send').disabled);assert(x.el.readOnly);submit(x);assert.equal(x.events.filter(event=>event.type==='submit').length,0);
+ x.snap(1,'保留任务草稿',{...fields,modelBusy:true});assert(d.getElementById('send').disabled);
+ x.snap(1,'保留任务草稿',{...fields,modelId:'other',modelLabel:'Other model',settledModelSelectionId:request.selectionId});
+ assert(!d.getElementById('send').disabled);assert(!x.el.readOnly);assert.equal(x.el.value,'保留任务草稿');assert.equal(select.value,'other');
+ x.snap(1,'保留任务草稿',{...fields,reasoningId:''});assert.equal(d.getElementById('reasoning-select').selectedOptions[0].textContent,'使用模型默认值');
+});
+
+test('uncertain model changes require a confirmed refresh, and model errors block task submission',{skip:!JSDOM},t=>{
+ let timeout;const fields={modelOptions:[{id:'flash',label:'DeepSeek-V4.1-Flash',reasoningOptions:[{id:'high',label:'High'}]}],modelId:'flash',reasoningId:'high'};
+ const x=setup(t,{initial:fields,setTimeout:fn=>{timeout=fn;return 71},clearTimeout:()=>{}}),d=x.w.document;x.snap(1,'保留任务',fields);
+ d.getElementById('reasoning-select').dispatchEvent(new x.w.Event('change',{bubbles:true}));const selection=x.events.at(-1);timeout();assert(d.getElementById('send').disabled);
+ d.getElementById('model-refresh').click();assert.equal(x.events.at(-1).selectionId,selection.selectionId);
+ x.snap(1,'保留任务',fields);assert(d.getElementById('send').disabled);
+ x.snap(1,'保留任务',{...fields,settledModelSelectionId:selection.selectionId});assert(!d.getElementById('send').disabled);
+ x.snap(1,'保留任务',{...fields,modelError:'默认模型暂不可用'});submit(x);assert(d.getElementById('send').disabled);assert.equal(x.events.some(event=>event.type==='submit'),false);assert.equal(x.el.value,'保留任务');
+});
 test('floating composer serializes edits and submits only the latest acknowledged draft',{skip:!JSDOM},t=>{
  const x=setup(t);type(x,'a');type(x,'ab');assert.equal(x.events.length,1);assert.equal(x.events[0].value,'a');submit(x);assert.equal(x.events.length,1);assert.equal(x.el.readOnly,true);
  x.snap(2,'a',{settledEditId:x.events[0].editId});assert.equal(x.events.length,2);assert.equal(x.events[1].value,'ab');assert.equal(x.events[1].revision,2);
  x.snap(3,'ab',{settledEditId:x.events[1].editId});assert.equal(x.events.length,3);assert.equal(x.events[2].type,'submit');assert.equal(x.events[2].value,'ab');assert.equal(x.events[2].revision,3);
  x.snap(3,'ab');assert.equal(x.el.readOnly,true);x.snap(4,'',{settledSubmitId:x.events[2].submissionId});assert.equal(x.el.readOnly,false);assert.equal(x.el.value,'');
+});
+test('daily chat-only input retains project records, draft edits and send but hides full workspace actions',{skip:!JSDOM},t=>{
+ const x=setup(t,{initial:{chatOnly:true,recordsOpen:false}}),files=x.w.document.getElementById('files'),records=x.w.document.getElementById('records-toggle');
+ assert(x.expand.hidden);assert(files.hidden);assert(!records.hidden);assert.match(x.w.document.getElementById('target').textContent,/项目记录/);
+ x.expand.click();files.click();assert.equal(x.events.length,0);records.click();assert.equal(x.events.at(-1).type,'records-toggle');
+ type(x,'日常工作草稿');const edit=x.events.at(-1);assert.equal(edit.type,'edit');x.snap(2,'日常工作草稿',{chatOnly:true,settledEditId:edit.editId});submit(x);assert.equal(x.events.at(-1).type,'submit');assert.equal(x.events.at(-1).value,'日常工作草稿');
+});
+test('work floating handle long-presses anywhere without editing or submitting the draft',{skip:!JSDOM},async t=>{
+ const x=setup(t);x.snap(1,'保留工作草稿');const handle=x.w.document.getElementById('window-drag');handle.dispatchEvent(new x.w.MouseEvent('pointerdown',{button:0,screenX:300,screenY:200}));await new Promise(r=>setTimeout(r,410));handle.dispatchEvent(new x.w.MouseEvent('pointermove',{screenX:340,screenY:230}));assert.deepEqual(x.events.map(e=>e.type),['move']);assert.equal(x.events[0].dx,40);assert.equal(x.events[0].dy,30);assert.equal(x.el.value,'保留工作草稿');handle.dispatchEvent(new x.w.MouseEvent('pointerup'));handle.dispatchEvent(new x.w.MouseEvent('pointermove',{screenX:400,screenY:400}));assert.equal(x.events.length,2);assert.equal(x.events[1].finished,true);assert.equal(x.events[1].dx,0);assert.equal(x.events[1].dy,0);assert.equal(x.el.value,'保留工作草稿');handle.dispatchEvent(new x.w.KeyboardEvent('keydown',{key:'Home',bubbles:true}));assert.equal(x.events.at(-1).reset,true);
 });
 test('draft conflict and session switch retain unacknowledged input without sending it',{skip:!JSDOM},t=>{
  const x=setup(t);type(x,'本地未同步');const id=x.events[0].editId;x.snap(2,'外部草稿',{settledEditId:id,editConflict:true});assert.equal(x.el.value,'本地未同步');assert.match(x.status.textContent,/草稿已变化/);submit(x);assert.equal(x.events.length,1);

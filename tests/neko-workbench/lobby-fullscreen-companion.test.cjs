@@ -73,11 +73,13 @@ test('fullscreen channel keeps the same companion and unsent draft through chat 
   await new Promise(resolve=>setTimeout(resolve,20));
   replyObserver.disconnect();
   assert(replyMutations>0,'a different message with identical text is still a new reply');
-  assert.equal(dock.hasAttribute('data-neko-companion-chat-open'),false,'companion chat is initially folded');
+  assert.equal(dock.hasAttribute('data-neko-companion-chat-open'),true,'entering a channel opens companion chat by default');
   const panel = dock.querySelector('.neko-companion-chat-panel');
   assert(panel?.contains(input), 'the original input is in the collapsible chat panel');
-  assert.equal(panel.hidden,true,'the chat panel is hidden when folded');
-  assert.equal(character.getAttribute('aria-expanded'),'false');
+  assert.equal(panel.hidden,false,'the chat panel is expanded on entry');
+  assert.equal(character.getAttribute('aria-expanded'),'true');
+  panel.querySelector('.neko-companion-chat-close').click();
+  assert.equal(panel.hidden,true,'the explicit close control folds the chat without removing it');
   character.click();
   await waitFor(()=>dock.hasAttribute('data-neko-companion-chat-open'),'companion chat opens');
   assert.equal(character.getAttribute('aria-expanded'),'true');
@@ -130,8 +132,9 @@ test('fullscreen channel keeps the same companion and unsent draft through chat 
   d.body.removeAttribute('data-neko-workspace-collapsed');
   assert.equal(parseFloat(d.body.style.getPropertyValue('--neko-companion-left')),socialRect.x,'companion uses the social pane left edge');
   assert(parseFloat(d.body.style.getPropertyValue('--neko-companion-width'))<=socialRect.width,'companion remains inside the social pane');
-  assert.equal(panel.hidden,true,'fixed scene starts with the companion chat folded');
+  assert.equal(panel.hidden,false,'fixed scene also opens companion chat by default');
   assert.equal(dock.querySelector('.neko-companion-character'),character,'scene uses the same live character');
+  panel.querySelector('.neko-companion-chat-close').click();
   character.click();
   assert.equal(panel.hidden,false,'clicking the scene character opens the chat');
   assert.equal(input.value,'还没有发送的主 agent 草稿，继续编辑','chat draft survives entering scene');

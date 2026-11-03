@@ -1,23 +1,34 @@
 'use strict';
 const { projectGroups } = require('./workspace-layout.cjs');
 const { CODEX_AVAILABLE, CODEX_TESTING_MESSAGE } = require('./codex-availability.cjs');
+const {createHash}=require('node:crypto');
+const {validRoot,rootKey}=require('./dsh-project-discovery.cjs');
 function createWorkspaceController({ layout, codex, readDsh, now = Date.now, codexAvailable = CODEX_AVAILABLE } = {}) {
-  let cached = null, fetchedAt = 0, pending = null;
+  let cached = null, checkedAt = 0, tail=Promise.resolve(),revision=0,contentKey='';
+  const inFlight=new Map();
   async function catalog({ force = false, dshOffset = 0 } = {}) {
     if (!Number.isSafeInteger(dshOffset) || dshOffset < 0 || dshOffset > 100000) throw Error('会话分页无效');
-    if (!force && !dshOffset && cached && now() - fetchedAt < 20000) return structuredClone(cached);
-    if (pending) { await pending; if (!dshOffset && cached) return structuredClone(cached); }
-    pending = (async () => {
-      const results = await Promise.allSettled([readDsh({ offset: dshOffset, limit: 80 }), codexAvailable ? codex.list() : Promise.resolve({ sessions: [], status: 'testing', more: false })]);
+    if (!force && !dshOffset && cached && now() - checkedAt < 20000) return structuredClone(cached);
+    if(inFlight.has(dshOffset))return structuredClone(await inFlight.get(dshOffset));
+    const operation=tail.then(async()=>{
+      const results = await Promise.allSettled([readDsh({ offset: dshOffset, limit: 80,force:force===true }), codexAvailable ? codex.list() : Promise.resolve({ sessions: [], status: 'testing', more: false })]);
       const native = results[0].status === 'fulfilled' ? results[0].value : { sessions: [], status: 'unavailable', nextOffset: null };
       const cx = results[1].status === 'fulfilled' ? results[1].value : { sessions: [], status: 'unavailable', more: false };
-      const oldDsh = dshOffset ? cached?.sessions.filter(s => s.provider === 'dsh') || [] : [];
-      const sessions = [...new Map([...oldDsh, ...native.sessions, ...cx.sessions].map(row => [row.provider + ':' + row.id, row])).values()];
-      cached = { sessions, projects: projectGroups(sessions), providers: { dsh: native.status, codex: cx.status }, nextDshOffset: native.nextOffset ?? null, codexMore: !!cx.more, fetchedAt: now() };
-      fetchedAt = now();
-    })();
-    try { await pending; } finally { pending = null; }
-    return structuredClone(cached);
+      const dshReady=native?.status==='ready'&&Array.isArray(native.sessions),codexReady=Array.isArray(cx?.sessions)&&['ready','testing'].includes(cx.status);
+      const previousDsh=cached?.sessions.filter(s=>s.provider==='dsh')||[],previousCodex=cached?.sessions.filter(s=>s.provider==='codex')||[];
+      const dshRows=dshReady?[...(dshOffset?previousDsh:[]),...native.sessions]:previousDsh,codexRows=codexReady?cx.sessions:previousCodex;
+      const sessions=[...new Map([...dshRows,...codexRows].map(row=>[row.provider+':'+row.id,row])).values()];
+      const sources={workbench:native?.workspaceSources?.workbench||'unsupported','installed-dsh':native?.workspaceSources?.['installed-dsh']||'not-configured'};
+      const workspaces=Array.isArray(native?.workspaces)?native.workspaces.filter(row=>sources[row.source]==='ready'):[];
+      for(const row of cached?.workspaces||[])if(sources[row.source]==='unavailable'&&!workspaces.some(next=>next.id===row.id))workspaces.push(row);
+      if(!dshReady&&results[0].status==='rejected'){for(const key of Object.keys(sources))sources[key]='unavailable';for(const row of cached?.workspaces||[])if(!workspaces.some(next=>next.id===row.id))workspaces.push(row);}
+      const next={sessions,workspaces,projects:projectGroups(sessions,workspaces),providers:{dsh:dshReady?'ready':'unavailable',codex:codexReady?cx.status:'unavailable'},workspaceSources:sources,staleProviders:[...(!dshReady&&previousDsh.length?['dsh']:[]),...(!codexReady&&previousCodex.length?['codex']:[])],nextDshOffset:dshReady?native.nextOffset??null:cached?.nextDshOffset??null,codexMore:codexReady?!!cx.more:cached?.codexMore||false};
+      const key=createHash('sha256').update(JSON.stringify(next)).digest('hex');
+      checkedAt=now();if(key!==contentKey){contentKey=key;cached={...next,revision:++revision,fetchedAt:checkedAt};}
+      return cached;
+    });
+    tail=operation.catch(()=>{});inFlight.set(dshOffset,operation);
+    try{return structuredClone(await operation);}finally{if(inFlight.get(dshOffset)===operation)inFlight.delete(dshOffset);}
   }
   function knownProject(root) { return root === null || cached?.projects.some(p => p.cwd === root); }
   function state() {
@@ -35,6 +46,14 @@ function createWorkspaceController({ layout, codex, readDsh, now = Date.now, cod
   }
   return {
     catalog,
+    async resolveProject(projectId){
+      if(typeof projectId!=='string'||!projectId||projectId.length>2048)throw Error('请选择有效工作项目');
+      if(!cached)await catalog();
+      const project=cached.projects.find(project=>project.provider==='dsh'&&project.id===projectId&&project.cwd);if(!project)throw Error('请从当前项目列表选择工作区');
+      const result=await readDsh({action:'resolve-project',projectId});
+      if(!result||result.projectId!==projectId||typeof result.workspaceId!=='string'||!result.workspaceId||result.workspaceId.length>512||!validRoot(result.path)||rootKey(result.path)!==rootKey(project.cwd))throw Error('DSH 未能确认所选项目');
+      checkedAt=-Infinity;return {projectId,workspaceId:result.workspaceId,path:result.path,name:typeof result.name==='string'?result.name.slice(0,160):''};
+    },
     state,
     update(patch) {
       if (!codexAvailable && (patch?.officeMode === 'codex' || layout.get().seats.some(s => s.id === patch?.activeSeatId && s.provider === 'codex'))) throw Error(CODEX_TESTING_MESSAGE);

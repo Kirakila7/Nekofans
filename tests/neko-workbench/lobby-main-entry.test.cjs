@@ -10,7 +10,7 @@ const source = fs.readFileSync(path.resolve(__dirname, '../../apps/neko-workbenc
 const preload = fs.readFileSync(path.resolve(__dirname, '../../apps/neko-workbench/workbench-preload.cjs'), 'utf8');
 
 test('workbench:lobby IPC delegates to lobbyController.request and calls assertWorkbenchCaller', async () => {
-  const handlers = new Map(), controllerCalls = [];
+  const handlers = new Map(), controllerCalls = [], readinessCalls=[];
   const host = { webContents: { mainFrame: { url: 'http://127.0.0.1:59099/coding' }, getURL: () => 'http://127.0.0.1:59099/coding' }, isDestroyed: () => false };
   const caller = { sender: host.webContents, senderFrame: host.webContents.mainFrame };
   const validation = source.slice(source.indexOf('function isWorkbenchOrigin'), source.indexOf('function rolesState'));
@@ -20,17 +20,21 @@ test('workbench:lobby IPC delegates to lobbyController.request and calls assertW
     const lobbyController = { request: async r => { controllerCalls.push(r); return { ok: true, state: {} }; } };
     const screenShare = { hide: () => {} };
     const communityController = { action: async () => ({}) };
+    const unifiedNekoLogin = { cancel: () => {} };
+    const mainChatRuntime = { refreshLobbyAccount: async value => { readinessCalls.push(value); } };
     ${routes}
   `;
   vm.runInNewContext(injected, { URL, dshWindow: host, dshLaunchUrl: 'http://127.0.0.1:59099/', ipcMain: { handle: (name, fn) => handlers.set(name, fn) },
-    controllerCalls });
+    controllerCalls,readinessCalls });
 
   const result = await handlers.get('workbench:lobby')(caller, { action: 'state' });
   assert.equal(result.ok, true);
   assert.deepEqual(controllerCalls, [{ action: 'state' }]);
+  assert.equal(readinessCalls.length,1,'state verifies the selected account without making a model call');
 
   await assert.rejects(handlers.get('workbench:lobby')({ ...caller, senderFrame: { url: 'https://example.com/' } }, { action: 'state' }), /工作台/);
   assert.deepEqual(controllerCalls, [{ action: 'state' }], 'the hostile frame was rejected');
+  assert.equal(readinessCalls.length,1,'hostile frame never queries account status');
 
   controllerCalls.length = 0;
   const openReq = { action: 'open' };
@@ -84,6 +88,10 @@ test('before-quit disposes the lobby controller', () => {
     app: { on: (name, fn) => quitHandlers.set(name, fn), quit: () => calls.push('app.quit') },
     shutdownComplete: false, shutdownStarted: false, quitting: false,
     lobbyController: { dispose: () => calls.push('lobby.dispose') },
+    unifiedNekoLogin: { dispose: () => calls.push('unified.dispose') },
+    nekoSsoWindow: { dispose: () => calls.push('sso.dispose') },
+    ourHomeRuntime: { dispose: () => calls.push('home.dispose') },
+    videoFloatController: { dispose: () => calls.push('video.dispose') },
     nativeComposerController: { dispose: () => calls.push('composer.dispose') },
     nativeDividerController: { dispose: () => calls.push('divider.dispose') },
     communityController: { dispose: () => calls.push('community.dispose') },
@@ -98,7 +106,7 @@ test('before-quit disposes the lobby controller', () => {
   assert(quitHandlers.has('before-quit'));
   const event = { preventDefault: () => calls.push('prevent') };
   quitHandlers.get('before-quit')(event);
-  assert.deepEqual(calls.slice(0, 7), ['prevent', 'composer.dispose', 'divider.dispose', 'community.dispose', 'community.cancel', 'lobby.dispose', 'screen.dispose'],
+  assert.deepEqual(calls.slice(0, 11), ['prevent', 'unified.dispose', 'sso.dispose', 'home.dispose', 'video.dispose', 'composer.dispose', 'divider.dispose', 'community.dispose', 'community.cancel', 'lobby.dispose', 'screen.dispose'],
     'lobby.dispose (which persists the open experience segment) runs before quit completes');
   quitHandlers.get('before-quit')(event);
   assert.equal(calls.filter(call => call === 'lobby.dispose').length, 1, 'a second before-quit does not dispose twice');

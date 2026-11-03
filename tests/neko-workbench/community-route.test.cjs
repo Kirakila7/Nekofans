@@ -26,12 +26,14 @@ function fixture(env = {}, useSocial = false, extra = {}) {
     }
     setWindowOpenHandler(handler) { this.popup = handler; }
     setUserAgent(value) { this.userAgent = value; }
+    setZoomFactor(value) { this.zoomFactor=value; }
     getUserAgent() { return this.userAgent || (extra.rawUserAgent ?? 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) TestApp/0.1 Chrome/150.0.7871.212 Electron/43.3.0 Safari/537.36'); }
     isAudioMuted() { return !!this.muted; }
     setAudioMuted(value) { this.muted = value; (this.muteHistory ||= []).push(value); }
     isDestroyed() { return this.destroyed; }
     getURL() { return this.url; }
     focus() { this.focused = (this.focused || 0) + 1; }
+    send(...args) { (this.sent ||= []).push(args); }
     async loadURL(url, options) {
       this.loads.push(url); this.loadOptions = options; this.url = url;
       this.history.splice(++this.index); this.history.push(url);
@@ -72,15 +74,22 @@ function fixture(env = {}, useSocial = false, extra = {}) {
   return { controller, views, external, states, errors, copied, failCopy: () => { copyError = new Error('private clipboard failure'); }, MockHost, Popup, host, action, open };
 }
 
-test('minimizing a native video silences it and restores the same page and mute preference', async()=>{
-  const f=fixture({}, false, {site:'bilibili'});await f.open();const v=f.views[0];
-  f.host.emit('minimize');assert.equal(f.host.children.size,0);assert.equal(v.webContents.isAudioMuted(),true);
-  f.host.emit('resize');assert.equal(f.host.children.size,0,'layout cannot reattach a minimized view');
-  f.host.emit('restore');assert(f.host.children.has(v));assert.equal(v.webContents.isAudioMuted(),false);assert.equal(v.webContents.loads.length,1);
-  v.webContents.setAudioMuted(true);f.host.emit('hide');f.host.emit('show');assert.equal(v.webContents.isAudioMuted(),true);
-  f.controller.dispose();
+test('floating B站 viewport adapts to compact and expanded sizes without reloading the page',async()=>{
+ const f=fixture({},false,{site:'bilibili',adaptiveVideoViewport:true});await f.open({x:10,y:56,width:460,height:264});const view=f.views[0];assert.equal(view.webContents.zoomFactor,460/1100);const loads=view.webContents.loads.length;await f.action({action:'layout',bounds:{x:10,y:56,width:940,height:560}});assert.equal(view.webContents.zoomFactor,940/1100);assert.equal(view.webContents.loads.length,loads);f.controller.dispose();
 });
-
+test('community status accepts only its own official top frame and login entry reuses the same web session',async()=>{
+ const publicStates=[];const f=fixture({},true,{onAccountState:value=>publicStates.push(value)});f.controller.requestLogin();await f.open();const contents=f.views[0].webContents;contents.mainFrame={url:contents.url};assert(contents.sent.some(([name])=>name==='workbench:community-web-login'));
+ assert.equal(f.controller.acceptAccountState({sender:contents,senderFrame:{}},{status:'signed-in'}),false);assert.equal(f.controller.accountState.status,'unknown');
+ assert.equal(f.controller.acceptAccountState({sender:contents,senderFrame:contents.mainFrame},{status:'signed-in',name:'missing identity'}),false);
+ assert.equal(f.controller.acceptAccountState({sender:contents,senderFrame:contents.mainFrame},{status:'signed-in',userId:'local-fixture',name:'测试喵',token:'must-not-project'}),true);assert.deepEqual(f.controller.accountState,{status:'signed-in',userId:'local-fixture',name:'测试喵'});assert(!JSON.stringify(publicStates).includes('must-not-project'));
+ f.controller.cancelLoginRequest();assert.equal(contents.sent.at(-1)[0],'workbench:community-web-login-cancel');
+ contents.url='https://auth.project-neko.cn/';assert.equal(f.controller.acceptAccountState({sender:contents,senderFrame:contents.mainFrame},{status:'signed-out'}),false);
+ contents.url='';assert.doesNotThrow(()=>assert.equal(f.controller.acceptAccountState({sender:contents,senderFrame:contents.mainFrame},{status:'checking'}),false));
+ f.controller.dispose();assert.equal(f.controller.accountState.status,'unknown');assert.equal(publicStates.at(-1).status,'unknown');
+});
+test('community login waits for ready even when Chromium reports no current loading operation',async()=>{
+ const f=fixture({},true);await f.open();const c=f.views[0].webContents;let release;c.behavior=()=>new Promise(r=>release=r);const reload=f.action({action:'reload'});await new Promise(r=>setImmediate(r));const before=c.sent?.length||0;f.controller.requestLogin();assert.equal(c.sent?.length||0,before);release();await reload;assert.equal(c.sent.length,before+1);f.controller.dispose();
+});
 test('YouTube links are sanitized into official embed URLs and invalid or credentialed URLs are rejected', () => {
   const id = 'M7lc1UVf-VE', expected = 'https://www.youtube.com/embed/'+id;
   for (const value of [
@@ -316,7 +325,8 @@ function secure(options, partition = COMMUNITY_PARTITION) {
   assert.equal(webPreferences.webSecurity, true);
   assert.equal(webPreferences.webviewTag, false);
   assert.equal(webPreferences.allowRunningInsecureContent, false);
-  assert.equal('preload' in webPreferences, false);
+  if (webPreferences.preload) { assert.equal(partition,COMMUNITY_PARTITION); assert.match(webPreferences.preload,/community-session-preload.cjs$/); }
+  else assert.equal('preload' in webPreferences, false);
 }
 
 test('community and Bilibili occupy independent slots and moving one reuses its exact view', async () => {

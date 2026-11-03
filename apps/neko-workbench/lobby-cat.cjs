@@ -1,6 +1,6 @@
 'use strict';
 // The companion in the lobby. Every model call here goes through an injected
-// ChatProvider (createChatApiProvider) with its own AbortController. Nothing in
+// ChatProvider for the selected companion route with its own AbortController. Nothing in
 // this module touches the private chat service, its turn lock or its history.
 // Message text is never logged.
 const fs = require('node:fs');
@@ -13,7 +13,7 @@ const PRIORITY = Object.freeze({ free: 0, owner: 1, mention: 2 });
 const RESTING = new Set(['cat_cooldown', 'cat_reply_limit', 'cat_depth_limit', 'cat_duplicate_reply',
   'cat_limiter_unavailable', 'cat_trigger_not_satisfied', 'rate_limited']);
 const ERRORS = Object.freeze({
-  unavailable: '需要聊天 API 才能让她参与大厅',
+  unavailable: '请先连接主 agent 的聊天线路',
   mode: '当前参与方式不支持这个操作',
   target: '要回复的消息已不存在',
   instruction: '给她的要求最多 500 字',
@@ -33,13 +33,46 @@ function readWorkbenchPersona(file) {
     prompt: [value.persona, ...value.boundaries.filter(line => typeof line === 'string')].join('\n') };
 }
 
-/** Lobby provider getter: a ChatProvider only for the chat-api backend with a stored key. */
+/** Same model/credit route as the companion; public requests never call its private service. */
 function providerGetter({ runtime, createChatApiProvider }) {
   return () => {
+    if (!runtime || runtime.closed) return null;
+    let provider;
+    if (runtime.backend === 'deepseek-account') {
+      if (runtime.lobbyAccountStatus !== 'signed-in' || typeof runtime.lobbyAccountProvider?.stream !== 'function') return null;
+      provider = runtime.lobbyAccountProvider;
+    } else {
     const settings = runtime?.settings;
-    if (!runtime || runtime.closed || runtime.backend !== 'chat-api' || !runtime.secretStore?.has() || !runtime.secretStore.available() || !settings?.baseUrl || !settings.model) return null;
-    return createChatApiProvider({ config: { protocol: settings.protocol, baseUrl: settings.baseUrl, model: settings.model,
+    if (runtime.backend !== 'chat-api' || typeof createChatApiProvider !== 'function' || !runtime.secretStore?.has() || !runtime.secretStore.available() || !settings?.baseUrl || !settings.model) return null;
+    provider = createChatApiProvider({ config: { protocol: settings.protocol, baseUrl: settings.baseUrl, model: settings.model,
       requestTimeoutMs: settings.requestTimeoutMs }, getApiKey: () => runtime.secretStore.get() });
+    }
+    const backend = runtime.backend, epoch = runtime.lobbyProviderEpoch;
+    const current = () => !runtime.closed && runtime.backend === backend && runtime.lobbyProviderEpoch === epoch
+      && (backend !== 'deepseek-account' || runtime.lobbyAccountStatus === 'signed-in');
+    const changed = () => Object.assign(new Error('聊天线路已切换'), { code: 'provider_changed' });
+    return { isCurrent: current, async *stream(input) {
+      // Live independent replies also recheck login; no UI interaction or paid
+      // request is needed to discover a logout in the authenticated account owner.
+      if (backend === 'deepseek-account') await runtime.refreshLobbyAccount?.({ force: true });
+      if (!current()) throw changed();
+      if (input.signal?.aborted) throw failure('cancelled');
+      const controller = new AbortController(), abort = () => controller.abort();
+      input.signal?.addEventListener('abort', abort, { once: true });
+      let off;
+      try {
+        off = runtime.subscribe?.(() => { if (!current()) abort(); });
+        for await (const event of provider.stream({ ...input, signal: controller.signal })) {
+          if (!current()) throw changed();
+          if (controller.signal.aborted) throw failure('cancelled');
+          yield event;
+        }
+        if (!current()) throw changed();
+      } catch (error) {
+        if (!current()) throw changed();
+        throw error;
+      } finally { off?.(); input.signal?.removeEventListener('abort', abort); controller.abort(); }
+    } };
   };
 }
 
@@ -102,7 +135,7 @@ async function runModel(provider, { persona, text, maxOutputTokens, signal, time
       }
     } finally { void Promise.resolve(iterator.return?.()).catch(() => {}); }
     if (controller.signal.aborted && !signal?.aborted) throw failure('failed'); // timed out
-  } catch (error) { if (signal?.aborted) throw failure('cancelled'); throw error?.code === 'failed' ? error : failure('failed'); }
+  } catch (error) { if (signal?.aborted) throw failure('cancelled'); throw ['failed','provider_changed'].includes(error?.code) ? error : failure('failed'); }
   finally { timers.clearTimeout(timer); signal?.removeEventListener('abort', onAbort); controller.abort(); }
   if (signal?.aborted) throw failure('cancelled');
   if (!out) throw failure('failed');
@@ -183,7 +216,7 @@ const mentionsUser = (message, userId) => !!userId && ((Array.isArray(message.me
 
 /**
  * Lobby participation state machine. deps:
- *  getProvider()             ChatProvider | null (chat-api backend with key only)
+ *  getProvider()             ChatProvider | null for the selected companion route
  *  getPersona()              {name, prompt} from the workbench persona file (read only)
  *  getLobby()                {ownerId, ownerName, catId, catReady, catsEnabled, freeAllowed, mutedUntil, note, catName, messages, names}
  *  recallMemory(q,budget,signal)  assist only; result never enters the snapshot

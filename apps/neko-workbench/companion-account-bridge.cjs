@@ -1,8 +1,10 @@
 'use strict';
 // Uses the host's authenticated LLM service directly. No DSH agent, tool,
 // session, project directory, or generic session-event log is created.
-function createCompanionAccountBridge({ctx, route, createUserMessage, createAssistantMessage, timeoutMs=75000, cleanupTimeoutMs=5000}) {
+function createCompanionAccountBridge({ctx, route, createUserMessage, createAssistantMessage, namespace='companion', timeoutMs=75000, cleanupTimeoutMs=5000}) {
   if (route?.provider!=='deepseek-account' || route?.model!=='deepseek-flash' || typeof createUserMessage!=='function' || typeof createAssistantMessage!=='function') throw Error('陪伴聊天账号路线无效。');
+  if (!['companion','lobby'].includes(namespace)) throw Error('聊天账号用途无效。');
+  const validId=namespace==='lobby'?/^lobby-[a-zA-Z0-9_-]{1,100}$/:/^companion-[a-zA-Z0-9_-]{1,100}$/;
   let active=null, disposed=false, cleanupFailed=false, pendingCleanup=0;
   const seen=new Set();
   const cleanupError=()=>Error('陪伴聊天请求清理未确认，请重启工作台后检查。');
@@ -24,7 +26,8 @@ function createCompanionAccountBridge({ctx, route, createUserMessage, createAssi
   async function send({requestId,text,context='',history=[],maxTokens}={}) {
     if(cleanupFailed||pendingCleanup)throw cleanupError();
     if(disposed||active)throw Error('陪伴聊天暂不可用，请稍后重试。');
-    if(typeof requestId!=='string'||!/^companion-[a-zA-Z0-9_-]{1,100}$/.test(requestId)||typeof text!=='string'||!text.trim()||text.length>32000||typeof context!=='string'||context.length>64000||!Number.isSafeInteger(maxTokens)||maxTokens<1||maxTokens>32000)throw Error('聊天内容无效。');
+    if(typeof requestId!=='string'||!validId.test(requestId)||typeof text!=='string'||!text.trim()||text.length>32000||typeof context!=='string'||context.length>64000||!Number.isSafeInteger(maxTokens)||maxTokens<1||maxTokens>32000)throw Error('聊天内容无效。');
+    if(namespace==='lobby'&&(!Array.isArray(history)||history.length))throw Error('公共聊天不能附带私聊历史。');
     if(!Array.isArray(history)||history.length>50||history.some(x=>!x||!['user','assistant'].includes(x.role)||typeof x.text!=='string'||x.text.length>32000)||history.reduce((sum,x)=>sum+x.text.length,0)>64000)throw Error('聊天历史无效。');
     if(seen.has(requestId))throw Error('聊天请求已使用，请重试。');seen.add(requestId);
     let reject;const interrupted=new Promise((_,r)=>{reject=r;});interrupted.catch(()=>{});

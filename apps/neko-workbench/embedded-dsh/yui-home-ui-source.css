@@ -23,3 +23,19 @@
 .neko-home__retry-save { align-self:flex-start; padding:4px 8px; border:1px solid #a8c8df; border-radius:7px; color:#315f85; background:#fff; font:inherit; cursor:pointer; }
 .neko-home__retry-save[hidden] { display:none; }.neko-home__retry-save:disabled { cursor:wait; opacity:.65; }
 .neko-home__retry-save:focus-visible { outline:2px solid #6e9ac5; outline-offset:2px; }
+
+/* Shared room: an empty floor and a real first-person camera. */
+.neko-chatroom-preview[data-home-open]{padding:0!important;display:flex;flex-direction:column;min-height:0;overflow:hidden;background:var(--dsw-alias-bg-layer-2,#e8edf8);color:var(--nws-text,#263750);border-radius:12px}
+.neko-chatroom-preview__home-view:not([hidden]){display:flex;flex-direction:column;min-height:0;height:100%;flex:1}
+.neko-chatroom-preview__home-view[hidden]{display:none!important}
+.neko-chatroom-preview[data-home-open] .neko-chatroom-preview__home-header{padding:12px 18px;margin:0;color:var(--nws-text,#263750);background:transparent;flex-shrink:0}
+.neko-chatroom-preview[data-home-open] .neko-chatroom-preview__home-header h2{font-size:14px}.neko-chatroom-preview__home-storage:empty{display:none}
+.neko-chatroom-preview[data-home-open] [data-neko-home-stage]{flex:1;min-height:280px;height:calc(100% - 54px);overflow:hidden;padding:0}
+.neko-our-home{position:relative;height:100%;min-height:280px;overflow:hidden;background:linear-gradient(180deg,#c8e6f2 0%,#e3f3f5 48%,#9bd5df 100%);color:#21495e;font:12px/1.5 system-ui,sans-serif;container-type:inline-size}
+.neko-our-home__canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}.neko-our-home__canvas:active{cursor:grabbing}.neko-our-home__canvas:focus-visible{outline:1px solid #b1c9d6;outline-offset:-2px}
+.neko-our-home__top{position:absolute;inset:15px 20px auto;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;pointer-events:none}.neko-our-home__top button{pointer-events:auto}
+.neko-our-home button{font:inherit;color:inherit;cursor:pointer;border:1px solid #ffffff99;background:#f4fcff88;border-radius:8px;padding:7px 10px;backdrop-filter:blur(12px)}.neko-our-home button:hover{background:#ffffffbd}.neko-our-home button:focus-visible{outline:2px solid #346f92}.neko-our-home button:disabled{opacity:.5;cursor:wait}
+.neko-our-home button.neko-our-home__invite{font-size:20px;font-weight:600;letter-spacing:.08em;padding:8px 0;border:0;background:transparent;backdrop-filter:none;text-align:left;white-space:nowrap}.neko-our-home__controls{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}.neko-our-home [aria-pressed=true]{background:#ffffffbd;border-color:#5b9fb877}
+.neko-our-home__hint{position:absolute;bottom:12px;right:20px;color:#285a6dd9;font-size:11px;margin:0;pointer-events:none}.neko-our-home__status{position:absolute;bottom:40px;left:20px;color:#764b2b;margin:0;max-width:70%;pointer-events:none}.neko-our-home__inventory{position:absolute;bottom:12px;left:20px;margin:0;color:#285a6dd9;font-size:11px;pointer-events:none}.neko-our-home [hidden]{display:none!important}
+@media(max-width:700px){.neko-our-home__top{inset:12px;gap:8px;flex-direction:column}.neko-our-home button.neko-our-home__invite{font-size:17px}.neko-our-home__controls button{padding:5px 7px;font-size:11px}}
+@container(max-width:650px){.neko-our-home__top{inset:12px;gap:8px;flex-direction:column}.neko-our-home button.neko-our-home__invite{font-size:17px}.neko-our-home__controls button{padding:5px 7px;font-size:11px}}

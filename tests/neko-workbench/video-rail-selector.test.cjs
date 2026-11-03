@@ -13,28 +13,11 @@ function setup(t, initial='bilibili') {
   d.addEventListener('neko-video-open',e=>{opens.push(e.detail.platform);e.detail.handled=true;});
   return {w,d,calls,opens,bridge,cleanup,getStored:()=>stored};
 }
-test('video rail offers a hover menu, saves selection and opens the chosen platform', {skip:!JSDOM}, async t=>{
- const f=setup(t); await tick(f.w); const button=f.d.querySelector('[data-neko-video-entry]'), menu=f.d.querySelector('.neko-side-rail__video-menu');
- assert.equal(button.getAttribute('aria-label'),'哔哩哔哩主页'); assert(menu.hidden); button.dispatchEvent(new f.w.MouseEvent('mouseenter'));
- assert(!menu.hidden); assert.equal(button.getAttribute('aria-expanded'),'true'); assert.equal(menu.getAttribute('role'),'menu');
- const youtube=menu.querySelector('[data-platform=youtube]'); youtube.click(); await tick(f.w);
- assert.equal(f.getStored(),'youtube'); assert.equal(button.dataset.videoPlatform,'youtube'); assert.equal(button.getAttribute('aria-label'),'YouTube 视频'); assert.equal(button.title,'YouTube 视频 · 悬停选择视频平台');
- assert.equal(youtube.getAttribute('aria-checked'),'true'); assert(menu.hidden); assert.deepEqual(f.opens,['youtube']); assert.equal(f.d.activeElement,button);
- assert(button.querySelector('svg:first-child').hasAttribute('hidden')); assert(!button.querySelector('svg:last-child').hasAttribute('hidden'));
- button.click(); await tick(f.w); assert.deepEqual(f.opens,['youtube','youtube']); f.cleanup();
+test('video rail opens Bilibili directly without a platform selector', {skip:!JSDOM}, async t=>{
+ const f=setup(t);await tick(f.w);const button=f.d.querySelector('[data-neko-video-entry]');
+ assert.equal(button.getAttribute('aria-label'),'哔哩哔哩主页');assert(!button.hasAttribute('aria-haspopup'));button.dispatchEvent(new f.w.MouseEvent('mouseenter'));assert(!f.d.querySelector('.neko-side-rail__video-menu'));assert(!f.d.querySelector('[data-platform=youtube]'));
+ button.click();await tick(f.w);assert.deepEqual(f.opens,['bilibili']);f.cleanup();
 });
-test('platform selection restores from workspace state and supports keyboard operation', {skip:!JSDOM}, async t=>{
- const f=setup(t,'youtube'); await tick(f.w); const button=f.d.querySelector('[data-neko-video-entry]'), menu=f.d.querySelector('.neko-side-rail__video-menu');
- assert.equal(button.dataset.videoPlatform,'youtube'); button.focus(); button.dispatchEvent(new f.w.KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true}));
- assert(!menu.hidden); assert.equal(f.d.activeElement,menu.querySelector('[data-platform=youtube]'));
- menu.dispatchEvent(new f.w.MouseEvent('mouseleave')); await new Promise(resolve=>f.w.setTimeout(resolve,250)); assert(!menu.hidden,'pointer leaving must not hide a keyboard-focused menu');
- f.d.activeElement.dispatchEvent(new f.w.KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true})); assert.equal(f.d.activeElement,menu.querySelector('[data-platform=bilibili]'));
- f.d.activeElement.dispatchEvent(new f.w.KeyboardEvent('keydown',{key:'Escape',bubbles:true})); assert(menu.hidden); assert.equal(f.d.activeElement,button);
- button.dispatchEvent(new f.w.MouseEvent('mouseenter')); menu.querySelector('[data-platform=bilibili]').click(); await tick(f.w); assert.equal(f.getStored(),'bilibili'); assert.deepEqual(f.opens,['bilibili']); f.cleanup();
-});
-test('late restore cannot overwrite an explicit new selection', {skip:!JSDOM}, async t=>{
- const f=setup(t); await tick(f.w); f.cleanup(); let finish; f.bridge.workspace=req=>req.action==='video-platform'?new Promise(r=>{finish=r;}):Promise.resolve({platform:req.platform});
- const cleanup=f.w.install({window:f.w,document:f.d,bridge:f.bridge,openBilibiliHome:async()=>{}}); await tick(f.w);
- const button=f.d.querySelector('[data-neko-video-entry]');button.dispatchEvent(new f.w.MouseEvent('mouseenter'));f.d.querySelector('[data-platform=youtube]').click(); await tick(f.w);finish({platform:'bilibili'});await tick(f.w);
- assert.equal(button.dataset.videoPlatform,'youtube'); cleanup();
+test('a legacy YouTube preference cannot restore a removed entry or alter saved user state', {skip:!JSDOM}, async t=>{
+ const f=setup(t,'youtube');await tick(f.w);const button=f.d.querySelector('[data-neko-video-entry]');assert.equal(button.dataset.videoPlatform,'bilibili');button.click();await tick(f.w);assert.deepEqual(f.opens,['bilibili']);assert.equal(f.getStored(),'youtube');assert.equal(f.calls.length,0);assert(!f.d.querySelector('[data-neko-side-rail]').textContent.includes('YouTube'));f.cleanup();
 });

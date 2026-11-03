@@ -290,7 +290,9 @@ function createLobbyAuth({ config, secretStore, openExternal, fetchImpl = global
       const tokens = validateTokenResponse(reply.value, { requireRefresh: true });
       // Store the refresh token first; only a persisted grant becomes "signed in".
       await persistRefresh(tokens.refresh);
+      operation.wroteRefresh = true;
       if (operation.generation !== generation) { if (!disposed) await forget(); throw failure('canceled'); }
+      check(operation);
       access = { token: tokens.access, expiresAt: now() + tokens.expiresIn * 1000 };
       return publish('signed-in');
     } finally { callback.close(); }
@@ -299,15 +301,47 @@ function createLobbyAuth({ config, secretStore, openExternal, fetchImpl = global
     if (disposed || operation.abort.signal.aborted || operation.generation !== generation) throw failure('canceled');
   }
 
-  function signIn() {
+  function signIn({ force = false } = {}) {
     if (disposed || !configured) return Promise.resolve(snapshot());
     if (signInOperation) return signInOperation.promise;
-    if (state.status === 'signed-in') return Promise.resolve(snapshot());
-    const operation = { abort: new AbortController(), generation, closeCallback: null };
+    if (state.status === 'signed-in' && !force) return Promise.resolve(snapshot());
+    const operation = { abort: new AbortController(), generation, closeCallback: null,
+      previousSignedIn: force && state.status === 'signed-in', previousAccess: access, wroteRefresh: false, rollback: null };
     signInOperation = operation;
-    operation.promise = signInFlow(operation).catch(error => {
+    // Freeze new refresh attempts before retaining the old grant. An in-flight
+    // refresh settles first, so rollback cannot overwrite a later rotation.
+    if (operation.previousSignedIn) publish('authorizing');
+    operation.promise = Promise.resolve().then(async () => {
+      if (operation.previousSignedIn) {
+        if (refreshing) await refreshing.catch(() => {});
+        check(operation);
+        operation.previousAccess = access;
+        let previous;
+        try { previous = await storedRefresh(); } catch (error) {
+          if (error.code !== 'login') throw error;
+          operation.previousSignedIn = false;
+        }
+        if (operation.previousSignedIn) {
+          operation.rollback = typeof secretStore.prepareRollback === 'function'
+            ? await secretStore.prepareRollback() : () => persistRefresh(previous);
+        }
+      }
+      check(operation);
+      return signInFlow(operation);
+    }).catch(async error => {
       // Superseded by sign-out or dispose: that path already published its state.
       if (disposed || operation.generation !== generation) return snapshot();
+      if (operation.previousSignedIn) {
+        if (operation.wroteRefresh && operation.rollback) {
+          try { await operation.rollback(); } catch {
+            await forget(); return publish('signed-out', SAFE_ERROR.storage);
+          }
+          if (disposed || operation.generation !== generation) { if (!disposed) await forget(); return snapshot(); }
+        }
+        access = operation.previousAccess;
+        return publish('signed-in', operation.abort.signal.aborted ? SAFE_ERROR.canceled : errorText(error));
+      }
+      if (operation.wroteRefresh) await forget();
       if (operation.abort.signal.aborted) return publish('signed-out', SAFE_ERROR.canceled);
       return publish('signed-out', errorText(error));
     }).finally(() => { if (signInOperation === operation) signInOperation = null; });

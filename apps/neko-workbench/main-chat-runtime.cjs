@@ -49,7 +49,7 @@ function parseApiInput(input, shared) {
 }
 
 class WorkbenchMainChat {
-  constructor({ dataDir, repositoryRoot, safeStorage, fetch: fetchImpl, initialBackend = 'chat-api', sharedModules, memoryWorker, accountProvider } = {}) {
+  constructor({ dataDir, repositoryRoot, safeStorage, fetch: fetchImpl, initialBackend = 'chat-api', sharedModules, memoryWorker, accountProvider,lobbyAccountProvider,environmentContext } = {}) {
     this.dataDir = path.join(dataDir, 'main-chat');
     this.repositoryRoot = repositoryRoot;
     this.personasDir = path.join(this.dataDir, 'personas');
@@ -58,7 +58,11 @@ class WorkbenchMainChat {
     this.memorySecretStore = new WorkbenchSecretStore(path.join(this.dataDir, 'secrets', 'memory-api-key.encrypted'), safeStorage);
     this.memoryConfigFile = path.join(this.dataDir, 'memory-model.json');
     if (accountProvider != null && typeof accountProvider.stream !== 'function') throw new Error('工作台账号聊天接口无效');
+    if (lobbyAccountProvider != null && (typeof lobbyAccountProvider.stream !== 'function' || typeof lobbyAccountProvider.status !== 'function')) throw new Error('聊天室账号聊天接口无效');
     this.memoryWorker = memoryWorker; this.accountProvider = accountProvider || null;
+    this.lobbyAccountProvider = lobbyAccountProvider || null; this.lobbyAccountStatus = 'unavailable';
+    this.lobbyProviderEpoch = 0; this.lobbyAccountCheckedAt = 0; this.lobbyAccountCheck = null;
+    this.environmentContext=environmentContext;
     this.fetch = fetchImpl; this.initialBackend = BACKENDS.has(initialBackend) ? initialBackend : 'chat-api';
     this.shared = sharedModules; this.opened = null; this.listeners = new Set(); this.tail = Promise.resolve();
     this.closed = false; this.backend = this.initialBackend; this.configError = '';
@@ -106,6 +110,7 @@ class WorkbenchMainChat {
       ...(this.backend === 'deepseek-account' ? {provider:this.accountProvider || unavailableAccountProvider} : {}),
       memoryContext:(personaId,query,budget,signal)=>this.memorySystem.recall(personaId,query,budget,signal),
       localMemoryProcessing:false,
+      environmentContext:this.environmentContext,
       onTurnSaved:()=>this.memorySystem.recordTurn() });
     this.offState = this.opened.service.subscribe(() => this.publish());
     this.offMemory = this.opened.memory?.subscribe(() => this.publish());
@@ -113,6 +118,7 @@ class WorkbenchMainChat {
     this.publish();
   }
   closeOpened() {
+    this.lobbyProviderEpoch++;
     const opened = this.opened; this.opened = null;
     this.offState?.(); this.offMemory?.(); this.offSummaries?.();
     this.offState = this.offMemory = this.offSummaries = null;
@@ -146,6 +152,7 @@ class WorkbenchMainChat {
       catch { throw new Error('聊天方式未能保存，请检查本机存储'); }
       this.cancel();
       try {
+        if (oldBackend !== backend) { this.lobbyProviderEpoch++; this.lobbyAccountCheckedAt = 0; this.lobbyAccountStatus = 'unavailable'; }
         if ((oldBackend === 'deepseek-account') !== (backend === 'deepseek-account')) {
           this.closeOpened(); this.backend = backend; this.openNow();
         } else this.backend = backend;
@@ -159,6 +166,33 @@ class WorkbenchMainChat {
       if(usesChatService(backend))void this.memorySystem?.connect().catch(()=>{});
       this.publish(); return this.read();
     });
+  }
+  /** Read only account readiness, never a paid model call or private conversation. */
+  async refreshLobbyAccount({ force = false } = {}) {
+    if (this.closed || this.backend !== 'deepseek-account' || !this.lobbyAccountProvider) return this.lobbyProviderState();
+    if (this.lobbyAccountCheck) return this.lobbyAccountCheck;
+    if (!force && this.lobbyAccountCheckedAt && Date.now() - this.lobbyAccountCheckedAt < 3000) return this.lobbyProviderState();
+    const provider = this.lobbyAccountProvider, epoch = this.lobbyProviderEpoch;
+    const check = Promise.resolve().then(() => provider.status()).catch(() => ({ status: 'unavailable' })).then(value => {
+      if (this.closed || this.backend !== 'deepseek-account' || provider !== this.lobbyAccountProvider || epoch !== this.lobbyProviderEpoch) return this.lobbyProviderState();
+      const status = ['signed-in', 'signed-out'].includes(value?.status) ? value.status : 'unavailable';
+      this.lobbyAccountCheckedAt = Date.now();
+      if (this.lobbyAccountStatus !== status) { this.lobbyAccountStatus = status; this.lobbyProviderEpoch++; this.publish(); }
+      return this.lobbyProviderState();
+    }).finally(() => { if (this.lobbyAccountCheck === check) this.lobbyAccountCheck = null; });
+    this.lobbyAccountCheck = check; return check;
+  }
+  /** Safe capability projection. No key, balance, private history, or provider output. */
+  lobbyProviderState() {
+    const backend = this.backend, state = { backend, revision: this.lobbyProviderEpoch || 0, available: false, reason: 'provider-required' };
+    if (this.closed) return { ...state, reason: 'provider-unavailable' };
+    if (backend === 'deepseek-account') return { ...state, available: !!this.lobbyAccountProvider && this.lobbyAccountStatus === 'signed-in',
+      reason: this.lobbyAccountProvider && this.lobbyAccountStatus === 'signed-in' ? '' : this.lobbyAccountStatus === 'signed-out' ? 'account-signed-out' : 'account-unavailable' };
+    if (backend === 'chat-api') {
+      const available = !!this.secretStore?.has() && !!this.secretStore?.available() && !!this.settings?.baseUrl && !!this.settings.model;
+      return { ...state, available, reason: available ? '' : 'provider-required' };
+    }
+    return state;
   }
   saveApi(input) {
     return this.serial(async () => {
@@ -256,12 +290,12 @@ class WorkbenchMainChat {
     if(this.memorySystem.settings.autoSync)void this.memorySystem.sync().catch(()=>{});
     return this.memories();
   }
-  /** Lobby access to the companion's memory, chat-api backend only. Rechecked on every call,
+  /** Lobby access to explicitly public memories on the selected companion route. Rechecked on every call,
    * so a later switch to the local N.E.K.O. backend stops reads and writes at once. */
   lobbyMemory() {
-    if (this.closed || this.backend !== 'chat-api' || !this.memorySystem) return null;
+    if (this.closed || !usesChatService(this.backend) || !this.memorySystem) return null;
     const ready = () => {
-      if (this.closed || this.backend !== 'chat-api' || !this.memorySystem) throw new Error('大厅记忆仅在聊天 API 模式可用');
+      if (this.closed || !usesChatService(this.backend) || !this.memorySystem) throw new Error('大厅记忆仅在主聊天模式可用');
       return this.memorySystem;
     };
     return Object.freeze({ personaId: PERSONA,
@@ -275,7 +309,7 @@ class WorkbenchMainChat {
       },
       recordSharedExperience: async input => ready().recordSharedExperience(input) });
   }
-  close() { this.closed = true; this.cancel(); return this.serial(async () => { await this.memorySystem?.close(); this.closeOpened(); this.listeners.clear(); }); }
+  close() { this.closed = true; this.publish(); this.cancel(); return this.serial(async () => { await this.memorySystem?.close(); this.closeOpened(); this.listeners.clear(); }); }
 }
 
 function trustedLocalCaller(event, window, expectedUrl) {

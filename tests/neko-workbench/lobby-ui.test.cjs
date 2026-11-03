@@ -39,16 +39,17 @@ function snapshot(over={}){
   outbox:[],catSettings:{mode:'assist'},cat:{},suggestion:null,nudge:null,error:'',...over};
 }
 
-function setup(t,{lobby=true,snap=snapshot(),respond,composer=true,home=false,officeMode='dsh'}={}){
+function setup(t,{lobby=true,snap=snapshot(),respond,composer=true,home=false,officeMode='dsh',unifiedLogin=null}={}){
  const dom=new JSDOM('<body><aside data-neko-side-rail><div class="neko-side-rail__theme"></div></aside><div data-slot="sidebar"><button data-neko-new-session="plus">+</button><div data-neko-seat-mount></div><div data-slot="sidebar.workspaces">native</div><div data-slot="settings.launcher"></div></div><main><textarea>native draft</textarea></main></body>',{runScripts:'outside-only'});
  t.after(()=>dom.window.close());
  const {window:w}=dom,doc=w.document;doc.querySelector('[data-slot="sidebar"]').getBoundingClientRect=()=>({right:300});
  let layout={seats:[{id:'seat-1',name:'DSH',provider:'dsh',avatarId:'bigfish',projectRoot:''}],activeSeatId:null,officeMode,companionCollapsed:false,companionHistoryOpen:false};
  const state={workspaceRoot:'/fixture',workspaceRevision:0,companion:{name:'主agent',ready:true,working:false,messages:[]}};
- const calls={lobby:[],hideSocial:0,community:0};let lobbySub,community,current=snap;
+ const calls={lobby:[],hideSocial:0,community:0};let lobbySub,community,accountSub,current=snap;
  const bridge={getState:async()=>state,action:async()=>({ok:true}),subscribe:()=>()=>{},
   subscribeCommunity:fn=>{community=fn;return()=>{};},companion:async()=>({}),
   workspace:async r=>{if(r.action==='update')layout={...layout,...r.patch};if(r.action==='codex-state')return {status:'idle',items:[],approvals:[]};if(r.action==='catalog')return {sessions:[],projects:[],providers:{dsh:'ready'}};return structuredClone(layout);}};
+ if(unifiedLogin){bridge.nekoSignIn=unifiedLogin.signIn;bridge.nekoSignInCancel=unifiedLogin.cancel;bridge.subscribeNekoAccount=fn=>{accountSub=fn;return()=>{accountSub=null;};};}
  if(lobby){
   bridge.lobby=async r=>{calls.lobby.push(structuredClone(r));const custom=respond?.(r,current);if(custom)return custom;return {ok:true,state:current};};
   bridge.subscribeLobby=fn=>{lobbySub=fn;return()=>{lobbySub=null;};};
@@ -57,9 +58,9 @@ function setup(t,{lobby=true,snap=snapshot(),respond,composer=true,home=false,of
  if(home)w.eval(fs.readFileSync(path.join(base,'embedded-dsh/chatroom-preview-source.js'),'utf8'));
  w.eval(source+'\nwindow.install=installWorkspaceShell');
  const cleanup=w.install({window:w,document:doc,bridge,cssText:css,mountHome:home ? async stage => {const mark=doc.createElement('span');mark.textContent='home fixture';stage.appendChild(mark);return ()=>{};} : undefined,avatar:id=>id==='bigfish'?'data:image/png;base64,iVBORw0KGgo=':'',
-  hideSocial:()=>{calls.hideSocial++;community?.({status:'hidden'});},openCommunity:()=>{calls.community++;community?.({status:'ready'});}});
+  hideSocial:()=>{calls.hideSocial++;community?.({status:'hidden'});},openCommunity:()=>{calls.community++;community?.({status:'ready'});return unifiedLogin?.openCommunity?.();}});
  t.after(()=>cleanup());
- return {w,doc,calls,cleanup,push:next=>{current=next;lobbySub?.(next);},get current(){return current;},setCurrent:v=>{current=v;}};
+ return {w,doc,calls,cleanup,push:next=>{current=next;lobbySub?.(next);},publishLogin:flow=>accountSub?.({login:flow}),get current(){return current;},setCurrent:v=>{current=v;}};
 }
 const rowOf=(doc,n)=>doc.querySelector('.neko-lobby-message[data-id="'+mid(n)+'"]');
 const labelOf=(doc,n)=>rowOf(doc,n).querySelector('.neko-lobby-label').textContent;
@@ -71,7 +72,7 @@ test('频道 rail button opens the lobby in the sidebar, leaving the dock and wo
  assert.equal(lobbyButton.getAttribute('aria-label'),'频道 · 公共大厅');assert.equal(lobbyButton.getAttribute('aria-expanded'),'false');
  const panel=doc.querySelector('.neko-lobby-panel');assert(panel.hidden);
  const dock=doc.querySelector('.neko-companion-dock'),draft=dock.querySelector('textarea');draft.value='私聊草稿';
- doc.querySelector('.neko-workspace-settings').click();await tick();assert(!doc.querySelector('.neko-workspace-modal').hidden);
+ doc.dispatchEvent(new f.w.CustomEvent('neko-workbench-open-settings',{detail:{section:'general'}}));await tick();assert(!doc.querySelector('.neko-workspace-modal').hidden);
  const before=calls.hideSocial;lobbyButton.click();await tick();
  assert(calls.hideSocial>before,'opening the panel calls hideSocial');
  assert(doc.querySelector('.neko-workspace-modal').hidden,'opening the panel closes settings');
@@ -90,14 +91,13 @@ test('频道 rail button opens the lobby in the sidebar, leaving the dock and wo
  f.cleanup();assert(!doc.querySelector('.neko-lobby-panel'));assert(!doc.querySelector('.neko-lobby-switch'));
 });
 
-test('opening and returning from the lobby keeps the Codex workspace visible',{skip:DOM_SKIP},async t=>{
+test('opening and returning from the lobby keeps DSH available with a legacy saved engine selection',{skip:DOM_SKIP},async t=>{
  const {doc}=setup(t,{officeMode:'codex'});await tick();
- const office=doc.querySelector('.neko-office-panel');assert.equal(office.hidden,false);
- const position=office.getAttribute('style');
+ const native=doc.querySelector('main textarea');assert.equal(doc.querySelector('.neko-office-panel'),null);assert.equal(doc.body.dataset.nekoOfficeMode,'dsh');
  doc.querySelector('.neko-lobby-switch').click();await tick();
- assert.equal(office.hidden,false);assert.equal(office.getAttribute('style'),position);
+ assert.equal(doc.querySelector('.neko-office-panel'),null);assert.equal(native.value,'native draft');assert(!doc.querySelector('main').hasAttribute('inert'));
  doc.querySelector('.neko-lobby-back').click();await tick();
- assert.equal(office.hidden,false);assert.equal(office.getAttribute('style'),position);
+ assert.equal(doc.querySelector('.neko-office-panel'),null);assert.equal(doc.querySelector('main textarea'),native);assert.equal(native.value,'native draft');
 });
 
 test('message list: origin labels, own labels, badges by origin only, reply quote label, mentions, deleted, text-only rendering',{skip:DOM_SKIP},async t=>{
@@ -180,6 +180,26 @@ test('sign-in state: unconfigured and signed-out gates; signing in joins the lob
  f.push(snapshot({connection:'unconfigured',auth:{status:'unconfigured',message:'频道服务未配置。',error:'',signingIn:false}}));await tick();
  assert(!doc.querySelector('.neko-lobby-gate').hidden);assert.equal(doc.querySelector('.neko-lobby-gate__text').textContent,'频道服务未配置。');
  assert(doc.querySelector('.neko-lobby-sign-in').hidden);
+});
+
+const loggedOut=()=>snapshot({connection:'signed-out',auth:{status:'signed-out',signingIn:false},me:null,messages:[],members:[],channel:null});
+test('verified community login authorizes in place and joins only after the matching unified completion',{skip:DOM_SKIP},async t=>{
+ let started=0;const f=setup(t,{snap:loggedOut(),unifiedLogin:{signIn:async request=>{assert.deepEqual(JSON.parse(JSON.stringify(request)),{source:'lobby'});started++;return {ok:true,state:{status:'chatroom',source:'lobby',flowId:11}};},cancel:async()=>({ok:true})}});await tick();f.doc.querySelector('.neko-lobby-switch').click();await tick();const input=f.doc.querySelector('.neko-lobby-form textarea');input.value='我的频道草稿';const panel=f.doc.querySelector('.neko-lobby-panel');
+ const login=f.doc.querySelector('.neko-lobby-sign-in');login.click();login.click();await tick();assert.equal(started,1);assert.equal(f.calls.community,0);assert(!panel.hidden);assert(f.doc.querySelector('.neko-lobby-sign-in').hidden);
+ f.push(snapshot());await tick();assert.equal(f.calls.lobby.filter(r=>r.action==='open').length,0,'OAuth token alone does not complete identity verification');f.publishLogin({status:'signed-in',source:'lobby',flowId:11});await tick();assert.equal(f.calls.lobby.filter(r=>r.action==='open').length,1);assert.equal(f.doc.querySelector('.neko-lobby-form textarea'),input);assert.equal(input.value,'我的频道草稿');
+});
+test('first login uses one official community relay and restores the same lobby and draft on completion',{skip:DOM_SKIP},async t=>{
+ let started=0;const f=setup(t,{snap:loggedOut(),unifiedLogin:{signIn:async()=>{started++;return{ok:true,state:{status:'community',source:'lobby',flowId:12}};},cancel:async()=>({ok:true})}});await tick();f.doc.querySelector('.neko-lobby-switch').click();await tick();const panel=f.doc.querySelector('.neko-lobby-panel'),input=panel.querySelector('textarea');input.value='中转前草稿';f.doc.querySelector('.neko-lobby-sign-in').click();await tick();assert.equal(f.calls.community,1);assert(panel.hidden);assert.equal(started,1);
+ f.push(snapshot());f.publishLogin({status:'signed-in',source:'lobby',flowId:12});await tick();await tick();assert.equal(f.doc.querySelector('.neko-lobby-panel'),panel);assert(!panel.hidden);assert.equal(input.value,'中转前草稿');assert.equal(f.calls.lobby.filter(r=>r.action==='open').length,1);assert.equal(f.calls.lobby.filter(r=>r.action==='sign-in').length,0);
+});
+for(const status of ['canceled','error','partial'])test('community relay restores its caller after '+status+' without joining or replacing drafts',{skip:DOM_SKIP},async t=>{
+ let finishCommunity;const f=setup(t,{snap:loggedOut(),unifiedLogin:{openCommunity:()=>new Promise(resolve=>finishCommunity=resolve),signIn:async()=>({ok:true,state:{status:'community',source:'lobby',flowId:13}}),cancel:async()=>({ok:true})}});await tick();f.doc.querySelector('.neko-lobby-switch').click();await tick();const panel=f.doc.querySelector('.neko-lobby-panel'),input=panel.querySelector('textarea');input.value='保留未发内容';f.doc.querySelector('.neko-lobby-sign-in').click();await tick();f.publishLogin({status,source:'lobby',flowId:13,message:'授权未完成',error:status==='error'?'读取账号失败':''});assert(panel.hidden,'a late navigation must settle before restoration');finishCommunity();await tick();await tick();assert(!panel.hidden);assert.equal(input.value,'保留未发内容');assert.equal(f.calls.lobby.filter(r=>r.action==='open').length,0);if(status==='error')assert.match(f.doc.querySelector('.neko-lobby-error').textContent,/读取账号失败/);
+});
+test('checking waits in the lobby and a later confirmed sign-out alone opens the community relay',{skip:DOM_SKIP},async t=>{
+ const f=setup(t,{snap:loggedOut(),unifiedLogin:{signIn:async()=>({ok:true,state:{status:'checking',source:'lobby',flowId:14}}),cancel:async()=>({ok:true})}});await tick();f.doc.querySelector('.neko-lobby-switch').click();await tick();f.doc.querySelector('.neko-lobby-sign-in').click();await tick();assert.equal(f.calls.community,0);f.publishLogin({status:'community',source:'lobby',flowId:14});await tick();assert.equal(f.calls.community,1);f.publishLogin({status:'canceled',source:'lobby',flowId:14});await tick();
+});
+test('independently signed-in owners restore an available lobby without pretending their local identities match',{skip:DOM_SKIP},async t=>{
+ const f=setup(t,{snap:loggedOut(),unifiedLogin:{signIn:async()=>({ok:true,state:{status:'community',source:'lobby',flowId:15}}),cancel:async()=>({ok:true})}});await tick();f.doc.querySelector('.neko-lobby-switch').click();await tick();f.doc.querySelector('.neko-lobby-sign-in').click();await tick();f.push(snapshot());f.publishLogin({status:'partial',source:'lobby',flowId:15,lobbyAvailable:true,identityStatus:'unverified',message:'已分别登录，同账号身份尚未验证'});await tick();await tick();assert(!f.doc.querySelector('.neko-lobby-panel').hidden);assert.equal(f.calls.lobby.filter(r=>r.action==='open').length,1);
 });
 
 test('message list keeps at most 300 nodes',{skip:DOM_SKIP},async t=>{
@@ -295,6 +315,12 @@ test('猫猫设置 shows the needs-Chat-API state and saves only changed fields;
  doc.querySelector('.neko-lobby-admin-open').click(); await tick(); assert(doc.querySelector('.neko-lobby-dialog[data-dialog="admin"]'));
  f.push(snapshot()); await tick();
  assert.equal(doc.querySelector('.neko-lobby-dialog'), null, 'the admin dialog closes when admin rights go away');
+});
+
+test('retired cat avatars display the fish and stay stored until an explicit new avatar choice',{skip:DOM_SKIP},async t=>{
+ const saved=snapshot({catSettings:{name:'我的猫',avatarKey:'claude',mode:'assist',independentTrigger:'mention',note:''}}),before=JSON.stringify(saved),f=setup(t,{snap:saved}),{doc,calls}=f;await tick();doc.querySelector('.neko-lobby-switch').click();await tick();
+ doc.querySelector('.neko-lobby-cat-settings').click();await tick();let dialog=doc.querySelector('.neko-lobby-dialog');assert.equal(dialog.querySelector('.neko-lobby-cat-avatars').dataset.value,'bigfish');assert(!dialog.querySelector('[data-value="claude"]'));assert(!/claude/i.test(dialog.textContent));dialog.querySelector('.neko-lobby-cat-name').value='新名字';dialog.querySelector('.neko-lobby-dialog-save').click();await tick();assert.deepEqual(calls.lobby.at(-1),{action:'cat-save',name:'新名字'});assert.equal(JSON.stringify(saved),before,'display fallback does not alter the remote snapshot');
+ doc.querySelector('.neko-lobby-cat-settings').click();await tick();dialog=doc.querySelector('.neko-lobby-dialog');dialog.querySelector('.neko-lobby-cat-avatars [data-value="bigfish"]').click();dialog.querySelector('.neko-lobby-dialog-save').click();await tick();assert.deepEqual(calls.lobby.at(-1),{action:'cat-save',avatarKey:'bigfish'},'explicit selection replaces the retained old avatar');
 });
 
 test('local home and lobby retain independent navigation and home stage',{skip:DOM_SKIP},async t=>{

@@ -29,15 +29,15 @@ function createChatroomPreview(doc, avatar = () => '', options = {}) {
     const icon = el('span', 'neko-chatroom-preview__room-icon ' + kind, symbol);
     icon.setAttribute('aria-hidden', 'true');
     const copy = el('span', 'neko-chatroom-preview__room-copy');
-    copy.append(el('strong', '', name), el('small', '', description));
+    copy.append(el('strong', '', name)); if(description)copy.append(el('small', '', description));
     row.append(icon, copy);
     rooms.appendChild(row);
     return row;
   };
   const publicRoom = addRoom('公共聊天室', '一起交流与分享', '✦', 'is-public', typeof options.onOpenLobby === 'function');
-  if (options.onOpenLobby) { publicRoom.setAttribute('aria-label', '打开公共聊天室'); publicRoom.addEventListener('click', options.onOpenLobby); }
-  const home = addRoom('我的小窝', '进入 Yui 的家', '⌂', 'is-home', true);
-  home.setAttribute('aria-label', '进入我的小窝，Yui 的家');
+  if (options.onOpenLobby) { publicRoom.setAttribute('aria-label', '打开公共聊天室'); publicRoom.addEventListener('click', () => { panel.openLobby(); options.onOpenLobby(); }); }
+  const home = addRoom('我的小窝', '', '⌂', 'is-home', true);
+  home.setAttribute('aria-label', '进入我的小窝');
 
   const empty = el('div', 'neko-chatroom-preview__empty');
   const illustration = el('div', 'neko-chatroom-preview__illustration');
@@ -52,14 +52,15 @@ function createChatroomPreview(doc, avatar = () => '', options = {}) {
 
   const room = el('div', 'neko-chatroom-preview__room-view');
   room.append(heading, introduction, search, label, rooms, empty);
+  const content = el('div', 'neko-chatroom-preview__content');content.hidden=true;content.setAttribute('aria-label','聊天室与小窝内容');
   const homeView = el('section', 'neko-chatroom-preview__home-view');
   homeView.hidden = true;
-  homeView.setAttribute('aria-label', 'Yui 的家');
+  homeView.setAttribute('aria-label', '我的小窝');
   const header = el('div', 'neko-chatroom-preview__home-header');
   const back = el('button', 'neko-chatroom-preview__home-back', '‹ 返回聊天室');
   back.type = 'button';
-  const title = el('h2', '', 'Yui 的家');
-  const storage = el('p', 'neko-chatroom-preview__home-storage', '工作台本地存档 · 尚未同步');
+  const title = el('h2', '', '我的小窝');
+  const storage = el('p', 'neko-chatroom-preview__home-storage', '');
   header.append(back, title, storage);
   const status = el('p', 'neko-chatroom-preview__home-status');
   status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite');
@@ -85,10 +86,16 @@ function createChatroomPreview(doc, avatar = () => '', options = {}) {
       mounting = false; homeView.removeAttribute('aria-busy');
     }
   };
-  home.addEventListener('click', () => { room.hidden = true; homeView.hidden = false; back.focus(); void mount(); });
-  back.addEventListener('click', () => { homeView.hidden = true; room.hidden = false; home.focus(); });
+  let split=false,selected='welcome';
+  function selection(kind){selected=kind;panel.dataset.roomView=kind;for(const [node,name]of [[publicRoom,'lobby'],[home,'home']]){if(kind===name)node.setAttribute('aria-current','page');else node.removeAttribute('aria-current');}}
+  panel.setSplit = enabled => {if(split===!!enabled)return;split=!!enabled;panel.toggleAttribute('data-neko-room-split',split);if(split){content.prepend(empty);content.append(homeView);room.hidden=false;content.hidden=false;empty.hidden=selected!=='welcome';homeView.hidden=selected!=='home';}else{room.append(empty);content.hidden=selected!=='home';room.hidden=selected==='home';empty.hidden=false;}};
+  panel.showRooms = () => {selection('welcome');homeView.hidden=true;room.hidden=false;content.hidden=!split;empty.hidden=false;panel.removeAttribute('data-home-open');};
+  panel.openLobby = () => {selection('lobby');homeView.hidden=true;panel.removeAttribute('data-home-open');if(split){room.hidden=false;content.hidden=false;empty.hidden=true;}};
+  panel.openHome = () => {options.onBeforeHome?.();selection('home');room.hidden=!split;content.hidden=false;empty.hidden=split;homeView.hidden=false;panel.setAttribute('data-home-open','');back.focus();return mount(); };
+  home.addEventListener('click', () => { void panel.openHome(); });
+  back.addEventListener('click', () => {if(split&&options.onOpenLobby){panel.openLobby();options.onOpenLobby();}else{panel.showRooms();home.focus();}});
   retry.addEventListener('click', () => { void mount(); });
   panel.disposeHome = () => { disposed = true; releaseHome?.(); releaseHome = null; };
-  panel.append(room, homeView);
+  content.append(homeView);panel.append(room, content);
   return panel;
 }

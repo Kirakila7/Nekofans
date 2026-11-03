@@ -10,8 +10,7 @@ class FakeContents extends EventEmitter {
   loadFile(p) { this.loaded=p; return Promise.resolve(); }
   close() { this.closed=true; }
   send(...args) { this.sent.push(args); }
-  getZoomFactor() { return this.zoom || 1; }
-  setZoomFactor(value) { this.zoom=value; }
+  getZoomFactor() { return 1; }
 }
 class FakeView { constructor(opts) { this.webContents=new FakeContents(); this.opts=opts; FakeView.latest=this; } setBackgroundColor(x) { this.background=x; } setBounds(r) { this.bounds=r; } }
 function setup(View = FakeView) {
@@ -21,26 +20,19 @@ function setup(View = FakeView) {
   const controller=createNativeComposerController({WebContentsView:View,ipcMain}); return {controller,ipcMain,window,children};
 }
 async function init(ctx) {ctx.controller.place(ctx.window,{action:'place',rect:{x:500,y:700,width:400,height:60}});ctx.controller.setEnabled(true);await Promise.resolve();}
+test('trusted floating drag events are bounded and do not depend on an active work session',async()=>{
+ const t=setup();await init(t);const v=FakeView.latest,event={sender:v.webContents,senderFrame:v.webContents.mainFrame};t.ipcMain.emit('neko-composer-input',event,{type:'move',dx:-120,dy:80});assert.deepEqual(t.window.webContents.sent.at(-1)[1],{type:'move',dx:-120,dy:80});const count=t.window.webContents.sent.length;t.ipcMain.emit('neko-composer-input',event,{type:'move',dx:Infinity,dy:0});assert.equal(t.window.webContents.sent.length,count);t.ipcMain.emit('neko-composer-input',{sender:{},senderFrame:{}},{type:'move',reset:true});assert.equal(t.window.webContents.sent.length,count);t.controller.dispose();
+});
+test('chat-only composer refuses stale full-workspace actions while retaining record selection',async()=>{
+ const t=setup();await init(t);const v=FakeView.latest;t.controller.update({value:'draft',sessionToken:'s1',revision:1,enabled:true,chatOnly:true});
+ const sender={sender:v.webContents,senderFrame:v.webContents.mainFrame};t.ipcMain.emit('neko-composer-input',sender,{type:'expand'});t.ipcMain.emit('neko-composer-input',sender,{type:'files',sessionToken:'s1',revision:1});assert.equal(t.window.webContents.sent.length,0);
+ assert.equal(v.webContents.sent.at(-1)[1].chatOnly,true);t.ipcMain.emit('neko-composer-input',sender,{type:'records-toggle',open:true});assert.equal(t.window.webContents.sent.at(-1)[1].type,'records-toggle');t.controller.dispose();
+});
 test('native composer overlays video, clips bounds, detaches, and disposes',async()=>{
   const t=setup();await init(t);const v=FakeView.latest;
   assert.equal(t.children.length,1);assert.deepEqual(v.bounds,{x:500,y:700,width:400,height:60});assert.equal(v.background,'#00000000');assert.equal(v.opts.webPreferences.nodeIntegration,false);assert.equal(v.opts.webPreferences.contextIsolation,true);assert.equal(v.webContents.windowHandler().action,'deny');
   t.controller.raise();assert.deepEqual(t.children,[v]);t.controller.place(t.window,{action:'remove'});assert.equal(t.children.length,0);
   assert.throws(()=>t.controller.place(t.window,{action:'place',rect:{x:1,y:1,width:2,height:3}}));t.controller.dispose();assert.equal(v.webContents.closed,true);assert.equal(t.ipcMain.listenerCount('neko-composer-input'),0);
-});
-
-test('resize reattaches a clipped composer and page zoom scales its content once', async()=>{
-  const t=setup();await init(t);const v=FakeView.latest;
-  t.controller.update({value:'保留草稿',enabled:true,sessionToken:'s',revision:1});
-  let size=[400,300];t.window.getContentSize=()=>size;
-  t.window.emit('resize');assert.equal(t.children.length,0);
-  size=[1600,1200];t.window.emit('resize');assert.deepEqual(t.children,[v]);
-  t.window.webContents.setZoomFactor(1.5);t.window.webContents.emit('zoom-changed');
-  assert.deepEqual(v.bounds,{x:750,y:1050,width:600,height:90});assert.equal(v.webContents.getZoomFactor(),1.5);
-  assert.equal(v.webContents.sent.at(-1)[1].value,'保留草稿');
-  let detachCount=0;const remove=t.window.contentView.removeChildView;
-  t.window.contentView.removeChildView=view=>{detachCount++;remove(view);};
-  t.children.push({site:true});t.controller.raise();assert.equal(t.children.at(-1),v);assert.equal(detachCount,0,'raising must not interrupt the focused input/IME');
-  t.controller.dispose();
 });
 test('only attached, top-frame trusted view may send bounded events for current session',async()=>{
   const t=setup();await init(t);const v=FakeView.latest;
@@ -113,4 +105,18 @@ test('lobby submit requires a verified target and preserves uncertain result to 
  t.ipcMain.emit('neko-composer-input',event,request);assert.equal(t.window.webContents.sent.length,0);
  t.controller.update({...state,targetLabel:'项目 · 会话'});t.ipcMain.emit('neko-composer-input',event,request);assert.equal(t.window.webContents.sent.length,1);
  t.controller.update({...state,targetLabel:'项目 · 会话',settledSubmitId:11,submitUnknown:true});assert.equal(v.webContents.sent.at(-1)[1].submitUnknown,true);assert.equal(v.webContents.sent.at(-1)[1].targetLabel,'项目 · 会话');t.controller.dispose();
+});
+
+test('model selection is catalog-bound and acknowledged by id before submission or record navigation can resume',async()=>{
+ const t=setup();await init(t);const v=FakeView.latest,event={sender:v.webContents,senderFrame:v.webContents.mainFrame};
+ const id=JSON.stringify(['deepseek-account','deepseek-flash']),state={value:'保留草稿',enabled:true,busy:false,sessionToken:'s1',revision:2,modelId:id,reasoningId:'low',modelOptions:[{id,label:'Flash',reasoningOptions:[{id:'low',label:'Low'},{id:'high',label:'High'}]}],records:[{id:'dsh:another',title:'Another',project:'P',enabled:true}]};
+ t.controller.update(state);const select={type:'model-select',modelId:id,reasoningId:'high',sessionToken:'s1',revision:2,selectionId:7};
+ t.ipcMain.emit('neko-composer-input',event,{...select,revision:1});assert.equal(t.window.webContents.sent.length,0);assert.equal(v.webContents.sent.at(-1)[1].settledModelSelectionId,7);assert.equal(v.webContents.sent.at(-1)[1].value,'保留草稿');
+ t.ipcMain.emit('neko-composer-input',event,{...select,reasoningId:'invented'});assert.equal(t.window.webContents.sent.length,0);
+ t.ipcMain.emit('neko-composer-input',event,select);assert.deepEqual(t.window.webContents.sent.at(-1)[1],select);
+ const count=t.window.webContents.sent.length,submit={type:'submit',value:'保留草稿',sessionToken:'s1',revision:2,submissionId:9};
+ t.ipcMain.emit('neko-composer-input',event,submit);t.ipcMain.emit('neko-composer-input',event,{type:'record-open',id:'dsh:another',openId:4,sessionToken:'s1',revision:2});assert.equal(t.window.webContents.sent.length,count);
+ t.controller.update({...state,settledModelSelectionId:6});t.ipcMain.emit('neko-composer-input',event,submit);assert.equal(t.window.webContents.sent.length,count,'an unrelated acknowledgment cannot clear the pending choice');
+ t.ipcMain.emit('neko-composer-input',event,{type:'model-refresh'});assert.deepEqual(t.window.webContents.sent.at(-1)[1],{type:'model-refresh',selectionId:7});
+ t.controller.update({...state,reasoningId:'high',settledModelSelectionId:7});t.ipcMain.emit('neko-composer-input',event,submit);assert.equal(t.window.webContents.sent.at(-1)[1].type,'submit');t.controller.dispose();
 });

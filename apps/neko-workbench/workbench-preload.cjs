@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('nekoWorkbench',Object.freeze({
   getState:()=>call('state'),
   screenShare:method=>method==='hide'?ipcRenderer.invoke('workbench:screen-share','hide'):Promise.reject(new Error('未知屏幕操作')),
   getAccounts:({includeQuota=false,force=false}={})=>call('accounts',{includeQuota:includeQuota===true,force:force===true}),
+  subscribeNekoAccount:callback=>{if(typeof callback!=='function')throw new TypeError('callback must be a function');const listener=(_event,state)=>callback(state);ipcRenderer.on('workbench:neko-account-state',listener);return()=>ipcRenderer.removeListener('workbench:neko-account-state',listener);},
   workspace:request=>call('workspace',request),
   companion:request=>call('companion',request),
   subscribeOffice:callback=>{const listener=(_event,state)=>callback(state);ipcRenderer.on('workbench:office-state',listener);return()=>ipcRenderer.removeListener('workbench:office-state',listener);},
@@ -25,9 +26,15 @@ contextBridge.exposeInMainWorld('nekoWorkbench',Object.freeze({
   divider:request=>ipcRenderer.invoke('workbench:divider',request),
   subscribeDivider:callback=>{if(typeof callback!=='function')throw new TypeError('callback must be a function');const listener=(_event,state)=>callback(state);ipcRenderer.on('workbench:divider-event',listener);return()=>ipcRenderer.removeListener('workbench:divider-event',listener);},
   nativeComposer:request=>ipcRenderer.invoke('workbench:native-composer',request),
+  accountMenuLayer:request=>ipcRenderer.invoke('workbench:account-menu-layer',request),
+  videoWindow:request=>ipcRenderer.invoke('workbench:video-window',request),
+  subscribeVideoWindow:callback=>{if(typeof callback!=='function')throw new TypeError('callback must be a function');const listener=(_event,state)=>callback(state);ipcRenderer.on('workbench:video-window-state',listener);return()=>ipcRenderer.removeListener('workbench:video-window-state',listener);},
   subscribeNativeComposer:callback=>{if(typeof callback!=='function')throw new TypeError('callback must be a function');const listener=(_event,state)=>callback(state);ipcRenderer.on('workbench:native-composer-event',listener);return()=>ipcRenderer.removeListener('workbench:native-composer-event',listener);},
   subscribeCommunity:callback=>{const listener=(_event,state)=>callback(state);ipcRenderer.on('workbench:community-state',listener);return()=>ipcRenderer.removeListener('workbench:community-state',listener);},
   communityAccount:action=>ipcRenderer.invoke('workbench:community-account',action),
+  communityLogin:()=>call('community-login'),
+  nekoSignIn:request=>call('neko-sign-in',request),
+  nekoSignInCancel:()=>call('neko-sign-in-cancel'),
   subscribeCommunityAccount:callback=>{if(typeof callback!=='function')throw new TypeError('callback must be a function');const listener=(_event,state)=>callback(state);ipcRenderer.on('workbench:community-account-state',listener);return()=>ipcRenderer.removeListener('workbench:community-account-state',listener);},
   subscribe:callback=>{const listener=(_event,state)=>callback(state);ipcRenderer.on('workbench:state',listener);return()=>ipcRenderer.removeListener('workbench:state',listener);}
 }));

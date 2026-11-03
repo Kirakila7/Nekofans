@@ -113,3 +113,5 @@ body[data-neko-side-rail-layout] button[data-neko-unified-account]:focus-visible
 .neko-side-rail__button:disabled { opacity: .45; cursor: not-allowed; }
 .neko-side-rail__button:disabled:hover { background: transparent; }
 @media (prefers-reduced-motion: reduce) { .neko-side-rail__button { transition: none; } }
+
+.neko-side-rail__account{position:relative}.neko-side-rail__account::after{content:'';position:absolute;right:3px;bottom:3px;width:8px;height:8px;border-radius:50%;background:#9ba8b9;border:2px solid var(--dsw-alias-bg-base,#f8fbff)}.neko-side-rail__account[data-community-login=signed-in]::after{background:#43bd9a}.neko-side-rail__account[data-community-login=checking]::after{background:#e6b45a}

@@ -3,7 +3,7 @@ html,body { margin:0; width:100%; height:100%; background:transparent; }
 body { display:flex; align-items:flex-end; padding:4px; font:14px/1.45 system-ui,sans-serif; }
 form { display:flex; align-items:center; gap:6px; width:100%; padding:6px; border:1px solid #c5d7e8; border-radius:20px; background:#fff; box-shadow:0 4px 16px #243a552a; }
 html[data-platform="win32"] form { flex:none; }
-textarea { flex:1; min-width:0; height:32px; max-height:72px; padding:6px; border:0; resize:none; outline:0; background:transparent; color:#233750; font:inherit; }
+textarea { flex:1; min-width:0; height:32px; max-height:72px; padding:6px; border:0; resize:none; outline:0; overflow-y:auto; background:transparent; color:#233750; font:inherit; }
 textarea:disabled { color:#71829a; }
 button { flex:none; width:32px; height:32px; border:0; border-radius:50%; color:#44648a; background:#edf4fb; font:18px system-ui,sans-serif; cursor:pointer; }
 button svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; vertical-align:middle; pointer-events:none; }
@@ -19,6 +19,8 @@ button:focus-visible,textarea:focus-visible { outline:2px solid #468bd8; outline
 @media (max-width:180px) { #files { display:none; } form { gap:3px; } }
 
 body { flex-direction:column; justify-content:flex-end; }
+#window-drag { order:-1; width:100%; height:24px; min-height:24px; padding:2px 10px; border-radius:10px; text-align:left; background:#eef5fbd9; color:#5d7795; font:11px/20px system-ui,sans-serif; cursor:grab; user-select:none; touch-action:none; }
+#window-drag[data-dragging] { cursor:grabbing; background:#dceaf6; }
 #records { order:0; }
 form { order:2; }
 #records { width:100%; min-height:0; flex:1; display:flex; flex-direction:column; background:#f5f9ff; border:1px solid #c5d7e8; border-radius:12px; overflow:hidden; }
@@ -33,6 +35,61 @@ form { order:2; }
 #records-status { padding:2px 8px; color:#526d89; font-size:12px; }
 #records-more { flex:none; align-self:center; margin:4px; }
 #records-more[hidden] { display:none; }
+body[data-desktop] #window-drag{-webkit-app-region:no-drag}body[data-desktop] #window-drag:focus-visible{-webkit-app-region:no-drag}
+
+html[data-hold-dragging],html[data-hold-dragging] *{cursor:grabbing!important;user-select:none!important}#window-drag{cursor:grab}
+
+#window-drag[hidden],#target[hidden],#model-panel[hidden]{display:none}
+#model-toggle,#project-toggle{display:grid;place-items:center;width:32px;padding:0;border-radius:10px;background:#e7eef9;color:#526d91}
+#model-toggle svg,#project-toggle svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+#model-toggle[aria-expanded=true],#project-toggle[aria-expanded=true]{background:#d9e5f5}
+#model-panel{order:0;flex:none;width:100%;padding:8px;border:1px solid #c5d7e8;border-radius:12px;background:#f5f8fef5;box-shadow:0 4px 16px #243a5520}
+.model-row{display:flex;align-items:center;gap:8px;min-height:36px;font-size:12px;color:#334d6f}
+.model-row>span{flex:none;min-width:48px}
+.model-row select{flex:1;min-width:0;max-width:100%;height:32px;padding:3px 4px;border:0;border-radius:6px;background:#eaf0fa;color:#526d89;font:12px system-ui,sans-serif}
+.model-row select:focus-visible{outline:2px solid #468bd8;outline-offset:1px}
+.model-row select:disabled{opacity:.6}
+#model-panel footer{display:flex;justify-content:space-between;gap:6px;margin-top:5px}
+#model-panel footer button{width:auto;height:28px;padding:3px 8px;border-radius:7px;font-size:11px}
+#model-status{margin:4px 0;color:#765414;font-size:11px;overflow-wrap:anywhere}
+#model-panel[aria-busy=true]{cursor:progress}
+
+/* Details arrow: a small tab on the window's top edge. Its press resizes the
+   details; it is outside the form so it can never submit. */
+body{position:relative}
+#details-toggle{position:absolute;z-index:3;top:0;left:50%;transform:translateX(-50%);display:grid;place-items:center;width:44px;height:14px;padding:0;border:1px solid #c5d7e8;border-radius:8px 8px 0 0;border-bottom:0;background:#f5f9ff;color:#5d7795;cursor:ns-resize;touch-action:none;user-select:none}
+#details-toggle svg{width:14px;height:9px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;transition:transform .15s}
+#details-toggle[aria-expanded=true] svg{transform:rotate(180deg)}
+#details-toggle[data-resizing]{background:#dceaf6;color:#36597f}
+#details-toggle:focus-visible{outline:2px solid #468bd8;outline-offset:1px}
+body[data-panel-open]{padding-top:14px}
+#project-panel,#details{order:0;width:100%;min-height:0;flex:1;display:flex;flex-direction:column;border:1px solid #c5d7e8;border-radius:12px;background:#f5f9ff;overflow:hidden;box-shadow:0 4px 16px #243a5520}
+#project-panel[hidden],#details[hidden]{display:none}
+#project-panel header,#details header{display:flex;align-items:center;gap:6px;padding:6px 8px;color:#233750}
+#project-panel header strong,#details header strong{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#project-panel header button{width:auto;height:auto;border-radius:8px;padding:3px 9px;font:12px system-ui,sans-serif}
+#project-status,#details-status,#details-path{padding:0 8px;color:#526d89;font-size:11px;overflow-wrap:anywhere}
+#project-status:empty,#details-status:empty,#details-path:empty{display:none}
+#details-path{color:#71829a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#details-badge{flex:none;padding:0 6px;border-radius:6px;background:#e3edf9;color:#48627b;font-size:11px}
+#details-badge:empty{display:none}
+#project-list,#details-sessions{min-height:0;flex:1;overflow:auto;padding:6px 8px 8px}
+#project-list button,#details-sessions button{display:flex;flex-direction:column;align-items:flex-start;gap:1px;width:100%;height:auto;margin-bottom:3px;padding:7px 9px;border-radius:8px;text-align:left;font:13px/1.35 system-ui,sans-serif}
+#project-list button strong,#details-sessions button span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#project-list button span,#details-sessions button small{color:#71829a;font-size:11px}
+#project-list button[aria-current=true],#details-sessions button[aria-current=true]{background:#d9e5f5;box-shadow:inset 3px 0 #5f8fd9;opacity:1}
+#details-sessions p{margin:8px 2px;color:#71829a;font-size:12px}
+#details-content{min-height:72px;flex:3;overflow:auto;margin:4px 8px 0;padding:6px;border-radius:10px;background:#fff;border:1px solid #dbe6f2;user-select:text}
+#details-content:focus-visible{outline:2px solid #468bd8;outline-offset:1px}
+.work-item{margin:0 0 8px;padding:6px 8px;border-radius:9px;background:#f2f6fc;color:#233750;font-size:12.5px;line-height:1.5}
+.work-item[data-role=user]{margin-left:18%;background:#e3edf9}
+.work-item small{display:block;color:#71829a;font-size:10.5px}
+.work-item p{margin:2px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}
+.work-note{margin:4px 2px 8px;color:#71829a;font-size:11.5px}
+#details-sessions-title{margin:6px 8px 0;color:#526d89;font:600 11px system-ui,sans-serif}
+#details-sessions{flex:1;max-height:34%}
+/* A taller selector-column desk keeps two lines of the draft visible. */
+@media (min-height:80px) and (max-height:100px){textarea{height:46px;max-height:46px}}
 
 html[data-platform="win32"] body { padding:6px; font:13px/1.45 "Segoe UI Variable","Segoe UI","Microsoft YaHei UI","Microsoft YaHei",sans-serif; }
 html[data-platform="win32"] form { gap:5px; padding:6px; border-color:#dfe6f0; border-radius:14px; box-shadow:0 4px 14px #29446b0b; }
