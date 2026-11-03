@@ -11,7 +11,7 @@ for(const value of [data,workspace])if(typeof value!=='string'||!path.isAbsolute
 const {resolveWindowsDsh}=require(path.join(process.resourcesPath,'workbench/apps/neko-workbench/windows-dsh-runtime.cjs'));
 const dsh=resolveWindowsDsh({resourcesPath:process.resourcesPath,homeDir:app.getPath('home'),programFiles:process.env.ProgramFiles,explicitInstall:local.dshInstall,bundledOnly:local.bundledDshOnly===true});
 delete process.env.ELECTRON_RUN_AS_NODE;
-if(!dsh){app.whenReady().then(()=>{dialog.showErrorBox('工作引擎未找到',local.bundledDshOnly?'内置工作引擎不完整，请重新解包 NEKOfuns。':'请先安装 DeepSeek Harness，再打开 NEKOfuns。');app.quit();});}
+if(!dsh){app.whenReady().then(()=>{dialog.showErrorBox('工作引擎未找到',local.bundledDshOnly?'内置工作引擎不完整，请重新解包 Nekofans。':'请先安装 DeepSeek Harness，再打开 Nekofans。');app.quit();});}
 else {
   Object.assign(process.env,{
     NEKO_WORKBENCH_DATA_DIR:data,NEKO_WORKBENCH_WORKSPACE:workspace,
@@ -27,7 +27,7 @@ else {
     process.env.NEKO_WORKBENCH_MEMORY_PYTHON_LIBS=path.join(base,'memory-python-libs');
   }
   process.env.PATH=path.join(base,'node')+path.delimiter+(process.env.PATH||'');
-  app.setName('NEKOfuns');
+  app.setName('Nekofans');
   if(local.trialLabel){
     app.on('browser-window-created',(_event,window)=>{
       if(window.webContents.getLastWebPreferences().preload?.endsWith('workbench-preload.cjs'))window.on('page-title-updated',(event,title)=>{event.preventDefault();window.setTitle(title+' · '+String(local.trialLabel).slice(0,60));});

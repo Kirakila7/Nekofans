@@ -7,9 +7,9 @@ using System.Text;
 using System.Threading;
 using System.Windows.Forms;
 using System.Reflection;
-[assembly: AssemblyTitle("NEKOfuns")]
-[assembly: AssemblyProduct("NEKOfuns Workbench")]
-[assembly: AssemblyDescription("NEKOfuns Windows portable launcher")]
+[assembly: AssemblyTitle("Nekofans")]
+[assembly: AssemblyProduct("Nekofans Workbench")]
+[assembly: AssemblyDescription("Nekofans Windows portable launcher")]
 [assembly: AssemblyVersion("0.28.37.0")]
 
 // The payload is a bounded ZIP stream followed by NEKOSFX1, its length and SHA256.
@@ -31,7 +31,7 @@ static class Program {
         if(Environment.OSVersion.Platform!=PlatformID.Win32NT)return full;
         return full.StartsWith(@"\\")?@"\\?\UNC\"+full.Substring(2):@"\\?\"+full;
     }
-    static Form Progress(){var f=new Form{Text="NEKOfuns",Width=370,Height=125,StartPosition=FormStartPosition.CenterScreen,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false,ControlBox=false};f.Controls.Add(new Label{Text="首次启动，正在准备工作台…",Left=22,Top=20,AutoSize=true});f.Controls.Add(new ProgressBar{Left=22,Top=48,Width=310,Height=12,Style=ProgressBarStyle.Marquee});f.Show();Application.DoEvents();return f;}
+    static Form Progress(){var f=new Form{Text="Nekofans",Width=370,Height=125,StartPosition=FormStartPosition.CenterScreen,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false,ControlBox=false};f.Controls.Add(new Label{Text="首次启动，正在准备工作台…",Left=22,Top=20,AutoSize=true});f.Controls.Add(new ProgressBar{Left=22,Top=48,Width=310,Height=12,Style=ProgressBarStyle.Marquee});f.Show();Application.DoEvents();return f;}
     [STAThread] static int Main(string[] args){
         AppContext.SetSwitch("Switch.System.IO.UseLegacyPathHandling",false);
         AppContext.SetSwitch("Switch.System.IO.BlockLongPaths",false);
@@ -40,9 +40,9 @@ static class Program {
         try{
             string self=Assembly.GetExecutingAssembly().Location;
             using(var input=File.OpenRead(self)){
-                if(input.Length<48)throw new IOException("Incomplete NEKOfuns package");
+                if(input.Length<48)throw new IOException("Incomplete Nekofans package");
                 input.Position=input.Length-48;byte[] footer=new byte[48];int read=input.Read(footer,0,footer.Length);
-                if(read!=48||Encoding.ASCII.GetString(footer,0,8)!="NEKOSFX1")throw new IOException("Invalid NEKOfuns package");
+                if(read!=48||Encoding.ASCII.GetString(footer,0,8)!="NEKOSFX1")throw new IOException("Invalid Nekofans package");
                 long size=BitConverter.ToInt64(footer,8);if(size<=0||size>input.Length-48)throw new IOException("Invalid payload length");
                 byte[] expected=new byte[32];Array.Copy(footer,16,expected,0,32);string digest=Hex(expected);
                 string destination=extract?Path.GetFullPath(args[1]):Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"NEKOfuns","portable",digest.Substring(0,20));
@@ -80,7 +80,7 @@ static class Program {
                 if(!extract){var start=new ProcessStartInfo(Path.Combine(destination,"NEKOfuns.exe")){WorkingDirectory=destination,UseShellExecute=false};start.EnvironmentVariables.Remove("ELECTRON_RUN_AS_NODE");Process.Start(start);}
             }
             return 0;
-        }catch(Exception e){if(progress!=null)progress.Close();if(extract)Console.Error.WriteLine(e.ToString());else MessageBox.Show(e.Message,"NEKOfuns 启动失败",MessageBoxButtons.OK,MessageBoxIcon.Error);return 1;}
+        }catch(Exception e){if(progress!=null)progress.Close();if(extract)Console.Error.WriteLine(e.ToString());else MessageBox.Show(e.Message,"Nekofans 启动失败",MessageBoxButtons.OK,MessageBoxIcon.Error);return 1;}
         // Failed preparations are left in their unique staging directory; no
         // existing application, user profile or workspace is ever removed.
     }

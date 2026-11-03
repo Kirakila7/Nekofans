@@ -3,6 +3,7 @@
   "build": "75",
   "appName": "N.E.K.O.工作台试用.app",
   "bundleIdentifier": "cn.neko.workbench.trial",
-  "repository": "Kirakila7/neko-workbench",
-  "platform": "darwin-arm64"
+  "repository": "Kirakila7/Nekofans",
+  "platform": "darwin-arm64",
+  "productName": "Nekofans"
 }

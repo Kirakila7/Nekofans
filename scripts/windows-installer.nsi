@@ -10,7 +10,7 @@ InstallDir "${NEKO_INSTALL_ROOT}"
 InstallDirRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${NEKO_APP_ID}" "InstallLocation"
 VIProductVersion "${NEKO_NUMERIC_VERSION}"
 VIAddVersionKey "ProductName" "${NEKO_DISPLAY_NAME}"
-VIAddVersionKey "FileDescription" "NEKOfuns 当前用户安装程序"
+VIAddVersionKey "FileDescription" "Nekofans 当前用户安装程序"
 VIAddVersionKey "FileVersion" "${NEKO_VERSION}"
 VIAddVersionKey "LegalCopyright" "NEKOfuns contributors"
 !include "MUI2.nsh"
@@ -19,8 +19,11 @@ VIAddVersionKey "LegalCopyright" "NEKOfuns contributors"
 !include "x64.nsh"
 !define NEKO_REG_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${NEKO_APP_ID}"
 !define MUI_FINISHPAGE_RUN "$INSTDIR\NEKOfuns.exe"
-!define MUI_FINISHPAGE_RUN_TEXT "运行 NEKOfuns"
+!define MUI_FINISHPAGE_RUN_TEXT "运行 Nekofans"
 !define MUI_FINISHPAGE_TEXT "安装完成。账号存档和项目保留在原有位置。"
+!define MUI_DIRECTORYPAGE_TEXT_TOP "选择 Nekofans 的安装位置。可使用默认目录，也可点击“浏览”选择其它磁盘上的空文件夹。"
+!define MUI_PAGE_CUSTOMFUNCTION_LEAVE DirectoryPageLeave
+!insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
 !insertmacro MUI_PAGE_FINISH
 !insertmacro MUI_UNPAGE_CONFIRM
@@ -120,7 +123,7 @@ Function ${Prefix}RequireClosedApplication
     Call ${Prefix}FindRunningApplication
     ${If} $BusyProcess != ""
       IfSilent process_silent
-      MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "请先关闭当前安装目录中的 NEKOfuns 和工作任务，再点击重试。不会强制结束任务。$\r$\n$\r$\n$BusyProcess" /SD IDCANCEL IDRETRY process_check
+      MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "请先关闭当前安装目录中的 Nekofans 和工作任务，再点击重试。不会强制结束任务。$\r$\n$\r$\n$BusyProcess" /SD IDCANCEL IDRETRY process_check
       SetErrorLevel 1602
       Quit
       process_silent:
@@ -136,10 +139,14 @@ Function .onInit
   SetShellVarContext current
   SetRegView 64
   ${IfNot} ${RunningX64}
-    MessageBox MB_OK|MB_ICONSTOP "NEKOfuns 需要 64 位 Windows。" /SD IDOK
+    MessageBox MB_OK|MB_ICONSTOP "Nekofans 需要 64 位 Windows。" /SD IDOK
     SetErrorLevel 1633
     Quit
   ${EndIf}
+FunctionEnd
+
+Function ValidateInstallDirectory
+  StrCpy $SafePath 1
   ; The NSIS instruction requires an existing parent and can erase $INSTDIR
   ; on a fresh installation. The Win32 API canonicalizes missing paths too.
   StrCpy $0 $INSTDIR
@@ -199,15 +206,29 @@ Function .onInit
       Goto unsafe_target
     ${EndIf}
   target_ready:
-    Call RequireClosedApplication
+    StrCpy $SafePath 1
     Return
   unsafe_target:
-    MessageBox MB_OK|MB_ICONSTOP "目标目录包含其它文件或不属于此安装程序，未覆盖。请选择空目录或原 NEKOfuns 安装位置。" /SD IDOK
-    SetErrorLevel 1603
-    Quit
+    StrCpy $SafePath 0
+FunctionEnd
+
+Function DirectoryPageLeave
+  Call ValidateInstallDirectory
+  ${If} $SafePath != 1
+    MessageBox MB_OK|MB_ICONSTOP "目标目录无效、包含其它文件或不属于此安装程序。请选择空目录或原 Nekofans 安装位置。" /SD IDOK
+    Abort
+  ${EndIf}
 FunctionEnd
 
 Section "NEKOfuns"
+  ; Validate the final selection again, including silent /D= installations.
+  Call ValidateInstallDirectory
+  ${If} $SafePath != 1
+    MessageBox MB_OK|MB_ICONSTOP "目标目录无效、包含其它文件或不属于此安装程序，未覆盖。" /SD IDOK
+    SetErrorLevel 1603
+    Quit
+  ${EndIf}
+  Call RequireClosedApplication
   ClearErrors
   SetOutPath "$INSTDIR"
   IfErrors install_failed

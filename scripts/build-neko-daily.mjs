@@ -25,11 +25,11 @@ const hashes={};for(const name of files){if(name.split('/').some(p=>['.venv','no
 const entry=join(resources,'app');mkdirSync(entry,{recursive:true});cpSync(join(root,'apps/neko-workbench/trial-bootstrap.cjs'),join(entry,'bootstrap.cjs'));
 writeFileSync(join(entry,'package.json'),JSON.stringify({name:'neko-workbench-daily',version:release.version,main:'bootstrap.cjs'},null,2)+'\n');
 run('/usr/bin/plutil',['-replace','CFBundleIdentifier','-string',release.bundleIdentifier,join(app,'Contents/Info.plist')]);
-for(const [key,text] of [['CFBundleName','NEKOfuns'],['CFBundleDisplayName','NEKOfuns'],['CFBundleShortVersionString',release.version],['CFBundleVersion',release.build]])run('/usr/bin/plutil',['-replace',key,'-string',text,join(app,'Contents/Info.plist')]);
+for(const [key,text] of [['CFBundleName','Nekofans'],['CFBundleDisplayName','Nekofans'],['CFBundleShortVersionString',release.version],['CFBundleVersion',release.build]])run('/usr/bin/plutil',['-replace',key,'-string',text,join(app,'Contents/Info.plist')]);
 const manifest={...release,sourceCommit:run('git',['rev-parse','HEAD'],{cwd:root}).trim(),runtimeArchiveSha256:createHash('sha256').update(readFileSync(runtime)).digest('hex'),files:hashes};
 writeFileSync(join(resources,'WORKBENCH_BUILD.json'),JSON.stringify(manifest,null,2)+'\n');
 for(const attr of ['com.apple.FinderInfo','com.apple.ResourceFork'])spawnSync('/usr/bin/xattr',['-dr',attr,app]);
 run('/usr/bin/codesign',['--force','--deep','--sign','-',app]);run('/usr/bin/codesign',['--verify','--deep','--strict',app]);
 const installer=join(stage,'安装日常版.command');writeFileSync(installer,'#!/bin/zsh\nset -e\nNEKO_INSTALL_DIR="${0:A:h}"\nexec env ELECTRON_RUN_AS_NODE=1 "$NEKO_INSTALL_DIR/'+release.appName+'/Contents/MacOS/Electron" "$NEKO_INSTALL_DIR/'+release.appName+'/Contents/Resources/workbench/scripts/install-neko-daily.cjs"\n');chmodSync(installer,0o755);
-writeFileSync(join(stage,'安装说明.txt'),'NEKOfuns '+release.version+'（build '+release.build+'）\n\n请先退出旧工作台，双击“安装日常版.command”。安装到个人 Applications 中同一个应用位置，保留存档，并准备原生记忆组件。\n需要已安装 DeepSeek Harness，以及 uv；记忆环境使用 Python 3.11。安装可能从官方包源下载锁定依赖。\n完成后打开 '+release.appName+'。只使用这一份日常版；QA 目录为开发验证用途。\n\n源码：'+release.repository+'\n提交：'+manifest.sourceCommit+'\n');
+writeFileSync(join(stage,'安装说明.txt'),'Nekofans '+release.version+'（build '+release.build+'）\n\n请先退出旧工作台，双击“安装日常版.command”。安装到个人 Applications 中同一个应用位置，保留存档，并准备原生记忆组件。\n需要已安装 DeepSeek Harness，以及 uv；记忆环境使用 Python 3.11。安装可能从官方包源下载锁定依赖。\n完成后打开 '+release.appName+'。只使用这一份日常版；QA 目录为开发验证用途。\n\n源码：'+release.repository+'\n提交：'+manifest.sourceCommit+'\n');
 console.log(JSON.stringify({app,version:release.version,build:release.build,files:files.length,sourceCommit:manifest.sourceCommit}));

@@ -11,7 +11,7 @@ const { execFile } = require('node:child_process');
 const { EventEmitter } = require('node:events');
 
 const appDir = path.resolve(__dirname, '../../apps/neko-workbench');
-const WORKBENCH_TITLE = 'NEKOfuns';
+const WORKBENCH_TITLE = 'Nekofans';
 
 const SCENARIOS = Object.freeze({
   missing: 'actual main sends private companion chat with no lobby module and no NEKO_WORKBENCH_CHAT_URL',

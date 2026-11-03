@@ -29,10 +29,15 @@ async function main(){
    fs.writeFileSync(path.join(application,revision===1?'old-owned.txt':'new-owned.txt'),'owned-'+revision);
    const names=['NEKOfuns.exe','assets/$sprite/鱼.txt',revision===1?'old-owned.txt':'new-owned.txt'];
    const integrity=Object.fromEntries(names.map(name=>[name,digest(path.join(application,name))]));
-   const args=['--nsis-compiler',tool.compiler,'--nsis-receipt',toolReceipt,'--installer-test-id',id,'--installer-install-dir',install,'--installer-shortcut-group',id];
+   const args=['--nsis-compiler',tool.compiler,'--nsis-receipt',toolReceipt,'--installer-test-id',id,'--installer-install-dir',path.join(dir,'unselected-default'),'--installer-shortcut-group',id];
    return {integrity,...packageWindowsInstaller({root,release:{version,build:'1'},args,output,application,integrity,manifest:{sourceCommit:'a'.repeat(40),files:{}},local:{profileName:'NEKOfuns-QA-Never-Opened'}})};
   }
-  const first=compile('1.2.3',1);assert.equal(run(first.exe,['/S']).status,0,'silent installation');
+  const first=compile('1.2.3',1),occupied=path.join(dir,'occupied');fs.mkdirSync(occupied);fs.writeFileSync(path.join(occupied,'keep.txt'),'unrelated');
+  assert.equal(run(first.exe,['/S','/D='+occupied],{windowsVerbatimArguments:true}).status,1603,'the final selected directory must be validated');
+  assert.equal(fs.readFileSync(path.join(occupied,'keep.txt'),'utf8'),'unrelated');assert(!fs.existsSync(path.join(occupied,'.nekofuns-install-id')));assert.notEqual(query(registry).status,0);
+  assert.equal(run(first.exe,['/S','/D='+install],{windowsVerbatimArguments:true}).status,0,'silent installation into a selected directory');
+  assert(!fs.existsSync(path.join(dir,'unselected-default')),'installation must use the final directory rather than the initial default');
+  checks.push('selected directory is revalidated before writing; unrelated nonempty directories are rejected');
   for(const [name,hash] of Object.entries(first.integrity))assert.equal(digest(path.join(install,name)),hash,name);
   assert.equal(query(registry).status,0);for(const name of ['NEKOfuns.lnk','卸载 NEKOfuns.lnk'])assert(fs.existsSync(path.join(menu,name)),name);
   checks.push('isolated per-user installation, Unicode/dollar paths, HKCU uninstall and Start-menu shortcuts');
@@ -40,13 +45,13 @@ async function main(){
   const second=compile('1.2.4',2);
   task=spawn(path.join(install,'NEKOfuns.exe'),['-e',"process.stdin.resume();process.stdin.on('end',()=>process.exit(0));console.log('QA_READY')"],{windowsHide:true,stdio:['pipe','pipe','pipe']});
   await new Promise((resolve,reject)=>{let text='';const timer=setTimeout(()=>reject(Error('Synthetic Node task did not start')),10000);task.once('error',reject);task.stdout.on('data',data=>{text+=data;if(text.includes('QA_READY')){clearTimeout(timer);resolve();}});task.once('exit',code=>reject(Error('Synthetic Node task exited early: '+code)));});
-  assert.equal(run(second.exe,['/S']).status,1618,'upgrade must wait for a running task');
+  assert.equal(run(second.exe,['/S','/D='+install],{windowsVerbatimArguments:true}).status,1618,'upgrade must wait for a running task');
   assert.equal(task.exitCode,null,'installer must not terminate the task');
   const blockedUninstall=run(path.join(install,'Uninstall.exe'),['/S','_?='+install],{windowsVerbatimArguments:true});
   assert.equal(blockedUninstall.status,1618,'uninstall must wait for a running task');assert.equal(task.exitCode,null);
   task.stdin.end();await new Promise(resolve=>task.once('exit',resolve));task=null;
   checks.push('running application blocks silent upgrade/uninstall without terminating its task');
-  assert.equal(run(second.exe,['/S']).status,0,'upgrade after closing task');
+  assert.equal(run(second.exe,['/S','/D='+install],{windowsVerbatimArguments:true}).status,0,'upgrade after closing task');
   for(const [name,hash] of Object.entries(second.integrity))assert.equal(digest(path.join(install,name)),hash,name);
   const managed=fs.readFileSync(path.join(install,'.nekofuns-managed-files'),'utf16le');
   for(const name of ['old-owned.txt','new-owned.txt','assets/$sprite/鱼.txt'])assert(managed.includes(name),'managed history keeps '+name);

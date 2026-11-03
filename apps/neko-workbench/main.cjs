@@ -631,7 +631,7 @@ async function openDsh(){
   }}
   if(dshWindow&&!dshWindow.isDestroyed()){dshWindow.show();app.focus({steal:true});dshWindow.focus();return;}
   const workArea=screen.getDisplayNearestPoint?.(screen.getCursorScreenPoint?.())?.workArea || screen.getPrimaryDisplay().workArea;
-  dshWindow=new BrowserWindow({...workbenchWindowOptions(process.platform,workArea,nativeTheme.shouldUseDarkColors),title:'NEKOfuns',backgroundColor:nativeTheme.shouldUseDarkColors?'#131C27':'#EDF3F8',show:false,webPreferences:{preload:path.join(base,'workbench-preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,partition:'persist:pet-dsh'}});
+  dshWindow=new BrowserWindow({...workbenchWindowOptions(process.platform,workArea,nativeTheme.shouldUseDarkColors),title:'Nekofans',backgroundColor:nativeTheme.shouldUseDarkColors?'#131C27':'#EDF3F8',show:false,webPreferences:{preload:path.join(base,'workbench-preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,partition:'persist:pet-dsh'}});
   dshCookieFilter.bind(dshWindow.webContents.session);
   communityController.bindHost(dshWindow);nativeDividerController.bind(dshWindow);nativeComposerController.bind(dshWindow);
   const clearAccountMenuLayer=()=>{nativeComposerController.setAccountMenuRect(null);videoFloatController.setAccountMenuRect(null);questionRelay.clear();};
@@ -643,7 +643,7 @@ async function openDsh(){
   dshWindow.webContents.on('will-navigate',(event,url)=>{if(!/^https?:/.test(url))event.preventDefault();});
   dshWindow.webContents.setWindowOpenHandler(({url})=>/^https?:/.test(url)?{action:'allow',overrideBrowserWindowOptions:{webPreferences:{nodeIntegration:false,contextIsolation:true,sandbox:true,partition:'persist:pet-dsh'}}}:{action:'deny'});
   if(dshLaunchUrl){await applySkinCookie(dshWindow.webContents.session,dshLaunchUrl,dshSkin);await dshWindow.loadURL(dshLaunchUrl);}
-  else await dshWindow.loadURL('data:text/html;charset=utf-8,'+encodeURIComponent('<meta charset="utf-8"><title>NEKOfuns</title><style>:root{color-scheme:light dark}body{margin:0;height:100vh;display:grid;place-items:center;font:14px system-ui,sans-serif;background:#EDF3F8;color:#4C5F73}@media (prefers-color-scheme:dark){body{background:#131C27;color:#9DB0C3}}</style><p>正在连接 NEKOfuns…</p>'));
+  else await dshWindow.loadURL('data:text/html;charset=utf-8,'+encodeURIComponent('<meta charset="utf-8"><title>Nekofans</title><style>:root{color-scheme:light dark}body{margin:0;height:100vh;display:grid;place-items:center;font:14px system-ui,sans-serif;background:#EDF3F8;color:#4C5F73}@media (prefers-color-scheme:dark){body{background:#131C27;color:#9DB0C3}}</style><p>正在连接 Nekofans…</p>'));
   dshWindow.show();app.focus({steal:true});dshWindow.focus();
 }
 function editMemory(){

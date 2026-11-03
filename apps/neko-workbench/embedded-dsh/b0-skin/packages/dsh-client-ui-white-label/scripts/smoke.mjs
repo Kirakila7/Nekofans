@@ -1,7 +1,7 @@
 /**
  * Offline smoke test for the white-label bundle (no dependencies, no DSH).
  *
- * Verifies the loader wrapper/id, exports, product identity (NEKOfuns; the
+ * Verifies the loader wrapper/id, exports, product identity (Nekofans; the
  * 大肥鱼 name appears only as one of five avatars), slots, title rewrite,
  * favicon, scoped hero CSS, avatar assets (placeholder or embedded), bridge
  * state sanitizing, the store against a fake window.nekoWorkbench (set,
@@ -77,8 +77,8 @@ const exports = entry.factory((id) => {
 assert.deepEqual(requested, ['react', 'react-dom'], 'only react and react-dom are required')
 assert.equal(typeof exports.apply, 'function')
 assert.deepEqual([...exports.inject], ['slots', 'uiWorkspace', 'remote', 'remote.account', 'locale'])
-assert.equal(exports.PRODUCT_BRAND.name, 'NEKOfuns')
-assert.equal(exports.PRODUCT_BRAND.shortName, 'NEKOfuns')
+assert.equal(exports.PRODUCT_BRAND.name, 'Nekofans')
+assert.equal(exports.PRODUCT_BRAND.shortName, 'Nekofans')
 assert.ok(Object.isFrozen(exports.PRODUCT_BRAND))
 
 // --- avatars ----------------------------------------------------------------
@@ -156,12 +156,12 @@ assert.deepEqual(byName, {
   'conversation.hero.brand.mark': 'HeroGallery', 'shell.overlay': 'RolesSidebarAdapter',
   'settings.onboarding': 'SkipWelcomeNotice',
 })
-assert.equal(run.registrations[3].component().children[0], 'NEKOfuns')
+assert.equal(run.registrations[3].component().children[0], 'Nekofans')
 
-assert.equal(document.title, 'Fix the parser — NEKOfuns')
+assert.equal(document.title, 'Fix the parser — Nekofans')
 document.title = 'New chat — DeepSeek Harness'
 observers[0].callback()
-assert.equal(document.title, 'New chat — NEKOfuns')
+assert.equal(document.title, 'New chat — Nekofans')
 
 const icons = document.querySelectorAll('link[rel~="icon"]')
 assert.equal(icons.length, 1)

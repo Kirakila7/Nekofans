@@ -64,7 +64,7 @@ export function startWorkbench({ plan, checkOnly = false, spawnProcess = spawn,
     onExit(1);
     return null;
   }
-  logger.log(`NEKOfuns数据：${plan.runtime.dataDir}`);
+  logger.log(`Nekofans数据：${plan.runtime.dataDir}`);
   logger.log(`工作区：${plan.runtime.workspaceDir}`);
   logger.log(`DSH 配置：${plan.runtime.dshHomeDir} / ${plan.runtime.dshProfile || 'web'}`);
   if (checkOnly) {
@@ -104,9 +104,9 @@ export function startWorkbench({ plan, checkOnly = false, spawnProcess = spawn,
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   if (process.argv.includes("--help")) {
-    console.log("npm run start:neko [-- --check]\n独立的 NEKOfuns；--check 仅检查运行路径，不启动服务。\n配置说明：docs/NEKO_LITE.md");
+    console.log("npm run start:neko [-- --check]\n独立的 Nekofans；--check 仅检查运行路径，不启动服务。\n配置说明：docs/NEKO_LITE.md");
   } else {
     try { startWorkbench({ plan: launchPlan(), checkOnly: process.argv.includes("--check") }); }
-    catch { console.error("无法读取 NEKOfuns启动配置。请检查 apps/neko-workbench 与环境变量。"); process.exitCode = 1; }
+    catch { console.error("无法读取 Nekofans启动配置。请检查 apps/neko-workbench 与环境变量。"); process.exitCode = 1; }
   }
 }

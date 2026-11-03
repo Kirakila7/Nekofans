@@ -70,7 +70,7 @@ export async function buildWindowsDaily({root,release,args}){
   }
   const entry=join(dir,'resources/app');mkdirSync(entry,{recursive:true});
   cpSync(join(root,'apps/neko-workbench/windows-bootstrap.cjs'),join(entry,'bootstrap.cjs'));
-  writeFileSync(join(entry,'package.json'),JSON.stringify({name:'nekofuns-workbench',productName:'NEKOfuns',version:release.version,main:'bootstrap.cjs',private:true},null,2)+'\n');
+  writeFileSync(join(entry,'package.json'),JSON.stringify({name:'nekofans-workbench',productName:'Nekofans',version:release.version,main:'bootstrap.cjs',private:true},null,2)+'\n');
   const local={};for(const [flag,key] of [['--data-dir','dataDir'],['--workspace-dir','workspaceDir']])if(value(flag))local[key]=resolve(value(flag));
   if(value('--profile-name'))local.profileName=value('--profile-name');
   if(value('--trial-label'))local.trialLabel=value('--trial-label');
@@ -107,12 +107,12 @@ function packageWindowsStage({root,release,args,output}){
   const csc=join(process.env.WINDIR||'C:/Windows','Microsoft.NET/Framework64/v4.0.30319/csc.exe');
   const stub=join(output,'launcher.exe');
   run(csc,['/nologo','/target:winexe','/platform:x64','/optimize+','/reference:System.Windows.Forms.dll','/reference:System.IO.Compression.dll','/reference:System.IO.Compression.FileSystem.dll','/out:'+stub,join(root,'scripts/windows-portable-launcher.cs')]);
-  const filename=value('--artifact-name')||'NEKOfuns-'+release.version+'-Windows-'+new Date().toISOString().slice(0,10).replaceAll('-','')+'.exe';
+  const filename=value('--artifact-name')||'Nekofans-'+release.version+'-Windows-'+new Date().toISOString().slice(0,10).replaceAll('-','')+'.exe';
   if(filename.includes('/')||filename.includes('\\')||!filename.endsWith('.exe'))throw Error('Invalid artifact filename');
   const exe=join(output,filename);
   const target=openSync(exe,'wx');try{for(const file of [stub,payload]){const input=openSync(file,'r'),buffer=Buffer.allocUnsafe(1024*1024);try{let n;while((n=readSync(input,buffer,0,buffer.length,null))>0)writeSync(target,buffer,0,n);}finally{closeSync(input);}}const footer=Buffer.alloc(48);footer.write('NEKOSFX1',0,'ascii');footer.writeBigInt64LE(BigInt(statSync(payload).size),8);Buffer.from(sha(payload),'hex').copy(footer,16);writeSync(target,footer);}finally{closeSync(target);}
   const receipt={exe,bytes:statSync(exe).size,sha256:sha(exe),sourceCommit:commit,sourceFiles:Object.keys(hashes).length,applicationFiles:Object.keys(integrity).length};
   writeFileSync(join(output,'BUILD_RECEIPT.json'),JSON.stringify(receipt,null,2)+'\n');
-  writeFileSync(join(output,'使用说明.txt'),'NEKOfuns '+release.version+' Windows'+(local.trialLabel?' · '+local.trialLabel:'')+'\r\n\r\n双击 '+filename+' 启动。首次会解包程序，之后直接打开。\r\n'+(dshResources?'已内置 DSH、工具依赖、Node 和记忆运行环境，无需单独安装 DSH。账号登录仍在工作台中进行。':'需要本机已安装 DeepSeek Harness。程序包含 Node 和记忆运行环境。')+'\r\n'+(local.profileName?'试用版使用独立存档，不替换日常工作台。':'本机配置只引用现有聊天数据和工作区。')+'程序包不包含聊天记录、账号凭据或用户文件。\r\n来源提交：'+commit+'（附加清单内的 Windows 打包入口）\r\n');
+  writeFileSync(join(output,'使用说明.txt'),'Nekofans '+release.version+' Windows'+(local.trialLabel?' · '+local.trialLabel:'')+'\r\n\r\n双击 '+filename+' 启动。首次会解包程序，之后直接打开。\r\n'+(dshResources?'已内置 DSH、工具依赖、Node 和记忆运行环境，无需单独安装 DSH。账号登录仍在工作台中进行。':'需要本机已安装 DeepSeek Harness。程序包含 Node 和记忆运行环境。')+'\r\n'+(local.profileName?'试用版使用独立存档，不替换日常工作台。':'本机配置只引用现有聊天数据和工作区。')+'程序包不包含聊天记录、账号凭据或用户文件。\r\n来源提交：'+commit+'（附加清单内的 Windows 打包入口）\r\n');
   console.log(JSON.stringify(receipt));return receipt;
 }

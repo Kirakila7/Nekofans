@@ -28,12 +28,12 @@ export function installerOptions({args,release}){
   const testId=value(args,'--installer-test-id'),testRoot=value(args,'--installer-install-dir'),testGroup=value(args,'--installer-shortcut-group');
   if((testRoot||testGroup)&&!testId)throw Error('Isolated installer location/group require --installer-test-id');
   if(testId&&(!/^NEKOfuns-QA-[A-Za-z0-9_-]{1,64}$/.test(testId)||!testRoot||!isAbsolute(testRoot)||!testGroup||!/^NEKOfuns-QA-[A-Za-z0-9 _-]{1,64}$/.test(testGroup)))throw Error('Invalid isolated installer settings');
-  const filename=value(args,'--artifact-name')||'NEKOfuns-'+release.version+'-Setup.exe';
+  const filename=value(args,'--artifact-name')||'Nekofans-'+release.version+'-Setup.exe';
   if(basename(filename)!==filename||!filename.endsWith('.exe')||/[\x00-\x1f\x7f:*?"<>|\\/]/.test(filename))throw Error('Invalid installer artifact filename');
   if(!/^\d+\.\d+\.\d+(?:[.-][A-Za-z0-9.-]+)?$/.test(release.version)||!/^\d+$/.test(String(release.build)))throw Error('Invalid installer version');
   const numeric=release.version.split(/[.-]/).slice(0,3).map(Number),build=Number(release.build);
   if([...numeric,build].some(n=>!Number.isInteger(n)||n<0||n>65535))throw Error('Installer version fields must fit a Windows version');
-  return {appId:testId||'NEKOfuns-Workbench',group:testGroup||'NEKOfuns',displayName:testId?'NEKOfuns · 隔离验收':'NEKOfuns',installRoot:testRoot?resolve(testRoot):null,desktopShortcut:!testId&&!args.includes('--no-desktop-shortcut'),filename,numericVersion:[...numeric,build].join('.'),testMode:!!testId};
+  return {appId:testId||'NEKOfuns-Workbench',group:testGroup||'NEKOfuns',displayName:testId?'Nekofans · 隔离验收':'Nekofans',installRoot:testRoot?resolve(testRoot):null,desktopShortcut:!testId&&!args.includes('--no-desktop-shortcut'),filename,numericVersion:[...numeric,build].join('.'),testMode:!!testId};
 }
 
 export function verifyInstallerInput(application,integrity){
@@ -92,6 +92,6 @@ export function packageWindowsInstaller({root,release,args,output,application,ma
   if(result.status!==0)throw Error(result.error?.message||result.stderr||result.stdout||'NSIS compiler failed');
   const receipt={kind:'installer',exe:generated.exe,bytes:statSync(generated.exe).size,sha256:sha(generated.exe),sourceCommit:manifest.sourceCommit,sourceFiles:Object.keys(manifest.files).length,applicationFiles:generated.payloadFiles,installer:{tool,...generated,profileName:local.profileName||null,uninstallPreservesUserData:true,runningProcessPolicy:'prompt-close-no-termination'}};
   writeFileSync(join(output,'BUILD_RECEIPT.json'),JSON.stringify(receipt,null,2)+'\n');
-  writeFileSync(join(output,'使用说明.txt'),'NEKOfuns '+release.version+' Windows 安装版\r\n\r\n双击 '+generated.filename+' 安装到当前用户的 Programs\\NEKOfuns，并创建开始菜单'+(generated.desktopShortcut?'和桌面':'')+'快捷方式。无需管理员权限。\r\n升级或卸载前请自行关闭该安装目录里的工作台和任务；安装器不会强制结束任务。\r\n账号存档和项目目录保持现有位置，卸载默认保留；程序包不包含账号凭据、聊天记录或用户文件。\r\n静默安装：'+generated.filename+' /S；静默不会自动运行工作台。卸载请使用系统“已安装的应用”或开始菜单的卸载入口。\r\n来源提交：'+manifest.sourceCommit+'\r\n');
+  writeFileSync(join(output,'使用说明.txt'),'Nekofans '+release.version+' Windows 安装版\r\n\r\n双击 '+generated.filename+'，选择安装位置后点击“安装”（默认当前用户的 Programs\\NEKOfuns）。安装后创建开始菜单'+(generated.desktopShortcut?'和桌面':'')+'快捷方式。无需管理员权限。\r\n升级或卸载前请自行关闭该安装目录里的工作台和任务；安装器不会强制结束任务。\r\n账号存档和项目目录保持现有位置，卸载默认保留；程序包不包含账号凭据、聊天记录或用户文件。\r\n静默安装：'+generated.filename+' /S；静默不会自动运行工作台。卸载请使用系统“已安装的应用”或开始菜单的卸载入口。\r\n来源提交：'+manifest.sourceCommit+'\r\n');
   console.log(JSON.stringify(receipt));return receipt;
 }

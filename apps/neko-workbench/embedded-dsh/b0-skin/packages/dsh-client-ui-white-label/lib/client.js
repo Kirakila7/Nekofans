@@ -1,10 +1,10 @@
 /**
- * NEKOfuns · 产品品牌面 — client bundle (hand-written, no build step).
+ * Nekofans · 产品品牌面 — client bundle (hand-written, no build step).
  *
  * This package owns the PRODUCT identity. It never changes with the skin:
  *
  *   - sidebar.brand.mark            selectable chibi avatar (button + picker)
- *   - sidebar.brand.name            wordmark "NEKOfuns"
+ *   - sidebar.brand.name            wordmark "Nekofans"
  *   - conversation.hero.brand.mark  five-portrait avatar gallery; a scoped
  *                                   :has() rule hides only the sibling
  *                                   titleGroup ("探索未至之境" + preview badge)
@@ -43,8 +43,8 @@ window.__ModuleLoader__.load({
 
     /** Product identity. Skins must not override any of this. */
     const PRODUCT_BRAND = Object.freeze({
-      name: 'NEKOfuns',
-      shortName: 'NEKOfuns',
+      name: 'Nekofans',
+      shortName: 'Nekofans',
       /** Hard-coded product name in the DSH layout title constant. */
       legacyName: 'DeepSeek Harness',
     })
@@ -6098,7 +6098,7 @@ function installWorkbenchSideRail(options = {}) {
     const brand = doc.createElement('span'); brand.className = 'neko-window-titlebar__brand';
     const iconSrc = options.accountAvatar || options.fishAvatar;
     if (iconSrc) { const icon = doc.createElement('img'); icon.src = iconSrc; icon.alt = ''; brand.appendChild(icon); }
-    const name = doc.createElement('span'); name.textContent = 'NEKOfuns'; brand.appendChild(name);
+    const name = doc.createElement('span'); name.textContent = 'Nekofans'; brand.appendChild(name);
     titlebar.appendChild(brand); doc.body.prepend(titlebar);
   }
   function findChatFrame(sidebar) {

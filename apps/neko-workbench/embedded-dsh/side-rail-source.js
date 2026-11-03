@@ -105,7 +105,7 @@ function installWorkbenchSideRail(options = {}) {
     const brand = doc.createElement('span'); brand.className = 'neko-window-titlebar__brand';
     const iconSrc = options.accountAvatar || options.fishAvatar;
     if (iconSrc) { const icon = doc.createElement('img'); icon.src = iconSrc; icon.alt = ''; brand.appendChild(icon); }
-    const name = doc.createElement('span'); name.textContent = 'NEKOfuns'; brand.appendChild(name);
+    const name = doc.createElement('span'); name.textContent = 'Nekofans'; brand.appendChild(name);
     titlebar.appendChild(brand); doc.body.prepend(titlebar);
   }
   function findChatFrame(sidebar) {
