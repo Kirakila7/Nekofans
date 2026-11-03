@@ -347,9 +347,13 @@ async function runIsolationHarness(scenario) {
       assert.equal((await lobbyCall({ action: 'open' })).ok, false, 'the lobby cannot open in this scenario');
     } else {
       const mode = scenario === 'independent' ? { action: 'mode-set', mode: 'independent', trigger: 'mention' } : { action: 'mode-set', mode: 'assist' };
-      assert.equal((await lobbyCall(mode)).ok, true, 'lobby mode can be set with the chat API configured');
       const opened = await lobbyCall({ action: 'open' });
       assert.equal(opened.ok, true, 'lobby open resolves');
+      if (scenario !== 'disconnected') {
+        await wait(async () => !(await lobbyCall({ action: 'state' })).state.loading, 'lobby account loaded');
+        const configured = await lobbyCall(mode);
+        assert.equal(configured.ok, true, 'lobby mode can be set after account context is loaded: '+configured.error);
+      }
       if (scenario === 'disconnected') {
         await wait(async () => (await lobbyCall({ action: 'state' })).state.connection === 'connecting', 'lobby reconnecting');
         assert.equal((await lobbyCall({ action: 'send', text: '大厅消息', origin: 'human' })).ok, false, 'lobby send fails while disconnected');

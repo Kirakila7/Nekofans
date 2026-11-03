@@ -287,6 +287,13 @@ function createVisitsController({ dataDir, repositoryRoot, safeStorage, openExte
     })();
     return closeFlight;
   }
-  return { action, snapshot, initialize, close };
+  function communityIdentity(){return !closed&&!departing&&account?{userId:account.id,epoch}:null;}
+  async function publishDaily({identity,title,body,signal,assertCurrent:assertDaily=()=>{}}){
+    const current=()=>{if(!identity||JSON.stringify(communityIdentity())!==JSON.stringify(identity))throw fail('account_changed');assertDaily();};
+    current();if(typeof social?.publishDaily!=='function')throw fail('daily_publish_unavailable');
+    return social.publishDaily({title,body,ownerId:identity.userId,signal,assertCurrent:current});
+  }
+  // Main-process capability only; publishing is NOT a generic visits IPC action.
+  return { action, snapshot, initialize, close, communityIdentity, publishDaily };
 }
 module.exports = { createVisitsController };

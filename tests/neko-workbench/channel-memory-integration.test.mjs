@@ -6,6 +6,7 @@ import {join,resolve} from 'node:path';
 import {EventStore,capabilities,selectValues} from '../../apps/neko-workbench/memory/event-store.mjs';
 import {WorkbenchMainChat} from '../../apps/neko-workbench/main-chat-runtime.cjs';
 import {createChannelLife} from '../../apps/neko-workbench/channel-life.cjs';
+import {createCommunityDaily} from '../../apps/neko-workbench/community-daily.cjs';
 import {qqExperience,biliExperience} from '../../apps/neko-workbench/channel-experiences.cjs';
 function fixture(t){
   const directory=mkdtempSync(join(tmpdir(),'neko-channel-e2e-')),remote=new EventStore(join(directory,'remote.sqlite')),requests=[];
@@ -14,6 +15,24 @@ function fixture(t){
   const runtimes=[],create=()=>{const runtime=new WorkbenchMainChat({dataDir:directory,repositoryRoot:resolve(import.meta.dirname,'../..'),initialBackend:'deepseek-account',accountProvider:provider,memoryWorker:worker,safeStorage:{isEncryptionAvailable:()=>true,encryptString:v=>Buffer.from(v),decryptString:v=>v.toString()}});runtimes.push(runtime);return runtime;};const runtime=create();
   const lives=[];t.after(async()=>{lives.forEach(c=>c.dispose());for(const r of runtimes)await r.close();remote.close();rmSync(directory,{recursive:true,force:true});});return {directory,remote,runtime,requests,lives,create};
 }
+
+test('community daily uses actual today conversation and main provider without private memory or forged history',async t=>{
+ const f=fixture(t);await f.runtime.start();
+ await f.runtime.memorySystem.recordChannelExperience(qqExperience({messageId:'private-qq',scope:'c2c',text:'合成的私人消息不要公开'},Date.now()));
+ await f.runtime.send('今天给小窝添了一个玩偶');const before=await f.runtime.history(),posts=[];
+ const daily=createCommunityDaily({dataDir:f.directory,getIdentity:()=>({userId:'fixture-owner',epoch:1}),getInteractions:()=>f.runtime.history(),generate:(rows,s)=>f.runtime.generateCommunityDaily(rows,s),publish:async p=>{p.assertCurrent();posts.push(p);return {id:'synthetic-post'};}});f.lives.push(daily);
+ daily.configure(true);await daily.tick({force:true});assert.equal(posts.length,1);assert.equal(f.requests.length,2);
+ const generated=f.requests[1];assert.equal(generated.persona.name,'大肥鱼');assert.match(generated.persona.prompt,/公开社区/);assert.match(generated.messages[0].text,/添了一个玩偶/);
+ assert(!generated.messages[0].text.includes('私人消息'));assert.deepEqual(generated.memoryContext,[]);assert.deepEqual(generated.memories,[]);assert.deepEqual(generated.summaries,[]);
+ assert.deepEqual(await f.runtime.history(),before,'public generation does not enter private user history');await daily.tick({force:true});assert.equal(posts.length,1);
+});
+
+test('community summary generation aborts when a new private message arrives',async t=>{
+ const f=fixture(t);await f.runtime.start();let started;const ready=new Promise(r=>started=r);
+ f.runtime.proactiveAccountProvider={async *stream(input){started();await new Promise(r=>input.signal.addEventListener('abort',r,{once:true}));yield {type:'delta',text:'must not publish'};}};
+ const pending=f.runtime.generateCommunityDaily([{role:'user',text:'今天整理玩偶'}],new AbortController().signal);await ready;
+ const check=assert.rejects(pending,/Cancelled/);await f.runtime.send('继续和我聊天');await check;assert.equal((await f.runtime.history()).filter(m=>m.role==='user').length,1);
+});
 test('B站 and QQ observations reach real main memory, recall and an opt-in desktop comment without a forged user history',async t=>{
   const f=fixture(t);let life;f.runtime.environmentContext=()=>life?.context()||'';await f.runtime.start();let time=Date.parse('2026-11-03T02:00:00Z');const replies=[];
   life=createChannelLife({dataDir:f.directory,getMemory:()=>f.runtime.memorySystem,generate:(e,s)=>f.runtime.generateProactive(e,s),present:r=>replies.push(r),now:()=>time});f.lives.push(life);
