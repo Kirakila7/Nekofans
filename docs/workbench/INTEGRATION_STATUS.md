@@ -1,5 +1,13 @@
 # Local test workbench 0.28.37 / build 73 (Windows installer verified)
 
+## Desktop interaction and channel-memory checks (2026-11-03, local source)
+
+Main desktop replies now use a bounded text viewport with up/down buttons for all three chat backends. This fixes clipping in the default account backend and removes the NEKO two-line clamp for the main pet. Text is retained as text, streaming additions preserve the reading position, and controls disappear for short replies. A narrow trusted pet IPC action opens the workbench on double click, while single click and dragging retain their existing actions.
+
+Subagents select the nearest visible ancestor task pet as their home. Cluster layouts are maintained per task family rather than sharing the main pet's anchor; missing/hidden task windows fall back to main. Roaming now defaults off unless explicitly enabled. Unit regressions cover independent families, ancestor/cycle fallback, IPC boundaries and existing motion behavior. Real Electron validation passed nine backend/zoom combinations (three backends at 100/125/150%), including actual scroll-button clicks, full text retention, window bounds, stream position retention and a desktop double-click event. Test profiles were independent and used only synthetic messages; no installer has been rebuilt.
+
+The B站/QQBot memory check found that channel operation remains separate from main-agent memory and does not trigger proactive desktop conversation. The channel/memory suite passed 60 of 62 tests; two full-main fixtures failed with temporary-directory cleanup EPERM, including on retry. Details and the unverified live-account scope are recorded in `CHANNEL_MEMORY_CHECK.md`. No channel-memory synchronization or autonomous messaging was enabled by these changes.
+
 ## Desktop pet reopening repair (2026-11-03, local source)
 
 Based on `codex/nekofuns-0.28.37-creation-installer-20261103` at `87fc69dbd7c8aea5bb60aae1b93daad8d1caec32`. Tracked in issue #53.

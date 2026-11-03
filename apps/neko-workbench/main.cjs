@@ -29,7 +29,7 @@ const {randomUUID} = require('node:crypto');
 const {writeAtomicStateFileSync}=require('./atomic-state-file.cjs');
 const readline = require('node:readline');
 const originalWork = require('./original/work-status.cjs');
-const {normalizeLimit,orderedHelpers,displayName,nickname,actorKind,orderedDesktopPets,orderedTaskPets,selectDesktopPets,nextDesktopRefreshAt,beginReturnHome,expireReturnHomes}=require('./pet-roster.cjs');
+const {normalizeLimit,orderedHelpers,displayName,nickname,actorKind,desktopHomeId,orderedDesktopPets,orderedTaskPets,selectDesktopPets,nextDesktopRefreshAt,beginReturnHome,expireReturnHomes}=require('./pet-roster.cjs');
 const {readOriginalSize,petLayout,petPlacement}=require('./pet-layout.cjs');
 const {migrateChatRouting,actorBySession:findDshActor}=require('./chat-routing.cjs');
 const petAppearance=require('./pet-appearance.js');
@@ -140,7 +140,7 @@ const pending=new Map(), petWindows=new Map(),renameWindows=new Map();
 const draggingPets=new Set(),petGeometry=new Map();
 const motionInputs=new Set();
 const catMotion=createSubagentMotion({
-  getHome:()=>{const w=petWindows.get('main');if(!w||w.isDestroyed())return null;const bounds=windowBounds(w);return {...bounds,body:motionBody(state.actors.find(a=>a.id==='main'),w,bounds)};},
+  getHome:id=>{const actor=state.actors.find(a=>a.id===id),homeId=desktopHomeId(actor,state.actors);let home=state.actors.find(a=>a.id===homeId),w=petWindows.get(homeId);if(!w||w.isDestroyed()||!w.isVisible()){home=state.actors.find(a=>a.id==='main');w=petWindows.get('main');}if(!w||w.isDestroyed())return null;const bounds=windowBounds(w);return {...bounds,anchorId:home.id,body:motionBody(home,w,bounds)};},
   getArea:bounds=>screen.getDisplayMatching?.(bounds)?.workArea||screen.getPrimaryDisplay().workArea,
   getCursor:()=>screen.getCursorScreenPoint?.(),reducedMotion:()=>nativeTheme.shouldUseReducedMotion===true,
   isPaused:id=>draggingPets.has(id)||motionInputs.has(id),
@@ -393,7 +393,8 @@ function motionBody(a,w,bounds){
     height:height*(original?.78:.94),bottomInset:Math.max(0,bounds.height-76*zoom-height*(original?.94:1))};
 }
 function keepMainInFront(id){
-  const main=petWindows.get('main'),helper=petWindows.get(id);
+  const actor=state.actors.find(a=>a.id===id),homeId=desktopHomeId(actor,state.actors);
+  const main=petWindows.get(homeId)||petWindows.get('main'),helper=petWindows.get(id);
   if(!main||!helper||main.isDestroyed()||helper.isDestroyed())return;
   // Electron moveAbove changes z-order without focusing the main character.
   try{const source=helper.getMediaSourceId?.();if(source)main.moveAbove?.(source);}catch{}
@@ -947,6 +948,7 @@ ipcMain.handle('pet:call',async(event,method,p={})=>{
   const renameId=[...renameWindows.entries()].find(([,w])=>w===sender)?.[0];
   if(!senderId&&!renameId&&sender!==memoryWindow&&sender!==settingsWindow&&sender!==nekoSettingsWindow&&sender!==chatSettingsWindow&&sender!==chatMemoryWindow)throw new Error('未知窗口');
   assertLocalCaller(event,sender);
+  if(method==='open-workbench'){if(!senderId)throw new Error('请从桌宠打开工作台');await openDsh();return true;}
   if(method==='state')return state;
   if(method==='chat-settings-read'){if(sender!==chatSettingsWindow)throw new Error('请从聊天设置操作');return mainChatRuntime?.read({checkSecureStorage:true})||state.mainChat;}
   if(method==='chat-open-neko-settings'){if(sender!==chatSettingsWindow)throw new Error('请从聊天设置操作');editNekoSettings();return true;}
