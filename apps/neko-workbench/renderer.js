@@ -5,6 +5,33 @@ const host = document.getElementById('app');
 let state, inputVisible = false, dragStart, lastPointer, dragged = false, noticeTimer;
 const clips = {idle:'idle',working:'working',stopping:'waiting',success:'success',stopped:'idle',error:'error'};
 const busy = actor => ['working','stopping'].includes(actor.status);
+// A completed message owns its deadline. Broadcasts and work-animation redraws
+// cannot restart it; streaming stays visible until the final chunk arrives.
+function installSpeechLifetime({feedback,bubble,getActor,getDuration,now=Date.now,schedule=setTimeout,cancel=clearTimeout,onExpire=()=>{}}){
+  const seen=new Map(),show=feedback.showLocal,render=feedback.renderBubble;let key=null,timer;
+  function apply(){
+    cancel(timer);timer=null;const entry=seen.get(key);if(!entry)return;
+    if(entry.expired){bubble.hidden=true;bubble.classList.remove('is-on');onExpire();return;}
+    if(entry.streaming)return;
+    const raw=getDuration(),duration=raw===0?0:Number.isFinite(raw)&&raw>=5000&&raw<=3600000?raw:60000;
+    if(duration===0&&!entry.expired)return;
+    const remaining=duration-(now()-entry.completedAt);
+    if(entry.expired||remaining<=0){entry.expired=true;bubble.hidden=true;bubble.classList.remove('is-on');onExpire();}
+    else timer=schedule(apply,remaining);
+  }
+  feedback.showLocal=function(text,options={}){
+    const a=getActor(),reply=a?.screenReply||a?.chatReply,source=reply?.text===text?reply:a?.notice?.text===text?a.notice:null;
+    key=text?JSON.stringify([source?.id||'local',source?.id?'':text]):null;
+    if(key){let e=seen.get(key);if(!e){e={streaming:!!source?.streaming,completedAt:now(),expired:false};seen.set(key,e);}
+      if(e.streaming&&!source?.streaming)e.completedAt=now();e.streaming=!!source?.streaming;
+      // Retain expired receipts for the renderer lifetime: an old history
+      // snapshot must never resurrect an already dismissed message.
+    }
+    show.call(feedback,text,{...options,persistent:true});apply();
+  };
+  if(render)feedback.renderBubble=function(){render.call(feedback);apply();};
+  return {refresh:apply,dispose(){cancel(timer);feedback.showLocal=show;if(render)feedback.renderBubble=render;seen.clear();}};
+}
 // Settings submits show an in-flight state and cannot be double-submitted.
 async function submitting(form,task){const button=form.querySelector('button[type=submit]');if(button?.disabled)return;if(button){button.disabled=true;button.setAttribute('aria-busy','true');}try{await task();}finally{if(button){button.disabled=false;button.removeAttribute('aria-busy');}}}
 
@@ -92,24 +119,53 @@ if(view==='chat-settings'){
   host.querySelector('.pet').style.setProperty('--stage-width',stageWidth+'px');
   const form = host.querySelector('form');
   const input = host.querySelector('input');
+  form.classList.add('speech-composer');form.setAttribute('aria-label','和桌宠说话');
+  const sendReply=document.createElement('button');sendReply.type='submit';sendReply.className='speech-send';sendReply.textContent='发送';form.append(sendReply);
+  const closeComposer=document.createElement('button');closeComposer.type='button';closeComposer.className='speech-close';closeComposer.textContent='×';closeComposer.setAttribute('aria-label','收起说话气泡');closeComposer.addEventListener('click',()=>setInput(false));form.append(closeComposer);
   const stopReply=document.createElement('button');stopReply.type='button';stopReply.className='chat-stop';stopReply.textContent='■';stopReply.title='停止回复';stopReply.setAttribute('aria-label','停止回复');stopReply.hidden=true;form.append(stopReply);
   stopReply.addEventListener('click',()=>{stopReply.setAttribute('aria-busy','true');stopReply.disabled=true;window.pet.call('chat-cancel').catch(()=>showBubble('停止回复未完成，请重试')).finally(()=>{stopReply.removeAttribute('aria-busy');stopReply.disabled=false;});});
   let shownNotice,shownReply;
   const actor = () => state?.actors.find(a=>a.id===actorId);
+  const speechLifetime=installSpeechLifetime({feedback,bubble,getActor:actor,getDuration:()=>state?.preferences?.petSpeechDurationMs,onExpire:()=>passThrough()});
+  window.addEventListener('unload',()=>speechLifetime.dispose(),{once:true});
   let ignoredMouse=null,lastHover=null;
   function passThrough(event=lastHover){
     if(event)lastHover={clientX:event.clientX,clientY:event.clientY};
-    const a=actor(),exploring=a?.id!=='main'&&(desktopMotion||state?.preferences.subagentFountain!==false||state?.preferences.subagentClustering!==false||a?.kind!=='task'&&appearance.isCat()&&state?.preferences.subagentExploration!==false);
     let ignore=false;
-    if(exploring&&!inputVisible&&!dragStart){
-      const targets=[character,tierTag];
-      if(!bubble.hidden)targets.push(bubble);
-      ignore=!event||!targets.some(node=>{let r=node.getBoundingClientRect();if(node===character&&!appearance.isMedia()){const b=window.PetShared.HIT_BOX;r={left:r.left+r.width*b.x0/640,right:r.left+r.width*b.x1/640,top:r.top+r.height*b.y0/360,bottom:r.top+r.height*b.y1/360};}return event.clientX>=r.left&&event.clientX<=r.right&&event.clientY>=r.top&&event.clientY<=r.bottom;});
+    if(!dragStart){
+      const targets=[];if(!bubble.hidden&&!inputVisible)targets.push(bubble);if(inputVisible&&!form.hidden)targets.push(form);
+      const inControl=event&&targets.some(node=>{const r=node.getBoundingClientRect();return event.clientX>=r.left&&event.clientX<=r.right&&event.clientY>=r.top&&event.clientY<=r.bottom;});
+      ignore=!event||!inControl&&!modelHit(event);
     }
     if(ignoredMouse!==ignore){ignoredMouse=ignore;window.pet.call('pass-through',{ignore}).catch(()=>{});}
   }
+  const hitCanvas=document.createElement('canvas');hitCanvas.width=hitCanvas.height=1;let hitContext;
+  function modelHit(event){
+    const r=character.getBoundingClientRect(),x=event.clientX-r.left,y=event.clientY-r.top;
+    if(x<0||y<0||x>=r.width||y>=r.height||!r.width||!r.height)return false;
+    const media=appearance.isMedia()?character.querySelector('.pet-cat'):character.querySelector('video.is-front');
+    const nw=media?.naturalWidth||media?.videoWidth,nh=media?.naturalHeight||media?.videoHeight;
+    if(nw&&nh){try{
+      hitContext??=hitCanvas.getContext('2d',{willReadFrequently:true});
+      const m=media.getBoundingClientRect(),scale=Math.min(m.width/nw,m.height/nh),width=nw*scale,height=nh*scale;
+      let px=event.clientX-m.left-(m.width-width)/2,py=event.clientY-m.top-(m.height-height)/2;
+      if(px<0||py<0||px>=width||py>=height)return false;
+      let flipX=false,flipY=false;for(let node=media;node&&node!==character.parentElement;node=node.parentElement){const matrix=getComputedStyle(node).transform.match(/^matrix\(([^)]+)\)$/);if(matrix){const v=matrix[1].split(',').map(Number);if(v[0]<0)flipX=!flipX;if(v[3]<0)flipY=!flipY;}}
+      if(flipX)px=width-px;if(flipY)py=height-py;
+      hitContext.clearRect(0,0,1,1);hitContext.drawImage(media,Math.min(nw-1,Math.floor(px/scale)),Math.min(nh-1,Math.floor(py/scale)),1,1,0,0,1,1);
+      return hitContext.getImageData(0,0,1,1).data[3]>12;
+    }catch{}}
+    // During first-frame loading (or an unsupported decoder) use the model's
+    // established body bounds, never the full transparent desktop window.
+    const b=appearance.isMedia()?{x0:0,y0:0,x1:640,y1:360}:window.PetShared.HIT_BOX;
+    return x>=r.width*b.x0/640&&x<=r.width*b.x1/640&&y>=r.height*b.y0/360&&y<=r.height*b.y1/360;
+  }
   window.addEventListener('mousemove',passThrough);
   window.addEventListener('mouseleave',()=>{lastHover=null;passThrough();});
+  // Animated frames can move underneath a stationary cursor. Re-evaluate the
+  // current alpha instead of retaining the last mousemove's native hit state.
+  const hitTimer=setInterval(()=>passThrough(),200);
+  window.addEventListener('unload',()=>clearInterval(hitTimer),{once:true});
   function showBubble(text) {feedback.showLocal(text);}
   function renderAnimation(a) {
     const visual=window.PetChatPresentation.animationActor(a,desktopMotion);
@@ -142,6 +198,7 @@ if(view==='chat-settings'){
       feedback.showLocal(visible?window.PetChatPresentation.taskChatText(a):'',{persistent:visible});return;
     }
     inputVisible=visible;form.hidden=!visible;host.querySelector('.pet').classList.toggle('chat-open',visible);
+    character.setAttribute('aria-expanded',String(visible));
     window.pet.call('motion-input',{active:visible}).catch(()=>{});passThrough();
     if(visible){hideInspector();input.focus();}else scheduleInspector();
   }
@@ -156,9 +213,10 @@ if(view==='chat-settings'){
     passThrough();
     if(a.kind==='task')hideInspector();
     if(a.id!=='main'&&a.kind!=='task'){form.remove();inputVisible=false;host.querySelector('.pet').classList.remove('chat-open','task-chat-open');}
+    nameTag.hidden=true;tierTag.hidden=true;
 
     nameTag.querySelector('.logo-letter').textContent=Array.from(a.name)[0]||'鲸';nameTag.classList.toggle('is-pinned',!!a.pinned);nameTag.title=a.name+(a.pinned?' · 常驻桌面':'')+(a.dshName&&a.nickname?'\nDSH：'+a.dshName:'');nameTag.setAttribute('aria-label',a.name);
-    character.setAttribute('aria-label',a.id==='main'?'与'+a.name+'聊天':a.kind==='task'?'展开或收起子会话聊天：'+a.name:'查看子代理状态：'+a.name);if(a.kind==='task')character.setAttribute('aria-expanded',String(inputVisible));else character.removeAttribute('aria-expanded');
+    character.setAttribute('aria-label',a.id==='main'?'与'+a.name+'聊天':a.kind==='task'?'展开或收起子会话聊天：'+a.name:'查看子代理状态：'+a.name);if(a.id==='main'||a.kind==='task')character.setAttribute('aria-expanded',String(inputVisible));else character.removeAttribute('aria-expanded');
     const preview=window.PetContext.preview(a);for(const field of inspector.querySelectorAll('dd'))field.textContent=preview[field.dataset.field];
     input.setAttribute('aria-label','给'+a.name+'发消息');
     const mainChatService=a.id==='main'&&['chat-api','deepseek-account'].includes(a.chatBackend);
@@ -181,14 +239,13 @@ if(view==='chat-settings'){
       const replyKey=a.chatReply&&JSON.stringify([a.chatReply.id,a.chatReply.text,a.chatReply.streaming]);
       if(replyKey&&replyKey!==shownReply){shownReply=replyKey;feedback.showLocal(a.chatReply.text);}
     }
+    speechLifetime.refresh();
   }
   window.pet.onState(render);
   window.pet.onInput(()=>setInput(true));
   window.pet.call('state').then(render);
   function trackHover(event){
-    const r=character.getBoundingClientRect(),x=(event.clientX-r.left)/r.width,y=(event.clientY-r.top)/r.height;
-    const box=appearance.isMedia()?{x0:0,y0:0,x1:640,y1:360}:window.PetShared.HIT_BOX;
-    overCharacter=x>=box.x0/640&&x<=box.x1/640&&y>=box.y0/360&&y<=box.y1/360;
+    overCharacter=modelHit(event);
     if(overCharacter)scheduleInspector();else hideInspector();
   }
   character.addEventListener('pointerenter',trackHover);
@@ -197,6 +254,7 @@ if(view==='chat-settings'){
   character.addEventListener('pointerdown',event=>{
     hideInspector();
     if(event.button!==0)return;
+    if(!modelHit(event))return;
     dragStart={x:event.screenX,y:event.screenY};lastPointer=dragStart;dragged=false;
     character.setPointerCapture(event.pointerId);
   });

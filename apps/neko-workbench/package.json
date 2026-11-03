@@ -1,7 +1,7 @@
 {
   "name": "@bigfish/neko-workbench",
   "productName": "Nekofans",
-  "version": "0.28.39",
+  "version": "0.28.41",
   "private": true,
   "main": "main.cjs",
   "scripts": {

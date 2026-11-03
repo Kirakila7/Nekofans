@@ -58,3 +58,16 @@
 .pet-bubble-scroll-controls{display:flex;justify-content:flex-end;gap:6px;flex:0 0 auto;margin-top:4px}
 .pet-bubble-scroll-controls button{min-width:28px;min-height:24px;padding:0 7px;border:1px solid #b7d6e9;border-radius:6px;background:#edf7ff;color:#416b89;cursor:pointer;font:14px/22px sans-serif}
 .pet-bubble-scroll-controls button:hover:enabled{background:#d9edfb}.pet-bubble-scroll-controls button:disabled{opacity:.4;cursor:default}.pet-bubble-scroll-controls button:focus-visible{outline:2px solid #478cbf;outline-offset:1px}
+/* A desktop pet has no name badge or separate toolbar. Its editor is a white
+   speech bubble, revealed only by an explicit click on the visible model. */
+.pet .pet-logo,.pet .pet-tier{display:none!important;pointer-events:none!important}
+.pet .speech-composer{top:auto;bottom:calc(100% - var(--head-top) + 8px);height:auto;min-height:50px;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:5px;overflow:visible;padding:10px 29px 10px 12px;border:1px solid #d2d9df;border-radius:16px;background:#fff;box-shadow:0 3px 12px #314b6020;animation:none}
+.pet .speech-composer::after{content:"";position:absolute;bottom:-7px;left:50%;width:12px;height:12px;background:#fff;border-right:1px solid #d2d9df;border-bottom:1px solid #d2d9df;transform:rotate(45deg)}
+.pet .speech-composer .chat-whale,.pet .speech-composer .chat-water{display:none}
+.pet .speech-composer input{height:28px;padding:0 4px;background:#fff;color:#3d5261;font-size:12px;border-radius:0}
+.pet .speech-composer input::placeholder{color:#8b969e}
+.speech-send{position:relative;z-index:2;float:right;border:0;border-radius:7px;background:#edf3f6;color:#496476;padding:3px 10px;cursor:pointer}
+.speech-close{position:absolute;top:5px;right:7px;border:0;background:transparent;color:#82909b;font-size:18px;cursor:pointer;padding:0 3px}
+.pet .speech-composer .chat-stop{top:auto;bottom:8px;left:10px;right:auto;background:#eef3f6}
+.pet[data-tier=main] .pet-bubble{background:#fff!important;border:1px solid #d2d9df;color:#3d5261}
+.pet[data-tier=main].chat-open .pet-bubble{display:none!important;visibility:hidden!important;pointer-events:none!important}
