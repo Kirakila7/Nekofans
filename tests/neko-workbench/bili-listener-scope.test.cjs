@@ -32,8 +32,11 @@ test('listener guard blocks shell and other files until writes are explicitly en
   assert.match(guard({name:'bash',arguments:{}}),/只读/);
   current='true';
   assert.match(guard({name:'bash',arguments:{}}),/只读/);
-  fs.unlinkSync(diary);fs.symlinkSync(outside,diary);
-  assert.match(guard({name:'write',arguments:{file_path:diary}}),/链接/);
+  await t.test('symlink redirection is rejected when the OS permits creating a test symlink',t=>{
+    fs.unlinkSync(diary);
+    try{fs.symlinkSync(outside,diary);}catch(error){if(process.platform==='win32'&&['EPERM','EACCES'].includes(error.code)){t.skip('Windows test account lacks symlink creation privilege');return;}throw error;}
+    assert.match(guard({name:'write',arguments:{file_path:diary}}),/链接/);
+  });
   await scope.dispose();assert.equal(disposed,true);
 });
 

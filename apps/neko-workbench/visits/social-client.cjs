@@ -18,11 +18,11 @@ function endpoint(value, allowLoopbackForTests = false) {
   return url;
 }
 async function requestJson(url, { fetch: fetchImpl = globalThis.fetch, method = 'GET', headers = {}, body,
-  timeoutMs = 15000, maxBytes = 1024 * 1024 } = {}) {
+  timeoutMs = 15000, maxBytes = 1024 * 1024, signal } = {}) {
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), timeoutMs);
   try {
-    const response = await fetchImpl(url, { method, headers, body, redirect: 'error', signal: abort.signal });
+    const response = await fetchImpl(url, { method, headers, body, redirect: 'error', signal: signal ? AbortSignal.any([abort.signal,signal]) : abort.signal });
     if (response.redirected || (response.status >= 300 && response.status < 400)) throw fail('redirect_refused');
     if (!response.ok) {
       await response.body?.cancel().catch(() => {});
@@ -130,6 +130,21 @@ function createSocialClient({ baseUrl = DEFAULT_BASE_URL, getAccessToken, fetch:
       return request(`/api/visit/rooms/${visitId}/cancel`, { method: 'POST' });
     },
     pubkeys: () => request('/api/visit/pubkeys', { public: true }),
+    async publishDaily({title,body,ownerId,signal,assertCurrent=()=>{}}){
+      check(ownerId,UUID,'invalid_owner');
+      if(typeof title!=='string'||!title.trim()||title.length>80||typeof body!=='string'||!body.trim()||body.length>500)throw fail('invalid_daily_post');
+      const token=await getAccessToken();
+      if(typeof token!=='string'||!token||token.length>8192||/\s/.test(token))throw fail('login_required');
+      const headers={Accept:'application/json','X-Client-Id':clientId,Authorization:`Bearer ${token}`};
+      // Use one captured token for both identity proof and write. Never refresh
+      // to a different account in between or fall back to the browser's login.
+      const me=await requestJson(new URL('/api/users/me',base).href,{fetch:fetchImpl,headers,timeoutMs,signal});
+      if(me?.user?.id!==ownerId)throw fail('account_changed');assertCurrent();
+      const form=new FormData();for(const [key,value] of Object.entries({title,body,visibility:'public',tags:'[]',image_ids:'[]',image_crops:'[]'}))form.append(key,value);
+      const result=await requestJson(new URL('/api/posts',base).href,{fetch:fetchImpl,method:'POST',headers,body:form,timeoutMs,signal});
+      if(!result||typeof result.id!=='string'||!result.id||result.id.length>128)throw fail('invalid_service_response');
+      return {id:result.id};
+    },
   });
 }
 module.exports = { createSocialClient, DEFAULT_BASE_URL, requestJson, endpoint };

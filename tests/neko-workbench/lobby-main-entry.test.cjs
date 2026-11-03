@@ -87,6 +87,8 @@ test('before-quit disposes the lobby controller', () => {
   const ctx = {
     app: { on: (name, fn) => quitHandlers.set(name, fn), quit: () => calls.push('app.quit') },
     shutdownComplete: false, shutdownStarted: false, quitting: false,
+    channelLife: { dispose() {} }, communityDaily: { dispose() {} }, dshLoginBrowser: { dispose() {} },
+    questionRelay: { dispose() {} }, petQuestionController: { dispose() {} },
     lobbyController: { dispose: () => calls.push('lobby.dispose') },
     unifiedNekoLogin: { dispose: () => calls.push('unified.dispose') },
     nekoSsoWindow: { dispose: () => calls.push('sso.dispose') },
