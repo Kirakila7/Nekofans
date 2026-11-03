@@ -605,6 +605,13 @@ function showInput(id='main'){const a=state.actors.find(a=>a.id===id);if(!a)retu
 async function openTaskSession(a){if(a.kind!=='task'||!a.metadataReady)throw new Error('这个任务会话尚未就绪');screenShare.hide();workbenchNavigation={sessionId:a.sessionId,revision:(workbenchNavigation?.revision||0)+1};await openDsh();broadcast();}
 function popupMainMenu(){const w=petWindows.get('main');if(w){w.show();setTimeout(()=>{app.focus({steal:true});w.focus();mainMenu().popup({window:w});},0);}}
 async function openDsh(){
+  // Reopening the workbench must also recover a hidden/minimized desktop pet.
+  // Do this before loading the engine so an offline engine cannot hide her.
+  if(!workbenchOnly){const main=state.actors.find(a=>a.id==='main');if(main){
+    const pet=createPetWindow(main);
+    if(pet.isMinimized?.())pet.restore();
+    if(!pet.webContents.isLoading())pet.showInactive();
+  }}
   if(dshWindow&&!dshWindow.isDestroyed()){dshWindow.show();app.focus({steal:true});dshWindow.focus();return;}
   const workArea=screen.getDisplayNearestPoint?.(screen.getCursorScreenPoint?.())?.workArea || screen.getPrimaryDisplay().workArea;
   dshWindow=new BrowserWindow({...workbenchWindowOptions(process.platform,workArea,nativeTheme.shouldUseDarkColors),title:'NEKOfuns',backgroundColor:nativeTheme.shouldUseDarkColors?'#131C27':'#EDF3F8',show:false,webPreferences:{preload:path.join(base,'workbench-preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,partition:'persist:pet-dsh'}});

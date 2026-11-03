@@ -1,5 +1,13 @@
 # Local test workbench 0.28.37 / build 73 (Windows installer verified)
 
+## Desktop pet reopening repair (2026-11-03, local source)
+
+Based on `codex/nekofuns-0.28.37-creation-installer-20261103` at `87fc69dbd7c8aea5bb60aae1b93daad8d1caec32`. Tracked in issue #53.
+
+Reopening the workbench now recreates/reveals the main desktop pet and restores it when minimized, before returning to an existing workbench window or loading the work engine. The original behavior reproduced in real Windows Electron: after hiding/minimizing Bigfish and emitting a second-instance event, the workbench appeared while Bigfish stayed hidden despite its video decoding successfully. After the repair the same scenario makes both windows visible. Workbench-only QA and the existing loading handler remain respected.
+
+Validation: all 11 pet reopening/runtime tests pass; the main entry passes syntax checking. Real Electron checks used independent synthetic profiles and an unavailable engine path, with no real model/account request. The unchanged three-tier-layout suite still fails its compact frame/name gutter assertion; broader existing main-entry fixtures also encountered a timeout and temporary-directory cleanup permission error. This repair has not been packaged into a new installer or validated against a daily user profile.
+
 2026-11-03 frontend/backend collaboration: the user authorized the actual Claude Code desktop workspace to implement the frontend while Codex handled the host/backend. This remains an independently staged PR52 trial, not a merge. The new release request supersedes the earlier source-only/no-EXE instructions below; historical deliveries are retained.
 
 The daily room selector now scales with its content area and gives the creation desk more space. Separate icon-only model/project controls keep accessible labels and tooltips. The project chooser uses the official DSH registry/catalog; explicit selection resolves a verified project ID through the host, with unchanged-draft/session guards. The details arrow displays the current project's sessions and the current session's ordinary user/assistant text through DSH's read-only chat projection. It does not read history files or expose reasoning/tool arguments. Closing or changing sessions releases the projection subscription. Arrow dragging resizes the panel without moving the desk or submitting text. Office mode hides the daily desk and restores only its own position/open intent on return; the office Claude portrait is restored without restoring Claude account/model features.
