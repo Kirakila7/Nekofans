@@ -8,6 +8,7 @@
   let pendingEdit = null, pendingSubmit = null, submitQueued = false, expandQueued = false, expandAction = 'expand', confirmExpand = false, expandTimer = null, editSequence = 0, submitSequence = 0;
   let draftOwner = '', recoveryOwner = '', storageFailed = false;
   let pendingModel = null, modelSequence = 0, modelUnknown = false, modelRefreshPending = false, unconfirmedModelId = null;
+  let questionForm=null,questionSelectionSequence=0;
   const windowDrag = document.getElementById('window-drag');
   const detailsToggle = document.getElementById('details-toggle');
   let detailsGesture = null, suppressDetailsClick = 0;
@@ -77,7 +78,7 @@
     message.placeholder = '创造台';
     copy.hidden = !(blockedDraft || conflict);
     files.disabled = message.disabled || conflict || blockedDraft || pendingSubmit !== null || submitQueued || expandQueued || recordOpenPending !== null;
-    send.disabled = message.disabled || state.busy || conflict || blockedDraft || submitQueued || pendingSubmit !== null || recordOpenPending !== null || projectSelectPending !== null || pendingModel !== null || state.modelBusy === true || modelUnknown || !!state.modelError || (state.targetRequired === true && !state.targetLabel) || !message.value.trim();
+    send.disabled = !!state.question || message.disabled || state.busy || conflict || blockedDraft || submitQueued || pendingSubmit !== null || recordOpenPending !== null || projectSelectPending !== null || pendingModel !== null || state.modelBusy === true || modelUnknown || !!state.modelError || (state.targetRequired === true && !state.targetLabel) || !message.value.trim();
     target.textContent = state.targetLabel ? '创造台：' + state.targetLabel : state.chatOnly ? '从项目记录选择会话' : '当前会话未确认，请展开工作区核对';
     target.title = target.textContent;
     target.hidden = true;
@@ -96,7 +97,7 @@
     api.send({ type:'edit', value:pendingEdit.value, sessionToken:state.sessionToken, revision:state.revision, editId:pendingEdit.id });
   }
   function sendSubmit() {
-    if (!submitQueued || pendingEdit !== null || dirty || conflict || blockedDraft || !state.enabled || !state.sessionToken || state.busy || state.modelBusy || pendingModel !== null || modelUnknown || state.modelError) return;
+    if (state.question || !submitQueued || pendingEdit !== null || dirty || conflict || blockedDraft || !state.enabled || !state.sessionToken || state.busy || state.modelBusy || pendingModel !== null || modelUnknown || state.modelError) return;
     submitQueued = false;
     const request = { id:++submitSequence, value:message.value, sessionToken:state.sessionToken, revision:state.revision };
     pendingSubmit = request;
@@ -168,7 +169,7 @@
     select.value = rows.some(row => row.id === selected) ? selected : '';
     if (!select.value && selected) { const unavailable = document.createElement('option'); unavailable.value = selected; unavailable.textContent = '当前选择暂不可用'; unavailable.disabled = true; select.appendChild(unavailable); select.value = selected; }
   }
-  function syncPanelAttr() { document.body.toggleAttribute('data-panel-open', modelOpen || recordsOpen || projectOpen || detailsOpen); }
+  function syncPanelAttr() { document.body.toggleAttribute('data-panel-open', modelOpen || recordsOpen || projectOpen || detailsOpen || questionForm?.isOpen()); }
   function renderModels() {
     modelPanel.hidden = !modelOpen; syncPanelAttr();
     modelPanel.setAttribute('aria-busy', String(state.modelBusy === true || pendingModel !== null));
@@ -235,7 +236,7 @@
   document.getElementById('records-close').addEventListener('click', closeRecords);
   // ---- workspace project chooser and current-project details ------------
   const projectToggle = document.getElementById('project-toggle'), projectPanel = document.getElementById('project-panel'), projectList = document.getElementById('project-list'), projectStatus = document.getElementById('project-status');
-  const details = document.getElementById('details'), detailsName = document.getElementById('details-name'), detailsBadge = document.getElementById('details-badge'), detailsPath = document.getElementById('details-path'), detailsStatus = document.getElementById('details-status'), detailsSessions = document.getElementById('details-sessions');
+  const details = document.getElementById('details'), detailsName = document.getElementById('details-name'), detailsBadge = document.getElementById('details-badge'), detailsPath = document.getElementById('details-path'), detailsStatus = document.getElementById('details-status');
   let projectOpen = false, projectDesired = null, detailsOpen = false, detailsDesired = null, projectSelectPending = null, projectSelectSequence = 0, projectRenderKey = '', detailsRenderKey = '';
   const projects = () => Array.isArray(state.projects) ? state.projects.filter(row => row && typeof row.id === 'string' && typeof row.name === 'string') : [];
   function closeLocalPanels() {
@@ -324,17 +325,6 @@
     detailsName.textContent = project ? project.name : '当前会话未关联已登记项目';
     detailsBadge.textContent = project ? project.registered === false ? '历史项目' : '已登记' : '';
     detailsPath.textContent = project?.path || ''; detailsPath.title = project?.path || '';
-    const rows = Array.isArray(project?.sessions) ? project.sessions.filter(row => row && typeof row.id === 'string' && typeof row.title === 'string') : [];
-    // Only real catalog sessions of this project; nothing is synthesized.
-    detailsSessions.replaceChildren(...(rows.length ? rows.map(row => {
-      const item = document.createElement('button'); item.type = 'button'; item.dataset.recordId = row.id; item.setAttribute('role', 'listitem');
-      const title = document.createElement('span'); title.textContent = row.title;
-      const meta = document.createElement('small'); meta.textContent = [row.current ? '当前会话' : '', row.active ? '运行中' : '', relative(row.updatedAt)].filter(Boolean).join(' · ');
-      item.append(title, meta); item.title = row.title;
-      if (row.current) item.setAttribute('aria-current', 'true');
-      item.disabled = row.current === true || !canSwitch();
-      item.addEventListener('click', () => openRecord(row.id)); return item;
-    }) : [Object.assign(document.createElement('p'), {textContent: project ? '这个项目还没有会话记录' : '用下方文件夹图标选择一个工作区项目'})]));
   }
   resizeHandle.addEventListener('pointerdown', event => { if (event.button !== 0) return; resizing = {pointerId:event.pointerId, y:event.screenY,x:event.screenX}; resizeHandle.setPointerCapture(event.pointerId); event.preventDefault(); });
   resizeHandle.addEventListener('pointermove', event => { if (!resizing || resizing.pointerId !== event.pointerId) return; const delta = resizing.y - event.screenY, dx = resizing.x - event.screenX; if (delta || dx) { resizing.y = event.screenY; resizing.x = event.screenX; api.send({type:'records-resize', delta:Math.max(-4000,Math.min(4000,delta)), dx:Math.max(-4000,Math.min(4000,dx))}); } });
@@ -344,6 +334,10 @@
   files.addEventListener('click', () => requestExpand('files'));
 
   copy.addEventListener('click', () => { message.focus(); message.select(); status.textContent = '草稿已选中，请按 ' + copyShortcut + ' 复制'; status.hidden = false; });
+  if(window.WorkbenchQuestions&&document.getElementById('question-panel'))questionForm=window.WorkbenchQuestions.mount({host:document.getElementById('question-panel'),toggleButton:document.getElementById('question-toggle'),
+    onVisibility:(open,q)=>{document.body.toggleAttribute('data-question-open',open);api.send({type:'question-visibility',open,...(q?{sessionId:q.sessionId,key:q.key,revision:q.revision}:{})});syncPanelAttr();},
+    onAction:action=>api.send({...action,type:'question-action',questionAction:action.type,...(action.type==='answer'?{questionSelectionId:++questionSelectionSequence}:{})})});
+  for(const id of ['model-toggle','project-toggle'])document.getElementById(id)?.addEventListener('click',()=>questionForm?.hide(),true);
   api.onState(next => {
     if (!next || typeof next.value !== 'string' || typeof next.sessionToken !== 'string' || !Number.isSafeInteger(next.revision)) return;
     const changedSession = state.sessionToken !== next.sessionToken;
@@ -371,6 +365,7 @@
     projectOpen = !recordsOpen && !modelOpen && (projectDesired === null ? next.projectOpen === true : projectDesired);
     detailsOpen = !recordsOpen && !modelOpen && !projectOpen && (detailsDesired === null ? next.detailsOpen === true : detailsDesired);
     if (projectSelectPending && next.settledProjectSelectId === projectSelectPending.id) { clearTimeout(projectSelectPending.timer); projectSelectPending = null; projectRenderKey = ''; }
+    questionForm?.update(next.question?.sessionId===next.sessionToken?next.question:null);
     if (pendingModel && next.settledModelSelectionId === pendingModel.id) { clearTimeout(pendingModel.timer); pendingModel = null; modelUnknown = false; unconfirmedModelId = null; }
     if (modelRefreshPending && !next.modelBusy && next.modelId && modelOptions().some(option => option.id === next.modelId) && (!unconfirmedModelId || next.settledModelSelectionId === unconfirmedModelId)) { modelUnknown = false; modelRefreshPending = false; unconfirmedModelId = null; }
     if (changedSession && !blockedDraft && next.sessionToken) {

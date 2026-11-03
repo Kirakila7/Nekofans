@@ -41,9 +41,8 @@ test('details arrow toggles on click, resizes on drag or hold without toggling, 
  assert(!x.byId('composer').contains(arrow),'the arrow is outside the form');assert.equal(arrow.type,'button');
  arrow.click();assert(!x.byId('details').hidden);assert.equal(x.events.at(-1).type,'details-toggle');assert.equal(x.events.at(-1).open,true);
  assert.match(x.byId('details-name').textContent,/fish/);assert.equal(x.byId('details-path').textContent,'C:/work/fish');
- const sessions=[...x.byId('details-sessions').querySelectorAll('button')];assert.equal(sessions.length,2);assert(sessions[0].disabled,'current session row is not reopenable');
- sessions[1].click();assert.equal(x.events.at(-1).type,'record-open');assert.equal(x.events.at(-1).id,'dsh:s0');
- x.snap(1,'',{projects,currentProject,detailsOpen:true,settledRecordOpenId:x.events.at(-1).openId});
+ assert.equal(x.byId('details-sessions'),null,'history content has no duplicate project-session list');
+ x.snap(1,'',{projects,currentProject,detailsOpen:true});
  // Drag: resize events only, and the trailing click does not fold the panel.
  const before=x.events.length;x.pointer(arrow,'pointerdown',500);x.pointer(arrow,'pointermove',470);x.pointer(arrow,'pointermove',440);x.pointer(arrow,'pointerup',440);arrow.click();
  const after=x.events.slice(before);assert.deepEqual(after.map(e=>e.type),['details-resize','details-resize']);assert.deepEqual(after.map(e=>e.delta),[30,30]);assert(!x.byId('details').hidden);
@@ -122,24 +121,44 @@ test('controller bounds work content and keeps a dragged desk bottom-anchored wh
  f.c.place(f.host,{action:'place',rect:{x:500,y:600,width:400,height:300}});assert.equal(f.w.rect.y+f.w.rect.height,compact.y+compact.height,'details grow upward from the dragged bottom edge');f.c.place(f.host,{action:'place',rect:{x:500,y:600,width:400,height:900}});assert.equal(f.w.rect.y,100,'a taller panel stops at the owner content top');
  f.c.place(f.host,{action:'place',rect:{x:500,y:600,width:400,height:64}});assert.deepEqual(f.w.rect,compact,'closing details returns the input where it was');
 });
+test('controller authorizes question identity independently of the work draft and serializes answers',async t=>{
+ const f=await desktop(t),question={sessionId:'s1',key:'question:s1:c',revision:7,kind:'question',canAnswer:true,questions:[{id:'q',question:'选择任务',options:[{label:'整理'}]}]},state={value:'原有草稿',sessionToken:'s1',revision:4,enabled:true,question};f.c.update(state);
+ const answer={type:'question-action',questionAction:'answer',sessionId:'s1',key:question.key,revision:7,questionSelectionId:1,answers:[{id:'q',selected:['整理']}]};
+ f.forged(answer);f.input({...answer,key:'old'});f.input({...answer,answers:[{id:'q',selected:['伪造']}]});assert.equal(f.hostEvents().length,0);
+ f.input({type:'submit',value:'原有草稿',sessionToken:'s1',revision:4,submissionId:1});assert.equal(f.hostEvents().length,0,'a pending question never becomes a normal prompt');
+ f.input(answer);assert.equal(f.hostEvents().length,1);assert.equal(f.hostEvents()[0].revision,7,'question revision does not use the draft revision');f.input({...answer,questionSelectionId:2});assert.equal(f.hostEvents().length,1);
+ f.c.update({...state,settledQuestionSelectionId:1,settledQuestionKey:question.key,settledQuestionRevision:7,question:{...question,submitted:true}});f.input({...answer,questionSelectionId:3});assert.equal(f.hostEvents().length,1);
+ f.c.update({...state,question:{...question,key:'question:s1:next',revision:8}});f.input({...answer,key:'question:s1:next',revision:8,questionSelectionId:4});assert.equal(f.hostEvents().length,2,'a new request is not locked by the old answer');
+});
 
-function shell(t,{edition='daily',catalog}={}){
+function shell(t,{edition='daily',catalog,questionSource=null}={}){
  const dom=new JSDOM('<body><aside data-neko-side-rail></aside><aside data-slot="sidebar"><div data-slot="settings.launcher"></div></aside><main></main></body>',{runScripts:'outside-only',pretendToBeVisual:true});
  const w=dom.window,d=w.document,sidebar=d.querySelector('[data-slot="sidebar"]'),rail=d.querySelector('[data-neko-side-rail]');sidebar.getBoundingClientRect=()=>({left:64,top:0,right:344,bottom:768,width:280,height:768});rail.getBoundingClientRect=()=>({left:0,right:64,top:0,bottom:768,width:64,height:768});
  let handler,layout={workbenchEdition:edition,officeMode:'dsh',seats:[]},selection={sessionId:'s1'},main='s1';const states=[],placements=[],calls=[],opened=[],targets=[];
  const draft={draft:'',draftRev:1,phase:'plain',attachmentIds:[],occurrences:[]},shellState={state:{getSnapshot:()=>({...draft}),subscribe:()=>()=>{}},actions:{setDraft(){},persistDraft(){},submit(){}}};
  const bindings={s1:{sessionId:'s1',session:{sessionId:'s1'}},s9:{sessionId:'s9',session:{sessionId:'s9'}}};let selectionListener;
- let subscriber,revision=0;const bridge={subscribe:fn=>{subscriber=fn;return()=>{};},getState:async()=>({workspaceRoot:'/w',workspaceRevision:0,companion:{ready:true,messages:[]}}),companion:async()=>({}),lobby:async()=>({state:{connection:'unconfigured'}}),
+ let subscriber,revision=0,questionHandler;const questionCalls=[];const bridge={questions:async request=>{questionCalls.push(request);return {ok:true};},subscribeQuestionEvents:fn=>{questionHandler=fn;return()=>{};},subscribe:fn=>{subscriber=fn;return()=>{};},getState:async()=>({workspaceRoot:'/w',workspaceRevision:0,companion:{ready:true,messages:[]}}),companion:async()=>({}),lobby:async()=>({state:{connection:'unconfigured'}}),
   nativeComposer:async r=>{(r.action==='update'?states:placements).push(r.action==='update'?r.state:r);return {ok:true};},subscribeNativeComposer:fn=>{handler=fn;return()=>{};},
   workspace:async r=>{calls.push(r);if(r.action==='state')return layout;if(r.action==='update'){layout={...layout,...r.patch};return layout;}if(r.action==='catalog')return catalog;if(r.action==='resolve-project')return {projectId:r.projectId,workspaceId:'w-'+r.projectId,path:'/x',name:'x'};if(r.action==='codex-state')return {items:[],approvals:[]};return null;}};
- const source=name=>fs.readFileSync(path.join(base,'embedded-dsh',name),'utf8');w.eval(source('native-composer-source.js')+'\n'+source('chatroom-preview-source.js')+'\n'+source('workspace-shell-source.js')+'\nwindow.install=installWorkspaceShell');
- const stop=w.install({window:w,document:d,bridge,avatar:id=>'avatar:'+id,locateSidebar:()=>({root:sidebar}),getDshSelection:()=>selection,hasDshActiveSession:()=>!!main,nativeComposerBindings:{getSelection:()=>selection,getMainSessionId:()=>main,getBinding:id=>bindings[id],getShell:()=>shellState,subscribeSelection:fn=>{selectionListener=fn;return()=>{};},
+ const source=name=>fs.readFileSync(path.join(base,'embedded-dsh',name),'utf8');w.eval(fs.readFileSync(path.join(base,'compact-questions.js'),'utf8')+'\nconst WORKBENCH_QUESTION_FORMS=window.WorkbenchQuestions;\n'+source('question-bridge-source.js')+'\n'+source('native-composer-source.js')+'\n'+source('chatroom-preview-source.js')+'\n'+source('workspace-shell-source.js')+'\nwindow.install=installWorkspaceShell');
+ const stop=w.install({window:w,document:d,bridge,avatar:id=>'avatar:'+id,locateSidebar:()=>({root:sidebar}),getDshSelection:()=>selection,hasDshActiveSession:()=>!!main,nativeComposerBindings:{...(questionSource?{getQuestionStatusSource:()=>questionSource}:{}),getSelection:()=>selection,getMainSessionId:()=>main,getBinding:id=>bindings[id],getShell:()=>shellState,subscribeSelection:fn=>{selectionListener=fn;return()=>{};},
   getWorkContentTarget:id=>({subscribe(fn){const s={id,fn,active:true};targets.push(s);return()=>{s.active=false;};},getSnapshot:()=>({order:['u'],nodes:new Map([['u',{kind:'user',data:{content:[{type:'text',text:'会话 '+id+' 的问题'}]}}]])})}),
   async openWorkspace(id){opened.push(id);selection={sessionId:'s9'};main='s9';selectionListener?.();}}});
  t.after(async()=>{stop();await tick();dom.window.close();});
- return {w,d,states,placements,calls,opened,targets,handler:()=>handler,setEdition:async value=>{layout={...layout,workbenchEdition:value};subscriber({workspaceRoot:'/w',workspaceRevision:++revision,companion:{ready:true,messages:[]}});await tick();await tick();}};
+ return {w,d,states,placements,calls,opened,targets,questionCalls,questionHandler:()=>questionHandler,handler:()=>handler,setEdition:async value=>{layout={...layout,workbenchEdition:value};subscriber({workspaceRoot:'/w',workspaceRevision:++revision,companion:{ready:true,messages:[]}});await tick();await tick();}};
 }
 const catalog={revision:1,sessions:[{id:'s1',provider:'dsh',title:'鱼缸',cwd:'/w/fish',updatedAt:1},{id:'s0',provider:'dsh',title:'旧鱼缸',cwd:'/w/fish',updatedAt:0}],workspaces:[],projects:[{id:'wp:fish',provider:'dsh',cwd:'/w/fish',name:'fish',workspaceId:'wf',needsRegistration:false,sessions:[{id:'s1',provider:'dsh',title:'鱼缸',cwd:'/w/fish',updatedAt:1,status:'idle'},{id:'s0',provider:'dsh',title:'旧鱼缸',cwd:'/w/fish',updatedAt:0,status:'idle'}]},{id:'wp:home',provider:'dsh',cwd:'/w/home',name:'home',workspaceId:'wh',needsRegistration:false,sessions:[]}],providers:{dsh:'ready'}};
+
+test('shell routes creator and nonselected task answers to their actual pending carriers and restores history size',{skip:!JSDOM},async t=>{
+ let statuses=new Map();const listeners=new Set(),questionSource={getSnapshot:()=>statuses,subscribe:fn=>{listeners.add(fn);return()=>listeners.delete(fn);}},answers=[];
+ const carrier=id=>({sessionId:id,key:'question:'+id+':c',kind:'question',questions:[{id:'q',question:'选择任务',options:[{label:'整理'}]}],getSnapshot:()=>({state:'open',channel:'waterfall',closed:false}),subscribe:()=>()=>{},answer:async value=>{answers.push({id,value});}});
+ const f=shell(t,{catalog,questionSource});await tick();await tick();f.handler()({type:'details-toggle',open:true});await tick();assert.equal(f.placements.filter(p=>p.action==='place').at(-1).rect.height,320);
+ statuses=new Map([['s1',{pendingInteraction:carrier('s1')}],['s2',{pendingInteraction:carrier('s2')}]]);for(const fn of [...listeners])fn();await tick();
+ const published=f.questionCalls.filter(c=>c.action==='publish').at(-1).items;assert.equal(published.length,2);assert.equal(f.states.at(-1).question.sessionId,'s1');assert.equal(f.placements.filter(p=>p.action==='place').at(-1).rect.height,360);
+ const pet=published.find(q=>q.sessionId==='s2');await f.questionHandler()({requestId:17,type:'answer',sessionId:'s2',key:pet.key,revision:pet.revision,answers:[{id:'q',selected:['整理']}]});assert.equal(answers[0].id,'s2');assert(f.questionCalls.some(c=>c.action==='result'&&c.requestId===17&&c.ok));
+ const own=f.states.at(-1).question;f.handler()({type:'question-action',questionAction:'answer',sessionId:'s1',key:own.key,revision:own.revision,questionSelectionId:9,answers:[{id:'q',selected:['整理']}]});await tick();assert.equal(answers[1].id,'s1');assert(f.states.some(s=>s.settledQuestionSelectionId===9&&s.settledQuestionKey===own.key));
+ statuses=new Map();for(const fn of [...listeners])fn();await tick();assert.equal(f.states.at(-1).question,null);assert.equal(f.placements.filter(p=>p.action==='place').at(-1).rect.height,320,'the existing history view returns, not a full-height panel');
+});
 
 test('shell publishes real projects, resolves a selection through the host and opens it via the bindings',{skip:!JSDOM},async t=>{
  const f=shell(t,{catalog});await tick();await tick();
@@ -150,10 +169,10 @@ test('shell publishes real projects, resolves a selection through the host and o
  f.handler()({type:'project-select',projectId:'unknown',sessionToken:'s9',revision:1,selectId:8});await tick();assert(f.states.some(s=>s.settledProjectSelectId===8&&/刷新/.test(s.status)));assert.equal(f.opened.length,1);
 });
 
-test('details open the desk to the content height with margins and a drag adjusts it; office hides the daily desk and daily restores it',{skip:!JSDOM},async t=>{
+test('details default to a compact scrolling panel and still resize; office hides the daily desk and daily restores it',{skip:!JSDOM},async t=>{
  const f=shell(t,{catalog});await tick();await tick();const places=()=>f.placements.filter(p=>p.action==='place');
- f.handler()({type:'details-toggle',open:true});await tick();let rect=places().at(-1).rect;assert.equal(rect.y,8);assert.equal(rect.y+rect.height,f.w.innerHeight-8,'full content height, 8px margins');assert.equal(f.states.at(-1).detailsOpen,true);
- f.handler()({type:'details-resize',delta:-300});await tick();rect=places().at(-1).rect;assert.equal(rect.height,f.w.innerHeight-16-300);assert.equal(rect.y+rect.height,f.w.innerHeight-16,'bottom stays anchored');
+ f.handler()({type:'details-toggle',open:true});await tick();let rect=places().at(-1).rect;assert.equal(rect.height,320);assert(rect.y>8,'does not fill the whole window');assert.equal(f.states.at(-1).detailsOpen,true);
+ const bottom=rect.y+rect.height;f.handler()({type:'details-resize',delta:120});await tick();rect=places().at(-1).rect;assert.equal(rect.height,440);assert.equal(rect.y+rect.height,bottom,'bottom stays anchored');
  f.handler()({type:'details-toggle',open:false});await tick();rect=places().at(-1).rect;assert.equal(rect.height,64);
  const removes=()=>f.placements.filter(p=>p.action==='remove').length,before=removes();
  await f.setEdition('office');assert.equal(f.d.body.dataset.nekoWorkbenchEdition,'office');assert(removes()>before,'office removes the daily creation desk');const count=places().length;

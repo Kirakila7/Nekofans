@@ -132,6 +132,7 @@ if(view==='chat-settings'){
   }
   function setInput(visible) {
     const a=actor(),tier=window.PetChatPresentation.role(a); if(!a)return;
+    if(visible&&a.id!=='main')void window.pet.call('question-reveal').catch(()=>{});
     if(tier==='subagent'){inputVisible=false;form.remove();bubble.hidden=true;host.querySelector('.pet').classList.remove('chat-open','task-chat-open');return;}
     if(tier==='task'){
       inputVisible=visible;form.hidden=true;const pet=host.querySelector('.pet');pet.classList.remove('chat-open');pet.classList.toggle('task-chat-open',visible);

@@ -687,11 +687,12 @@ function installWorkspaceShell(options = {}) {
   const collapseNotice = own(el('p', 'neko-workspace-collapse-notice')); collapseNotice.setAttribute('role', 'status'); collapseNotice.hidden = true; doc.body.appendChild(collapseNotice);
   let collapsedComposer = null, collapsedPopover = false, collapseGeometry = '', collapseNoticeTimer = null;
   let floatingComposer = null, floatingGeometry = '', floatingState = '', floatingRecoveryPending = false, floatingInitialized = false;
+  let questionController=null,nativeQuestionOpen=false,nativeQuestionIdentity='';
   let floatingPosition = null;
   let nativeRecordsOpen = false, nativeRecordsWidth = 480, nativeRecordsHeight = 360, nativeOpening = false, nativeRecordsOffset = 0;
   let nativeModelOpen=false,nativeDefaultPreparing=false,nativeDefaultPrepared=false,nativeCompactError=false;
   // Project chooser and current-project details of the creation desk. The
-  // details height is the user's drag result; null means "use the content height".
+  // details height is the user's drag result; null uses a compact 320px panel.
   let nativeProjectOpen=false,nativeDetailsOpen=false,nativeDetailsHeight=null,nativeProjectHint=null;
   let creationPositionKey='default',creationLobbySeen=false,creationResetPosition=false;
   const creationModeState={default:null,lobby:null};
@@ -770,6 +771,7 @@ function installWorkspaceShell(options = {}) {
     const next = { records, recordsOpen:nativeRecordsOpen, recordsHasMore:nativeRecordsOffset + 100 < allRecords.length || catalog?.nextDshOffset != null, recordsLoading:listLoading, recordsStatus:listLoading ? '正在读取会话…' : catalogError || (!allRecords.length ? '暂无会话' : nativeRecordsOffset ? '显示较早记录；刷新可返回最新记录' : ''), targetLabel, targetRequired, value:typeof state?.draft === 'string' ? state.draft.slice(0, 30000) : '', enabled:available, busy:state?.phase != null && state.phase !== 'plain', sessionToken:typeof state?.sessionId === 'string' ? state.sessionId : '', revision:Number.isSafeInteger(state?.revision) && state.revision >= 0 ? state.revision : 0, placeholder:available ? '发消息或创建任务…' : '请先打开可用的工作会话', status:state?.reason || state?.status || '', ...extra };
     for(const key of ['modelOptions','modelId','modelLabel','reasoningId','reasoningLabel','modelBusy','modelError','defaultErrorCode','workContent'])if(state?.[key]!==undefined)next[key]=state[key];
     Object.assign(next,nativeProjectState(state),{projectOpen:nativeProjectOpen,detailsOpen:nativeDetailsOpen});
+    next.question=questionController?.current(state?.sessionId)||null;
     Object.assign(next,extra);
     next.modelOpen=nativeModelOpen;
     next.chatOnly = isDailyEdition();
@@ -782,6 +784,22 @@ function installWorkspaceShell(options = {}) {
   if (typeof createNativeComposerAdapter === 'function' && options.nativeComposerBindings) {
     floatingComposer = createNativeComposerAdapter({ ...options.nativeComposerBindings, getDefaultWorkspaceRoot:()=>state?.workspaceRoot, onReady:schedule, onChange: state => updateFloatingComposer(state) });
   }
+  if(typeof createWorkbenchQuestionController==='function'&&options.nativeComposerBindings?.getQuestionStatusSource){
+    questionController=createWorkbenchQuestionController({getSource:options.nativeComposerBindings.getQuestionStatusSource,
+      openSession:async id=>{if(typeof options.openDshSession!=='function')throw Error('工作区暂不可用');await options.openDshSession(id);if(!isOfficeEdition()&&!await saveLayout({workbenchEdition:'office'}))throw Error('版本切换未完成');},
+      onChange:items=>{
+        if(disposed)return;const q=items.find(q=>q.sessionId===floatingComposer?.snapshot()?.sessionId),identity=q?JSON.stringify([q.sessionId,q.key,q.revision]):'';
+        if(identity!==nativeQuestionIdentity){nativeQuestionIdentity=identity;nativeQuestionOpen=!!q;floatingGeometry='';}
+        if(typeof bridge.questions==='function')void Promise.resolve(bridge.questions({action:'publish',items})).catch(()=>{});
+        updateFloatingComposer(floatingComposer?.snapshot());schedule();
+      }});
+    if(typeof bridge.subscribeQuestionEvents==='function')releases.push(bridge.subscribeQuestionEvents(async event=>{
+      if(!event||!Number.isSafeInteger(event.requestId)||disposed)return;
+      const result=await questionController.perform(event);
+      if(!disposed)void Promise.resolve(bridge.questions({action:'result',requestId:event.requestId,ok:result.ok===true})).catch(()=>{});
+    }));
+    questionController.refresh();
+  }
   function prepareNativeDefault({retry=false}={}){
     if(nativeDefaultPreparing||nativeDefaultPrepared&&!retry||typeof floatingComposer?.ensureDefaultSession!=='function'||typeof options.nativeComposerBindings?.ensureDefaultSession!=='function')return;
     nativeDefaultPreparing=true;
@@ -792,6 +810,11 @@ function installWorkspaceShell(options = {}) {
     try {
       const off = bridge.subscribeNativeComposer(event => {
         if (!floatingInitialized || !event || typeof event.type !== 'string') return;
+        if(event.type==='question-visibility'){const q=questionController?.current(floatingComposer?.snapshot()?.sessionId);if(q&&(event.sessionId!==q.sessionId||event.key!==q.key||event.revision!==q.revision))return;nativeQuestionOpen=event.open===true&&!!q;floatingGeometry='';schedule();return;}
+        if(event.type==='question-action'){
+          if(event.sessionId!==floatingComposer?.snapshot()?.sessionId)return;
+          void Promise.resolve(questionController?.perform({...event,type:event.questionAction})).then(()=>updateFloatingComposer(floatingComposer?.snapshot(),{settledQuestionSelectionId:event.questionSelectionId,settledQuestionKey:event.key,settledQuestionRevision:event.revision}));return;
+        }
         if (event.type === 'move') {
           const current=floatingBounds();if(!current)return;
           if(event.reset===true)floatingPosition=null;
@@ -910,8 +933,8 @@ function installWorkspaceShell(options = {}) {
     const compactHeight = (room?84:64)+(nativeCompactError?24:0);
     const minX=Math.max(8,Math.round(doc.querySelector('[data-neko-side-rail]')?.getBoundingClientRect().right||64)+8);
     const minY=floatingTop();
-    const panelOpen=nativeRecordsOpen||nativeModelOpen||nativeProjectOpen||nativeDetailsOpen;
-    const panelHeight=nativeDetailsOpen?(nativeDetailsHeight??detailsHeightLimit()):nativeProjectOpen?360:nativeModelOpen?320:nativeRecordsHeight;
+    const panelOpen=nativeQuestionOpen||nativeRecordsOpen||nativeModelOpen||nativeProjectOpen||nativeDetailsOpen;
+    const panelHeight=nativeQuestionOpen?360:nativeDetailsOpen?(nativeDetailsHeight??Math.min(320,detailsHeightLimit())):nativeProjectOpen?360:nativeModelOpen?320:nativeRecordsHeight;
     const height = panelOpen ? Math.max(compactHeight,Math.min(panelHeight,nativeDetailsOpen?detailsHeightLimit():Math.max(compactHeight,win.innerHeight-bottom-32))) : compactHeight;
     // A dragged desk keeps its bottom edge when a panel opens or closes, so
     // collapsing the details returns the input to where the person left it.
@@ -921,6 +944,9 @@ function installWorkspaceShell(options = {}) {
   function floatingTop(){const title=doc.querySelector('.neko-window-titlebar')?.getBoundingClientRect();return title?.height>0?Math.round(title.bottom)+8:8;}
   function detailsHeightLimit(){return Math.max(160,Math.min(1000,win.innerHeight-floatingTop()-8));}
   function syncFloatingComposer() {
+    questionController?.refresh();
+    const state=floatingComposer?.snapshot(),q=questionController?.current(state?.sessionId),identity=q?JSON.stringify([q.sessionId,q.key,q.revision]):'';
+    if(identity!==nativeQuestionIdentity){nativeQuestionIdentity=identity;nativeQuestionOpen=!!q;floatingGeometry='';}
     const flex = doc.body.hasAttribute('data-neko-flex-workspace-collapsed');
     const collapsed = doc.body.hasAttribute('data-neko-workspace-collapsed');
     // The creation desk belongs to the daily edition. Office keeps its native
@@ -938,8 +964,8 @@ function installWorkspaceShell(options = {}) {
     if(layout?.officeMode==='dsh')prepareNativeDefault();
     const key = JSON.stringify([creationPositionKey,rect]); if (key !== floatingGeometry) { floatingInitialized = true; floatingGeometry = key; floatingCall({action:'place',rect,positionKey:creationPositionKey,...(creationResetPosition?{resetPosition:true}:{})});creationResetPosition=false; }
     // Real session content is read only while the details are on screen.
-    floatingComposer?.watchWorkContent?.(nativeDetailsOpen);
-    updateFloatingComposer(floatingComposer?.snapshot());
+    floatingComposer?.watchWorkContent?.(nativeDetailsOpen&&!nativeQuestionOpen);
+    updateFloatingComposer(state);
   }
   const collapseResize = win.ResizeObserver ? new win.ResizeObserver(() => schedule()) : null;
   function notifyCollapseGeometry() {
@@ -1661,6 +1687,7 @@ function installWorkspaceShell(options = {}) {
   const interval = win.setInterval(() => { if (doc.visibilityState !== 'hidden') refreshCatalog(false, 0, { quiet:true }); }, 60000);
   place();
   return () => {
+    questionController?.dispose();if(typeof bridge.questions==='function')void Promise.resolve(bridge.questions({action:'publish',items:[]})).catch(()=>{});
     doc.removeEventListener('neko-request-composer-geometry', requestCollapseGeometry);
     clearCollapsedComposer(); collapseResize?.disconnect(); if (collapseNoticeTimer) win.clearTimeout(collapseNoticeTimer);
     if (disposed) return; disposed = true; hideCompanionReply(); floatingComposer?.dispose(); if (floatingGeometry) floatingCall({action:'remove'}); stopNativeNew(); motion?.removeEventListener?.('change', syncCharacter); motion?.removeEventListener?.('change', syncRailWalking); doc.removeEventListener('visibilitychange', syncCharacter); doc.removeEventListener('visibilitychange', syncRailWalking); stopRailWalking(); if (railClickTimer !== null) win.clearTimeout(railClickTimer); if (railSpace) { if (railSpaceBeforeAria === null) railSpace.removeAttribute('aria-hidden'); else railSpace.setAttribute('aria-hidden', railSpaceBeforeAria); } if (characterVideo) { characterVideo.pause(); characterVideo.removeAttribute('src'); characterVideo.load(); } observer.disconnect(); ancestorObserver.disconnect(); intersection?.disconnect(); resize?.disconnect(); win.clearInterval(interval);

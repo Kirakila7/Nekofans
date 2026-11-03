@@ -26,6 +26,8 @@ contextBridge.exposeInMainWorld('nekoWorkbench',Object.freeze({
   divider:request=>ipcRenderer.invoke('workbench:divider',request),
   subscribeDivider:callback=>{if(typeof callback!=='function')throw new TypeError('callback must be a function');const listener=(_event,state)=>callback(state);ipcRenderer.on('workbench:divider-event',listener);return()=>ipcRenderer.removeListener('workbench:divider-event',listener);},
   nativeComposer:request=>ipcRenderer.invoke('workbench:native-composer',request),
+  questions:request=>ipcRenderer.invoke('workbench:questions',request),
+  subscribeQuestionEvents:callback=>{if(typeof callback!=='function')throw new TypeError('callback must be a function');const listener=(_event,value)=>callback(value);ipcRenderer.on('workbench:question-event',listener);return()=>ipcRenderer.removeListener('workbench:question-event',listener);},
   accountMenuLayer:request=>ipcRenderer.invoke('workbench:account-menu-layer',request),
   videoWindow:request=>ipcRenderer.invoke('workbench:video-window',request),
   subscribeVideoWindow:callback=>{if(typeof callback!=='function')throw new TypeError('callback must be a function');const listener=(_event,state)=>callback(state);ipcRenderer.on('workbench:video-window-state',listener);return()=>ipcRenderer.removeListener('workbench:video-window-state',listener);},

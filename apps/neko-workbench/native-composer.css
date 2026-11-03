@@ -73,13 +73,13 @@ body[data-panel-open]{padding-top:14px}
 #details-path{color:#71829a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #details-badge{flex:none;padding:0 6px;border-radius:6px;background:#e3edf9;color:#48627b;font-size:11px}
 #details-badge:empty{display:none}
-#project-list,#details-sessions{min-height:0;flex:1;overflow:auto;padding:6px 8px 8px}
+#project-list{min-height:0;flex:1;overflow:auto;padding:6px 8px 8px}
 #project-list button,#details-sessions button{display:flex;flex-direction:column;align-items:flex-start;gap:1px;width:100%;height:auto;margin-bottom:3px;padding:7px 9px;border-radius:8px;text-align:left;font:13px/1.35 system-ui,sans-serif}
 #project-list button strong,#details-sessions button span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #project-list button span,#details-sessions button small{color:#71829a;font-size:11px}
 #project-list button[aria-current=true],#details-sessions button[aria-current=true]{background:#d9e5f5;box-shadow:inset 3px 0 #5f8fd9;opacity:1}
 #details-sessions p{margin:8px 2px;color:#71829a;font-size:12px}
-#details-content{min-height:72px;flex:3;overflow:auto;margin:4px 8px 0;padding:6px;border-radius:10px;background:#fff;border:1px solid #dbe6f2;user-select:text}
+#details-content{min-height:72px;flex:1;overflow:auto;margin:4px 8px 8px;padding:6px;border-radius:10px;background:#fff;border:1px solid #dbe6f2;user-select:text}
 #details-content:focus-visible{outline:2px solid #468bd8;outline-offset:1px}
 .work-item{margin:0 0 8px;padding:6px 8px;border-radius:9px;background:#f2f6fc;color:#233750;font-size:12.5px;line-height:1.5}
 .work-item[data-role=user]{margin-left:18%;background:#e3edf9}
@@ -88,6 +88,8 @@ body[data-panel-open]{padding-top:14px}
 .work-note{margin:4px 2px 8px;color:#71829a;font-size:11.5px}
 #details-sessions-title{margin:6px 8px 0;color:#526d89;font:600 11px system-ui,sans-serif}
 #details-sessions{flex:1;max-height:34%}
+#question-panel{order:0;flex:1;margin-bottom:4px}#question-toggle{font-size:14px;border-radius:9px}#question-toggle[hidden]{display:none}body[data-question-open] #details,body[data-question-open] #project-panel,body[data-question-open] #records,body[data-question-open] #model-panel{display:none!important}
+body[data-question-open] #details-toggle{display:none}
 /* A taller selector-column desk keeps two lines of the draft visible. */
 @media (min-height:80px) and (max-height:100px){textarea{height:46px;max-height:46px}}
 

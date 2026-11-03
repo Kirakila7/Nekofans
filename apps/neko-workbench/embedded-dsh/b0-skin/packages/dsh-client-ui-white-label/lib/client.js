@@ -3061,6 +3061,7 @@ function createNativeComposerDshBindings(ctx) {
     openWorkspace,
     // Read-only official chat projection of one session (loaded window + live).
     getWorkContentTarget: id => ctx.get?.('uiConversation')?.binding?.(id)?.target?.('chat'),
+    getQuestionStatusSource: () => ctx.get?.('uiSession')?.sessionStatus,
     getModelDirectory: id => ctx.get?.('modelDirectories')?.directoryFor?.(id),
     hasExplicitModelSelection: binding => binding.session?.projections?.faceOf?.('modelSelection')?.getSnapshot?.()?.next !== undefined,
     isDefaultSession: id => !!defaultWorkspaceId && (id===defaultSessionId || defaultSessionIds.includes(id) || workspaces()?.list?.getSnapshot?.()?.items?.some(row => row.workspaceId === defaultWorkspaceId && row.sessionIds?.includes(id))),
@@ -3408,6 +3409,182 @@ function createNativeComposerAdapter(options = {}) {
 }
 
 if (typeof window === 'undefined' && typeof module !== 'undefined' && module.exports) module.exports = { createNativeComposerAdapter, createNativeComposerDshBindings };
+
+const WORKBENCH_QUESTION_FORMS = (function (module, globalThis) {
+(function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.WorkbenchQuestions=api;})(globalThis,function(){
+  'use strict';
+  const str=(v,n)=>typeof v==='string'&&v.length>0&&v.length<=n;
+  function normalize(value){
+    if(!value||!str(value.sessionId,512)||!str(value.key,1024)||!Number.isSafeInteger(value.revision)||value.revision<1||!['question','plan-review','unsupported'].includes(value.kind))return null;
+    if(!Array.isArray(value.questions)||value.questions.length>8||value.kind!=='unsupported'&&!value.questions.length)return null;
+    const questions=[],ids=new Set();
+    for(const q of value.questions){
+      if(!q||!str(q.id,256)||ids.has(q.id)||!str(q.question,8000)||!Array.isArray(q.options)||q.options.length>16||typeof q.detail==='string'&&q.detail.length>30000)return null;
+      ids.add(q.id);const options=[];
+      for(const o of q.options){if(!o||!str(o.label,2000))return null;options.push({label:o.label,...(typeof o.description==='string'?{description:o.description.slice(0,4000)}:{})});}
+      questions.push({id:q.id,question:q.question,header:typeof q.header==='string'?q.header.slice(0,200):'',multiSelect:q.multiSelect===true,options,...(typeof q.detail==='string'?{detail:q.detail.slice(0,30000)}:{})});
+    }
+    return {sessionId:value.sessionId,key:value.key,revision:value.revision,kind:value.kind,questions,canAnswer:value.canAnswer===true,submitting:value.submitting===true,submitted:value.submitted===true,state:value.state==='continued'?'continued':'open',error:typeof value.error==='string'?value.error.slice(0,240):'',remainingMs:Number.isFinite(value.remainingMs)?Math.max(0,value.remainingMs):null};
+  }
+  function fingerprint(q){return JSON.stringify([q.sessionId,q.key,q.kind,q.questions]);}
+  function answersFor(question,answers){
+    if(!question||question.kind==='unsupported'||!Array.isArray(answers)||answers.length!==question.questions.length)return null;
+    const seen=new Set(),result=[];
+    for(const a of answers){
+      const q=question.questions.find(q=>q.id===a?.id);
+      if(!q||seen.has(q.id)||!Array.isArray(a.selected)||a.selected.length>q.options.length||a.selected.some(label=>typeof label!=='string'||!q.options.some(o=>o.label===label))||new Set(a.selected).size!==a.selected.length)return null;
+      if(a.custom!==undefined&&(typeof a.custom!=='string'||a.custom.length>8000))return null;
+      const custom=a.custom?.trim();if(!q.multiSelect&&(a.selected.length>1||custom&&a.selected.length))return null;
+      seen.add(q.id);result.push({id:q.id,selected:[...a.selected],...(custom?{custom}:{})});
+    }
+    return result;
+  }
+  function mount({host,onAction,onVisibility=()=>{},toggleButton,storage}){
+    const d=host.ownerDocument,make=(tag,text,cls)=>{const n=d.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;};
+    host.classList.add('compact-questions');host.setAttribute('aria-label','任务选项');
+    const header=make('header'),heading=make('strong'),counter=make('small'),close=make('button','×');close.type='button';close.title='收起选项';close.setAttribute('aria-label','收起任务选项');header.append(heading,counter,close);
+    const content=make('div',undefined,'cq-content'),status=make('p',undefined,'cq-status'),footer=make('footer'),prev=make('button','‹'),next=make('button','›'),customToggle=make('button','自定义'),skip=make('button','跳过'),submit=make('button','提交');
+    for(const b of [prev,next,customToggle,skip,submit])b.type='button';prev.title='上一题';next.title='下一题';submit.className='cq-submit';footer.append(prev,next,customToggle,skip,submit);host.replaceChildren(header,content,status,footer);
+    let value=null,open=false,disposed=false,localBusy=false,focused=false,page=0,renderKey='',error='',storageNotice='',identity='';const drafts=new Map();
+    if(storage===undefined){try{storage=d.defaultView?.localStorage;}catch{storage=null;}}
+    const storageKey=()=>value?'neko.questions.draft.v1:'+encodeURIComponent(value.sessionId)+':'+encodeURIComponent(value.key):'';
+    function persist(){
+      if(!value)return;try{
+        const data=JSON.stringify({signature:identity,page,answers:value.questions.map(q=>({id:q.id,...(drafts.get(identity+'\0'+q.id)||{selected:[],custom:'',customOpen:false,skipped:false})}))});
+        if(data.length>512000||!storage)throw Error('unavailable');storage.setItem(storageKey(),data);storageNotice='';
+      }catch{storageNotice='选项草稿暂未保存，请保持窗口打开';}
+    }
+    function restore(){
+      try{const saved=JSON.parse(storage?.getItem(storageKey())||'null');if(!saved||saved.signature!==identity||!Array.isArray(saved.answers))return;
+        for(const q of value.questions){const a=saved.answers.find(a=>a?.id===q.id);if(!a||!Array.isArray(a.selected)||typeof a.custom!=='string'||a.custom.length>8000||!answersFor({...value,questions:[q]},[{id:q.id,selected:a.selected,...(a.customOpen&&a.custom.trim()?{custom:a.custom}:{})}]))continue;
+          drafts.set(identity+'\0'+q.id,{selected:[...a.selected],custom:a.custom,customOpen:a.customOpen===true,skipped:a.skipped===true});}
+        if(Number.isSafeInteger(saved.page)&&saved.page>=0&&saved.page<value.questions.length)page=saved.page;
+      }catch{}
+    }
+    const draft=()=>{const q=value?.questions[page];if(!q)return null;const key=identity+'\0'+q.id;if(!drafts.has(key))drafts.set(key,{selected:[],custom:'',customOpen:false,skipped:false});return drafts.get(key);};
+    const answered=(q)=>{const a=drafts.get(identity+'\0'+q.id);return !!a&&(a.skipped||a.selected.length>0||a.customOpen&&!!a.custom.trim());};
+    function releaseFocus(){if(!focused)return;focused=false;void Promise.resolve(action('blur')).catch(()=>{});}
+    function visible(nextOpen){const next=!!value&&nextOpen;if(open!==next){if(!next)releaseFocus();open=next;onVisibility(open,value);}host.hidden=!open;if(toggleButton){toggleButton.hidden=!value;toggleButton.setAttribute('aria-expanded',String(open));toggleButton.title=open?'收起任务选项':'有待回答的任务选项';}}
+    async function action(type,extra={}){if(!value||disposed)return;return onAction({type,sessionId:value.sessionId,key:value.key,revision:value.revision,...extra});}
+    const engage=()=>{void Promise.resolve(action('engage')).catch(()=>{});};
+    function controls(){
+      const busy=localBusy||value?.submitting||value?.submitted,disabled=busy||!value?.canAnswer;
+      host.setAttribute('aria-busy',String(!!busy));
+      for(const n of content.querySelectorAll('button,textarea'))n.disabled=value?.kind==='unsupported'?false:!!disabled;
+      prev.disabled=page===0;next.disabled=page>=(value?.questions.length||0)-1;
+      customToggle.disabled=skip.disabled=!!disabled;customToggle.hidden=skip.hidden=value?.kind==='unsupported';
+      submit.hidden=value?.kind==='unsupported';submit.disabled=!!disabled||!value?.questions.every(answered);
+      status.textContent=error||value?.error||storageNotice||(value?.kind==='unsupported'?'请在工作区查看完整问题。':value?.submitted?'已提交，等待会话确认…':!value?.canAnswer?'正在等待回答通道…':value?.state==='continued'?'已继续工作，仍可回答':'');status.hidden=!status.textContent;
+      counter.textContent=value?`${Math.min(page+1,value.questions.length)} / ${value.questions.length}`:'';
+      if(value?.remainingMs!==null&&value?.remainingMs!==undefined)counter.textContent+=' · '+Math.ceil(value.remainingMs/1000)+'s';
+    }
+    function render(){
+      if(!value){visible(false);content.replaceChildren();renderKey='';return;}
+      const q=value.questions[page],a=draft();heading.textContent=q?.header||'选择任务';
+      const key=JSON.stringify([identity,page,a?.selected,a?.customOpen,a?.skipped]);
+      if(key!==renderKey){
+        renderKey=key;const nodes=[];
+        if(value.kind==='unsupported'){
+          const b=make('button','在工作区查看完整问题');b.type='button';b.addEventListener('click',()=>{void Promise.resolve(action('open')).catch(()=>{error='未能打开工作区，请稍后重试';controls();});});nodes.push(b);
+        }else if(q){
+          const title=make('p',q.question,'cq-question');title.title=q.question;nodes.push(title);
+          if(q.detail){const detail=make('details'),summary=make('summary','查看完整内容');detail.append(summary,make('pre',q.detail));nodes.push(detail);}
+          const choices=make('div',undefined,'cq-choices');
+          q.options.forEach((o,index)=>{const b=make('button',o.label,'cq-option');b.type='button';b.title=o.description||o.label;b.dataset.option=String(index);b.setAttribute('aria-pressed',String(a.selected.includes(o.label)&&!a.skipped));b.addEventListener('click',()=>{if(localBusy||!value?.canAnswer||value.submitted)return;a.skipped=false;if(q.multiSelect)a.selected=a.selected.includes(o.label)?a.selected.filter(x=>x!==o.label):[...a.selected,o.label];else{a.selected=[o.label];a.customOpen=false;}persist();engage();render();content.querySelector(`[data-option="${index}"]`)?.focus();});choices.append(b);});nodes.push(choices);
+          if(a.customOpen){const input=make('textarea');input.setAttribute('aria-label','输入你的答案');input.placeholder='输入你的答案';input.maxLength=8000;input.rows=2;input.value=a.custom;input.addEventListener('input',()=>{a.custom=input.value;a.skipped=false;if(!q.multiSelect)a.selected=[];persist();engage();controls();});nodes.push(input);}
+        }
+        content.replaceChildren(...nodes);
+      }
+      visible(open);controls();
+    }
+    close.addEventListener('click',()=>visible(false));toggleButton?.addEventListener('click',()=>{visible(!open);render();});
+    prev.addEventListener('click',()=>{if(page>0){page--;persist();render();}});next.addEventListener('click',()=>{if(page<value.questions.length-1){page++;persist();render();}});
+    customToggle.addEventListener('click',()=>{const a=draft();if(!a)return;a.customOpen=!a.customOpen;a.skipped=false;if(a.customOpen&&!value.questions[page].multiSelect)a.selected=[];persist();engage();render();content.querySelector('textarea')?.focus();});
+    skip.addEventListener('click',()=>{const a=draft();if(!a)return;a.skipped=true;engage();if(page<value.questions.length-1)page++;persist();render();});
+    submit.addEventListener('click',async()=>{
+      if(submit.disabled||!value)return;const expected=identity;
+      const answers=answersFor(value,value.questions.map(q=>{const a=drafts.get(identity+'\0'+q.id);return {id:q.id,selected:a.skipped?[]:[...a.selected],...(!a.skipped&&a.customOpen&&a.custom.trim()?{custom:a.custom.trim()}:{})};}));
+      if(!answers)return;localBusy=true;error='';controls();
+      try{const result=await action('answer',{answers});if(result?.ok===false)throw Error('回答未确认，请核对后重试');}
+      catch{if(identity===expected)error='回答未确认，请核对后重试';}
+      finally{if(identity===expected){localBusy=false;controls();}}
+    });
+    const focus=()=>{if(!open||focused||disposed)return;focused=true;void Promise.resolve(action('focus')).catch(()=>{});};
+    host.addEventListener('focusin',focus);
+    host.addEventListener('focusout',event=>{if(!host.contains(event.relatedTarget))releaseFocus();});
+    const windowFocus=()=>{if(host.contains(d.activeElement))focus();};d.defaultView?.addEventListener('blur',releaseFocus);d.defaultView?.addEventListener('focus',windowFocus);
+    host.addEventListener('keydown',event=>{if(event.key==='Escape'&&!event.isComposing){event.preventDefault();event.stopPropagation();visible(false);}});
+    return {update(next){if(disposed)return;const normalized=normalize(next),nextIdentity=normalized?fingerprint(normalized):'';if(nextIdentity!==identity)releaseFocus();value=normalized;if(nextIdentity!==identity){identity=nextIdentity;page=0;renderKey='';localBusy=false;error='';storageNotice='';if(drafts.size>128)drafts.clear();if(value)restore();visible(!!value);}if(!value)visible(false);render();},show(){visible(true);render();},hide(){visible(false);},isOpen:()=>open,dispose(){releaseFocus();disposed=true;value=null;visible(false);d.defaultView?.removeEventListener('blur',releaseFocus);d.defaultView?.removeEventListener('focus',windowFocus);host.replaceChildren();drafts.clear();}};
+  }
+  return Object.freeze({normalize,fingerprint,answersFor,mount});
+});
+
+return globalThis.WorkbenchQuestions;
+})(undefined, {});
+'use strict';
+
+// Project existing official PendingQuestion carriers. The native question
+// plugin continues to own its waterfall, countdown, continuation and inbox.
+function createWorkbenchQuestionController(options={}) {
+  const forms=options.forms||(typeof WORKBENCH_QUESTION_FORMS==='object'?WORKBENCH_QUESTION_FORMS:require('../compact-questions.js'));
+  const entries=new Map();let source=null,stopSource=null,sequence=0,disposed=false,last='',refreshing=false;
+  const snapshot=()=>[...entries.values()].map(row=>row.dto).filter(Boolean);
+  function emit(){const rows=snapshot(),key=JSON.stringify(rows);if(key===last)return;last=key;try{options.onChange?.(rows);}catch{}}
+  function detach(row){try{row.carrier.releaseFocus?.();}catch{}try{row.stop?.();}catch{}row.dto=null;}
+  function read(row){
+    let state;try{state=row.carrier.getSnapshot();}catch{return null;}
+    if(state?.closed||row.carrier.review!==undefined)return null;
+    const raw={sessionId:row.id,key:row.carrier.key,revision:row.revision,kind:row.carrier.kind,questions:row.carrier.questions?.map(q=>({...q,options:Array.isArray(q.options)?q.options:[]})),canAnswer:state?.channel==='waterfall'||state?.channel==='rpc',state:state?.state,error:row.error||'',remainingMs:state?.countdown?.remainingMs,submitting:row.inFlight,submitted:row.sent};
+    // Plan review retains its native full-plan approval/cancel semantics.
+    // A compact title must not replace the document the user approves.
+    let dto=row.carrier.kind==='plan-review'?forms.normalize({...raw,kind:'unsupported',questions:[],canAnswer:false}):forms.normalize(raw);
+    if(!dto)dto=forms.normalize({...raw,kind:'unsupported',questions:[],canAnswer:false});
+    if(!dto)return null;
+    const signature=forms.fingerprint(dto);
+    if(row.signature!==undefined&&signature!==row.signature){row.revision=++sequence;row.sent=false;row.error='问题已更新，请重新确认';}
+    row.signature=signature;dto.revision=row.revision;
+    if(row.sent&&row.sentVia==='waterfall'&&state?.channel==='rpc'&&state?.state==='continued'){row.sent=false;row.error='已继续工作，请重新确认回答';dto.submitted=false;dto.error=row.error;}
+    return dto;
+  }
+  function refresh(){
+    if(disposed||refreshing)return;refreshing=true;
+    try{
+      const next=options.getSource?.();
+      if(next!==source){try{stopSource?.();}catch{}source=next;stopSource=source?.subscribe?.(refresh);}
+      const statuses=source?.getSnapshot?.(),present=new Set();
+      if(statuses&&typeof statuses[Symbol.iterator]==='function')for(const [id,status] of statuses){
+        if(present.size>=100)break;
+        const carrier=status?.pendingInteraction;
+        if(typeof id!=='string'||id.length>512||!carrier||carrier.sessionId!==id||!['question','plan-review'].includes(carrier.kind)||typeof carrier.key!=='string'||typeof carrier.getSnapshot!=='function'||typeof carrier.answer!=='function')continue;
+        present.add(id);let row=entries.get(id);
+        if(!row||row.carrier!==carrier){if(row)detach(row);row={id,carrier,revision:++sequence,signature:undefined,stop:null,sent:false,inFlight:false,error:''};entries.set(id,row);row.stop=carrier.subscribe?.(refresh);}
+        row.dto=read(row);
+      }
+      for(const [id,row] of entries)if(!present.has(id)){detach(row);entries.delete(id);}
+    }catch{for(const row of entries.values())detach(row);entries.clear();}finally{refreshing=false;}
+    emit();
+  }
+  async function perform(message){
+    refresh();const row=entries.get(message?.sessionId),dto=row?.dto;
+    if(disposed||!row||!dto||message.key!==dto.key||message.revision!==dto.revision)return {ok:false,code:'stale'};
+    if(message.type==='open'){if(typeof options.openSession!=='function')return {ok:false,code:'unavailable'};try{await options.openSession(row.id);return {ok:true};}catch{row.error='未能打开工作区，请稍后重试';row.dto=read(row);emit();return {ok:false,code:'unavailable'};}}
+    const method={focus:'holdFocus',blur:'releaseFocus',engage:'engage'}[message.type];
+    if(method){try{row.carrier[method]?.();refresh();return {ok:true};}catch{return {ok:false,code:'unavailable'};}}
+    if(message.type!=='answer'||!dto.canAnswer||row.inFlight||row.sent)return {ok:false,code:'unavailable'};
+    const answers=forms.answersFor(dto,message.answers);if(!answers)return {ok:false,code:'invalid'};
+    row.inFlight=true;row.error='';row.sentVia=row.carrier.getSnapshot()?.channel;row.dto=read(row);emit();
+    try{
+      await row.carrier.answer({answers});
+      if(entries.get(row.id)===row){row.sent=true;row.inFlight=false;row.dto=read(row);emit();}
+      return {ok:true};
+    }catch{
+      if(entries.get(row.id)===row){row.inFlight=false;row.error='回答未确认，请核对后重试';row.dto=read(row);emit();}
+      return {ok:false,code:'unconfirmed'};
+    }
+  }
+  return {refresh,snapshot,current:id=>entries.get(id)?.dto||null,perform,dispose(){disposed=true;try{stopSource?.();}catch{}for(const row of entries.values())detach(row);entries.clear();source=null;}};
+}
+if(typeof window==='undefined'&&typeof module==='object'&&module.exports)module.exports={createWorkbenchQuestionController};
 
 function installWorkspaceShell(options = {}) {
   const doc = options.document || (typeof document !== 'undefined' ? document : null);
@@ -4098,11 +4275,12 @@ function installWorkspaceShell(options = {}) {
   const collapseNotice = own(el('p', 'neko-workspace-collapse-notice')); collapseNotice.setAttribute('role', 'status'); collapseNotice.hidden = true; doc.body.appendChild(collapseNotice);
   let collapsedComposer = null, collapsedPopover = false, collapseGeometry = '', collapseNoticeTimer = null;
   let floatingComposer = null, floatingGeometry = '', floatingState = '', floatingRecoveryPending = false, floatingInitialized = false;
+  let questionController=null,nativeQuestionOpen=false,nativeQuestionIdentity='';
   let floatingPosition = null;
   let nativeRecordsOpen = false, nativeRecordsWidth = 480, nativeRecordsHeight = 360, nativeOpening = false, nativeRecordsOffset = 0;
   let nativeModelOpen=false,nativeDefaultPreparing=false,nativeDefaultPrepared=false,nativeCompactError=false;
   // Project chooser and current-project details of the creation desk. The
-  // details height is the user's drag result; null means "use the content height".
+  // details height is the user's drag result; null uses a compact 320px panel.
   let nativeProjectOpen=false,nativeDetailsOpen=false,nativeDetailsHeight=null,nativeProjectHint=null;
   let creationPositionKey='default',creationLobbySeen=false,creationResetPosition=false;
   const creationModeState={default:null,lobby:null};
@@ -4181,6 +4359,7 @@ function installWorkspaceShell(options = {}) {
     const next = { records, recordsOpen:nativeRecordsOpen, recordsHasMore:nativeRecordsOffset + 100 < allRecords.length || catalog?.nextDshOffset != null, recordsLoading:listLoading, recordsStatus:listLoading ? '正在读取会话…' : catalogError || (!allRecords.length ? '暂无会话' : nativeRecordsOffset ? '显示较早记录；刷新可返回最新记录' : ''), targetLabel, targetRequired, value:typeof state?.draft === 'string' ? state.draft.slice(0, 30000) : '', enabled:available, busy:state?.phase != null && state.phase !== 'plain', sessionToken:typeof state?.sessionId === 'string' ? state.sessionId : '', revision:Number.isSafeInteger(state?.revision) && state.revision >= 0 ? state.revision : 0, placeholder:available ? '发消息或创建任务…' : '请先打开可用的工作会话', status:state?.reason || state?.status || '', ...extra };
     for(const key of ['modelOptions','modelId','modelLabel','reasoningId','reasoningLabel','modelBusy','modelError','defaultErrorCode','workContent'])if(state?.[key]!==undefined)next[key]=state[key];
     Object.assign(next,nativeProjectState(state),{projectOpen:nativeProjectOpen,detailsOpen:nativeDetailsOpen});
+    next.question=questionController?.current(state?.sessionId)||null;
     Object.assign(next,extra);
     next.modelOpen=nativeModelOpen;
     next.chatOnly = isDailyEdition();
@@ -4193,6 +4372,22 @@ function installWorkspaceShell(options = {}) {
   if (typeof createNativeComposerAdapter === 'function' && options.nativeComposerBindings) {
     floatingComposer = createNativeComposerAdapter({ ...options.nativeComposerBindings, getDefaultWorkspaceRoot:()=>state?.workspaceRoot, onReady:schedule, onChange: state => updateFloatingComposer(state) });
   }
+  if(typeof createWorkbenchQuestionController==='function'&&options.nativeComposerBindings?.getQuestionStatusSource){
+    questionController=createWorkbenchQuestionController({getSource:options.nativeComposerBindings.getQuestionStatusSource,
+      openSession:async id=>{if(typeof options.openDshSession!=='function')throw Error('工作区暂不可用');await options.openDshSession(id);if(!isOfficeEdition()&&!await saveLayout({workbenchEdition:'office'}))throw Error('版本切换未完成');},
+      onChange:items=>{
+        if(disposed)return;const q=items.find(q=>q.sessionId===floatingComposer?.snapshot()?.sessionId),identity=q?JSON.stringify([q.sessionId,q.key,q.revision]):'';
+        if(identity!==nativeQuestionIdentity){nativeQuestionIdentity=identity;nativeQuestionOpen=!!q;floatingGeometry='';}
+        if(typeof bridge.questions==='function')void Promise.resolve(bridge.questions({action:'publish',items})).catch(()=>{});
+        updateFloatingComposer(floatingComposer?.snapshot());schedule();
+      }});
+    if(typeof bridge.subscribeQuestionEvents==='function')releases.push(bridge.subscribeQuestionEvents(async event=>{
+      if(!event||!Number.isSafeInteger(event.requestId)||disposed)return;
+      const result=await questionController.perform(event);
+      if(!disposed)void Promise.resolve(bridge.questions({action:'result',requestId:event.requestId,ok:result.ok===true})).catch(()=>{});
+    }));
+    questionController.refresh();
+  }
   function prepareNativeDefault({retry=false}={}){
     if(nativeDefaultPreparing||nativeDefaultPrepared&&!retry||typeof floatingComposer?.ensureDefaultSession!=='function'||typeof options.nativeComposerBindings?.ensureDefaultSession!=='function')return;
     nativeDefaultPreparing=true;
@@ -4203,6 +4398,11 @@ function installWorkspaceShell(options = {}) {
     try {
       const off = bridge.subscribeNativeComposer(event => {
         if (!floatingInitialized || !event || typeof event.type !== 'string') return;
+        if(event.type==='question-visibility'){const q=questionController?.current(floatingComposer?.snapshot()?.sessionId);if(q&&(event.sessionId!==q.sessionId||event.key!==q.key||event.revision!==q.revision))return;nativeQuestionOpen=event.open===true&&!!q;floatingGeometry='';schedule();return;}
+        if(event.type==='question-action'){
+          if(event.sessionId!==floatingComposer?.snapshot()?.sessionId)return;
+          void Promise.resolve(questionController?.perform({...event,type:event.questionAction})).then(()=>updateFloatingComposer(floatingComposer?.snapshot(),{settledQuestionSelectionId:event.questionSelectionId,settledQuestionKey:event.key,settledQuestionRevision:event.revision}));return;
+        }
         if (event.type === 'move') {
           const current=floatingBounds();if(!current)return;
           if(event.reset===true)floatingPosition=null;
@@ -4321,8 +4521,8 @@ function installWorkspaceShell(options = {}) {
     const compactHeight = (room?84:64)+(nativeCompactError?24:0);
     const minX=Math.max(8,Math.round(doc.querySelector('[data-neko-side-rail]')?.getBoundingClientRect().right||64)+8);
     const minY=floatingTop();
-    const panelOpen=nativeRecordsOpen||nativeModelOpen||nativeProjectOpen||nativeDetailsOpen;
-    const panelHeight=nativeDetailsOpen?(nativeDetailsHeight??detailsHeightLimit()):nativeProjectOpen?360:nativeModelOpen?320:nativeRecordsHeight;
+    const panelOpen=nativeQuestionOpen||nativeRecordsOpen||nativeModelOpen||nativeProjectOpen||nativeDetailsOpen;
+    const panelHeight=nativeQuestionOpen?360:nativeDetailsOpen?(nativeDetailsHeight??Math.min(320,detailsHeightLimit())):nativeProjectOpen?360:nativeModelOpen?320:nativeRecordsHeight;
     const height = panelOpen ? Math.max(compactHeight,Math.min(panelHeight,nativeDetailsOpen?detailsHeightLimit():Math.max(compactHeight,win.innerHeight-bottom-32))) : compactHeight;
     // A dragged desk keeps its bottom edge when a panel opens or closes, so
     // collapsing the details returns the input to where the person left it.
@@ -4332,6 +4532,9 @@ function installWorkspaceShell(options = {}) {
   function floatingTop(){const title=doc.querySelector('.neko-window-titlebar')?.getBoundingClientRect();return title?.height>0?Math.round(title.bottom)+8:8;}
   function detailsHeightLimit(){return Math.max(160,Math.min(1000,win.innerHeight-floatingTop()-8));}
   function syncFloatingComposer() {
+    questionController?.refresh();
+    const state=floatingComposer?.snapshot(),q=questionController?.current(state?.sessionId),identity=q?JSON.stringify([q.sessionId,q.key,q.revision]):'';
+    if(identity!==nativeQuestionIdentity){nativeQuestionIdentity=identity;nativeQuestionOpen=!!q;floatingGeometry='';}
     const flex = doc.body.hasAttribute('data-neko-flex-workspace-collapsed');
     const collapsed = doc.body.hasAttribute('data-neko-workspace-collapsed');
     // The creation desk belongs to the daily edition. Office keeps its native
@@ -4349,8 +4552,8 @@ function installWorkspaceShell(options = {}) {
     if(layout?.officeMode==='dsh')prepareNativeDefault();
     const key = JSON.stringify([creationPositionKey,rect]); if (key !== floatingGeometry) { floatingInitialized = true; floatingGeometry = key; floatingCall({action:'place',rect,positionKey:creationPositionKey,...(creationResetPosition?{resetPosition:true}:{})});creationResetPosition=false; }
     // Real session content is read only while the details are on screen.
-    floatingComposer?.watchWorkContent?.(nativeDetailsOpen);
-    updateFloatingComposer(floatingComposer?.snapshot());
+    floatingComposer?.watchWorkContent?.(nativeDetailsOpen&&!nativeQuestionOpen);
+    updateFloatingComposer(state);
   }
   const collapseResize = win.ResizeObserver ? new win.ResizeObserver(() => schedule()) : null;
   function notifyCollapseGeometry() {
@@ -5072,6 +5275,7 @@ function installWorkspaceShell(options = {}) {
   const interval = win.setInterval(() => { if (doc.visibilityState !== 'hidden') refreshCatalog(false, 0, { quiet:true }); }, 60000);
   place();
   return () => {
+    questionController?.dispose();if(typeof bridge.questions==='function')void Promise.resolve(bridge.questions({action:'publish',items:[]})).catch(()=>{});
     doc.removeEventListener('neko-request-composer-geometry', requestCollapseGeometry);
     clearCollapsedComposer(); collapseResize?.disconnect(); if (collapseNoticeTimer) win.clearTimeout(collapseNoticeTimer);
     if (disposed) return; disposed = true; hideCompanionReply(); floatingComposer?.dispose(); if (floatingGeometry) floatingCall({action:'remove'}); stopNativeNew(); motion?.removeEventListener?.('change', syncCharacter); motion?.removeEventListener?.('change', syncRailWalking); doc.removeEventListener('visibilitychange', syncCharacter); doc.removeEventListener('visibilitychange', syncRailWalking); stopRailWalking(); if (railClickTimer !== null) win.clearTimeout(railClickTimer); if (railSpace) { if (railSpaceBeforeAria === null) railSpace.removeAttribute('aria-hidden'); else railSpace.setAttribute('aria-hidden', railSpaceBeforeAria); } if (characterVideo) { characterVideo.pause(); characterVideo.removeAttribute('src'); characterVideo.load(); } observer.disconnect(); ancestorObserver.disconnect(); intersection?.disconnect(); resize?.disconnect(); win.clearInterval(interval);

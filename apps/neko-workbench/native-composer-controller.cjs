@@ -2,6 +2,7 @@
 const path = require('node:path');
 const { snapFloatingBounds } = require('./floating-window-snap.cjs');
 const { createFloatingMenuLayer } = require('./floating-menu-layer.cjs');
+const questionForms=require('./compact-questions.js');
 
 // A trusted, isolated child view can be layered above site WebContentsViews.
 // This controller never sends a task: the host must bind each event to a real
@@ -13,10 +14,12 @@ function createNativeComposerController({ WebContentsView, BrowserWindow, screen
   let host = null, view = null, rect = null, enabled = false, attached = false, ready = false, pendingSubmit = null, pendingEdit = null, pendingModel = null, pendingProject = null;
   let menuLayer = null, nativeDismissed = false, deferredMenuShow = false;
   let state = { value: '', placeholder: '创造台未连接', enabled: false, busy: false, sessionToken: '', revision: 0 };
+  let pendingQuestion=null;
   const listeners = [];
   function unlisten() { for (const [obj, event, fn] of listeners.splice(0)) obj.removeListener(event, fn); }
   function detach() { nativeMoving=false;deferredMenuShow=false; if (desktop) { if (view && !view.isDestroyed()) view.hide(); } else if (attached && host && !host.isDestroyed()) host.contentView.removeChildView(view); attached = false; }
   function close() {
+    pendingQuestion=null;
     menuLayer?.dispose(); menuLayer=null;
     detach();
     if (view && !view.webContents.isDestroyed()) { if (desktop) view.destroy(); else view.webContents.close({ waitForBeforeUnload: false }); }
@@ -145,7 +148,8 @@ function createNativeComposerController({ WebContentsView, BrowserWindow, screen
   }
   function update(snapshot) {
     if (!snapshot || typeof snapshot.value !== 'string' || snapshot.value.length > 30000 || typeof snapshot.sessionToken !== 'string' || snapshot.sessionToken.length > 512 || !Number.isSafeInteger(snapshot.revision) || snapshot.revision < 0) throw Error('无效工作会话状态');
-    if (snapshot.sessionToken !== state.sessionToken) { pendingSubmit = null; pendingEdit = null; pendingModel=null; pendingProject=null; }
+    if (snapshot.sessionToken !== state.sessionToken) { pendingSubmit = null; pendingEdit = null; pendingModel=null; pendingProject=null; pendingQuestion=null; }
+    if(pendingQuestion&&snapshot.settledQuestionSelectionId===pendingQuestion.id&&snapshot.settledQuestionKey===pendingQuestion.key&&snapshot.settledQuestionRevision===pendingQuestion.revision)pendingQuestion=null;
     if (pendingSubmit !== null && snapshot.settledSubmitId === pendingSubmit) pendingSubmit = null;
     if (pendingEdit !== null && snapshot.settledEditId === pendingEdit) pendingEdit = null;
     if(pendingModel!==null&&snapshot.settledModelSelectionId===pendingModel)pendingModel=null;
@@ -153,6 +157,8 @@ function createNativeComposerController({ WebContentsView, BrowserWindow, screen
     const targetLabel = typeof snapshot.targetLabel === 'string' ? snapshot.targetLabel.trim().slice(0, 280) : '';
     state = { targetLabel, targetRequired:snapshot.targetRequired === true, submitUnknown:snapshot.submitUnknown === true, settledRecordOpenId:Number.isSafeInteger(snapshot.settledRecordOpenId) ? snapshot.settledRecordOpenId : null, records, recordsOpen:snapshot.recordsOpen === true, recordsHasMore:snapshot.recordsHasMore === true, recordsLoading:snapshot.recordsLoading === true, recordsStatus:typeof snapshot.recordsStatus === 'string' ? snapshot.recordsStatus.slice(0,160) : '', value: snapshot.value, settledEditId: Number.isSafeInteger(snapshot.settledEditId) ? snapshot.settledEditId : null, editConflict: snapshot.editConflict === true, status: typeof snapshot.status === 'string' ? snapshot.status.slice(0, 160) : '', settledSubmitId: Number.isSafeInteger(snapshot.settledSubmitId) ? snapshot.settledSubmitId : null, placeholder: typeof snapshot.placeholder === 'string' ? snapshot.placeholder.slice(0, 120) : '发消息或创建任务…', enabled: snapshot.enabled === true, busy: snapshot.busy === true, sessionToken: snapshot.sessionToken, revision: snapshot.revision };
     state.chatOnly = snapshot.chatOnly === true;
+    state.question=questionForms.normalize(snapshot.question);if(state.question?.sessionId!==state.sessionToken)state.question=null;
+    if(pendingQuestion&&(!state.question||pendingQuestion.key!==state.question.key||pendingQuestion.revision!==state.question.revision))pendingQuestion=null;
     const bounded=(value,length)=>typeof value==='string'?value.slice(0,length):'';
     state.modelOptions=(Array.isArray(snapshot.modelOptions)?snapshot.modelOptions:[]).slice(0,200).filter(row=>row&&typeof row.id==='string'&&row.id&&row.id.length<=1024&&typeof row.label==='string').map(row=>({id:row.id,label:bounded(row.label,180),reasoningOptions:(Array.isArray(row.reasoningOptions)?row.reasoningOptions:[]).slice(0,32).filter(e=>e&&typeof e.id==='string'&&e.id.length<=128&&typeof e.label==='string').map(e=>({id:e.id,label:bounded(e.label,80)}))}));
     for(const key of ['modelId','modelLabel','reasoningId','reasoningLabel','modelError'])state[key]=bounded(snapshot[key],key==='modelId'?1024:key==='modelError'?240:180);
@@ -174,7 +180,18 @@ function createNativeComposerController({ WebContentsView, BrowserWindow, screen
     publish(); return { ok: true };
   }
   function input(event, message) {
-    if (!host || host.isDestroyed() || !view || !ready || !attached || !enabled || event.sender !== view.webContents || event.senderFrame !== view.webContents.mainFrame || !message || !['move', 'edit', 'submit', 'expand', 'files', 'records-toggle', 'records-resize', 'records-refresh', 'records-more', 'record-open','model-toggle','model-refresh','model-select','project-toggle','project-refresh','project-select','details-toggle','details-resize'].includes(message.type)) return;
+    if (!host || host.isDestroyed() || !view || !ready || !attached || !enabled || event.sender !== view.webContents || event.senderFrame !== view.webContents.mainFrame || !message || !['move', 'edit', 'submit', 'expand', 'files', 'records-toggle', 'records-resize', 'records-refresh', 'records-more', 'record-open','model-toggle','model-refresh','model-select','project-toggle','project-refresh','project-select','details-toggle','details-resize','question-action','question-visibility'].includes(message.type)) return;
+    if(message.type==='question-visibility'){const q=state.question;if(typeof message.open==='boolean'&&(q?message.sessionId===q.sessionId&&message.key===q.key&&message.revision===q.revision:message.open===false))host.webContents.send('workbench:native-composer-event',{type:message.type,open:message.open,...(q?{sessionId:q.sessionId,key:q.key,revision:q.revision}:{})});return;}
+    if(message.type==='question-action'){
+      const q=state.question,type=message.questionAction;
+      if(!q||q.sessionId!==message.sessionId||q.key!==message.key||q.revision!==message.revision||!['answer','focus','blur','engage','open'].includes(type))return;
+      const answers=type==='answer'?questionForms.answersFor(q,message.answers):null;
+      if(type==='answer'){
+        if(pendingQuestion||!q.canAnswer||q.submitted||q.submitting||!answers||!Number.isSafeInteger(message.questionSelectionId)||message.questionSelectionId<=0)return;
+        pendingQuestion={id:message.questionSelectionId,key:q.key,revision:q.revision};view.webContents.send('neko-composer-state',{...state,question:{...q,submitting:true}});
+      }
+      host.webContents.send('workbench:native-composer-event',{type:'question-action',questionAction:type,sessionId:q.sessionId,key:q.key,revision:q.revision,...(answers?{answers,questionSelectionId:message.questionSelectionId}:{})});return;
+    }
     if (message.type === 'move') {
       if(Object.hasOwn(message,'finished')&&typeof message.finished!=='boolean')return;
       if (desktop) {
@@ -228,6 +245,7 @@ function createNativeComposerController({ WebContentsView, BrowserWindow, screen
       host.webContents.send('workbench:native-composer-event', {type:'record-open',id:message.id,sessionToken:state.sessionToken,revision:state.revision,openId:message.openId}); return;
     }
     if (message.type !== 'expand') {
+      if(message.type==='submit'&&state.question)return;
       const invalid = !state.enabled || !state.sessionToken || message.sessionToken !== state.sessionToken || message.revision !== state.revision || typeof message.value !== 'string' || message.value.length > 30000 || (message.type === 'edit' && (pendingEdit !== null || !Number.isSafeInteger(message.editId) || message.editId <= 0)) || (message.type === 'submit' && (state.targetRequired && !state.targetLabel || state.busy || state.modelBusy || !!state.modelError || pendingModel!==null || pendingSubmit !== null || !Number.isSafeInteger(message.submissionId) || message.submissionId <= 0 || !message.value.trim()));
       if (invalid) {
         // Never strand the user's draft when a session/revision changes before

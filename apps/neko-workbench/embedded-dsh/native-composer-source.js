@@ -44,6 +44,7 @@ function createNativeComposerDshBindings(ctx) {
     openWorkspace,
     // Read-only official chat projection of one session (loaded window + live).
     getWorkContentTarget: id => ctx.get?.('uiConversation')?.binding?.(id)?.target?.('chat'),
+    getQuestionStatusSource: () => ctx.get?.('uiSession')?.sessionStatus,
     getModelDirectory: id => ctx.get?.('modelDirectories')?.directoryFor?.(id),
     hasExplicitModelSelection: binding => binding.session?.projections?.faceOf?.('modelSelection')?.getSnapshot?.()?.next !== undefined,
     isDefaultSession: id => !!defaultWorkspaceId && (id===defaultSessionId || defaultSessionIds.includes(id) || workspaces()?.list?.getSnapshot?.()?.items?.some(row => row.workspaceId === defaultWorkspaceId && row.sessionIds?.includes(id))),

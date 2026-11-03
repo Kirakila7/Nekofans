@@ -15,11 +15,14 @@ const composerBlock='const WORKBENCH_LOBBY_COMPOSER = (function (module, globalT
 const preview=fs.readFileSync(path.join(base,'chatroom-preview-source.js'),'utf8');
 const previewCss=fs.readFileSync(path.join(base,'chatroom-preview-source.css'),'utf8');
 const nativeComposer=fs.readFileSync(path.join(base,'native-composer-source.js'),'utf8');
+const questions=fs.readFileSync(path.join(base,'question-bridge-source.js'),'utf8');
+const questionForms=fs.readFileSync(path.join(base,'../compact-questions.js'),'utf8');
+const questionBlock='const WORKBENCH_QUESTION_FORMS = (function (module, globalThis) {\n'+questionForms+'\nreturn globalThis.WorkbenchQuestions;\n})(undefined, {});\n'+questions+'\n';
 const ourHome=fs.readFileSync(path.join(base,'our-home-ui-source.js'),'utf8');
 const home=fs.readFileSync(path.join(base,'yui-home-ui-source.js'),'utf8');
 const homeTextures=fs.readFileSync(path.join(base,'yui-home-textures-source.js'),'utf8');
 const homeCss=fs.readFileSync(path.join(base,'yui-home-ui-source.css'),'utf8');
-const block='// @neko-workspace-shell:start\nconst WORKSPACE_SHELL_CSS = '+JSON.stringify(css)+' + '+JSON.stringify(bubbleCss)+' + '+JSON.stringify(previewCss)+' + '+JSON.stringify(homeCss)+';\n'+composerBlock+homeTextures+'\n'+home+'\n'+ourHome+'\n'+preview+'\n'+nativeComposer+'\n'+source+'\n// @neko-workspace-shell:end\n';
+const block='// @neko-workspace-shell:start\nconst WORKSPACE_SHELL_CSS = '+JSON.stringify(css)+' + '+JSON.stringify(bubbleCss)+' + '+JSON.stringify(previewCss)+' + '+JSON.stringify(homeCss)+';\n'+composerBlock+homeTextures+'\n'+home+'\n'+ourHome+'\n'+preview+'\n'+nativeComposer+'\n'+questionBlock+source+'\n// @neko-workspace-shell:end\n';
 let code=fs.readFileSync(file,'utf8');
 const avatarThemePattern=/\/\/ @neko-avatar-theme:start[\s\S]*?\/\/ @neko-avatar-theme:end/;
 if(!avatarThemePattern.test(code))throw Error('Missing avatar theme source markers');
