@@ -2,6 +2,15 @@
 
 final result: passed
 
+Release-based integration verification: the memory feature was isolated on
+v0.28.41 (20dde9291c35ee74b464679eb43a2a7234db6356), excluding unrelated local
+configuration and account-relay work. 65 focused Node checks, 3 real service
+component checks and 1 native FactStore recovery check pass. A local merge with
+PR #62 at ad99e456e857912f423a0b6742ddd2152fc1149f runs 134 checks with 133 passes,
+1 existing Windows /usr/bin/zip fixture failure and no skips. The same failure
+is reproduced on the release baseline. Native Electron visual acceptance remains
+unverified; browser fixtures and jsdom are not presented as native acceptance.
+
 Latest navigation/name refinement: 鱼的记忆 is the consistent entry/page title.
 The main desktop menu opens the star map directly. The workbench adds a matching
 rail button immediately after community, using the same `neko-side-rail__button`
