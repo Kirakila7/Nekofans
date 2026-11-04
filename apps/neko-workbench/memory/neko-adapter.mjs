@@ -11,7 +11,7 @@ export function memoryLaunch({directory,python,uv='uv',env=process.env}){
     if(!isAbsolute(direct)||!existsSync(direct)||!libs||!isAbsolute(libs)||!existsSync(libs))throw Error('内置记忆运行环境不完整，请重新安装工作台');
     // Process .pth files too: pywin32 needs its DLL/bootstrap paths on Windows.
     // Paths are argv, never shell code; credentials still travel only on stdin.
-    return {command:direct,args:['-B','-c','import runpy,site,sys; site.addsitedir(sys.argv[1]); script=sys.argv[2]; sys.argv=[script]; runpy.run_path(script,run_name="__main__")',libs,script]};
+    return {command:direct,args:['-B','-c','import os,runpy,site,sys; site.addsitedir(sys.argv[1]); script=sys.argv[2]; sys.path.insert(0,os.path.dirname(script)); sys.argv=[script]; runpy.run_path(script,run_name="__main__")',libs,script]};
   }
   const configured=python||env.NEKO_WORKBENCH_MEMORY_PYTHON;
   if(!configured&&!existsSync(join(directory,'.venv',process.platform==='win32'?'Scripts/python.exe':'bin/python')))throw Error('请先运行 npm run setup:neko-memory 安装记忆组件');
