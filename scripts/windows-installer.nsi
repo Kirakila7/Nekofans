@@ -14,6 +14,10 @@ VIAddVersionKey "FileDescription" "Nekofans 当前用户安装程序"
 VIAddVersionKey "FileVersion" "${NEKO_VERSION}"
 VIAddVersionKey "LegalCopyright" "NEKOfuns contributors"
 !include "MUI2.nsh"
+!ifdef NEKO_ICON
+!define MUI_ICON "${NEKO_ICON}"
+!define MUI_UNICON "${NEKO_ICON}"
+!endif
 !include "FileFunc.nsh"
 !include "LogicLib.nsh"
 !include "x64.nsh"

@@ -32,6 +32,12 @@ export async function buildWindowsDaily({root,release,args}){
   const dir=join(output,'application');mkdirSync(dir,{recursive:true});
   cpSync(electron,dir,{recursive:true,filter:src=>!src.endsWith('default_app.asar')&&!/\.(?:log|dmp|dpapi|sqlite)$/i.test(src)});
   renameSync(join(dir,'electron.exe'),join(dir,'NEKOfuns.exe'));
+  // Preserve installation/profile names while branding the staged PE resource.
+  const appIcon=join(root,'apps/neko-workbench/assets/icons/bigfish.ico');
+  const iconHeader=Buffer.alloc(2),iconFd=openSync(join(dir,'NEKOfuns.exe'),'r');
+  try{readSync(iconFd,iconHeader,0,2,0);}finally{closeSync(iconFd);}
+  // Packaging fixtures contain inert text instead of a PE executable.
+  if(existsSync(appIcon)&&iconHeader.toString()==='MZ')run(join(process.env.WINDIR||'C:/Windows','System32/WindowsPowerShell/v1.0/powershell.exe'),['-NoLogo','-NoProfile','-NonInteractive','-File',join(root,'scripts/set-windows-icon.ps1'),'-Executable',join(dir,'NEKOfuns.exe'),'-Icon',appIcon]);
   mkdirSync(join(dir,'node'),{recursive:true});
   for(const name of ['node.exe','LICENSE'])if(existsSync(join(node,name)))cpSync(join(node,name),join(dir,'node',name));
   // QQ's official adapter installs its dependencies through npm-cli.js.

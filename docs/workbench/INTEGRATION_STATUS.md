@@ -1,5 +1,7 @@
 # Local integration 0.28.41 / build 77
 
+2026-11-04 Windows icon follow-up: the existing Bigfish brand avatar is exported with provenance into `assets/icons` as WebP/PNG and a transparent seven-size ICO. The Windows builder updates the staged application's PE icon groups before hashing, and NSIS uses the same ICO for installer/uninstaller resources. Legacy executable/profile/uninstall identities are preserved. A separate real Electron PE copy was patched and its extracted icon visually verified as Bigfish; all six installer regressions, including actual NSIS compilation, pass. This source revision does not replace the user's installed application automatically.
+
 ## Desktop speech and daily settings (2026-11-04, new version branch)
 
 Version 0.28.41 adds a sandboxed community-daily settings window for Shanghai HH:mm scheduling and a bounded writing-style preference. Saving preserves the account binding and daily receipts, cancels stale generation and does not enable public posting. The generator receives style as data with fixed public-summary boundaries and no private memory recall. Scheduling now waits from the configured minute until the end of the same day.

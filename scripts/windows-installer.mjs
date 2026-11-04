@@ -78,6 +78,8 @@ export function generateInstallerFiles({root,output,application,release,integrit
   lines.push('!define NEKO_OUTPUT '+compilerLiteral(exe),'!define NEKO_FILES_INCLUDE '+compilerLiteral(files));
   lines.push('!define NEKO_INSTALL_ROOT '+(options.installRoot?nsisLiteral(options.installRoot):'"$LOCALAPPDATA\\Programs\\NEKOfuns"'));
   if(options.desktopShortcut)lines.push('!define NEKO_DESKTOP_SHORTCUT');
+  const icon=join(root,'apps/neko-workbench/assets/icons/bigfish.ico');
+  if(existsSync(icon))lines.push('!define NEKO_ICON '+compilerLiteral(icon));
   lines.push('!define NEKO_ESTIMATED_KB '+Math.ceil(names.reduce((n,name)=>n+statSync(join(application,name)).size,0)/1024));
   lines.push('!include '+compilerLiteral(join(root,'scripts/windows-installer.nsi')));
   writeFileSync(script,'\uFEFF'+lines.join('\n')+'\n');
