@@ -1,8 +1,14 @@
-# Local integration 0.28.42 / build 78
+# Local integration 0.28.43 / build 79
+
+## PR #66 daily integration (2026-11-04)
+
+PR #66 is merged on the remote default branch at 01d7926. This daily build combines that image/GIF and single-character fix with the existing home-value ledger and icon controls from 0.28.42. The generated client is regenerated from the merged canonical sources; private account routing, independent chats, drafts, sessions and project memory are retained. Only synthetic data is used for acceptance, including the real installed DSH/Sharp attachment path. PR #58 remains draft and unmerged.
+
+Daily acceptance: 165 focused regressions passed with zero failures or skips, with the installed DSH attachment store and Sharp decoder enabled. An isolated actual Electron fixture checked one visible character layer in video and poster modes, decoded GIF history, retained the work draft and no horizontal overflow. Source syntax passed for all 263 modules; the aggregate check still reaches the pre-existing removed-Claude-avatar smoke assertion. No real model calls or supplier account charges were used.
 
 ## Home build value and icon controls (2026-11-04)
 
-Based on current default-branch commit f25226d. The approved home layout now has a prominent white `价值：… Token` card above the invitation, three icon-only controls at the upper right, and no lower-right instruction text. Accessible names and pressed states remain available. Every entry through 我的​小窝 returns Bigfish home, including cached and retried mounts.
+Based on current default-branch commit f25226d. The approved home layout now has a prominent white `价值：… Token` card above the invitation, three icon-only controls at the upper right, and no lower-right instruction text. Accessible names and pressed states remain available. Every entry through 我的小窝 returns Bigfish home, including cached and retried mounts.
 
 Value is forward-only and tied to the dedicated home session's successful native `write`/`edit` scene mutations. The bridge observes the final native tool result, validates its actual before/after scene, and associates it with the owning assistant step's provider-reported `totalTokens`. Equivalent JSON formatting, item order, default fields, color case and complete rotations do not count. Multiple mutations from one model step count once. The renderer cannot submit receipts or totals. Home instructions direct model edits through these native tools; bash/script/legacy-editor writes and unattributable changes are not estimated or charged to this meter.
 
@@ -12,13 +18,18 @@ Validation: 94 focused home, storage, IPC, native bridge and workspace cases pas
 
 The macOS Apple Silicon delivery is built with `scripts/build-neko-daily.mjs`; build/signature and packaged-source acceptance are recorded alongside the local delivery. Production accounts and the installed daily app are not modified by QA.
 
+2026-11-04 Fish-date account vision: fix the detached character poster/video hidden rule so only one layer renders. Private account requests now carry bounded real image bytes through the existing DeepSeek-account route and native attachment service. File signatures detect image/GIF types; GIFs stay animated in history while native Sharp produces up to three ordered model frames. Missing account image capability fails visibly. Public/proactive/memory images remain refused and cancellation remains independent. 117 regression cases passed; the separately enabled real bundled DSH/Sharp image suite passed 8/8, including three-frame pixel verification. Actual Electron checked the single visible character and original GIF. Only synthetic model replies were used. See FISH_DATE.md.
+
+Merge preflight against f25226d: 93 focused account-image/GIF, privacy, history, layout, edition and home tests passed with zero failures or skips. The actual installed DSH attachment store and Sharp decoder were enabled; only synthetic model responses were used. Canonical UI sources and the generated client agree. Both this fix and the newer home aspect/feet-anchor correction are retained.
+
+
 ## Home pet aspect ratio correction (2026-11-04)
 
 Action videos use 640×360 frames (16:9), but the home renderer previously forced them into a 1.06:1 rectangle, compressing horizontal scale by about 40%. The room now preserves each source's natural aspect ratio. Shared dsh-pet body bounds and feet baseline stabilize visible height and floor contact across poster/action transitions; transparent side margins remain outside the drag hitbox. The generated client is updated without replacing newer default-branch features.
 
 Validation: 66 local home/storage/IPC/avatar/workspace regressions passed without skips, including aspect, foot anchor, hitbox and poster/video dimension cases. The corrected sprite was also observed in the running native home preview. This source change does not rebuild the installed EXE.
 
-2026-11-04 肥鱼有约 (local source): a private main-agent room now appears below 我的小窝, sharing the existing companion conversation and paginated SQLite history. It adds a single-line composer with emoji, stickers and bounded image attachments; preserves drafts on failure; moves the existing pet above its composer; and places the creation desk in the left selector column. Media survives restart and is exposed only after loading its current conversation. API image protocols are supported when the selected model supports vision; the current DSH account route remains explicitly text-only. Synthetic regression and isolated actual Electron layout checks pass; no real account/model requests were used and the previously delivered installer is unchanged. See `FISH_DATE.md`.
+Earlier PR #65 (2026-11-04, local source): a private main-agent room now appears below 我的小窝, sharing the existing companion conversation and paginated SQLite history. It adds a single-line composer with emoji, stickers and bounded image attachments; preserves drafts on failure; moves the existing pet above its composer; and places the creation desk in the left selector column. Media survives restart and is exposed only after loading its current conversation. API image protocols are supported when the selected model supports vision; the initial DSH account route was text-only (superseded by the PR #66 image support above). Synthetic regression and isolated actual Electron layout checks pass; no real account/model requests were used and the previously delivered installer is unchanged. See `FISH_DATE.md`.
 
 2026-11-04 PR #62/#64 integration: this revision combines the merged fish memory explorer, clickable home pet, and DeepSeek account memory channel. Historical notes below describe their earlier isolated branches. The resolved memory settings retain the account route status and the star-map/list controls. All 41 account, native Python, memory viewer/entry, replication and main-chat integration tests passed with no skips using synthetic providers; no live supplier account inference was performed.
 

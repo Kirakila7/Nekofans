@@ -1,7 +1,8 @@
 'use strict';
 // Uses the host's authenticated LLM service directly. No DSH agent, tool,
 // session, project directory, or generic session-event log is created.
-function createCompanionAccountBridge({ctx, route, createUserMessage, createAssistantMessage, namespace='companion', timeoutMs=75000, cleanupTimeoutMs=5000}) {
+const {decodeAccountImages,accountImageContent}=require('./companion-account-images.cjs');
+function createCompanionAccountBridge({ctx, route, createUserMessage, createAssistantMessage, loadImageDecoder, namespace='companion', timeoutMs=75000, cleanupTimeoutMs=5000}) {
   if (route?.provider!=='deepseek-account' || route?.model!=='deepseek-flash' || typeof createUserMessage!=='function' || typeof createAssistantMessage!=='function') throw Error('陪伴聊天账号路线无效。');
   if (!['companion','lobby','proactive','memory'].includes(namespace)) throw Error('聊天账号用途无效。');
   const validId=new RegExp('^'+namespace+'-[a-zA-Z0-9_-]{1,100}$');
@@ -23,12 +24,13 @@ function createCompanionAccountBridge({ctx, route, createUserMessage, createAssi
     if(!active||active.requestId!==requestId)return {accepted:false};
     active.cancelled=true;active.abort.abort();active.reject(Error('陪伴聊天已取消。'));return {accepted:true};
   }
-  async function send({requestId,text,context='',history=[],maxTokens}={}) {
+  async function send({requestId,text,context='',history=[],images=[],maxTokens}={}) {
     if(cleanupFailed||pendingCleanup)throw cleanupError();
     if(disposed||active)throw Error('陪伴聊天暂不可用，请稍后重试。');
     if(typeof requestId!=='string'||!validId.test(requestId)||typeof text!=='string'||!text.trim()||text.length>32000||typeof context!=='string'||context.length>64000||!Number.isSafeInteger(maxTokens)||maxTokens<1||maxTokens>32000)throw Error('聊天内容无效。');
     if(namespace==='lobby'&&(!Array.isArray(history)||history.length))throw Error('公共聊天不能附带私聊历史。');
     if(!Array.isArray(history)||history.length>50||history.some(x=>!x||!['user','assistant'].includes(x.role)||typeof x.text!=='string'||x.text.length>32000)||history.reduce((sum,x)=>sum+x.text.length,0)>64000)throw Error('聊天历史无效。');
+    const decoded=decodeAccountImages([...history,{role:'user',text,images}],namespace),hasImages=decoded.some(m=>m.images.length);
     if(seen.has(requestId))throw Error('聊天请求已使用，请重试。');seen.add(requestId);
     let reject;const interrupted=new Promise((_,r)=>{reject=r;});interrupted.catch(()=>{});
     const state=active={requestId,abort:new AbortController(),reject,cancelled:false};
@@ -41,14 +43,14 @@ function createCompanionAccountBridge({ctx, route, createUserMessage, createAssi
       if(typeof ctx.llm?.prepareCall!=='function')throw Error('陪伴聊天模型服务不可用。');
       const call=await wait(ctx.llm.prepareCall({...route,maxTokens},state.abort.signal));
       if(!call||typeof call.stream!=='function'||!call.config||typeof call.config!=='object')throw Error('陪伴聊天模型服务不可用。');
+      if(hasImages&&!call.inputModalities?.includes('image'))throw Error('陪伴聊天当前账号模型未开放图片能力，请刷新模型或更新工作台后重试。');
       const normalized=[];
-      for(const m of [...history,{role:'user',text}]){
+      for(const m of decoded){
         const trimmed=m.text.trim();if(!trimmed||(!normalized.length&&m.role!=='user'))continue;
-        const last=normalized.at(-1);if(last?.role===m.role)last.text+='\n\n'+trimmed;else normalized.push({role:m.role,text:trimmed});
+        const last=normalized.at(-1);if(last?.role===m.role){last.text+='\n\n'+trimmed;last.images.push(...m.images);}else normalized.push({role:m.role,text:trimmed,images:m.images});
       }
-      const messages=normalized.map(m=>m.role==='user'
-        ? createUserMessage({content:[{type:'text',text:m.text}],source:{kind:'user'}})
-        : createAssistantMessage({content:[{type:'text',text:m.text}],source:{provider:'workbench-history',model:'persisted'}}));
+      const messages=[];
+      for(const m of normalized){const content=[{type:'text',text:m.text},...await wait(accountImageContent(m.images,{ctx,signal:state.abort.signal,loadImageDecoder}))];messages.push(m.role==='user'?createUserMessage({content,source:{kind:'user'}}):createAssistantMessage({content,source:{provider:'workbench-history',model:'persisted'}}));}
       const stream=call.stream({...call.config,messages,system:context,signal:state.abort.signal});
       if(!stream||typeof stream[Symbol.asyncIterator]!=='function')throw Error('陪伴聊天回复格式异常。');
       iterator=stream[Symbol.asyncIterator]();let finish;const blocks=new Map();

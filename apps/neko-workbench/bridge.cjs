@@ -30,7 +30,7 @@ exports.apply=function(ctx){
   const syncingParents=new Map();let lastRoster='';
   const options=accountRoute();
   const channelPrivacy=createChannelSessionPrivacy(runtimePaths.dataDir,{fishWorkspace:path.join(runtimePaths.workspaceDir,'fish-care')});
-  const accountDeps={ctx,route:options,createUserMessage: input=>{if(typeof createUserMessage!=='function')throw Error('DSH 尚未就绪');return createUserMessage(input);},createAssistantMessage: input=>{if(typeof createAssistantMessage!=='function')throw Error('DSH 尚未就绪');return createAssistantMessage(input);}};
+  const accountDeps={ctx,route:options,loadImageDecoder:()=>require('node:module').createRequire(runtime+'/dsh-attachment-local/package.json')('sharp'),createUserMessage: input=>{if(typeof createUserMessage!=='function')throw Error('DSH 尚未就绪');return createUserMessage(input);},createAssistantMessage: input=>{if(typeof createAssistantMessage!=='function')throw Error('DSH 尚未就绪');return createAssistantMessage(input);}};
   const companionAccount=createCompanionAccountBridge(accountDeps);
   // Same authenticated model/credit owner, separate in-flight lock and cancellation.
   const lobbyAccount=createCompanionAccountBridge({...accountDeps,namespace:'lobby'});
@@ -212,7 +212,7 @@ exports.apply=function(ctx){
     }
     if(!root)throw new Error('DSH 尚未就绪');
     if(method==='companion-account-status')return companionAccount.status();
-    if(method==='companion-account-chat')return companionAccount.send({requestId:p.requestId,text:p.text,context:p.context,history:p.history,maxTokens:p.maxTokens});
+    if(method==='companion-account-chat')return companionAccount.send({requestId:p.requestId,text:p.text,context:p.context,history:p.history,images:p.images,maxTokens:p.maxTokens});
     if(method==='companion-account-cancel')return companionAccount.cancel({requestId:p.requestId});
     if(method==='lobby-account-status')return lobbyAccount.status();
     if(method==='lobby-account-chat')return lobbyAccount.send({requestId:p.requestId,text:p.text,context:p.context,history:p.history,maxTokens:p.maxTokens});
