@@ -37,7 +37,10 @@ export async function buildWindowsDaily({root,release,args}){
   const iconHeader=Buffer.alloc(2),iconFd=openSync(join(dir,'NEKOfuns.exe'),'r');
   try{readSync(iconFd,iconHeader,0,2,0);}finally{closeSync(iconFd);}
   // Packaging fixtures contain inert text instead of a PE executable.
-  if(existsSync(appIcon)&&iconHeader.toString()==='MZ')run(join(process.env.WINDIR||'C:/Windows','System32/WindowsPowerShell/v1.0/powershell.exe'),['-NoLogo','-NoProfile','-NonInteractive','-File',join(root,'scripts/set-windows-icon.ps1'),'-Executable',join(dir,'NEKOfuns.exe'),'-Icon',appIcon]);
+  if(existsSync(appIcon)&&iconHeader.toString()==='MZ'){
+    const {setWindowsIcon}=await import('./set-windows-icon.mjs');
+    setWindowsIcon(join(dir,'NEKOfuns.exe'),appIcon);
+  }
   mkdirSync(join(dir,'node'),{recursive:true});
   for(const name of ['node.exe','LICENSE'])if(existsSync(join(node,name)))cpSync(join(node,name),join(dir,'node',name));
   // QQ's official adapter installs its dependencies through npm-cli.js.

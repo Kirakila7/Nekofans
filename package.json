@@ -22,7 +22,9 @@
     "test:portable": "node tests/desktop/portable-smoke.mjs"
   },
   "devDependencies": {
-    "electron": "44.7.0"
+    "electron": "44.7.0",
+    "pe-library": "2.0.1",
+    "resedit": "3.1.0"
   },
   "productName": "Nekofans",
   "description": "Nekofans workbench: desktop companion, multi-agent creation desk and N.E.K.O. community",

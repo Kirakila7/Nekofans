@@ -1,6 +1,6 @@
 # Windows 安装版构建
 
-0.28.41 使用 `apps/neko-workbench/assets/icons/bigfish.ico` 作为主程序、安装器和卸载器的图标。`scripts/set-windows-icon.ps1` 只修改构建暂存副本，通过 Windows 资源 API 替换所有现有数字图标组及其语言资源；随后才计算最终文件哈希。图标包含 16 至 256 像素共七种尺寸，来源与原许可见同目录 `SOURCE.md`。修改源图标后需重新暂存并打包；更改头像素材不会自动修改旧 EXE。
+0.28.41 使用 `apps/neko-workbench/assets/icons/bigfish.ico` 作为主程序、安装器和卸载器的图标。`scripts/set-windows-icon.mjs` 只修改构建暂存副本，通过锁定版本的纯 JavaScript PE 资源库 替换所有现有数字图标组及其语言资源；随后才计算最终文件哈希。图标包含 16 至 256 像素共七种尺寸，来源与原许可见同目录 `SOURCE.md`。修改源图标后需重新暂存并打包；更改头像素材不会自动修改旧 EXE。
 
 Windows 默认输出由官方 NSIS 编译器生成的当前用户安装程序。打开后先显示安装位置选择页，可输入路径或点击“浏览”；默认位置为 `%LOCALAPPDATA%\Programs\NEKOfuns`。请选择当前用户可写的专用空目录或原 NEKOfuns 安装位置，随后点击“安装”。安装器创建开始菜单和桌面快捷方式，并在系统“已安装的应用”中登记卸载入口。安装和卸载不需要管理员权限；升级或卸载遇到该目录中的运行进程时要求用户自行关闭，不强制结束工作任务。
 
