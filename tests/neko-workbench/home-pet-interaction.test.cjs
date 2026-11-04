@@ -3,6 +3,14 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 const base=path.resolve(__dirname,'../../apps/neko-workbench'),motion=fs.readFileSync(path.join(base,'embedded-dsh/home-pet-motion-source.js'),'utf8');
 const {createYuiHomeSession}=require('../../apps/neko-workbench/yui-home-session.cjs');
 function helpers(){const context={};vm.createContext(context);vm.runInContext(motion,context);return context;}
+test('home video keeps its original aspect, visible body size and floor anchor across actions',()=>{
+ const h=helpers();for(const bodyHeight of [20,60,120]){const {draw,hit}=h.homePetSpriteFrame([300,250],bodyHeight,640,360,true);
+ assert(Math.abs(draw.width/draw.height-16/9)<1e-10);assert(Math.abs(hit.bottom-hit.top-bodyHeight)<1e-10);
+ assert(Math.abs(draw.top+draw.height*330/360-250)<1e-10);assert(hit.left>draw.left&&hit.right<draw.left+draw.width,'transparent sides must not become draggable');}
+});
+test('poster keeps its own dimensions instead of inheriting the video frame ratio',()=>{
+ const h=helpers();for(const [w,n,ratio]of [[128,128,1],[640,360,16/9],[256,320,.8]]){const {draw}=h.homePetSpriteFrame([300,250],60,w,n,false);assert.equal(draw.width/draw.height,ratio);assert.equal(draw.top+draw.height,250);}
+});
 test('idle room randomly walks and pauses for direct interaction, first person, hidden state and disposal',async()=>{
  const h=helpers(),world=createYuiHomeSession();world.command({action:'return-home'});let time=0,busy=false;const moved=[],activities=[];
  const p=h.createHomePetMotion({getState:world.state,move:async cmd=>{moved.push(cmd);world.command(cmd);},onActivity:a=>activities.push(a),random:()=>.3,now:()=>time,blocked:()=>busy});
