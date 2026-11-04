@@ -8,6 +8,9 @@ export interface SharedMemoryValue {
   visibility: MemoryVisibility;
   certainty: 'candidate' | 'inferred' | 'user-confirmed';
   evidenceRefs: string[];
+  /** User-controlled recall preference; omitted legacy values mean 50 / false. */
+  priority?: number;
+  pinned?: boolean;
   nativeRef?: { provider: MemoryMode; id: string; nativeStatus?: string };
   audioRef?: string;
 }

@@ -313,7 +313,7 @@ class WorkbenchMainChat {
     return this.memorySystem.connect();
   }
   async memoryAction(input) {
-    if (!input || typeof input !== 'object' || Object.keys(input).some(key => !['action', 'id', 'text','mode','enabled','revisionIds','useChatApi','protocol','baseUrl','model','requestTimeoutMs','key'].includes(key))) throw new Error('记忆操作无效');
+    if (!input || typeof input !== 'object' || Object.keys(input).some(key => !['action', 'id', 'text','mode','enabled','revisionIds','priority','pinned','useChatApi','protocol','baseUrl','model','requestTimeoutMs','key'].includes(key))) throw new Error('记忆操作无效');
     if (this.closed || !usesChatService(this.backend) || !this.opened?.memory) throw new Error('记忆服务未就绪');
     if(['configure-neko','sync'].includes(input.action)||String(input.action).startsWith('event-')){
       try{

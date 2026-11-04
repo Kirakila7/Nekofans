@@ -1,6 +1,47 @@
 # Local integration 0.28.41 / build 77
 
+2026-11-04 PR #62/#64 integration: this revision combines the merged fish memory explorer, clickable home pet, and DeepSeek account memory channel. Historical notes below describe their earlier isolated branches. The resolved memory settings retain the account route status and the star-map/list controls. All 41 account, native Python, memory viewer/entry, replication and main-chat integration tests passed with no skips using synthetic providers; no live supplier account inference was performed.
+
 2026-11-04 DeepSeek account memory channel (local source): the native memory worker can now reuse the current signed-in DSH account through a separate `memory-account-*` bridge and an authenticated loopback OpenAI-compatible adapter. No supplier API key is required or extracted. Memory requests serialize independently of companion/lobby/proactive locks; each request checks account readiness, and route switches/shutdown revoke the local endpoint. Independent encrypted API settings remain supported. Synthetic end-to-end acceptance used the actual bundled Python, installed OpenAI SDK, native ChatOpenAI and memory worker to extract, persist and pull an episode; no real supplier account or credits were used. This does not update the earlier installer or installed application. See `MEMORY_ACCOUNT_CHANNEL.md`.
+
+## Clickable home pet with random idle movement and source actions (2026-11-04, local source)
+
+The home scene now supports clicking Bigfish for a random original reaction and dragging her to a validated floor position. Dragging plays the existing suspended-drag asset; dropping saves the avatar position while rejecting furniture overlap and off-platform coordinates. Empty-floor dragging still rotates the camera. A room-local controller alternates random walking, resting and original-material actions; it waits until an action ends, yields to direct interaction, first-person control, text input and hidden/offscreen rooms, and is disposed on leaving the home. The 自由活动 button can pause/resume this local behavior. It runs while the home UI is mounted and does not make model calls or imply model-selected intentions.
+
+Materials are selected from the existing dsh-pet manifest and actual installed files, served on demand via a fixed main-process allowlist. No renderer-supplied URL or arbitrary file is read. Walking checks the whole proposed path against rotated furniture and platform edges; saved room state remains authoritative, with visual interpolation between moves. The generated DSH client bundle is synchronized along with the canonical sources. Sync now handles CRLF before marker replacement and avatar patching; canonical-source comparison ignores newline encoding.
+
+Validation: 64 home/storage/IPC/interaction/avatar/workspace checks passed with no skips using synthetic data. An earlier parallel temporary-file save failed intermittently on Windows; the direct save probe and final sequential run passed, without weakening storage protections. An interactive current-source native preview subsequently verified room rendering, free-movement toggling, click interaction, dragging and saved placement with an isolated profile. Automated native pixel/zoom acceptance remains outstanding; the installed EXE has not been rebuilt. Evidence: ignored `_sandbox/social-isolation-20261104/home-pet-verified.tap`.
+
+
+## Fish memory explorer (2026-11-04, release-based integration)
+
+This branch starts at release v0.28.41, commit 20dde9291c35ee74b464679eb43a2a7234db6356.
+It adds the 鱼的记忆 entry below community and a direct desktop-menu entry, a
+star-map/list switch, glass record editors, priority/pinning, and per-role archive
+viewing. Native memory remains Bigfish-owned; other roles view only their existing
+persona-scoped archives. Selection does not switch chat accounts or engines.
+Priority changes preserve certainty and native identities and order relevant
+retrieval hits before context allocation. Deleted records stay excluded from recall.
+
+The original dirty checkout is retained. Configuration import/export and the
+account-memory relay are separate work and are excluded from this branch. PR #62
+is fetched separately for combined testing; it is not implicitly published or
+merged by this feature. Release-branch validation: 65 focused Node tests passed without skips. Three real
+bundled-Python service/component tests passed (native extraction, confirmed recall,
+correction/deletion/restart, private lifecycle and independent Anthropic routing),
+and the real FactStore recovery/priority test passed. All fixtures are synthetic.
+
+Combined testing pins PR #62 at ad99e456e857912f423a0b6742ddd2152fc1149f. The local
+test merge is 4293804aefef9f0769860c46b5cbeef12ee3b9a1; generated bundle and doc conflicts
+were resolved by regeneration and retaining both notes. With isolated jsdom 26.1.0,
+134 tests ran: 133 passed, 1 failed, 0 skipped. The failure is the unchanged texture
+archive fixture's hardcoded /usr/bin/zip (ENOENT on Windows); a release-baseline
+rerun reproduces the identical failure (4/5 texture tests pass). The 65 memory/chat
+checks and 64 PR #62/home/workspace checks all pass; the other 5 checks are textures.
+No native Electron pixel/zoom acceptance or real account/model connectivity is claimed.
+Browser fixture/design checks are documented in design-qa.md; they are synthetic,
+not a claim of real model connectivity or native Electron acceptance. No installer
+or release asset is rebuilt by this change.
 
 2026-11-04 Windows icon follow-up: the existing Bigfish brand avatar is exported with provenance into `assets/icons` as WebP/PNG and a transparent seven-size ICO. The Windows builder updates the staged application's PE icon groups before hashing, and NSIS uses the same ICO for installer/uninstaller resources. Legacy executable/profile/uninstall identities are preserved. A separate real Electron PE copy was patched and its extracted icon visually verified as Bigfish; all six installer regressions, including actual NSIS compilation, pass. This source revision does not replace the user's installed application automatically.
 

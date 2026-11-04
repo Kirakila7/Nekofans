@@ -93,6 +93,11 @@ class NativeMemoryGateway:
                     not isinstance(v.get("evidenceRefs"), list) or len(v["evidenceRefs"]) > 256 or
                     any(not isinstance(r, str) or len(r) > 1000 for r in v["evidenceRefs"])):
                     raise ValueError("invalid value")
+                priority = v.get("priority", 50)
+                if isinstance(priority, bool) or not isinstance(priority, int) or not 0 <= priority <= 100:
+                    raise ValueError("invalid priority")
+                if not isinstance(v.get("pinned", False), bool):
+                    raise ValueError("invalid pin")
             old = known.get(e["eventId"])
             if old is not None:
                 if canonical(old) != canonical(e):
@@ -150,6 +155,21 @@ class NativeMemoryGateway:
         if self.get("projected:" + item) == event["eventId"]:
             return
         value = event["value"]
+        # Priority/pin revisions reuse native identities. Changing a display/recall
+        # preference must not run extraction again or duplicate the source episode.
+        if event["operation"] == "upsert" and len(event["parents"]) == 1:
+            parent_id = event["parents"][0]
+            parent = next((e for e in self.events() if e["eventId"] == parent_id), None)
+            content = lambda v: {k: v for k, v in v.items() if k not in ("priority", "pinned")}
+            if parent and parent.get("value") and content(parent["value"]) == content(value):
+                inherited = [p for p in projections if p[0] == parent_id]
+                # An empty extraction is also a completed effect.
+                if inherited or self.get("projected:" + item) == parent_id:
+                    with self.db:
+                        for _, fid, kind in inherited:
+                            self.db.execute("INSERT OR IGNORE INTO projections VALUES(?,?,?,?)", (item, event["eventId"], fid, kind))
+                    self.set("projected:" + item, event["eventId"])
+                    return
         native = value.get("nativeRef") or {}
         # Mirrored native records keep their original ID and are not extracted again.
         if event["origin"] == "neko" and native.get("provider") == "neko":
@@ -304,7 +324,20 @@ class NativeMemoryGateway:
             if not isinstance(result,dict) or not isinstance(result.get("results"),list):
                 raise RuntimeError("native recall unavailable")
             state=records(self.events());blocked=self.blocked_native();values=[];used=0
-            for hit in result["results"]:
+            preferences = {}
+            for item, revision, fid, kind in self.db.execute("SELECT item,event,native_id,kind FROM projections"):
+                row = state.get(item)
+                if row and not row["deleted"] and not row["conflict"] and row["heads"][0]["eventId"] == revision:
+                    value = row["value"]
+                    # Untouched mirrors must not override an explicit demotion
+                    # of their originating episode with the legacy default 50.
+                    if "priority" not in value and "pinned" not in value:
+                        continue
+                    rank = (bool(value.get("pinned", False)), value.get("priority", 50))
+                    preferences[(kind, fid)] = max(preferences.get((kind, fid), (False, 0)), rank)
+            hits = sorted(result["results"], key=lambda hit: preferences.get(
+                ("reflection" if hit.get("tier") == "reflection" else "fact", hit.get("id")), (False, 50)), reverse=True)
+            for hit in hits:
                 kind="reflection" if hit.get("tier")=="reflection" else "fact"
                 if (kind,hit.get("id")) in blocked:
                     continue
