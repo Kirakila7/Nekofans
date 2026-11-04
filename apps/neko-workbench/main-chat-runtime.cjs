@@ -3,8 +3,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { WorkbenchSecretStore, atomicBytes } = require('./main-chat-secret.cjs');
-
 const {createMemoryAccountRelay}=require('./memory-account-relay.cjs');
+const {createCompanionMedia,splitMessage}=require('./companion-media.cjs');
 
 const PERSONA = 'bigfish';
 const BACKENDS = new Set(['chat-api', 'neko', 'deepseek-account']);
@@ -53,6 +53,7 @@ function parseApiInput(input, shared) {
 class WorkbenchMainChat {
   constructor({ dataDir, repositoryRoot, safeStorage, fetch: fetchImpl, initialBackend = 'chat-api', sharedModules, memoryWorker, accountProvider,lobbyAccountProvider,proactiveAccountProvider,memoryAccountProvider,environmentContext } = {}) {
     this.dataDir = path.join(dataDir, 'main-chat');
+    this.media=createCompanionMedia(this.dataDir);this.visibleMediaIds=new Set();
     this.repositoryRoot = repositoryRoot;
     this.personasDir = path.join(this.dataDir, 'personas');
     this.configFile = path.join(this.dataDir, 'app-config.json');
@@ -111,8 +112,8 @@ class WorkbenchMainChat {
   openNow() {
     if (this.closed) throw new Error('聊天服务已关闭');
     this.opened = this.shared.openMainChat({ settings: this.settings, personasDir: this.personasDir,
-      dataDir: this.dataDir, secretStore: this.secretStore, ...(this.fetch ? { fetch: this.fetch } : {}),
-      ...(this.backend === 'deepseek-account' ? {provider:this.accountProvider || unavailableAccountProvider} : {}),
+      dataDir: this.dataDir, secretStore: this.secretStore, fetch:this.media.wrapFetch(this.fetch||globalThis.fetch.bind(globalThis),this.settings.protocol),
+      ...(this.backend === 'deepseek-account' ? {provider:this.accountProvider?{stream:input=>this.accountProvider.stream({...input,messages:input.messages.map(m=>({...m,text:this.media.modelText(m.text)}))})}:unavailableAccountProvider} : {}),
       memoryContext:(personaId,query,budget,signal)=>this.memorySystem.recall(personaId,query,budget,signal),
       localMemoryProcessing:false,
       environmentContext:this.environmentContext,
@@ -123,6 +124,7 @@ class WorkbenchMainChat {
     this.publish();
   }
   closeOpened() {
+    this.visibleMediaIds.clear();
     this.proactiveAbort?.abort();
     this.lobbyProviderEpoch++;
     const opened = this.opened; this.opened = null;
@@ -133,11 +135,13 @@ class WorkbenchMainChat {
   read({ checkSecureStorage = false } = {}) {
     // Querying the macOS keychain can prompt/block. DSH startup does not need it.
     if (checkSecureStorage) this.secureStorageAvailable = this.secretStore.available();
+    const chat=this.opened?.service.state()||{personaId:PERSONA,phase:'idle'};
+    if(chat.lastUserMessage)chat.lastUserMessage=splitMessage(chat.lastUserMessage).text||'[图片]';
     return clone({ backend: this.backend, settings: this.settings || null, hasKey: this.secretStore.has(),
       secureStorageAvailable: this.secureStorageAvailable ?? null, ready: !!this.opened && (this.backend !== 'deepseek-account' || !!this.accountProvider), error: this.configError || (this.backend === 'deepseek-account' && !this.accountProvider ? '工作台账号聊天尚未接入' : ''),
       memoryAvailable: usesChatService(this.backend) && !!this.opened?.memory,
       memorySystem: this.memorySystem?.status(),
-      voiceStatus: '未接入', chat: this.opened?.service.state() || { personaId: PERSONA, phase: 'idle' } });
+      voiceStatus: '未接入', chat });
   }
   subscribe(listener) { this.listeners.add(listener); listener(this.read()); return () => this.listeners.delete(listener); }
   publish() { for (const listener of this.listeners) { try { listener(this.read()); } catch {} } }
@@ -263,10 +267,14 @@ class WorkbenchMainChat {
       this.publish(); return this.read();
     });
   }
-  async history() {
+  prepareMedia(text,attachments){return this.media.prepare(text,attachments);}
+  mediaMessage(message){const parsed=splitMessage(message.text);for(const a of parsed.attachments)this.visibleMediaIds.add(a.id);return {...message,text:parsed.text,...(parsed.attachments.length?{attachments:parsed.attachments}:{})};}
+  readMedia(id){if(!this.visibleMediaIds.has(id))throw Error('请先在当前会话加载这张图片');return this.media.read(id);}
+  async history({beforeId,limit=200}={}) {
     if (!this.opened || this.closed) throw new Error('聊天记录暂不可用');
+    const opened=this.opened;
     const store = new this.shared.SqliteConversationStore(path.join(this.dataDir, 'conversations.sqlite'));
-    try { return await store.recent(PERSONA, this.opened.service.conversationId, 200); }
+    try { const count=Math.max(1,Math.min(200,Number.isInteger(limit)?limit:200));const rows=beforeId?await store.pageBefore(PERSONA,opened.service.conversationId,beforeId,count):await store.recent(PERSONA,opened.service.conversationId,count);if(opened!==this.opened||this.closed)throw Error('会话已切换，请重新加载');return rows.map(m=>this.mediaMessage(m)); }
     finally { store.close(); }
   }
   async memories() {

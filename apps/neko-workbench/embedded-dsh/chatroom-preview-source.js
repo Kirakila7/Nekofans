@@ -38,6 +38,9 @@ function createChatroomPreview(doc, avatar = () => '', options = {}) {
   if (options.onOpenLobby) { publicRoom.setAttribute('aria-label', '打开公共聊天室'); publicRoom.addEventListener('click', () => { panel.openLobby(); options.onOpenLobby(); }); }
   const home = addRoom('我的小窝', '', '⌂', 'is-home', true);
   home.setAttribute('aria-label', '进入我的小窝');
+  const fishDate=typeof options.createFishDate==='function'?addRoom('肥鱼有约','和她谈心','♡','is-fish-date',true):null;
+  const fishDatePanel=fishDate?options.createFishDate():null;
+  if(fishDate)fishDate.setAttribute('aria-label','打开肥鱼有约，和她谈心');
 
   const empty = el('div', 'neko-chatroom-preview__empty');
   const illustration = el('div', 'neko-chatroom-preview__illustration');
@@ -87,15 +90,17 @@ function createChatroomPreview(doc, avatar = () => '', options = {}) {
     }
   };
   let split=false,selected='welcome';
-  function selection(kind){selected=kind;panel.dataset.roomView=kind;for(const [node,name]of [[publicRoom,'lobby'],[home,'home']]){if(kind===name)node.setAttribute('aria-current','page');else node.removeAttribute('aria-current');}}
-  panel.setSplit = enabled => {if(split===!!enabled)return;split=!!enabled;panel.toggleAttribute('data-neko-room-split',split);if(split){content.prepend(empty);content.append(homeView);room.hidden=false;content.hidden=false;empty.hidden=selected!=='welcome';homeView.hidden=selected!=='home';}else{room.append(empty);content.hidden=selected!=='home';room.hidden=selected==='home';empty.hidden=false;}};
+  function selection(kind){selected=kind;panel.dataset.roomView=kind;for(const [node,name]of [[publicRoom,'lobby'],[home,'home'],[fishDate,'date']]){if(!node)continue;if(kind===name)node.setAttribute('aria-current','page');else node.removeAttribute('aria-current');}if(fishDatePanel)fishDatePanel.hidden=kind!=='date';options.onDateVisibility?.(kind==='date');}
+  panel.setSplit = enabled => {if(split===!!enabled)return;split=!!enabled;panel.toggleAttribute('data-neko-room-split',split);if(split){content.prepend(empty);content.append(homeView);room.hidden=false;content.hidden=false;empty.hidden=selected!=='welcome';homeView.hidden=selected!=='home';}else{room.append(empty);const detail=selected==='home'||selected==='date';content.hidden=!detail;room.hidden=detail;empty.hidden=false;}};
   panel.showRooms = () => {selection('welcome');homeView.hidden=true;room.hidden=false;content.hidden=!split;empty.hidden=false;panel.removeAttribute('data-home-open');};
   panel.openLobby = () => {selection('lobby');homeView.hidden=true;panel.removeAttribute('data-home-open');if(split){room.hidden=false;content.hidden=false;empty.hidden=true;}};
   panel.openHome = () => {options.onBeforeHome?.();selection('home');room.hidden=!split;content.hidden=false;empty.hidden=split;homeView.hidden=false;panel.setAttribute('data-home-open','');back.focus();return mount(); };
+  panel.openFishDate=()=>{if(!fishDatePanel)return;options.onBeforeDate?.();selection('date');room.hidden=!split;content.hidden=false;empty.hidden=true;homeView.hidden=true;panel.removeAttribute('data-home-open');};
+  fishDate?.addEventListener('click',()=>panel.openFishDate());
   home.addEventListener('click', () => { void panel.openHome(); });
   back.addEventListener('click', () => {if(split&&options.onOpenLobby){panel.openLobby();options.onOpenLobby();}else{panel.showRooms();home.focus();}});
   retry.addEventListener('click', () => { void mount(); });
   panel.disposeHome = () => { disposed = true; releaseHome?.(); releaseHome = null; };
-  content.append(homeView);panel.append(room, content);
+  content.append(homeView);if(fishDatePanel)content.append(fishDatePanel);panel.append(room, content);
   return panel;
 }

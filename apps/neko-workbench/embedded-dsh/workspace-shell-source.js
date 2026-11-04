@@ -69,7 +69,12 @@ function installWorkspaceShell(options = {}) {
   // The room is a local visual preview. It never touches the work session or
   // the saved multi-pane layout. The original sidebar stays mounted behind it.
   const previewFactory = options.createChatroomPreview || (typeof createChatroomPreview === 'function' ? createChatroomPreview : null);
-  const roomPreview = previewFactory ? own(previewFactory(doc, avatar, { mountHome: options.mountHome, onBeforeHome:()=>lobby?.hide(), onOpenLobby: lobby ? () => lobby.show() : undefined })) : null;
+  let fishDateView=null;
+  const isFishDateOpen=()=>!!fishDateView?.isOpen()&&roomActive&&!sideSocial&&isDailyEdition();
+  const roomPreview = previewFactory ? own(previewFactory(doc, avatar, { mountHome: options.mountHome, onBeforeHome:()=>lobby?.hide(), onOpenLobby: lobby ? () => lobby.show() : undefined,
+    createFishDate:typeof createFishDateView==='function'?()=>{fishDateView=createFishDateView({doc,bridge,avatar,onChange:schedule});releases.push(()=>fishDateView.dispose());return fishDateView.panel;}:undefined,
+    onBeforeDate:()=>{lobby?.hide();closeSettings();},onDateVisibility:open=>{fishDateView?.setOpen(open);schedule();}
+  })) : null;
   if (roomPreview?.disposeHome) releases.push(() => roomPreview.disposeHome());
   if (lobby && !roomPreview) railTop.appendChild(lobby.railButton);
   let roomActive = !!roomPreview, roomSelection = !!roomPreview, sideSocial = false, initialRoomResolved = false;
@@ -355,6 +360,7 @@ function installWorkspaceShell(options = {}) {
   win.addEventListener('blur', finishCompanionOnBlur);
   character.addEventListener('dragstart', event => event.preventDefault());
   character.addEventListener('click', event => {
+    if(isFishDateOpen()){fishDateView.focus();return;}
     if (companionInRail) return;
     if (suppressCompanionClick) { suppressCompanionClick = false; event.preventDefault(); return; }
     if (event.button === 0) {
@@ -583,6 +589,12 @@ function installWorkspaceShell(options = {}) {
   doc.addEventListener('pointerdown', dismissCompanionMenu, true);
   function syncCompanionPlacement(rail) {
     if (!rail) return;
+    if(isFishDateOpen()){
+      dock.hidden=true;railCompanion.hidden=true;companionInRail=false;stopRailWalking();
+      character.removeAttribute('aria-hidden');
+      if(character.parentNode!==fishDateView.petSlot)fishDateView.petSlot.append(character);
+      return;
+    }
     if (dock.hidden !== sideSocial) dock.hidden = sideSocial;
     const railLabel = typeof bridge.home==='function'?'大肥鱼，点击回到我的小窝，右键互动，可拖动':sideSocial ? '大肥鱼，点击聊天，可拖动，方向键移动' : '大肥鱼互动菜单，可拖动，方向键移动';
     if (railCompanion.getAttribute('aria-label') !== railLabel) railCompanion.setAttribute('aria-label', railLabel);
@@ -709,7 +721,7 @@ function installWorkspaceShell(options = {}) {
   const roomSelectorWidth = width => Math.round(Math.min(Math.max(144, width - 240), Math.max(220, width * .27)));
   const creationLobbyInsets={left:12,widthLoss:24,bottom:12};
   function creationRoomGeometry(){const rail=doc.querySelector('[data-neko-side-rail]')?.getBoundingClientRect(),left=Math.max(0,rail?.width>0?rail.right:64),width=Math.max(0,win.innerWidth-left);return {left,width,selectorWidth:roomSelectorWidth(width)};}
-  function splitLobbyActive(){return isDailyEdition()&&roomActive&&!sideSocial&&!!lobby?.isOpen()&&!doc.body.hasAttribute('data-neko-flex-social-hidden');}
+  function splitLobbyActive(){return isDailyEdition()&&roomActive&&!sideSocial&&(!!lobby?.isOpen()||isFishDateOpen())&&!doc.body.hasAttribute('data-neko-flex-social-hidden');}
   function syncCreationMode(){
     const next=splitLobbyActive()?'lobby':'default';if(next===creationPositionKey)return;
     creationModeState[creationPositionKey]={position:floatingPosition,recordsOpen:nativeRecordsOpen,recordsWidth:nativeRecordsWidth,recordsHeight:nativeRecordsHeight};
@@ -1214,6 +1226,7 @@ function installWorkspaceShell(options = {}) {
   }
   function newOffice() { ++readVersion; leaveViews(); selectedId = null; officeReading = false; officeErrorText = ''; office = { status: 'idle', thread: null, items: [], approvals: office.approvals || [], error: '' }; officeInput.value = drafts.get('new') || ''; officeRenderKey = ''; renderOffice(); closeStartup(); officeInput.focus(); }
   function renderCompanion() {
+    fishDateView?.update(state?.companion);
     const c = state?.companion || {}, open = !!layout?.companionHistoryOpen || historyPeek, wasHidden = history.hidden;
     updateCompanionReply(state?.companion);
     history.hidden = !open; historyToggle.setAttribute('aria-expanded', String(open)); historyToggle.setAttribute('aria-label', open ? '收起聊天记录' : '展开聊天记录'); historyToggle.title = open ? '收起聊天记录' : '展开聊天记录';
@@ -1229,7 +1242,7 @@ function installWorkspaceShell(options = {}) {
     const key = JSON.stringify(c.messages || []);
     if (key !== historyKey) {
       const bottom = history.scrollHeight - history.scrollTop - history.clientHeight < 30; historyKey = key;
-      history.replaceChildren(...(c.messages || []).map(m => { const line = el('p', 'neko-companion-message'); line.dataset.role = m.role; line.append(el('strong', '', m.role === 'user' ? '你：' : m.role === 'error' ? '提示：' : m.streaming ? '回复中：' : m.partial ? '未完成回复：' : '回复：'), doc.createTextNode(m.text)); return line; }));
+      history.replaceChildren(...(c.messages || []).map(m => { const line = el('p', 'neko-companion-message'); line.dataset.role = m.role;const mediaText=(m.attachments||[]).map(a=>'['+(a.kind==='sticker'?'表情包':'图片')+'：'+a.name+']').join(' '); line.append(el('strong', '', m.role === 'user' ? '你：' : m.role === 'error' ? '提示：' : m.streaming ? '回复中：' : m.partial ? '未完成回复：' : '回复：'), doc.createTextNode([m.text,mediaText].filter(Boolean).join(' '))); return line; }));
       if (!history.children.length) history.appendChild(el('p', 'neko-companion-empty', '暂无聊天记录'));
       if (bottom) history.scrollTop = history.scrollHeight;
     }

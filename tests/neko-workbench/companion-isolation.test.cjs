@@ -57,7 +57,10 @@ if (harnessIndex < 0) {
     // hiding, inerting, removal, replacement or direct style writes are allowed.
     const socialGuard = 'if (dock.hidden !== sideSocial) dock.hidden = sideSocial;';
     assert.equal(source.split(socialGuard).length - 1, 1, 'only the social-view conditional controls dock visibility');
-    const remainingSource = source.replace(socialGuard, '');
+    // The explicit private-room portal keeps the same character and draft;
+    // its active input is the shared conversation page rather than this dock.
+    const dateGuard=/if\(isFishDateOpen\(\)\)\{\s*dock\.hidden=true;[\s\S]*?fishDateView\.petSlot\.append\(character\);\s*return;\s*\}/;
+    const remainingSource = source.replace(socialGuard, '').replace(dateGuard,'');
     for (const pattern of forbidden) assert.doesNotMatch(remainingSource, pattern);
     const css = fs.readFileSync(path.join(appDir, 'embedded-dsh/workspace-shell-source.css'), 'utf8');
     for (const rule of css.split('}')) {
