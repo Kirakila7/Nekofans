@@ -29,6 +29,17 @@ test('new workbench uses independent unconfigured chat, encrypted key projection
   const history=await runtime.history();assert.equal(history.length,1);assert.equal(history[0].role,'user');assert.equal(history[0].personaId,'bigfish');
 });
 
+test('memory IPC accepts bounded priority/pin edits without confirming a candidate',async t=>{
+  const f=fixture(t),runtime=f.create();await runtime.start();
+  const value={kind:'fact',text:'合成测试记忆',visibility:'private',certainty:'candidate',evidenceRefs:['synthetic']};
+  await runtime.memorySystem.hub.add([{eventId:'ipc-priority-base',itemId:'ipc-priority-item',personaId:'bigfish',origin:'user',operation:'upsert',parents:[],occurredAt:'2026-10-28T00:00:00Z',value}]);
+  const input={action:'event-priority',id:'ipc-priority-item',revisionIds:['ipc-priority-base'],priority:90,pinned:true};
+  const result=await runtime.memoryAction(input);assert.equal(result.ok,true);
+  const row=result.replication.records.find(r=>r.itemId===input.id);assert.equal(row.value.priority,90);assert.equal(row.value.pinned,true);assert.equal(row.value.certainty,'candidate');
+  assert.equal((await runtime.memoryAction({...input,priority:200,revisionIds:row.heads.map(e=>e.eventId)})).ok,false);
+  assert.equal((await runtime.memoryAction({...input,priority:2})).ok,false);
+});
+
 test('starting DSH with unconfigured companion chat never queries the keychain; settings checks remain fail-closed',async t=>{
   const f=fixture(t);let checks=0;f.safeStorage.isEncryptionAvailable=()=>{checks++;throw Error('locked keychain fixture');};
   const runtime=f.create();await runtime.start();runtime.read();assert.equal(checks,0);assert.equal(runtime.read().secureStorageAvailable,null);

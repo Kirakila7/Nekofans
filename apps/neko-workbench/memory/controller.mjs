@@ -191,7 +191,7 @@ export class WorkbenchMemory {
     catch(error){this.providerStates.neko='待连接或待重试';this.error='N.E.K.O. 记忆尚未就绪，请检查组件与记忆模型设置';this.publish();throw error;}
     void this.sync().catch(()=>{});this.publish();return this.status();
   }
-  async change({action,id,text,revisionIds}){
+  async change({action,id,text,revisionIds,priority,pinned}){
     await this.localSync();const record=this.hub.records().find(r=>r.itemId===id);
     if(!record||!Array.isArray(revisionIds)||stable([...revisionIds].sort())!==stable(record.heads.map(e=>e.eventId).sort()))throw Error('记忆已变化，请刷新后再操作');
     let value=record.value,operation='upsert';
@@ -205,7 +205,10 @@ export class WorkbenchMemory {
       else if(record.conflict)throw Error('请先合并冲突');
       if(!value)throw Error('记忆内容不可用');value=structuredClone(value);
       if(action==='event-resolve')value.evidenceRefs=[...new Set(record.heads.flatMap(e=>e.value?.evidenceRefs||[]))].slice(0,256);
-      if(action==='event-confirm')value.certainty='user-confirmed';
+      if(action==='event-priority'){
+        if(!Number.isInteger(priority)||priority<0||priority>100||typeof pinned!=='boolean')throw Error('优先级应为 0–100 的整数');
+        value.priority=priority;value.pinned=pinned;
+      }else if(action==='event-confirm')value.certainty='user-confirmed';
       else if(['event-update','event-resolve'].includes(action)){
         if(typeof text!=='string'||!text.trim()||text.length>30000)throw Error('记忆内容无效');value.text=text.trim();value.certainty='user-confirmed';
       }else throw Error('记忆操作无效');

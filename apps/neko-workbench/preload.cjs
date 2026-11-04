@@ -4,6 +4,7 @@ const methods=new Set(['state','neko-settings','rename','settings','menu','move'
 contextBridge.exposeInMainWorld('pet', Object.freeze({
   call: (method, params={}) => methods.has(method)?ipcRenderer.invoke('pet:call',method,params):Promise.reject(new Error('未知桌宠操作')),
   onInput: callback => { const f=()=>callback(); ipcRenderer.on('pet:input',f); return ()=>ipcRenderer.removeListener('pet:input',f); },
+  onMemoryOpen: callback => { const f=()=>callback(); ipcRenderer.on('pet:memory-open',f); return ()=>ipcRenderer.removeListener('pet:memory-open',f); },
   onMotion: callback => { const f=(_,value)=>callback(value); ipcRenderer.on('pet:motion',f); return ()=>ipcRenderer.removeListener('pet:motion',f); },
   onState: callback => { const f=(_,state)=>callback(state); ipcRenderer.on('pet:state',f); return ()=>ipcRenderer.removeListener('pet:state',f); }
 }));

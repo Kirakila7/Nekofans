@@ -17,5 +17,5 @@ test('settings IPC validates the original settings window before read or save',a
 test('desktop menu exposes visits and memory without removed task/reply/artifact entries',()=>{
  const menu=source.slice(source.indexOf('function mainMenu(){'),source.indexOf('\nfunction createPetWindow'));
  for(const label of ['工作台选项','产出文件','停止任务','最近回复','停止聊天回复'])assert(!menu.includes(`label:'${label}'`),label);
- assert(menu.includes("label:'串门',click:openVisits"));assert(menu.includes("label:'记忆',submenu:memoryMenu()"));assert(menu.includes("label:'说话显示时长'"));
+ assert(menu.includes("label:'串门',click:openVisits"));assert(menu.includes("label:'鱼的记忆',click:editChatMemory"));assert(menu.includes("label:'说话显示时长'"));
 });

@@ -55,6 +55,13 @@ function installWorkspaceShell(options = {}) {
   communityButton.setAttribute('aria-label','N.E.K.O. 社区');communityButton.title='N.E.K.O. 社区';
   const communitySvg=doc.createElementNS('http://www.w3.org/2000/svg','svg'),communityPath=doc.createElementNS('http://www.w3.org/2000/svg','path');communitySvg.setAttribute('viewBox','0 0 24 24');communitySvg.setAttribute('aria-hidden','true');for(const [key,value]of Object.entries({d:'M15.5 7a3.5 3.5 0 1 1-7 0 3.5 3.5 0 0 1 7 0ZM5 20v-2a5 5 0 0 1 10 0v2M18 9a3 3 0 0 1 3 3M18 15a4 4 0 0 1 3 4',fill:'none',stroke:'currentColor','stroke-width':'1.6','stroke-linecap':'round','stroke-linejoin':'round'}))communityPath.setAttribute(key,value);communitySvg.append(communityPath);communityButton.append(communitySvg);
   railTop.append(communityButton);
+  const memoryButton=button('', 'neko-side-rail__button neko-memory', async()=>{
+    if(memoryButton.disabled)return;memoryButton.disabled=true;memoryButton.setAttribute('aria-busy','true');
+    try{await bridge.action('chat-memory');}catch(error){showError(error);}finally{if(!disposed){memoryButton.disabled=false;memoryButton.removeAttribute('aria-busy');}}
+  });
+  memoryButton.setAttribute('aria-label','鱼的记忆');memoryButton.title='鱼的记忆';
+  const memoryIcon=el('span','neko-memory-icon');memoryIcon.setAttribute('aria-hidden','true');memoryButton.append(memoryIcon);
+  railTop.append(memoryButton);
   // Lobby (频道): optional. The room list opens it; older shells retain the rail fallback.
   const lobby = typeof bridge.lobby === 'function' ? createLobbyView({ doc, bridge, el, button, image, avatar, composer: options.lobbyComposer || (typeof WORKBENCH_LOBBY_COMPOSER !== 'undefined' ? WORKBENCH_LOBBY_COMPOSER : null) || win.WorkbenchLobbyComposer || null, companion: () => state?.companion, onOpen: () => { hideSocial(); closeSettings();roomPreview?.openLobby?.(); }, onBack: () => {roomPreview?.showRooms?.();Promise.resolve().then(() => roomPreview?.querySelector('button.neko-chatroom-preview__room')?.focus());}, onChange: () => { renderOffice(); schedule(); } }) : null;
   if (lobby) { own(lobby.panel); releases.push(lobby.dispose); }
