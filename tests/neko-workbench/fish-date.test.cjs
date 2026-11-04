@@ -9,7 +9,7 @@ test('private media persists by content, rejects unsafe inputs and reconstructs 
  const parsed=splitMessage(encoded);assert.equal(parsed.text,'看看这张图');assert.equal(parsed.attachments[0].kind,'sticker');assert.equal(createCompanionMedia(dir).read(parsed.attachments[0].id).dataUrl,png);
  assert.throws(()=>media.prepare('bad',[{dataUrl:'data:image/svg+xml;base64,PHN2Zz4='}]),/图片格式/);assert.throws(()=>media.read('../secret'),/标识/);assert.throws(()=>media.prepare('',Array(5).fill({dataUrl:png})),/四张/);
  let body;await media.wrapFetch(async(_,init)=>{body=JSON.parse(init.body);return {};},'openai-compatible')('http://127.0.0.1/v1',{body:JSON.stringify({messages:[{role:'system',content:encoded},{role:'user',content:encoded}]})});
- assert.equal(body.messages[0].content,encoded,'private images are never expanded from system/memory text');assert.equal(body.messages[1].content[1].image_url.url,png);assert.doesNotMatch(media.modelText(encoded),/base64|neko-media/);assert.match(media.modelText(encoded),/请勿编造/);
+ assert.equal(body.messages[0].content,encoded,'private images are never expanded from system/memory text');assert.equal(body.messages[1].content[1].image_url.url,png);const account=media.accountMessages([{personaId:'bigfish',role:'user',text:encoded}])[0];assert.equal(account.text,'看看这张图');assert.equal(account.images[0].data,png.split(',')[1]);
 });
 test('Anthropic images use the image/source wire shape',async t=>{const media=createCompanionMedia(directory(t));const text=media.prepare('',[{dataUrl:png,name:'photo'}]);let body;await media.wrapFetch(async(_,init)=>{body=JSON.parse(init.body)},'anthropic')('http://127.0.0.1',{body:JSON.stringify({messages:[{role:'user',content:text}]})});assert.equal(body.messages[0].content[1].source.media_type,'image/png');});
 test('ordinary text and invalid media markers remain intact; only the latest four images reach a model',async t=>{
@@ -29,7 +29,7 @@ test('shared main-agent history keeps images across restart and pages through al
  let runtime=create();await runtime.start();const encoded=runtime.prepareMedia('今天想给你看看海',[{name:'海.png',dataUrl:png}]);
  const id=splitMessage(encoded).attachments[0].id;assert.throws(()=>runtime.readMedia(id),/会话/);
  assert.equal((await runtime.send(encoded)).status,'completed');let history=await runtime.history();
- assert.equal(history[0].text,'今天想给你看看海');assert.equal(runtime.readMedia(id).dataUrl,png);assert.match(inputs[0].messages.at(-1).text,/当前账号聊天线路不提供图片内容/);assert.doesNotMatch(JSON.stringify(inputs),/neko-media|base64/);
+ assert.equal(history[0].text,'今天想给你看看海');assert.equal(runtime.readMedia(id).dataUrl,png);assert.equal(inputs[0].messages.at(-1).text,'今天想给你看看海');assert.equal(inputs[0].messages.at(-1).images[0].data,png.split(',')[1]);assert.doesNotMatch(JSON.stringify(inputs),/neko-media|base64/);
  const conversationId=runtime.opened.service.conversationId;await runtime.close();runtime=create();await runtime.start();assert.equal(runtime.opened.service.conversationId,conversationId);
  history=await runtime.history();assert.equal(history[0].attachments[0].id,id);assert.equal(runtime.readMedia(id).dataUrl,png);
  const store=new runtime.shared.SqliteConversationStore(path.join(runtime.dataDir,'conversations.sqlite'));
