@@ -74,7 +74,7 @@ function createWorkspaceController({ layout, codex, readDsh, now = Date.now, cod
 function companionSnapshot(state) {
   const main = state.actors?.find(a => a.id === 'main');
   const runtime = state.mainChat || {};
-  const messages = (main?.messages || []).filter(m => ['user', 'assistant', 'error'].includes(m.role)).slice(-40).map((m, i) => ({ id: String(m.id || m.requestId || m.time || i), role: m.role, text: String(m.text || '').slice(0, 8000) }));
+  const messages = (main?.messages || []).filter(m => ['user', 'assistant', 'error'].includes(m.role)).slice(-40).map((m, i) => ({ id: String(m.id || m.requestId || m.time || i), role: m.role, text: String(m.text || '').slice(0, 8000),...(m.attachments?.length?{attachments:m.attachments.map(({id,name,mime,kind})=>({id,name,mime,kind}))}:{}) }));
   const backend = main?.chatBackend || runtime.backend || 'chat-api';
   const chat = runtime.chat || {};
   const workbenchStatus = backend === 'deepseek-account' ? (state.connection === 'ready' ? 'ready' : state.connection === 'starting' ? 'starting' : 'unavailable') : null;

@@ -12,8 +12,8 @@ const bubbleCss=fs.readFileSync(path.join(base,'../original/bubble.css'),'utf8')
 // bundle's own exports intact; the page CSP has no unsafe-eval, so this is plain text wrapping.
 const composer=fs.readFileSync(path.join(base,'../lobby-composer.js'),'utf8');
 const composerBlock='const WORKBENCH_LOBBY_COMPOSER = (function (module, globalThis) {\n'+composer+'\nreturn globalThis.WorkbenchLobbyComposer;\n})(undefined, {});\n';
-const preview=fs.readFileSync(path.join(base,'chatroom-preview-source.js'),'utf8');
-const previewCss=fs.readFileSync(path.join(base,'chatroom-preview-source.css'),'utf8');
+const preview=fs.readFileSync(path.join(base,'fish-date-source.js'),'utf8')+'\n'+fs.readFileSync(path.join(base,'chatroom-preview-source.js'),'utf8');
+const previewCss=fs.readFileSync(path.join(base,'chatroom-preview-source.css'),'utf8')+'\n'+fs.readFileSync(path.join(base,'fish-date-source.css'),'utf8');
 const nativeComposer=fs.readFileSync(path.join(base,'native-composer-source.js'),'utf8');
 const questions=fs.readFileSync(path.join(base,'question-bridge-source.js'),'utf8');
 const questionForms=fs.readFileSync(path.join(base,'../compact-questions.js'),'utf8');

@@ -361,7 +361,7 @@ async function refreshApiHistory(){
   const runtime=mainChatRuntime;if(!runtime||!usesMainChatService(runtime.backend))return;
   try{
     const messages=await runtime.history();if(quitting||runtime!==mainChatRuntime||!usesMainChatService(runtime.backend))return;
-    const a=state.actors[0];a.messages=messages.map(m=>({id:m.id,role:m.role,text:m.text,time:m.createdAt}));
+    const a=state.actors[0];a.messages=messages.map(m=>({id:m.id,role:m.role,text:m.text,time:m.createdAt,...(m.attachments?.length?{attachments:m.attachments}:{})}));
     if(!activeApiRequest){const last=messages.at(-1);a.chatReply=last?.role==='assistant'?{id:last.id,text:last.text,streaming:false}:null;}
     update();
   }catch{if(!quitting){state.mainChat={...state.mainChat,error:'聊天记录暂不可读取'};broadcast();}}
@@ -987,9 +987,13 @@ ipcMain.handle('workbench:call',async(event,method,value)=>{
   if(method==='companion'){
     if(!value||typeof value!=='object'||Array.isArray(value))throw Error('聊天请求无效');
     if(value.action==='read')return companionSnapshot(state);
+    if(value.action==='history')return mainChatRuntime.history({beforeId:typeof value.beforeId==='string'?value.beforeId:undefined,limit:value.limit});
+    if(value.action==='media')return mainChatRuntime.readMedia(value.id);
     if(value.action==='stop'){if(usesMainChatService(mainChatRuntime?.backend))cancelMainChat();else nekoChat.close();return companionSnapshot(state);}
     if(value.action==='send'){
-      const text=String(value.text||'').trim();if(!text||text.length>8000)throw Error('请输入 1–8000 字的消息');
+      let text=String(value.text||'').trim();
+      if(value.attachments?.length){if(!usesMainChatService(mainChatRuntime?.backend))throw Error('当前聊天线路暂不支持附加图片');if(activeApiRequest||busy(state.actors[0]))throw Error('我还在回复，等我一下。');text=mainChatRuntime.prepareMedia(text,value.attachments);}
+      if(!text||text.length>8000)throw Error('请输入 1–8000 字的消息');
       const a=state.actors[0];
       if(usesMainChatService(mainChatRuntime?.backend))return startApiPrompt(text);
       if(!state.neko.enabled)throw Error('请先设置主 agent 的聊天连接');
