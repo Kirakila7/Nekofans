@@ -7,7 +7,7 @@
 // publishes body[data-neko-workbench-edition]); daily keeps 大肥鱼 in her
 // place. The Claude role/platform entry stays retired in both editions.
 function patchVisibleAvatarUi(source) {
-  let code=source;
+  let code=source.replace(/\r\n/g,'\n');
   function replace(before,after,label) {
     if(code.includes(after))return;
     if(code.split(before).length!==2)throw Error('Avatar UI patch target changed: '+label);

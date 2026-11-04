@@ -1,5 +1,14 @@
 # Local integration 0.28.41 / build 77
 
+## Clickable home pet with random idle movement and source actions (2026-11-04, local source)
+
+The home scene now supports clicking Bigfish for a random original reaction and dragging her to a validated floor position. Dragging plays the existing suspended-drag asset; dropping saves the avatar position while rejecting furniture overlap and off-platform coordinates. Empty-floor dragging still rotates the camera. A room-local controller alternates random walking, resting and original-material actions; it waits until an action ends, yields to direct interaction, first-person control, text input and hidden/offscreen rooms, and is disposed on leaving the home. The 自由活动 button can pause/resume this local behavior. It runs while the home UI is mounted and does not make model calls or imply model-selected intentions.
+
+Materials are selected from the existing dsh-pet manifest and actual installed files, served on demand via a fixed main-process allowlist. No renderer-supplied URL or arbitrary file is read. Walking checks the whole proposed path against rotated furniture and platform edges; saved room state remains authoritative, with visual interpolation between moves. The generated DSH client bundle is synchronized along with the canonical sources. Sync now handles CRLF before marker replacement and avatar patching; canonical-source comparison ignores newline encoding.
+
+Validation: 64 home/storage/IPC/interaction/avatar/workspace checks passed with no skips using synthetic data. An earlier parallel temporary-file save failed intermittently on Windows; the direct save probe and final sequential run passed, without weakening storage protections. An interactive current-source native preview subsequently verified room rendering, free-movement toggling, click interaction, dragging and saved placement with an isolated profile. Automated native pixel/zoom acceptance remains outstanding; the installed EXE has not been rebuilt. Evidence: ignored `_sandbox/social-isolation-20261104/home-pet-verified.tap`.
+
+
 2026-11-04 Windows icon follow-up: the existing Bigfish brand avatar is exported with provenance into `assets/icons` as WebP/PNG and a transparent seven-size ICO. The Windows builder updates the staged application's PE icon groups before hashing, and NSIS uses the same ICO for installer/uninstaller resources. Legacy executable/profile/uninstall identities are preserved. A separate real Electron PE copy was patched and its extracted icon visually verified as Bigfish; all six installer regressions, including actual NSIS compilation, pass. This source revision does not replace the user's installed application automatically.
 
 ## Desktop speech and daily settings (2026-11-04, new version branch)
@@ -284,3 +293,4 @@ Run `node scripts/build-neko-daily.mjs --electron-zip <official darwin-arm64 Ele
 The download contains one app and one installer entry. Quit the old app, then run `安装日常版.command`. It replaces the same daily app path and prepares a locked memory environment under Application Support. Chat databases, persona files and encrypted account settings are not packaged or uploaded.
 
 The installer links an existing canonical checkout to the daily workbench after checking its `origin` repository. Existing sessions keep their own directories; new default work uses that linked checkout. The local link file contains only the project path and repository URL.
+

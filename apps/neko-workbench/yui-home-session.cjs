@@ -68,6 +68,11 @@ function createYuiHomeSession({empty = false} = {}) {
         if(![input.dx,input.dz].every(n=>Number.isFinite(n)&&Math.abs(n)<=1))throw Error('角色移动无效');const p=avatar.position,x=clamp(p.x+input.dx,-4.1,4.1),z=clamp(p.z+input.dz,-3.1,3.1);
         const collision=items.some(o=>{if(o.kind==='rug'||o.y>1.35)return false;const r=o.rotation*Math.PI/180,dx=x-o.x,dz=z-o.z;return Math.abs(dx*Math.cos(r)-dz*Math.sin(r))<o.width/2+.15&&Math.abs(dx*Math.sin(r)+dz*Math.cos(r))<o.depth/2+.15;});if(!collision)avatar={...avatar,atHome:true,position:{x,y:0,z}};avatarRevision++;return publish();
       }
+      case 'avatar_place': {
+        const {x,z}=input;if(![x,z].every(Number.isFinite)||Math.abs(x)>4.1||Math.abs(z)>3.1)throw Error('请把小鱼放在小窝地板上');
+        if(items.some(o=>{if(o.kind==='rug'||o.y>1.35)return false;const r=o.rotation*Math.PI/180,dx=x-o.x,dz=z-o.z;return Math.abs(dx*Math.cos(r)-dz*Math.sin(r))<o.width/2+.2&&Math.abs(dx*Math.sin(r)+dz*Math.cos(r))<o.depth/2+.2;}))throw Error('这里有家具，请换一个落脚点');
+        avatar={...avatar,atHome:true,position:{x,y:0,z}};avatarRevision++;return publish();
+      }
       case 'place': {
         const pos = coordinates(input);
         if (!allowedMaterials.has(input.material)) throw new Error('方块材料无效');
