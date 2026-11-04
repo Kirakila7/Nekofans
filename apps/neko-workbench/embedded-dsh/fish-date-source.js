@@ -16,7 +16,7 @@ function createFishDateView({doc,bridge,avatar,onChange=()=>{}}){
  input.addEventListener('compositionstart',()=>{composing=true;});input.addEventListener('compositionend',()=>{composing=false;});
  const cachedImages=new Map();let backend=null;
  const attach=button('＋','添加图片',()=>{selectedKind='image';files.click();});
- const emoji=button('☺','表情包和 emoji',()=>{picker.hidden=!picker.hidden;});
+ const emoji=button('☺','表情包和 emoji',()=>footerChange(()=>{picker.hidden=!picker.hidden;}));
  const picker=el('div','neko-fish-date__picker');picker.hidden=true;picker.setAttribute('aria-label','表情与表情包');
  const emojis=el('div','neko-fish-date__emojis');for(const value of ['😊','🥺','😋','😭','🤗','🐟','💕','✨','👍','🎉','🌊','🏡'])emojis.append(button(value,'插入 '+value,()=>{const from=input.selectionStart??input.value.length,to=input.selectionEnd??from;input.value=input.value.slice(0,from)+value+input.value.slice(to);input.focus();input.setSelectionRange(from+value.length,from+value.length);}));
  const stickers=el('div','neko-fish-date__stickers');
@@ -24,16 +24,20 @@ function createFishDateView({doc,bridge,avatar,onChange=()=>{}}){
  const importSticker=button('添加自己的表情包','选择表情包图片或 GIF',()=>{selectedKind='sticker';files.click();});picker.append(emojis,stickers,importSticker);
  const send=el('button','','↑');send.type='submit';send.setAttribute('aria-label','发送给大肥鱼');
  const stop=button('■','停止大肥鱼回复',()=>Promise.resolve(bridge.companion({action:'stop'})).catch(showError));stop.hidden=true;
- form.append(attach,emoji,input,send,stop);bottom.append(petSlot,notice,previews,picker,files,form);panel.append(header,messages,bottom);
+ form.append(attach,emoji,input,send,stop);bottom.append(notice,previews,picker,petSlot,files,form);panel.append(header,messages,bottom);
  function showError(error){if(!disposed)notice.textContent=error?.message||'暂时没有发送成功，请重试';}
- function drawPending(){previews.replaceChildren();for(const [index,item] of pending.entries()){const tile=el('div','neko-fish-date__preview'),img=el('img');img.src=item.dataUrl;img.alt=item.name;tile.append(img,button('×','移除 '+item.name,()=>{pending.splice(index,1);drawPending();}));previews.append(tile);}previews.hidden=!pending.length;}
+ function footerChange(change){const pinned=messages.scrollHeight-messages.scrollTop-messages.clientHeight<72;change();if(pinned&&open)win.requestAnimationFrame(()=>{if(!disposed&&open)messages.scrollTop=messages.scrollHeight;});}
+ function drawPending(){footerChange(()=>{previews.replaceChildren();for(const [index,item] of pending.entries()){const tile=el('div','neko-fish-date__preview'),img=el('img');img.src=item.dataUrl;img.alt=item.name;tile.append(img,button('×','移除 '+item.name,()=>{pending.splice(index,1);drawPending();}));previews.append(tile);}previews.hidden=!pending.length;});}
  async function addFiles(values,kind='image'){
   const ownEpoch=epoch;try{for(const file of values){if(pending.length>=4)throw Error('每条消息最多四张图片');if(file.size>4*1024*1024)throw Error('请选择不超过 4MB 的 PNG、JPEG、GIF 或 WebP 图片');let dataUrl=await new Promise((resolve,reject)=>{const reader=new win.FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(Error('图片读取失败'));reader.readAsDataURL(file);});const encoded=String(dataUrl).split(',')[1]||'',head=win.atob(encoded).slice(0,12),type=head.startsWith('\x89PNG\r\n\x1a\n')?'image/png':head.startsWith('\xff\xd8\xff')?'image/jpeg':/^GIF8[79]a/.test(head)?'image/gif':head.startsWith('RIFF')&&head.slice(8,12)==='WEBP'?'image/webp':null;if(!type)throw Error('仅支持 PNG、JPEG、GIF 和 WebP 图片');dataUrl='data:'+type+';base64,'+encoded;if(disposed||ownEpoch!==epoch)return;pending.push({name:file.name,kind,dataUrl});drawPending();}notice.textContent='';}catch(error){showError(error);}finally{files.value='';}
  }
- files.addEventListener('change',()=>addFiles(Array.from(files.files||[]),selectedKind));
- input.addEventListener('paste',event=>{const images=Array.from(event.clipboardData?.files||[]);if(images.length){event.preventDefault();void addFiles(images);}});
- panel.addEventListener('dragover',event=>{if(event.dataTransfer?.types?.includes('Files'))event.preventDefault();});
- panel.addEventListener('drop',event=>{if(event.dataTransfer?.files?.length){event.preventDefault();void addFiles(Array.from(event.dataTransfer.files));}});
+ files.addEventListener('change',event=>{event.stopPropagation();void addFiles(Array.from(files.files||[]),selectedKind);});
+ // The retained DSH editor also listens on the document. preventDefault only
+ // suppresses browser insertion; these private events must not reach it.
+ const privatePaste=event=>{event.stopPropagation();const images=Array.from(event.clipboardData?.files||[]);if(images.length){event.preventDefault();void addFiles(images);}};
+ input.addEventListener('paste',privatePaste);panel.addEventListener('paste',privatePaste);
+ for(const type of ['dragenter','dragover','dragleave'])panel.addEventListener(type,event=>{if(event.dataTransfer?.types?.includes('Files')){event.preventDefault();event.stopPropagation();}});
+ panel.addEventListener('drop',event=>{if(event.dataTransfer?.files?.length||event.dataTransfer?.types?.includes('Files')){event.preventDefault();event.stopPropagation();void addFiles(Array.from(event.dataTransfer.files||[]));}});
  function imageFor(id){if(cachedImages.has(id))return cachedImages.get(id);const request=Promise.resolve(bridge.companion({action:'media',id})).then(value=>{if(!/^data:image\/(png|jpeg|gif|webp);base64,/.test(value?.dataUrl||''))throw Error('图片暂时不可用');return value.dataUrl;}).catch(error=>{cachedImages.delete(id);throw error;});cachedImages.set(id,request);return request;}
  function draw(){const keepBottom=messages.scrollHeight-messages.scrollTop-messages.clientHeight<72;const items=all.slice();for(const item of state.messages||[])if(!items.some(m=>m.id===item.id||item.streaming&&m.role==='assistant'&&m.text===item.text))items.push(item);const key=JSON.stringify(items);if(key===renderKey)return;renderKey=key;rows.replaceChildren();if(!items.length)rows.append(el('p','neko-fish-date__empty','想说的话，就在这里告诉她吧。'));
   for(const item of items){const row=el('article','neko-fish-date__message');row.dataset.role=item.role;row.append(el('small','',item.role==='user'?'我':item.role==='error'?'提示':'大肥鱼'));if(item.text)row.append(el('p','',item.text));for(const attachment of item.attachments||[]){const img=el('img','neko-fish-date__image');img.alt=(attachment.mime==='image/gif'?'GIF 动图：':'')+(attachment.name||'聊天图片');img.dataset.mediaType=attachment.mime;img.loading='lazy';if(attachment.kind==='sticker')img.classList.add('is-sticker');row.append(img);void imageFor(attachment.id).then(url=>{if(!disposed&&img.isConnected)img.src=url;}).catch(()=>{if(img.isConnected)img.replaceWith(el('span','','图片暂时不可用'));});}rows.append(row);}if(keepBottom)messages.scrollTop=messages.scrollHeight;
