@@ -1,5 +1,11 @@
 # Local integration 0.28.41 / build 77
 
+## Home pet aspect ratio correction (2026-11-04)
+
+Action videos use 640×360 frames (16:9), but the home renderer previously forced them into a 1.06:1 rectangle, compressing horizontal scale by about 40%. The room now preserves each source's natural aspect ratio. Shared dsh-pet body bounds and feet baseline stabilize visible height and floor contact across poster/action transitions; transparent side margins remain outside the drag hitbox. The generated client is updated without replacing newer default-branch features.
+
+Validation: 66 local home/storage/IPC/avatar/workspace regressions passed without skips, including aspect, foot anchor, hitbox and poster/video dimension cases. The corrected sprite was also observed in the running native home preview. This source change does not rebuild the installed EXE.
+
 2026-11-04 肥鱼有约 (local source): a private main-agent room now appears below 我的小窝, sharing the existing companion conversation and paginated SQLite history. It adds a single-line composer with emoji, stickers and bounded image attachments; preserves drafts on failure; moves the existing pet above its composer; and places the creation desk in the left selector column. Media survives restart and is exposed only after loading its current conversation. API image protocols are supported when the selected model supports vision; the current DSH account route remains explicitly text-only. Synthetic regression and isolated actual Electron layout checks pass; no real account/model requests were used and the previously delivered installer is unchanged. See `FISH_DATE.md`.
 
 2026-11-04 PR #62/#64 integration: this revision combines the merged fish memory explorer, clickable home pet, and DeepSeek account memory channel. Historical notes below describe their earlier isolated branches. The resolved memory settings retain the account route status and the star-map/list controls. All 41 account, native Python, memory viewer/entry, replication and main-chat integration tests passed with no skips using synthetic providers; no live supplier account inference was performed.
