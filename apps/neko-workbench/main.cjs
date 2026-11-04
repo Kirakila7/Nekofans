@@ -20,6 +20,7 @@ const {WorkbenchSecretStore}=require('./main-chat-secret.cjs');
 const {createSubagentMotion,motionOptions}=require('./subagent-motion.cjs');
 const {createScreenShare}=require('./screen-share-controller.cjs');
 const {WorkbenchMainChat,trustedLocalCaller,PERSONA}=require('./main-chat-runtime.cjs');
+const {createMemoryViewer}=require('./memory-viewer.cjs');
 const {createCompanionAccountProvider}=require('./companion-account-provider.cjs');
 const usesMainChatService=backend=>backend==='chat-api'||backend==='deepseek-account';
 const {createVisitsController}=require('./visits/controller.cjs');
@@ -66,6 +67,7 @@ prepareRuntimeDirectories(runtimePaths);
 const data=runtimePaths.dataDir,workspace=runtimePaths.workspaceDir;
 const workbenchAppearance=createAppearanceStore(path.join(data,'workbench-appearance.json'));
 const workbenchRoles=createRolesStore(path.join(data,'workbench-roles.json'));
+const memoryViewer=createMemoryViewer({getRuntime:()=>mainChatRuntime,getRoles:()=>workbenchRoles.get()});
 const workspaceLayout=createWorkspaceLayout(path.join(data,'workspace-layout.json'));
 const paneLayout=createPaneLayout(path.join(data,'pane-layout.json'));
 const videoPlatform=createVideoPlatform(path.join(data,'video-platform.json'));
@@ -303,6 +305,7 @@ async function workbenchAction(name){
     case 'screen-share':await openDsh();await screenShare.open();break;
     case 'open-companion-chat':showInput();break;
     case 'chat-settings':editChatSettings();break;
+    case 'chat-memory':editChatMemory();break;
     case 'open-visits':openVisits();break;
     case 'open-community':throw new Error('请使用工作台社区入口打开内嵌社区');
     case 'neko-settings':editChatSettings();break;
@@ -320,7 +323,7 @@ function workbenchOptions(){return [
   {label:'猫娘串门…',click:openVisits},
   {label:'养鱼设置…',click:()=>openFishSettings().catch(engineError)},
   {label:'聊天 API 设置…',click:editChatSettings},
-  {label:'聊天记忆…',click:editChatMemory},
+  {label:'鱼的记忆',click:editChatMemory},
   {label:'N.E.K.O. 聊天设置…',click:editNekoSettings},
   {label:'打开 N.E.K.O.',click:()=>workbenchAction('open-neko').catch(error=>{notice(state.actors[0],error.message);update();})},
   {label:'任务备注…',click:editMemory},
@@ -417,8 +420,8 @@ function editChatSettings(){
   loadLocalFile(w,{view:'chat-settings'});w.webContents.on('did-finish-load',()=>{broadcast();w.show();});w.on('closed',()=>{if(chatSettingsWindow===w)chatSettingsWindow=null;});
 }
 function editChatMemory(){
-  if(chatMemoryWindow&&!chatMemoryWindow.isDestroyed()){chatMemoryWindow.show();chatMemoryWindow.focus();return;}
-  const w=new BrowserWindow({...options(),width:620,height:680,minWidth:440,minHeight:450,title:'聊天记忆',backgroundColor:'#f1f8fe'});chatMemoryWindow=w;
+  if(chatMemoryWindow&&!chatMemoryWindow.isDestroyed()){chatMemoryWindow.webContents.send('pet:memory-open');chatMemoryWindow.show();chatMemoryWindow.focus();return;}
+  const w=new BrowserWindow({...options(),width:1160,height:850,minWidth:440,minHeight:450,title:'鱼的记忆',backgroundColor:'#f1f8fe'});chatMemoryWindow=w;
   loadLocalFile(w,{view:'chat-memory'});w.webContents.on('did-finish-load',()=>{broadcast();w.show();});w.on('closed',()=>{if(chatMemoryWindow===w)chatMemoryWindow=null;});
 }
 const pinnedCount=()=>orderedDesktopPets(state.actors,{taskOrder:state.taskOrder,catalogOrder:state.catalogOrder}).filter(a=>a.pinned).length;
@@ -853,7 +856,7 @@ function mainMenu(){return Menu.buildFromTemplate([
     {label:'子代理小猫自由探索',type:'checkbox',checked:state.preferences.subagentExploration!==false,click:item=>{state.preferences.subagentExploration=item.checked;update();}},
     {label:'保存桌宠截图',accelerator:'CommandOrControl+Shift+S',click:capture}
   ]},
-  {label:'记忆',submenu:memoryMenu()},
+  {label:'鱼的记忆',click:editChatMemory},
   {label:'重新连接工作台',click:restart},
   {type:'separator'},
   {label:'退出',click:()=>app.quit()}
@@ -1039,11 +1042,11 @@ ipcMain.handle('pet:call',async(event,method,p={})=>{
     screenShare.interrupt();
     const result=await mainChatRuntime.saveApi(p);activeApiRequest=null;await refreshApiHistory();return result;
   }
-  if(method==='chat-memory-read'){if(sender!==chatMemoryWindow||!mainChatRuntime)throw new Error('请从聊天记忆窗口操作');return mainChatRuntime.memories();}
-  if(method==='chat-history'){if(sender!==chatMemoryWindow||!mainChatRuntime)throw new Error('请从聊天记忆窗口操作');return mainChatRuntime.history();}
+  if(method==='chat-memory-read'){if(sender!==chatMemoryWindow||!mainChatRuntime)throw new Error('请从聊天记忆窗口操作');return memoryViewer.read(p.personaId);}
+  if(method==='chat-history'){if(sender!==chatMemoryWindow||!mainChatRuntime)throw new Error('请从聊天记忆窗口操作');return memoryViewer.history(p.personaId);}
   if(method==='chat-memory-action'){
     if(sender!==chatMemoryWindow||!mainChatRuntime)throw new Error('请从聊天记忆窗口操作');
-    try{return await mainChatRuntime.memoryAction(p);}catch{throw new Error('记忆操作未完成，请刷新后重试');}
+    try{return await memoryViewer.action(p);}catch{throw new Error('记忆操作未完成，请刷新后重试');}
   }
   if(method==='chat-cancel'){if(senderId!=='main'||!usesMainChatService(mainChatRuntime?.backend))throw new Error('请从主角色聊天操作');return cancelMainChat();}
   if(method==='neko-settings'){

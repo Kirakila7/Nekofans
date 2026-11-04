@@ -38,7 +38,7 @@ async function submitting(form,task){const button=form.querySelector('button[typ
 if(view==='chat-settings'){
   document.title='聊天 API 设置';window.addEventListener('unload',window.WorkbenchChatUI.mountSettings(host,window.pet),{once:true});
 }else if(view==='chat-memory'){
-  document.title='聊天记忆';window.addEventListener('unload',window.WorkbenchChatUI.mountMemory(host,window.pet),{once:true});
+  document.title='鱼的记忆';window.addEventListener('unload',window.WorkbenchChatUI.mountMemory(host,window.pet),{once:true});
 }else if(view==='neko-settings'){
   document.title='N.E.K.O. 聊天';
   host.innerHTML='<form class="settings-form neko-settings"><label for="neko-url">N.E.K.O. 服务地址</label><input id="neko-url" type="url" required placeholder="http://127.0.0.1:48911"><label for="neko-character">聊天角色</label><input id="neko-character" type="text" list="neko-characters" placeholder="默认使用独立大肥鱼角色"><datalist id="neko-characters"></datalist><p>沿用 N.E.K.O. 的角色与记忆，使用现有单行聊天框。</p><button type="submit">连接</button><span role="status"></span></form>';

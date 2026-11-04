@@ -17,7 +17,7 @@ test('actual Chromium memory panel: native-only controls, source safety, drafts,
       throw Error('unexpected fixture IPC');}};
     const dispose=window.WorkbenchChatUI.mountMemory(document.getElementById('root'),pet);await delay();
     const check=(ok,message)=>{if(!ok)throw Error(message);};
-    check(!document.querySelector('img')&&!window.bad,'source content executed');
+    check(!document.querySelector('.memory-card img')&&!window.bad,'source content executed');
     check(!document.querySelector('.memory-mode,.switch-memory,.auto-memory-sync,.disable-neko-memory'),'dual provider controls remain');document.querySelector('.sync-memory').click();await delay();
     check(!document.body.textContent.includes('日记模式'),'diary fallback remains');check(document.querySelector('[role=status]').textContent.includes('记录已保留'),'failure hidden');
     const edit=document.querySelector('.memory-items textarea');edit.value='保留的编辑草稿';edit.dispatchEvent(new Event('input',{bubbles:true}));

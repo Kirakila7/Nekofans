@@ -1,5 +1,23 @@
 # Local integration 0.28.41 / build 77
 
+## Fish memory explorer (2026-11-04, release-based integration)
+
+This branch starts at release v0.28.41, commit 20dde9291c35ee74b464679eb43a2a7234db6356.
+It adds the 鱼的记忆 entry below community and a direct desktop-menu entry, a
+star-map/list switch, glass record editors, priority/pinning, and per-role archive
+viewing. Native memory remains Bigfish-owned; other roles view only their existing
+persona-scoped archives. Selection does not switch chat accounts or engines.
+Priority changes preserve certainty and native identities and order relevant
+retrieval hits before context allocation. Deleted records stay excluded from recall.
+
+The original dirty checkout is retained. Configuration import/export and the
+account-memory relay are separate work and are excluded from this branch. PR #62
+is fetched separately for combined testing; it is not implicitly published or
+merged by this feature. Validation notes will record exact branch/test results.
+Browser fixture/design checks are documented in design-qa.md; they are synthetic,
+not a claim of real model connectivity or native Electron acceptance. No installer
+or release asset is rebuilt by this change.
+
 2026-11-04 Windows icon follow-up: the existing Bigfish brand avatar is exported with provenance into `assets/icons` as WebP/PNG and a transparent seven-size ICO. The Windows builder updates the staged application's PE icon groups before hashing, and NSIS uses the same ICO for installer/uninstaller resources. Legacy executable/profile/uninstall identities are preserved. A separate real Electron PE copy was patched and its extracted icon visually verified as Bigfish; all six installer regressions, including actual NSIS compilation, pass. This source revision does not replace the user's installed application automatically.
 
 ## Desktop speech and daily settings (2026-11-04, new version branch)
