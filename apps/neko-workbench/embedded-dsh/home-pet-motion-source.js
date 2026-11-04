@@ -1,5 +1,14 @@
 // Local room interaction, not model/tool execution. Only the authoritative
 // home bridge commits movement; hidden or manually controlled rooms stay idle.
+function homePetSpriteFrame(foot,bodyHeight,sourceWidth,sourceHeight,isVideo=false){
+ const ratio=Number.isFinite(sourceWidth)&&sourceWidth>0&&Number.isFinite(sourceHeight)&&sourceHeight>0?sourceWidth/sourceHeight:isVideo?16/9:1;
+ // Original dsh-pet uses a 640x360 sheet, HIT_BOX (200,50)-(440,335)
+ // and FEET_Y=330. Keep its alpha margins while scaling both axes equally.
+ const height=isVideo?bodyHeight*360/285:bodyHeight,width=height*ratio,left=foot[0]-width/2,top=foot[1]-height*(isVideo?330/360:1);
+ const draw={left,top,width,height};
+ const hit=isVideo?{left:left+width*200/640,right:left+width*440/640,top:top+height*50/360,bottom:top+height*335/360}:{left,right:left+width,top,bottom:top+height};
+ return {draw,hit};
+}
 function homePetClear(items,x,z){
  if(!Number.isFinite(x)||!Number.isFinite(z)||Math.abs(x)>4.1||Math.abs(z)>3.1)return false;
  return !(items||[]).some(o=>{if(o.kind==='rug'||o.y>1.35)return false;const r=o.rotation*Math.PI/180,dx=x-o.x,dz=z-o.z;return Math.abs(dx*Math.cos(r)-dz*Math.sin(r))<o.width/2+.2&&Math.abs(dx*Math.sin(r)+dz*Math.cos(r))<o.depth/2+.2;});

@@ -2811,6 +2811,15 @@ async function mountYuiBlockHome(stage, options = {}) {
 
 // Local room interaction, not model/tool execution. Only the authoritative
 // home bridge commits movement; hidden or manually controlled rooms stay idle.
+function homePetSpriteFrame(foot,bodyHeight,sourceWidth,sourceHeight,isVideo=false){
+ const ratio=Number.isFinite(sourceWidth)&&sourceWidth>0&&Number.isFinite(sourceHeight)&&sourceHeight>0?sourceWidth/sourceHeight:isVideo?16/9:1;
+ // Original dsh-pet uses a 640x360 sheet, HIT_BOX (200,50)-(440,335)
+ // and FEET_Y=330. Keep its alpha margins while scaling both axes equally.
+ const height=isVideo?bodyHeight*360/285:bodyHeight,width=height*ratio,left=foot[0]-width/2,top=foot[1]-height*(isVideo?330/360:1);
+ const draw={left,top,width,height};
+ const hit=isVideo?{left:left+width*200/640,right:left+width*440/640,top:top+height*50/360,bottom:top+height*335/360}:{left,right:left+width,top,bottom:top+height};
+ return {draw,hit};
+}
 function homePetClear(items,x,z){
  if(!Number.isFinite(x)||!Number.isFinite(z)||Math.abs(x)>4.1||Math.abs(z)>3.1)return false;
  return !(items||[]).some(o=>{if(o.kind==='rug'||o.y>1.35)return false;const r=o.rotation*Math.PI/180,dx=x-o.x,dz=z-o.z;return Math.abs(dx*Math.cos(r)-dz*Math.sin(r))<o.width/2+.2&&Math.abs(dx*Math.sin(r)+dz*Math.cos(r))<o.depth/2+.2;});
@@ -2927,7 +2936,7 @@ async function mountOurHome(stage,options={}){
   for(const item of state.items||[])furniture(item);
   const a=state.avatar||{},fp=state.perspective==='agent'||state.perspective==='yui';let pet=null;
   petRect=null;if(a.atHome&&!fp){const p=petPosition(),foot=space([p.x,.03+platformLift,p.z]),head=space([p.x,1.3+platformLift,p.z]);if(foot[2]>.08&&head[2]>.08){const f=screen(foot),t=screen(head);pet={p:f,height:Math.max(20,f[1]-t[1]),depth:foot[2]};}}
-  function paintPet(){if(!pet)return;const size=pet.height;petRect={left:pet.p[0]-size*.53,top:pet.p[1]-size,right:pet.p[0]+size*.53,bottom:pet.p[1]};const media=video.readyState>=2&&video.videoWidth?video:avatar;if(media===video||avatar.complete&&avatar.naturalWidth)ctx.drawImage(media,petRect.left,petRect.top,size*1.06,size);else{ctx.fillStyle='#829dbf';ctx.beginPath();ctx.arc(pet.p[0],pet.p[1]-size*.45,size*.3,0,Math.PI*2);ctx.fill();}pet=null;}
+  function paintPet(){if(!pet)return;const size=pet.height,media=video.readyState>=2&&video.videoWidth?video:avatar,frame=homePetSpriteFrame(pet.p,size,media.videoWidth||media.naturalWidth,media.videoHeight||media.naturalHeight,media===video);petRect=frame.hit;if(media===video||avatar.complete&&avatar.naturalWidth){const r=frame.draw;ctx.drawImage(media,r.left,r.top,r.width,r.height);}else{ctx.fillStyle='#829dbf';ctx.beginPath();ctx.arc(pet.p[0],pet.p[1]-size*.45,size*.3,0,Math.PI*2);ctx.fill();}pet=null;}
   faces.sort((a,b)=>b.depth-a.depth);for(const f of faces){if(pet&&pet.depth>f.depth)paintPet();paintFace(f);}paintPet();
  }
  function updateUi(){const a=state.avatar||{},fp=['agent','yui'].includes(state.perspective);orbit.setAttribute('aria-pressed',String(!fp));first.setAttribute('aria-pressed',String(fp));callHome.hidden=a.atHome===true;hint.textContent=fp?'拖动环顾 · W A S D 移动':'点击小鱼互动 · 拖动小鱼放置 · 拖动空白旋转 · 滚轮缩放';inventory.textContent=(state.items||[]).length?`${state.items.length} 件一起添置的东西`:'';const p=state.persistence;status.textContent=state.buildError||(p?.status==='save-error'||p?.status==='load-error'?p.error||'小窝暂未保存':'');canvas.setAttribute('aria-label',fp?'大肥鱼第一视角，海面木平台，拖动环顾，W A S D 移动':'浮在海面上的小窝木平台，拖动旋转，滚轮缩放');}
