@@ -1,5 +1,14 @@
 # Local integration 0.28.41 / build 77
 
+## Clickable home pet with random idle movement and source actions (2026-11-04, local source)
+
+The home scene now supports clicking Bigfish for a random original reaction and dragging her to a validated floor position. Dragging plays the existing suspended-drag asset; dropping saves the avatar position while rejecting furniture overlap and off-platform coordinates. Empty-floor dragging still rotates the camera. A room-local controller alternates random walking, resting and original-material actions; it waits until an action ends, yields to direct interaction, first-person control, text input and hidden/offscreen rooms, and is disposed on leaving the home. The 自由活动 button can pause/resume this local behavior. It runs while the home UI is mounted and does not make model calls or imply model-selected intentions.
+
+Materials are selected from the existing dsh-pet manifest and actual installed files, served on demand via a fixed main-process allowlist. No renderer-supplied URL or arbitrary file is read. Walking checks the whole proposed path against rotated furniture and platform edges; saved room state remains authoritative, with visual interpolation between moves. The generated DSH client bundle is synchronized along with the canonical sources. Sync now handles CRLF before marker replacement and avatar patching; canonical-source comparison ignores newline encoding.
+
+Validation: 64 home/storage/IPC/interaction/avatar/workspace checks passed with no skips using synthetic data. An earlier parallel temporary-file save failed intermittently on Windows; the direct save probe and final sequential run passed, without weakening storage protections. An interactive current-source native preview subsequently verified room rendering, free-movement toggling, click interaction, dragging and saved placement with an isolated profile. Automated native pixel/zoom acceptance remains outstanding; the installed EXE has not been rebuilt. Evidence: ignored `_sandbox/social-isolation-20261104/home-pet-verified.tap`.
+
+
 ## Fish memory explorer (2026-11-04, release-based integration)
 
 This branch starts at release v0.28.41, commit 20dde9291c35ee74b464679eb43a2a7234db6356.

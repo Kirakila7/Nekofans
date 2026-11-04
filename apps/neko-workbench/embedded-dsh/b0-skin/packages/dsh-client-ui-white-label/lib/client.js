@@ -2809,6 +2809,34 @@ async function mountYuiBlockHome(stage, options = {}) {
   return () => { if(disposed)return;disposed=true;observer?.disconnect();win.removeEventListener('resize',resize);if(typeof unsubscribe==='function')unsubscribe();ui.remove(); };
 }
 
+// Local room interaction, not model/tool execution. Only the authoritative
+// home bridge commits movement; hidden or manually controlled rooms stay idle.
+function homePetClear(items,x,z){
+ if(!Number.isFinite(x)||!Number.isFinite(z)||Math.abs(x)>4.1||Math.abs(z)>3.1)return false;
+ return !(items||[]).some(o=>{if(o.kind==='rug'||o.y>1.35)return false;const r=o.rotation*Math.PI/180,dx=x-o.x,dz=z-o.z;return Math.abs(dx*Math.cos(r)-dz*Math.sin(r))<o.width/2+.2&&Math.abs(dx*Math.sin(r)+dz*Math.cos(r))<o.depth/2+.2;});
+}
+function homePetPathClear(items,a,b){const distance=Math.hypot(b.x-a.x,b.z-a.z),steps=Math.max(1,Math.ceil(distance/.06));for(let i=1;i<=steps;i++)if(!homePetClear(items,a.x+(b.x-a.x)*i/steps,a.z+(b.z-a.z)*i/steps))return false;return true;}
+function createHomePetMotion({getState,move,onActivity,blocked=()=>false,now=Date.now,random=Math.random}){
+ let goal=null,nextAt=now()+3000,lastMove=0,running=false,disposed=false,enabled=true;
+ const pause=(ms=15000)=>{goal=null;nextAt=now()+ms;};
+ async function tick(){
+  if(disposed||running)return;const state=getState(),a=state?.avatar,time=now();
+  if(!enabled||!a?.atHome||state.perspective!=='orbit'||blocked()){pause(3000);return;}
+  if(time<nextAt)return;
+  if(!goal){
+   if(random()<.45){for(let i=0;i<30;i++){const p={x:(random()-.5)*7.6,z:(random()-.5)*5.6};if(Math.hypot(p.x-a.position.x,p.z-a.position.z)>.7&&homePetPathClear(state.items,a.position,p)){goal=p;break;}}}
+   if(!goal){onActivity(random()<.7?'action':'idle');nextAt=time+4000+random()*8000;return;}
+   onActivity('move');lastMove=time-1000;
+  }
+  if(time-lastMove<1000)return;lastMove=time;
+  const dx=goal.x-a.position.x,dz=goal.z-a.position.z,distance=Math.hypot(dx,dz),amount=Math.min(.45,distance);
+  const to={x:a.position.x+dx/distance*amount,z:a.position.z+dz/distance*amount};
+  if(distance<.08||!homePetPathClear(state.items,a.position,to)){goal=null;onActivity('idle');nextAt=time+3000+random()*5000;return;}
+  running=true;try{await move({action:'avatar_walk',dx:to.x-a.position.x,dz:to.z-a.position.z});}catch{pause(10000);onActivity('idle');}finally{running=false;}
+ }
+ return {tick,pause,setEnabled(value){enabled=value===true;pause(1000);onActivity('idle');},dispose(){disposed=true;goal=null;}};
+}
+
 // The room, first-person camera and agent observation share one saved scene.
 async function mountOurHome(stage,options={}){
  const doc=stage.ownerDocument,win=options.window||doc.defaultView,bridge=options.bridge||win.nekoWorkbench;
@@ -2821,6 +2849,7 @@ async function mountOurHome(stage,options={}){
  const orbit=button('小窝全景',()=>void command({action:'perspective',mode:'orbit'}));
  const first=button('大肥鱼第一视角',async()=>{if(!state?.avatar?.atHome&&!await command({action:'return-home'}))return;await command({action:'perspective',mode:'agent'});});
  const callHome=button('叫大肥鱼回家',()=>void command({action:'return-home'}));
+ let freely=true;const free=button('自由活动：开',()=>{freely=!freely;petMotion.setEnabled(freely);free.textContent='自由活动：'+(freely?'开':'关');free.setAttribute('aria-pressed',String(freely));});free.setAttribute('aria-pressed','true');
  const status=el('p','neko-our-home__status');status.setAttribute('role','status');
  const hint=el('p','neko-our-home__hint'),inventory=el('p','neko-our-home__inventory');top.append(invite,controls);root.append(canvas,top,status,inventory,hint);stage.append(root);
  let state=null,disposed=false,drag=null,w=1,h=1,azimuth=42,elevation=34,zoom=1,lookYaw=0,lookPitch=-10,pendingLook=null,lookTimer=null;
@@ -2831,6 +2860,16 @@ async function mountOurHome(stage,options={}){
  const normal=a=>{const l=Math.hypot(...a)||1;return a.map(n=>n/l);};
  let eye,forward,right,up,focal,faces=[];
  const avatar=new win.Image();avatar.src=options.posterSrc||options.avatar?.('bigfish')||'';avatar.onload=()=>draw();
+ const video=doc.createElement('video');video.muted=true;video.playsInline=true;video.preload='auto';let animations=null,animationEpoch=0,performing=false,petRect=null,petDrag=null,petPress=null,pose=null,poseFrom=null,poseAt=0;
+ const pick=list=>list?.length?list[Math.floor(Math.random()*list.length)]:null;
+ async function play(kind){const epoch=++animationEpoch,name=pick(animations?.[kind==='action'?'actions':kind==='move'?'moves':kind]);if(!name)return;
+  performing=kind==='action'||kind==='clicks';
+  try{const result=await bridge.home({action:'pet-animation',name});if(disposed||epoch!==animationEpoch)return;video.loop=['idle','move','drag'].includes(kind);video.src=result.animation.src;root.dataset.petAction=name;await video.play();}catch{if(!disposed&&epoch===animationEpoch){performing=false;video.removeAttribute('src');root.dataset.petAction='';}}
+ }
+ video.onended=()=>{performing=false;void play('idle');};video.onerror=()=>{performing=false;video.removeAttribute('src');};
+ const petMotion=createHomePetMotion({getState:()=>state,move:async request=>{if(!await command(request))throw Error('小鱼暂时不能移动');},onActivity:kind=>void play(kind),blocked:()=>performing||!!drag||!!petDrag||doc.hidden||!onScreen||doc.activeElement?.matches?.('input,textarea,[contenteditable=true]')});
+ const motionTimer=win.setInterval(()=>void petMotion.tick(),250);
+ function petPosition(){if(petDrag)return petDrag.position;const to=state?.avatar?.position;if(!to)return {x:0,y:0,z:2.5};if(!poseFrom||motion?.matches)return to;const t=clamp((win.performance.now()-poseAt)/900,0,1);return {x:poseFrom.x+(to.x-poseFrom.x)*t,y:0,z:poseFrom.z+(to.z-poseFrom.z)*t};}
  function camera(){
   const a=state?.avatar||{},p=a.position||{x:0,y:0,z:2.5},fp=state?.perspective==='agent'||state?.perspective==='yui';
   if(fp){eye=[p.x,(p.y||0)+1.1+platformLift,p.z];const yaw=radians(lookYaw),pitch=radians(lookPitch);forward=[Math.sin(yaw)*Math.cos(pitch),Math.sin(pitch),-Math.cos(yaw)*Math.cos(pitch)];focal=w/(2*Math.tan(radians(43)));}
@@ -2887,27 +2926,30 @@ async function mountOurHome(stage,options={}){
   faces.sort((a,b)=>b.depth-a.depth).forEach(paintFace);faces=[];
   for(const item of state.items||[])furniture(item);
   const a=state.avatar||{},fp=state.perspective==='agent'||state.perspective==='yui';let pet=null;
-  if(a.atHome&&!fp){const p=a.position,foot=space([p.x,.03+platformLift,p.z]),head=space([p.x,1.3+platformLift,p.z]);if(foot[2]>.08&&head[2]>.08){const f=screen(foot),t=screen(head);pet={p:f,height:Math.max(20,f[1]-t[1]),depth:foot[2]};}}
-  function paintPet(){if(!pet)return;const size=pet.height;if(avatar.complete&&avatar.naturalWidth)ctx.drawImage(avatar,pet.p[0]-size*.53,pet.p[1]-size,size*1.06,size);else{ctx.fillStyle='#829dbf';ctx.beginPath();ctx.arc(pet.p[0],pet.p[1]-size*.45,size*.3,0,Math.PI*2);ctx.fill();}pet=null;}
+  petRect=null;if(a.atHome&&!fp){const p=petPosition(),foot=space([p.x,.03+platformLift,p.z]),head=space([p.x,1.3+platformLift,p.z]);if(foot[2]>.08&&head[2]>.08){const f=screen(foot),t=screen(head);pet={p:f,height:Math.max(20,f[1]-t[1]),depth:foot[2]};}}
+  function paintPet(){if(!pet)return;const size=pet.height;petRect={left:pet.p[0]-size*.53,top:pet.p[1]-size,right:pet.p[0]+size*.53,bottom:pet.p[1]};const media=video.readyState>=2&&video.videoWidth?video:avatar;if(media===video||avatar.complete&&avatar.naturalWidth)ctx.drawImage(media,petRect.left,petRect.top,size*1.06,size);else{ctx.fillStyle='#829dbf';ctx.beginPath();ctx.arc(pet.p[0],pet.p[1]-size*.45,size*.3,0,Math.PI*2);ctx.fill();}pet=null;}
   faces.sort((a,b)=>b.depth-a.depth);for(const f of faces){if(pet&&pet.depth>f.depth)paintPet();paintFace(f);}paintPet();
  }
- function updateUi(){const a=state.avatar||{},fp=['agent','yui'].includes(state.perspective);orbit.setAttribute('aria-pressed',String(!fp));first.setAttribute('aria-pressed',String(fp));callHome.hidden=a.atHome===true;hint.textContent=fp?'拖动环顾 · W A S D 移动':'拖动旋转 · 滚轮缩放';inventory.textContent=(state.items||[]).length?`${state.items.length} 件一起添置的东西`:'';const p=state.persistence;status.textContent=state.buildError||(p?.status==='save-error'||p?.status==='load-error'?p.error||'小窝暂未保存':'');canvas.setAttribute('aria-label',fp?'大肥鱼第一视角，海面木平台，拖动环顾，W A S D 移动':'浮在海面上的小窝木平台，拖动旋转，滚轮缩放');}
- function setState(next){if(disposed||!next?.ok)return;state=next;if(!drag){lookYaw=state.avatar?.yaw||0;lookPitch=state.avatar?.pitch??-10;}updateUi();draw();}
+ function updateUi(){const a=state.avatar||{},fp=['agent','yui'].includes(state.perspective);orbit.setAttribute('aria-pressed',String(!fp));first.setAttribute('aria-pressed',String(fp));callHome.hidden=a.atHome===true;hint.textContent=fp?'拖动环顾 · W A S D 移动':'点击小鱼互动 · 拖动小鱼放置 · 拖动空白旋转 · 滚轮缩放';inventory.textContent=(state.items||[]).length?`${state.items.length} 件一起添置的东西`:'';const p=state.persistence;status.textContent=state.buildError||(p?.status==='save-error'||p?.status==='load-error'?p.error||'小窝暂未保存':'');canvas.setAttribute('aria-label',fp?'大肥鱼第一视角，海面木平台，拖动环顾，W A S D 移动':'浮在海面上的小窝木平台，拖动旋转，滚轮缩放');}
+ function setState(next){if(disposed||!next?.ok||!next.avatar||next.revision<(state?.revision??-1))return;const p=next.avatar.position;if(!pose||p.x!==pose.x||p.z!==pose.z){poseFrom=petPosition();pose={...p};poseAt=win.performance.now();}state=next;if(!drag){lookYaw=state.avatar?.yaw||0;lookPitch=state.avatar?.pitch??-10;}updateUi();draw();}
  function animate(now){frame=null;if(disposed||doc.hidden||!onScreen||motion?.matches)return;if(now-lastFrame>=50){lastFrame=now;draw();}frame=win.requestAnimationFrame(animate);}
- function syncAnimation(){if(frame!==null)win.cancelAnimationFrame?.(frame);frame=null;if(!disposed&&!doc.hidden&&onScreen&&!motion?.matches&&typeof win.requestAnimationFrame==='function')frame=win.requestAnimationFrame(animate);}
+ function syncAnimation(){if(frame!==null)win.cancelAnimationFrame?.(frame);frame=null;if(video.getAttribute('src')){if(doc.hidden||!onScreen)video.pause();else void video.play().catch(()=>{});}if(!disposed&&!doc.hidden&&onScreen&&!motion?.matches&&typeof win.requestAnimationFrame==='function')frame=win.requestAnimationFrame(animate);}
  function motionChanged(){draw();syncAnimation();}
  async function command(request){try{const result=await bridge.home(request);if(!disposed)setState(result);return result;}catch(e){if(!disposed)status.textContent=e.message||'小窝暂未更新';return null;}}
  function resize(){const r=root.getBoundingClientRect();w=Math.max(1,Math.floor(r.width));h=Math.max(1,Math.floor(r.height));const scale=Math.min(win.devicePixelRatio||1,2);canvas.width=Math.round(w*scale);canvas.height=Math.round(h*scale);draw();}
  invite.addEventListener('click',async()=>{if(invite.disabled)return;invite.disabled=true;status.textContent='';const detail={};try{doc.dispatchEvent(new win.CustomEvent('neko-home-build-workspace',{detail}));if(!detail.handled)throw Error('共建工作会话暂不可用');await detail.promise;}catch(e){status.textContent=e.message||'共建会话未能打开';}finally{invite.disabled=false;}});
- canvas.addEventListener('pointerdown',e=>{if(e.button!==0)return;canvas.focus();drag={id:e.pointerId,x:e.clientX,y:e.clientY};canvas.setPointerCapture?.(e.pointerId);});
+ function localPoint(e){const r=canvas.getBoundingClientRect();return {x:e.clientX-r.left,y:e.clientY-r.top};}
+ function ground(e){const p=localPoint(e),dx=(p.x-w/2)/focal,dy=-(p.y-h*.55)/focal,ray=forward.map((n,i)=>n+right[i]*dx+up[i]*dy),t=(platformLift-eye[1])/ray[1];return t>0?{x:clamp(eye[0]+ray[0]*t,-4.1,4.1),y:0,z:clamp(eye[2]+ray[2]*t,-3.1,3.1)}:null;}
+ canvas.addEventListener('pointerdown',e=>{if(e.button!==0)return;canvas.focus();petMotion.pause();const p=localPoint(e);if(petRect&&p.x>=petRect.left&&p.x<=petRect.right&&p.y>=petRect.top&&p.y<=petRect.bottom){petPress={id:e.pointerId,x:e.clientX,y:e.clientY};petDrag={position:{...petPosition()},moved:false};void play('drag');}else drag={id:e.pointerId,x:e.clientX,y:e.clientY};canvas.setPointerCapture?.(e.pointerId);});
+ canvas.addEventListener('pointermove',e=>{if(!petPress||petPress.id!==e.pointerId)return;if(Math.hypot(e.clientX-petPress.x,e.clientY-petPress.y)>5){const p=ground(e);if(p){petDrag.position=p;petDrag.moved=true;draw();}}});
  canvas.addEventListener('pointermove',e=>{if(!drag||drag.id!==e.pointerId)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;drag.x=e.clientX;drag.y=e.clientY;if(state?.perspective==='agent'||state?.perspective==='yui'){lookYaw+=dx*.35;lookPitch=clamp(lookPitch-dy*.25,-55,45);pendingLook={action:'avatar_look',yaw:lookYaw,pitch:lookPitch};clearTimeout(lookTimer);lookTimer=win.setTimeout(()=>{if(pendingLook)void command(pendingLook);pendingLook=null;},100);}else{azimuth-=dx*.4;elevation=clamp(elevation+dy*.25,18,70);}draw();});
- const end=()=>{drag=null;if(pendingLook){clearTimeout(lookTimer);void command(pendingLook);pendingLook=null;}};canvas.addEventListener('pointerup',end);canvas.addEventListener('pointercancel',end);
+ const end=async e=>{if(petPress){const held=petDrag;petPress=null;if(held?.moved&&e.type!=='pointercancel'){await command({action:'avatar_place',x:held.position.x,z:held.position.z});}petDrag=null;poseFrom=null;petMotion.pause();void play(e.type==='pointercancel'?'idle':held?.moved?'idle':'clicks');draw();}drag=null;if(pendingLook){clearTimeout(lookTimer);void command(pendingLook);pendingLook=null;}};canvas.addEventListener('pointerup',end);canvas.addEventListener('pointercancel',end);
  canvas.addEventListener('wheel',e=>{if(state?.perspective!=='orbit')return;e.preventDefault();zoom=clamp(zoom*(e.deltaY<0?1.08:1/1.08),.6,2);draw();},{passive:false});
  canvas.addEventListener('keydown',e=>{if(!['agent','yui'].includes(state?.perspective))return;const key=e.key.toLowerCase();if(!['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(key))return;e.preventDefault();const yaw=radians(lookYaw),forwardStep=['w','arrowup'].includes(key)?1:['s','arrowdown'].includes(key)?-1:0,side=['d','arrowright'].includes(key)?1:['a','arrowleft'].includes(key)?-1:0;void command({action:'avatar_walk',dx:(Math.sin(yaw)*forwardStep+Math.cos(yaw)*side)*.25,dz:(-Math.cos(yaw)*forwardStep+Math.sin(yaw)*side)*.25});});
  const observer=win.ResizeObserver?new win.ResizeObserver(resize):null;observer?.observe(root);win.addEventListener('resize',resize);const unsubscribe=bridge.subscribeHome?.(setState);
  const intersection=win.IntersectionObserver?new win.IntersectionObserver(entries=>{onScreen=entries[0]?.isIntersecting!==false;syncAnimation();}):null;intersection?.observe(root);doc.addEventListener('visibilitychange',syncAnimation);motion?.addEventListener?.('change',motionChanged);
- const release=()=>{disposed=true;clearTimeout(lookTimer);if(frame!==null)win.cancelAnimationFrame?.(frame);observer?.disconnect();intersection?.disconnect();unsubscribe?.();win.removeEventListener('resize',resize);doc.removeEventListener('visibilitychange',syncAnimation);motion?.removeEventListener?.('change',motionChanged);avatar.onload=null;root.remove();};
- try{setState(await bridge.home({action:'status'}));resize();syncAnimation();}catch(error){release();throw error;}
+ const release=()=>{disposed=true;animationEpoch++;win.clearInterval(motionTimer);petMotion.dispose();video.onended=video.onerror=null;if(video.getAttribute('src'))video.pause();video.removeAttribute('src');clearTimeout(lookTimer);if(frame!==null)win.cancelAnimationFrame?.(frame);observer?.disconnect();intersection?.disconnect();unsubscribe?.();win.removeEventListener('resize',resize);doc.removeEventListener('visibilitychange',syncAnimation);motion?.removeEventListener?.('change',motionChanged);avatar.onload=null;root.remove();};
+ try{setState(await bridge.home({action:'status'}));resize();syncAnimation();void bridge.home({action:'pet-animations'}).then(result=>{if(!disposed&&result.animations){animations=result.animations;void play('idle');}}).catch(()=>{});}catch(error){release();throw error;}
  return release;
 }
 

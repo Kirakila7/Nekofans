@@ -18,12 +18,13 @@ const nativeComposer=fs.readFileSync(path.join(base,'native-composer-source.js')
 const questions=fs.readFileSync(path.join(base,'question-bridge-source.js'),'utf8');
 const questionForms=fs.readFileSync(path.join(base,'../compact-questions.js'),'utf8');
 const questionBlock='const WORKBENCH_QUESTION_FORMS = (function (module, globalThis) {\n'+questionForms+'\nreturn globalThis.WorkbenchQuestions;\n})(undefined, {});\n'+questions+'\n';
-const ourHome=fs.readFileSync(path.join(base,'our-home-ui-source.js'),'utf8');
+const ourHome=fs.readFileSync(path.join(base,'home-pet-motion-source.js'),'utf8')+'\n'+fs.readFileSync(path.join(base,'our-home-ui-source.js'),'utf8');
 const home=fs.readFileSync(path.join(base,'yui-home-ui-source.js'),'utf8');
 const homeTextures=fs.readFileSync(path.join(base,'yui-home-textures-source.js'),'utf8');
 const homeCss=fs.readFileSync(path.join(base,'yui-home-ui-source.css'),'utf8');
 const block='// @neko-workspace-shell:start\nconst WORKSPACE_SHELL_CSS = '+JSON.stringify(css)+' + '+JSON.stringify(bubbleCss)+' + '+JSON.stringify(previewCss)+' + '+JSON.stringify(homeCss)+';\n'+composerBlock+homeTextures+'\n'+home+'\n'+ourHome+'\n'+preview+'\n'+nativeComposer+'\n'+questionBlock+source+'\n// @neko-workspace-shell:end\n';
-let code=fs.readFileSync(file,'utf8');
+const originalCode=fs.readFileSync(file,'utf8');
+let code=originalCode.replace(/\r\n/g,'\n');
 const avatarThemePattern=/\/\/ @neko-avatar-theme:start[\s\S]*?\/\/ @neko-avatar-theme:end/;
 if(!avatarThemePattern.test(code))throw Error('Missing avatar theme source markers');
 code=code.replace(avatarThemePattern,()=>avatarTheme.trimEnd());
@@ -36,4 +37,5 @@ if(!accountPattern.test(code)) throw new Error('Missing account habitat CSS cons
 code=code.replace(accountPattern,()=> 'const ACCOUNT_HABITAT_CSS = '+JSON.stringify(accountCss)+';');
 code=code.replace(/mountHome: stage => mountYuiHome\(stage, \{ avatar: builtinSrc(?:, posterSrc: ACCOUNT_PET_ART.still)? \}\)/g,'mountHome: stage => mountYuiHome(stage, { avatar: builtinSrc, posterSrc: ACCOUNT_PET_ART.still })');
 code=code.replace(/nativeComposerBindings: \{ getSelection: \(\) => ctx\.uiWorkspace\?\.selection\?\.getSnapshot\?\.\(\), getMainSessionId: \(\) => ctx\.uiWorkspace\?\.mainReference\?\.sessionId, getBinding: id => ctx\.uiWorkspace\?\.sessions\?\.binding\?\.\(id\), getShell: \(_binding, id\) => ctx\.get\?\.\('conversation'\)\?\.input\?\.shell\?\.\(id\), subscribeSelection: callback => ctx\.uiWorkspace\?\.selection\?\.subscribe\?\.\(callback\) \}/g,'nativeComposerBindings: createNativeComposerDshBindings(ctx)');
-fs.writeFileSync(file,patchVisibleAvatarUi(code));
+const output=patchVisibleAvatarUi(code);
+fs.writeFileSync(file,originalCode.includes('\r\n')?output.replace(/\n/g,'\r\n'):output);

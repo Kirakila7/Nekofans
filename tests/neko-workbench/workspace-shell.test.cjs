@@ -345,8 +345,8 @@ test('home co-build switching preserves existing drafts and rechecks input chang
 });
 
 test('installed UI bundle contains the canonical workspace implementation and accessible hero labels',()=>{
- const code=fs.readFileSync(path.join(base,'embedded-dsh/b0-skin/packages/dsh-client-ui-white-label/lib/client.js'),'utf8');
- const source=fs.readFileSync(path.join(base,'embedded-dsh/workspace-shell-source.js'),'utf8');
+ const code=fs.readFileSync(path.join(base,'embedded-dsh/b0-skin/packages/dsh-client-ui-white-label/lib/client.js'),'utf8').replace(/\r\n/g,'\n');
+ const source=fs.readFileSync(path.join(base,'embedded-dsh/workspace-shell-source.js'),'utf8').replace(/\r\n/g,'\n');
  const css=fs.readFileSync(path.join(base,'embedded-dsh/workspace-shell-source.css'),'utf8');
  const accountCss=fs.readFileSync(path.join(base,'embedded-dsh/account-habitat-source.css'),'utf8');
  assert(code.includes(source));assert(code.includes(JSON.stringify(css)));
