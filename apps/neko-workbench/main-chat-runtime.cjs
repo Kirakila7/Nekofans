@@ -113,7 +113,7 @@ class WorkbenchMainChat {
     if (this.closed) throw new Error('聊天服务已关闭');
     this.opened = this.shared.openMainChat({ settings: this.settings, personasDir: this.personasDir,
       dataDir: this.dataDir, secretStore: this.secretStore, fetch:this.media.wrapFetch(this.fetch||globalThis.fetch.bind(globalThis),this.settings.protocol),
-      ...(this.backend === 'deepseek-account' ? {provider:this.accountProvider?{stream:input=>this.accountProvider.stream({...input,messages:input.messages.map(m=>({...m,text:this.media.modelText(m.text)}))})}:unavailableAccountProvider} : {}),
+      ...(this.backend === 'deepseek-account' ? {provider:this.accountProvider?{stream:input=>this.accountProvider.stream({...input,messages:this.media.accountMessages(input.messages)})}:unavailableAccountProvider} : {}),
       memoryContext:(personaId,query,budget,signal)=>this.memorySystem.recall(personaId,query,budget,signal),
       localMemoryProcessing:false,
       environmentContext:this.environmentContext,

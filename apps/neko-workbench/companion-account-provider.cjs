@@ -26,8 +26,8 @@ function createCompanionAccountProvider(rpc, { namespace = 'companion' } = {}) {
         if (m.personaId !== input.persona?.id || !['user', 'assistant'].includes(m.role) || typeof m.text !== 'string' || !m.text.trim()) continue;
         if (!history.length && m.role !== 'user') continue;
         const previous = history.at(-1);
-        if (previous?.role === m.role) previous.text += `\n\n${m.text.trim()}`;
-        else history.push({ role: m.role, text: m.text.trim() });
+        if (previous?.role === m.role) {previous.text += `\n\n${m.text.trim()}`;if(m.role==='user'&&m.images?.length)previous.images=[...(previous.images||[]),...m.images];}
+        else history.push({ role: m.role, text: m.text.trim(),...(m.role==='user'&&m.images?.length?{images:m.images}:{}) });
       }
       const confirmed = (input.memories || []).filter(m => m.personaId === input.persona?.id && m.confirmation === 'confirmed')
         .map(m => `- ${m.text.replace(/\s+/g, ' ').trim()}`).join('\n');
@@ -47,7 +47,7 @@ function createCompanionAccountProvider(rpc, { namespace = 'companion' } = {}) {
       const cancel = () => { if (!settled) void Promise.resolve(rpc(method('cancel'), { requestId })).catch(() => {}); };
       input.signal.addEventListener('abort', cancel, { once: true });
       try {
-        const result = await rpc(method('chat'), { requestId, text: last.text, context, history, maxTokens: input.maxOutputTokens });
+        const result = await rpc(method('chat'), { requestId, text: last.text, context, history, maxTokens: input.maxOutputTokens,...(last.images?.length?{images:last.images}:{}) });
         if (input.signal.aborted) throw new Error('Cancelled');
         if (typeof result?.text !== 'string' || !result.text.trim()) throw Error('Account returned no reply');
         settled = true;
