@@ -20,3 +20,7 @@ test('unavailable or failed home mounting is visible and retryable',{skip:!JSDOM
 test('a late mount after disposal is cleaned up',{skip:!JSDOM},async t=>{
  let resolveMount,cleanups=0;const f=fixture(t,{mountHome:()=>new Promise(resolve=>{resolveMount=resolve;})});f.home.click();f.panel.disposeHome();resolveMount(()=>{cleanups++;});await tick();assert.equal(cleanups,1);
 });
+test('each entry returns the pet home even when the room is already mounted',{skip:!JSDOM},async t=>{
+ let entries=0,mounts=0;const f=fixture(t,{mountHome:async stage=>{mounts++;stage.addEventListener('neko-home-enter',()=>entries++);}});
+ await f.panel.openHome();assert.equal(entries,1);f.panel.showRooms();await f.panel.openHome();assert.equal(entries,2);await f.panel.openHome();assert.equal(entries,3);assert.equal(mounts,1);
+});

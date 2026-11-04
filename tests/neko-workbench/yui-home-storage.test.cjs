@@ -70,7 +70,7 @@ test('独立存档可重启恢复，原家园与 Minecraft 路径不会被访问
   assert.deepEqual(state.blocks, [{x:1,y:2,z:3,material:'glass'}]);
   assert.deepEqual(state.camera, {azimuth:15,elevation:35,zoom:1.2});
   assert.deepEqual(await fs.readdir(path.join(dir,'our-home')), ['world.json']);
-  assert.equal(JSON.parse(await fs.readFile(path.join(dir,'our-home','world.json'),'utf8')).version, 2);
+  assert.equal(JSON.parse(await fs.readFile(path.join(dir,'our-home','world.json'),'utf8')).version, 3);
 });
 
 test('存档损坏时禁止覆盖并提供可显示的错误', async t => {

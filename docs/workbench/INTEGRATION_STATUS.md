@@ -1,4 +1,16 @@
-# Local integration 0.28.41 / build 77
+# Local integration 0.28.42 / build 78
+
+## Home build value and icon controls (2026-11-04)
+
+Based on current default-branch commit f25226d. The approved home layout now has a prominent white `价值：… Token` card above the invitation, three icon-only controls at the upper right, and no lower-right instruction text. Accessible names and pressed states remain available. Every entry through 我的​小窝 returns Bigfish home, including cached and retried mounts.
+
+Value is forward-only and tied to the dedicated home session's successful native `write`/`edit` scene mutations. The bridge observes the final native tool result, validates its actual before/after scene, and associates it with the owning assistant step's provider-reported `totalTokens`. Equivalent JSON formatting, item order, default fields, color case and complete rotations do not count. Multiple mutations from one model step count once. The renderer cannot submit receipts or totals. Home instructions direct model edits through these native tools; bash/script/legacy-editor writes and unattributable changes are not estimated or charged to this meter.
+
+Only validated scene changes accepted by the home runtime are recorded. Scene and deduplicated receipt ledger commit in the same atomic world save; failed saves retain the prior total and can retry. Versions 1/2 migrate without inventing historical usage. Missing provider totals display `—`, with known accumulated usage in the tooltip. Ordinary chat, planning-only steps, manual edits, camera changes and pet motion do not count. The installed DSH native `Session.snapshotEvents()` contract was exercised with local synthetic usage; this is not real supplier/account billing verification.
+
+Validation: 93 focused home, storage, IPC, native bridge and workspace cases passed without skips. An isolated actual Electron renderer verified white background, three icons with no visible labels, perspective controls, automatic return, narrow layout, persisted usage and restart deduplication. The standard source check passes syntax and skin-patch checks, then encounters the existing white-label smoke expectation for the removed Claude avatar; the unchanged baseline reproduces that failure. PR #58 remains separate and unmerged; issue #69 is retained.
+
+The macOS Apple Silicon delivery is built with `scripts/build-neko-daily.mjs`; build/signature and packaged-source acceptance are recorded alongside the local delivery. Production accounts and the installed daily app are not modified by QA.
 
 ## Home pet aspect ratio correction (2026-11-04)
 
