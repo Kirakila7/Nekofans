@@ -1,4 +1,6 @@
-# Local integration 0.28.41 / build 77
+# Local integration 0.28.42-test.3 / build 80
+
+2026-11-04 Windows test ZIP uses the canonical daily builder, version 0.28.42-test.3 / build 80, and the existing isolated Nekofans-PR62-64-Test profile. No personal files or credentials are packaged.
 
 2026-11-04 Fish-date account vision: fix the detached character poster/video hidden rule so only one layer renders. Private account requests now carry bounded real image bytes through the existing DeepSeek-account route and native attachment service. File signatures detect image/GIF types; GIFs stay animated in history while native Sharp produces up to three ordered model frames. Missing account image capability fails visibly. Public/proactive/memory images remain refused and cancellation remains independent. 117 regression cases passed; the separately enabled real bundled DSH/Sharp image suite passed 8/8, including three-frame pixel verification. Actual Electron checked the single visible character and original GIF. Only synthetic model replies were used. See FISH_DATE.md.
 
