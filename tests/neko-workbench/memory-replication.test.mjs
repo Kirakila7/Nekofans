@@ -23,6 +23,22 @@ test('native is the only provider by default; ten replays and restart preserve I
   await memory.recall('bigfish','晚上',1000);assert.equal(f.recalls(),1);
   await memory.close();memory=f.create();assert.equal(memory.status().mode,'neko');await memory.sync();assert.equal(memory.status().pending,0);
 });
+
+test('priority and pin revisions survive sync/restart, preserve certainty and reject stale/invalid updates',async t=>{
+  const f=fixture(t);let memory=f.create();const original=event('priority-base',[],{value:{...event('x').value,certainty:'candidate'}});
+  await memory.hub.add([original]);await memory.sync();
+  await memory.change({action:'event-priority',id:original.itemId,priority:92,pinned:true,revisionIds:[original.eventId]});await memory.sync();
+  let row=memory.hub.records()[0];assert.equal(row.value.priority,92);assert.equal(row.value.pinned,true);assert.equal(row.value.certainty,'candidate');assert.equal(row.value.text,original.value.text);assert.equal(row.createdAt,original.occurredAt);
+  await assert.rejects(memory.change({action:'event-priority',id:row.itemId,priority:20,pinned:false,revisionIds:[original.eventId]}));
+  for(const priority of [-1,101,1.5,NaN,'60'])await assert.rejects(memory.change({action:'event-priority',id:row.itemId,priority,pinned:false,revisionIds:row.heads.map(e=>e.eventId)}));
+  await assert.rejects(memory.hub.add([event('invalid-priority',[],{itemId:'bad',value:{...original.value,priority:101}})]));
+  await assert.rejects(memory.hub.add([event('invalid-pin',[],{itemId:'bad',value:{...original.value,pinned:'true'}})]));
+  await memory.close();memory=f.create();await memory.sync();row=memory.hub.records()[0];assert.equal(row.value.priority,92);assert.equal(row.value.pinned,true);
+  await memory.change({action:'event-update',id:row.itemId,text:'更正后的合成偏好',revisionIds:row.heads.map(e=>e.eventId)});await memory.sync();row=memory.hub.records()[0];assert.equal(row.value.priority,92);assert.equal(row.value.pinned,true);
+  await memory.change({action:'event-delete',id:row.itemId,revisionIds:row.heads.map(e=>e.eventId)});await memory.sync();row=memory.hub.records()[0];
+  await assert.rejects(memory.change({action:'event-priority',id:row.itemId,priority:100,pinned:true,revisionIds:row.heads.map(e=>e.eventId)}));
+  await memory.change({action:'event-restore',id:row.itemId,revisionIds:row.heads.map(e=>e.eventId)});await memory.sync();assert.equal(memory.hub.records()[0].value.priority,92);
+});
 test('offline native keeps pending writes and never falls back to local recall',async t=>{
   const f=fixture(t),memory=f.create();await memory.hub.add([event('offline')]);f.setOnline(false);
   await assert.rejects(memory.sync());await assert.rejects(memory.recall('bigfish','晚上',1000));assert.equal(memory.status().mode,'neko');assert.equal(memory.status().pending,1);

@@ -1,5 +1,35 @@
 # Local integration 0.28.41 / build 77
 
+## Fish memory explorer (2026-11-04, release-based integration)
+
+This branch starts at release v0.28.41, commit 20dde9291c35ee74b464679eb43a2a7234db6356.
+It adds the 鱼的记忆 entry below community and a direct desktop-menu entry, a
+star-map/list switch, glass record editors, priority/pinning, and per-role archive
+viewing. Native memory remains Bigfish-owned; other roles view only their existing
+persona-scoped archives. Selection does not switch chat accounts or engines.
+Priority changes preserve certainty and native identities and order relevant
+retrieval hits before context allocation. Deleted records stay excluded from recall.
+
+The original dirty checkout is retained. Configuration import/export and the
+account-memory relay are separate work and are excluded from this branch. PR #62
+is fetched separately for combined testing; it is not implicitly published or
+merged by this feature. Release-branch validation: 65 focused Node tests passed without skips. Three real
+bundled-Python service/component tests passed (native extraction, confirmed recall,
+correction/deletion/restart, private lifecycle and independent Anthropic routing),
+and the real FactStore recovery/priority test passed. All fixtures are synthetic.
+
+Combined testing pins PR #62 at ad99e456e857912f423a0b6742ddd2152fc1149f. The local
+test merge is 4293804aefef9f0769860c46b5cbeef12ee3b9a1; generated bundle and doc conflicts
+were resolved by regeneration and retaining both notes. With isolated jsdom 26.1.0,
+134 tests ran: 133 passed, 1 failed, 0 skipped. The failure is the unchanged texture
+archive fixture's hardcoded /usr/bin/zip (ENOENT on Windows); a release-baseline
+rerun reproduces the identical failure (4/5 texture tests pass). The 65 memory/chat
+checks and 64 PR #62/home/workspace checks all pass; the other 5 checks are textures.
+No native Electron pixel/zoom acceptance or real account/model connectivity is claimed.
+Browser fixture/design checks are documented in design-qa.md; they are synthetic,
+not a claim of real model connectivity or native Electron acceptance. No installer
+or release asset is rebuilt by this change.
+
 2026-11-04 Windows icon follow-up: the existing Bigfish brand avatar is exported with provenance into `assets/icons` as WebP/PNG and a transparent seven-size ICO. The Windows builder updates the staged application's PE icon groups before hashing, and NSIS uses the same ICO for installer/uninstaller resources. Legacy executable/profile/uninstall identities are preserved. A separate real Electron PE copy was patched and its extracted icon visually verified as Bigfish; all six installer regressions, including actual NSIS compilation, pass. This source revision does not replace the user's installed application automatically.
 
 ## Desktop speech and daily settings (2026-11-04, new version branch)
