@@ -2,16 +2,14 @@
 function installPrivacySettings(doc = document) {
   const Observer = doc.defaultView?.MutationObserver;
   if (!doc.documentElement || !doc.head || !Observer) return () => {};
-  const rows = new Map(), cards = new Set();
+  const rows = new Map();
   const titles = new Map([
     ['在使用官方模型 API 时上传 Session Log', 'zh'],
     ['Upload Session Log when using the official model API', 'en'],
   ]);
-  const cardSelector = 'section._6qcDqa_section > ._6qcDqa_card, section._6qcDqa_section > ._6qcDqa_balanceCard';
   const style = doc.createElement('style');
   style.dataset.nekoPrivacyStyle = '';
   style.textContent = `
-    .neko-settings-account-card { display: none !important; }
     [data-neko-privacy-collapsed="true"] { display: none !important; }
     .neko-privacy-settings { margin: 12px 0 0; }
     .neko-privacy-settings > button {
@@ -85,9 +83,6 @@ function installPrivacySettings(doc = document) {
       if (record.header.parentNode !== row.parentNode || record.header.nextSibling !== row) row.before(record.header);
       render(record, value.control, value.language);
     }
-    const selected = new Set(doc.querySelectorAll(cardSelector));
-    for (const card of cards) if (!selected.has(card)) { card.classList.remove('neko-settings-account-card'); cards.delete(card); }
-    for (const card of selected) if (!cards.has(card)) { card.classList.add('neko-settings-account-card'); cards.add(card); }
   }
   function schedule() {
     if (disposed || queued) return;
@@ -103,7 +98,6 @@ function installPrivacySettings(doc = document) {
     disposed = true; observer.disconnect();
     doc.removeEventListener('change', schedule, true); doc.removeEventListener('click', schedule, true);
     for (const record of rows.values()) release(record);
-    for (const card of cards) card.classList.remove('neko-settings-account-card');
-    rows.clear(); cards.clear(); style.remove();
+    rows.clear(); style.remove();
   };
 }
