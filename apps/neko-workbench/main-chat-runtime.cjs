@@ -4,6 +4,8 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { WorkbenchSecretStore, atomicBytes } = require('./main-chat-secret.cjs');
 
+const {createMemoryAccountRelay}=require('./memory-account-relay.cjs');
+
 const PERSONA = 'bigfish';
 const BACKENDS = new Set(['chat-api', 'neko', 'deepseek-account']);
 const usesChatService = backend => backend === 'chat-api' || backend === 'deepseek-account';
@@ -49,7 +51,7 @@ function parseApiInput(input, shared) {
 }
 
 class WorkbenchMainChat {
-  constructor({ dataDir, repositoryRoot, safeStorage, fetch: fetchImpl, initialBackend = 'chat-api', sharedModules, memoryWorker, accountProvider,lobbyAccountProvider,proactiveAccountProvider,environmentContext } = {}) {
+  constructor({ dataDir, repositoryRoot, safeStorage, fetch: fetchImpl, initialBackend = 'chat-api', sharedModules, memoryWorker, accountProvider,lobbyAccountProvider,proactiveAccountProvider,memoryAccountProvider,environmentContext } = {}) {
     this.dataDir = path.join(dataDir, 'main-chat');
     this.repositoryRoot = repositoryRoot;
     this.personasDir = path.join(this.dataDir, 'personas');
@@ -60,6 +62,7 @@ class WorkbenchMainChat {
     if (accountProvider != null && typeof accountProvider.stream !== 'function') throw new Error('工作台账号聊天接口无效');
     if (lobbyAccountProvider != null && (typeof lobbyAccountProvider.stream !== 'function' || typeof lobbyAccountProvider.status !== 'function')) throw new Error('聊天室账号聊天接口无效');
     this.memoryWorker = memoryWorker; this.accountProvider = accountProvider || null;
+    this.memoryAccountProvider=memoryAccountProvider||null;
     if(proactiveAccountProvider!=null&&typeof proactiveAccountProvider.stream!=='function')throw new Error('主动搭话账号接口无效');
     this.proactiveAccountProvider=proactiveAccountProvider||null;
     this.lobbyAccountProvider = lobbyAccountProvider || null; this.lobbyAccountStatus = 'unavailable';
@@ -188,6 +191,7 @@ class WorkbenchMainChat {
       try {
         if (oldBackend !== backend) { this.lobbyProviderEpoch++; this.lobbyAccountCheckedAt = 0; this.lobbyAccountStatus = 'unavailable'; }
         if ((oldBackend === 'deepseek-account') !== (backend === 'deepseek-account')) {
+          await this.memoryAccountRelay?.stop();await this.memorySystem?.worker.stop();
           this.closeOpened(); this.backend = backend; this.openNow();
         } else this.backend = backend;
         this.configError = '';
@@ -238,7 +242,7 @@ class WorkbenchMainChat {
       const restoreSecret = await this.secretStore.prepareRollback();
       try {
         this.closeOpened();
-        if(this.readMemoryModel().useChatApi)await this.memorySystem?.worker.stop();
+        if(this.readMemoryModel().useChatApi){await this.memoryAccountRelay?.stop();await this.memorySystem?.worker.stop();}
         if (change.key.action === 'replace') await this.secretStore.set(change.key.value);
         else if (change.key.action === 'clear') await this.secretStore.clear();
         if (this.closed) throw failure();
@@ -274,10 +278,16 @@ class WorkbenchMainChat {
   readMemoryModel() {
     let settings={useChatApi:true};
     if(fs.existsSync(this.memoryConfigFile))settings=JSON.parse(fs.readFileSync(this.memoryConfigFile,'utf8'));
-    return {...settings,hasKey:this.memorySecretStore.has()};
+    return {...settings,hasKey:this.memorySecretStore.has(),route:settings.useChatApi&&this.backend==='deepseek-account'?'deepseek-account':'api-key'};
   }
   async memoryModel() {
-    const config=this.readMemoryModel(),settings=config.useChatApi?this.settings:config;
+    const config=this.readMemoryModel();
+    if(config.useChatApi&&this.backend==='deepseek-account'){
+      this.memoryAccountRelay??=createMemoryAccountRelay({provider:this.memoryAccountProvider,isCurrent:()=>!this.closed&&this.backend==='deepseek-account'&&this.readMemoryModel().useChatApi===true});
+      return this.memoryAccountRelay.start();
+    }
+    await this.memoryAccountRelay?.stop();
+    const settings=config.useChatApi?this.settings:config;
     this.shared.validateConfig(settings);
     return {...settings,apiKey:await (config.useChatApi?this.secretStore:this.memorySecretStore).get()};
   }
@@ -299,6 +309,7 @@ class WorkbenchMainChat {
     }
     await this.memorySystem.activeSync?.catch(()=>{});
     await this.memorySystem.worker.stop();
+    await this.memoryAccountRelay?.stop();
     return this.memorySystem.connect();
   }
   async memoryAction(input) {
@@ -343,7 +354,7 @@ class WorkbenchMainChat {
       },
       recordSharedExperience: async input => ready().recordSharedExperience(input) });
   }
-  close() { this.closed = true; this.publish(); this.cancel(); return this.serial(async () => { await this.memorySystem?.close(); this.closeOpened(); this.listeners.clear(); }); }
+  close() { this.closed = true; this.publish(); this.cancel(); return this.serial(async () => { await this.memoryAccountRelay?.stop();await this.memorySystem?.close(); this.closeOpened(); this.listeners.clear(); }); }
 }
 
 function trustedLocalCaller(event, window, expectedUrl) {

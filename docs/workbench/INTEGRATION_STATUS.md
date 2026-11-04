@@ -1,5 +1,7 @@
 # Local integration 0.28.41 / build 77
 
+2026-11-04 DeepSeek account memory channel (local source): the native memory worker can now reuse the current signed-in DSH account through a separate `memory-account-*` bridge and an authenticated loopback OpenAI-compatible adapter. No supplier API key is required or extracted. Memory requests serialize independently of companion/lobby/proactive locks; each request checks account readiness, and route switches/shutdown revoke the local endpoint. Independent encrypted API settings remain supported. Synthetic end-to-end acceptance used the actual bundled Python, installed OpenAI SDK, native ChatOpenAI and memory worker to extract, persist and pull an episode; no real supplier account or credits were used. This does not update the earlier installer or installed application. See `MEMORY_ACCOUNT_CHANNEL.md`.
+
 2026-11-04 Windows icon follow-up: the existing Bigfish brand avatar is exported with provenance into `assets/icons` as WebP/PNG and a transparent seven-size ICO. The Windows builder updates the staged application's PE icon groups before hashing, and NSIS uses the same ICO for installer/uninstaller resources. Legacy executable/profile/uninstall identities are preserved. A separate real Electron PE copy was patched and its extracted icon visually verified as Bigfish; all six installer regressions, including actual NSIS compilation, pass. This source revision does not replace the user's installed application automatically.
 
 ## Desktop speech and daily settings (2026-11-04, new version branch)

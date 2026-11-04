@@ -365,7 +365,7 @@ async function refreshApiHistory(){
 }
 async function startMainChat(){
   await homeReady;
-  mainChatRuntime=new WorkbenchMainChat({dataDir:data,repositoryRoot:path.resolve(base,'../..'),safeStorage,accountProvider:createCompanionAccountProvider(rpc),lobbyAccountProvider:createCompanionAccountProvider(rpc,{namespace:'lobby'}),proactiveAccountProvider:createCompanionAccountProvider(rpc,{namespace:'proactive'}),environmentContext:()=>[ourHomeRuntime.context(),channelLife.context()].filter(Boolean).join('\n\n'),initialBackend:state.neko.enabled?'neko':'deepseek-account'});
+  mainChatRuntime=new WorkbenchMainChat({dataDir:data,repositoryRoot:path.resolve(base,'../..'),safeStorage,accountProvider:createCompanionAccountProvider(rpc),lobbyAccountProvider:createCompanionAccountProvider(rpc,{namespace:'lobby'}),proactiveAccountProvider:createCompanionAccountProvider(rpc,{namespace:'proactive'}),memoryAccountProvider:createCompanionAccountProvider(rpc,{namespace:'memory'}),environmentContext:()=>[ourHomeRuntime.context(),channelLife.context()].filter(Boolean).join('\n\n'),initialBackend:state.neko.enabled?'neko':'deepseek-account'});
   await mainChatRuntime.start();mainChatRuntime.subscribe(value=>{applyMainChat(value);lobbyController.refresh();});await refreshApiHistory();
   if(state.connection==='ready')await mainChatRuntime.refreshLobbyAccount();
   lobbyController.processPending();
