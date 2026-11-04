@@ -6,11 +6,11 @@ const {validateHomeItems,homeContext,parseHomeScene,sceneFingerprint}=require('.
 function createOurHomeRuntime({workspaceDir,getStorage,onError=()=>{},intervalMs=1000}){
  const directory=path.join(workspaceDir,'our-home'),file=path.join(directory,'scene.json');let timer,stopped=false,lastHash='',snapshot=null,error='',unsubscribe,tail=Promise.resolve();const pending=new Map();
  function refresh(){const task=tail.catch(()=>{}).then(readScene);tail=task;return task;}
- async function readScene(){if(stopped)return;try{
+ async function readScene(){if(stopped)return;const observed=new Map(pending);try{
   const dir=await fs.lstat(directory);if(!dir.isDirectory()||dir.isSymbolicLink())throw Error('小窝共建目录无效');const st=await fs.lstat(file);if(!st.isFile()||st.isSymbolicLink()||st.size>160000)throw Error('小窝场景文件过大或不是普通文件');
   const real=await fs.realpath(file),parent=await fs.realpath(directory);if(path.dirname(real)!==parent)throw Error('小窝场景路径无效');
   const handle=await fs.open(file,'r');let raw;try{const opened=await handle.stat();if(opened.ino!==st.ino||opened.dev!==st.dev||!opened.isFile())throw Error('小窝场景在读取前发生变化');const buffer=Buffer.alloc(160001);let count=0;while(count<buffer.length){const result=await handle.read(buffer,count,buffer.length-count,count);if(!result.bytesRead)break;count+=result.bytesRead;}if(count>160000)throw Error('小窝场景文件过大');raw=buffer.subarray(0,count).toString('utf8');}finally{await handle.close();}
-  const items=parseHomeScene(raw),hash=sceneFingerprint(items),receipts=[],reachable=new Set([hash]),waiting=[...pending.values()],store=await getStorage();
+  const items=parseHomeScene(raw),hash=sceneFingerprint(items),receipts=[],reachable=new Set([hash]),waiting=[...observed.values()],store=await getStorage();
   for(let found=true;found;){found=false;for(let i=waiting.length-1;i>=0;i--){const receipt=waiting[i];if(reachable.has(receipt.afterHash)){receipts.push(receipt);reachable.add(receipt.beforeHash);waiting.splice(i,1);found=true;}}}
   if(hash!==lastHash||error||receipts.length||store.state().persistence?.status==='save-error'){
    if(hash!==sceneFingerprint(store.state().items||[])||receipts.length||store.state().persistence?.status==='save-error'){
@@ -20,7 +20,7 @@ function createOurHomeRuntime({workspaceDir,getStorage,onError=()=>{},intervalMs
   }
   // Each receipt describes a specific successful native write. Do not retain
   // an unmatched receipt for an unrelated future scene that happens to match.
-  pending.clear();
+  for(const [key,receipt]of observed)if(pending.get(key)===receipt)pending.delete(key);
  }catch(e){error=e.code==='ENOENT'?'':e.message||'小窝场景未能更新';if(error)onError(error);}}
  function acceptBuild(receipt){try{if(!receipt||!(/^[a-f0-9]{64}$/.test(receipt.key))||!(/^[a-f0-9]{64}$/.test(receipt.beforeHash))||receipt.beforeHash===receipt.afterHash||sceneFingerprint(validateHomeItems(receipt.items))!==receipt.afterHash||!(receipt.tokens===null||Number.isSafeInteger(receipt.tokens)&&receipt.tokens>=0))return Promise.resolve();pending.set(receipt.key,receipt);return refresh();}catch{return Promise.resolve();}}
  async function start(){const storage=await getStorage();snapshot=storage.state();unsubscribe=storage.subscribe(value=>snapshot=value);await fs.mkdir(directory,{recursive:true});const dir=await fs.lstat(directory);if(!dir.isDirectory()||dir.isSymbolicLink())throw Error('小窝共建目录不能是链接');

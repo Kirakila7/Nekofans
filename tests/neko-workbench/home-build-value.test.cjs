@@ -45,3 +45,8 @@ test('watcher counts only native receipts matching an accepted scene; poll befor
  await fs.writeFile(info.file,JSON.stringify(JSON.parse(scene(b)),null,2));const revision=storage.state().revision;await runtime.refresh();assert.equal(storage.state().revision,revision);
 });
 test('fast sequential native writes form a verified chain and count each successful model call once',async()=>{const storage=await createYuiHomeStorage({store:{load:async()=>null,save:async()=>{}}});await storage.applyScene(b,[receipt(fixture()),receipt(fixture({items:b,before:a,step:3,tokens:20}))]);assert.equal(storage.state().homeValue.tokens,1254);});
+test('a native receipt arriving during an in-flight watcher save is retained for the next refresh',async t=>{
+ const dir=await fs.mkdtemp(path.join(os.tmpdir(),'home-value-race-'));t.after(()=>fs.rm(dir,{recursive:true,force:true}));let block=false,release,started;
+ const waiting=new Promise(resolve=>started=resolve),storage=await createYuiHomeStorage({store:{load:async()=>null,save:async()=>{if(block){block=false;started();await new Promise(resolve=>release=resolve);}}}}),runtime=createOurHomeRuntime({workspaceDir:dir,getStorage:async()=>storage,intervalMs:100000});t.after(()=>runtime.dispose());const {file}=await runtime.start();
+ await fs.writeFile(file,scene(a));block=true;const polling=runtime.refresh();await waiting;const accounting=runtime.acceptBuild(receipt(fixture()));release();await polling;await accounting;assert.equal(storage.state().homeValue.tokens,1234);
+});
