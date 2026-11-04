@@ -1,4 +1,6 @@
-# Local integration 0.28.41 / build 77
+# Local integration 0.28.42-test.5 / build 82
+
+2026-11-04 PR67 latest test integration: PR67 was merged at f25226d8235d0d78b03ea46923ac0e33a4251a70. This test source also retains the tested account vision, single-character, private attachment isolation and in-flow sticker layout corrections from 0c0d64a2ee1ba3800548971a44c1d72d6a14936f. Combined regression passed 141/141 with no skips, including actual bundled DSH/Sharp GIF verification. Build test.5 / 82 via the canonical daily builder and keep the existing isolated test profile; user data is excluded.
 
 ## Home pet aspect ratio correction (2026-11-04)
 
