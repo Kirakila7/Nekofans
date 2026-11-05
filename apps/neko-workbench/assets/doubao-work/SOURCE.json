@@ -1,5 +1,5 @@
 {
-  "description": "User-selected red-scarf chibi working animation, generated with Updream using an existing work-motion reference.",
+  "description": "User-identified Dounai (豆奶), a red-scarf chibi working animation generated with Updream using an existing work-motion reference. The internal asset folder name is retained for compatibility.",
   "sourceFilename": "豆包_原版工作点按复刻_10秒.mp4",
   "sourceSha256": "0d9151a7942985b31ac2f5e4df28df4e4861055029dfb53ef40a3005c9484bf0",
   "processing": "Green background keyed to alpha; 640x360 animated WebP at approximately 12 fps; first-frame PNG fallback.",
