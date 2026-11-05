@@ -33,6 +33,7 @@ function fixture(reduced=false){
 }
 test('Doubao appearance follows the real helper working state and respects reduced motion',()=>{
  const state={preferences:A.normalizePreferences({})};
+ assert.equal(A.choices.find(choice=>choice.id===A.DOUBAO).label,'豆奶 · 工作点按');
  assert(A.setDefault(state,'subagent',A.DOUBAO));
  const actor={id:'subagent-real',kind:'subagent',sessionId:'real-child',active:true,status:'working'};
  const f=fixture();f.presenter.render(state,actor);
