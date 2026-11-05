@@ -1,4 +1,6 @@
-# Local integration 0.28.43-test.1 / build 84
+# Local integration 0.28.43-test.2 / build 85
+
+2026-11-05 Windows login follow-up: packaged startup supplies the registered N.E.K.O. desktop public OAuth configuration for Visits and Community Daily. The default loopback callback uses port 48913. Explicit OAuth overrides keep their own configuration. All 71 focused installer, OAuth, Visits and Community Daily checks pass. An anonymous PKCE request with this configuration redirected to the official login page. Account consent and live posting still require real account verification.
 
 2026-11-05 Windows test integration: preserve the installed 0.28.42-test.6 source at `1f0abae` and its account/balance fixes, then include the local Help & Feedback contacts, PR #70's account menu regression correction, PR #71 at `66ffdefa82aca799a27ac69ef73ca5b4e31eda38` (verified home building Token receipts) and PR #72 at `287501bb5a1bc86ce79987ba370769cb6d9299f7` (optional Doubao work animation and static fallback). Resolve the generated client conflict by regenerating from both sets of canonical sources. Home usage counts recorded model calls associated with successful scene updates, not account-wide billing; missing usage remains unknown. The Windows ZIP and EXE use one frozen payload and the existing local test profile. No remote PR merge or public asset distribution is performed.
 

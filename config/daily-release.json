@@ -1,6 +1,6 @@
 {
-  "version": "0.28.43-test.1",
-  "build": "84",
+  "version": "0.28.43-test.2",
+  "build": "85",
   "appName": "N.E.K.O.工作台试用.app",
   "bundleIdentifier": "cn.neko.workbench.trial",
   "repository": "Kirakila7/Nekofans",

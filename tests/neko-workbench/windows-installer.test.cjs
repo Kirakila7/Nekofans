@@ -2,6 +2,41 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const root=path.resolve(__dirname,'../..'),workspace=path.dirname(root),modulePromise=import('../../scripts/windows-installer.mjs'),release={version:'1.2.3',build:'4'};
 const hash=file=>crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+
+test('Windows bootstrap supplies a complete Visits OAuth registration for a normal launch', () => {
+  const { runInNewContext } = require('node:vm');
+  const source = fs.readFileSync(path.join(root, 'apps/neko-workbench/windows-bootstrap.cjs'), 'utf8');
+  function launch(overrides = {}) {
+    const env = { ...overrides };
+    const runtime = { execPath: path.join(root, 'NEKOfuns.exe'), resourcesPath: root, env };
+    let visitsConfig;
+    runInNewContext(source, {
+      process: runtime,
+      require(id) {
+        if (id === 'node:path') return path;
+        if (id === 'node:fs') return { readFileSync() { throw Object.assign(new Error(), { code: 'ENOENT' }); }, existsSync: () => false };
+        if (id === 'electron') return { app: { getPath: () => root, setName() {} } };
+        if (id.endsWith('windows-dsh-runtime.cjs')) return { resolveWindowsDsh: () => ({ resources: root }) };
+        assert.ok(id.endsWith('main.cjs'), id);
+        visitsConfig = Object.fromEntries(Object.entries(env).filter(([key]) => key.startsWith('NEKO_VISIT_')));
+      },
+    });
+    return visitsConfig;
+  }
+  const defaults = launch();
+  assert.deepEqual(defaults, {
+    NEKO_VISIT_COMMUNITY_URL: 'https://community.project-neko.cn',
+    NEKO_VISIT_AUTHORIZATION_URL: 'https://auth.project-neko.cn/oauth2/auth',
+    NEKO_VISIT_TOKEN_URL: 'https://auth.project-neko.cn/oauth2/token',
+    NEKO_VISIT_OAUTH_CLIENT_ID: 'neko-servers-desktop-prod',
+    NEKO_VISIT_REDIRECT_URI: 'http://127.0.0.1:48913/oauth/callback',
+  });
+  const custom = { ...defaults, NEKO_VISIT_REDIRECT_URI: 'http://127.0.0.1:49002/oauth/callback' };
+  assert.deepEqual(launch(custom), custom);
+  const customService = { NEKO_VISIT_COMMUNITY_URL: 'https://community.example.test' };
+  assert.deepEqual(launch(customService), customService);
+});
+
 function directory(t){const parent=path.join(workspace,'.neko-windows-build');fs.mkdirSync(parent,{recursive:true});const dir=fs.mkdtempSync(path.join(parent,'installer-unit-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));return dir;}
 function payload(t){const dir=directory(t),application=path.join(dir,'application'),output=path.join(dir,'output');fs.mkdirSync(application);fs.mkdirSync(output);fs.mkdirSync(path.join(application,'assets/$sprite'),{recursive:true});fs.writeFileSync(path.join(application,'NEKOfuns.exe'),'MZ-SYNTHETIC-NOT-RUN');fs.writeFileSync(path.join(application,'assets/$sprite/鱼.txt'),'synthetic');const integrity=Object.fromEntries(['NEKOfuns.exe','assets/$sprite/鱼.txt'].map(name=>[name,hash(path.join(application,name))]));return {dir,application,output,integrity};}
 
