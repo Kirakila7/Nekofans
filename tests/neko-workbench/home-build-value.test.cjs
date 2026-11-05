@@ -50,3 +50,20 @@ test('a native receipt arriving during an in-flight watcher save is retained for
  const waiting=new Promise(resolve=>started=resolve),storage=await createYuiHomeStorage({store:{load:async()=>null,save:async()=>{if(block){block=false;started();await new Promise(resolve=>release=resolve);}}}}),runtime=createOurHomeRuntime({workspaceDir:dir,getStorage:async()=>storage,intervalMs:100000});t.after(()=>runtime.dispose());const {file}=await runtime.start();
  await fs.writeFile(file,scene(a));block=true;const polling=runtime.refresh();await waiting;const accounting=runtime.acceptBuild(receipt(fixture()));release();await polling;await accounting;assert.equal(storage.state().homeValue.tokens,1234);
 });
+test('consecutive writes from one call preserve earlier calls in the verified scene chain', async t => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'home-value-multi-write-'));
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  const storage = await createYuiHomeStorage({ store: { load: async () => null, save: async () => {} } });
+  const runtime = createOurHomeRuntime({ workspaceDir: directory, getStorage: async () => storage, intervalMs: 100000 });
+  t.after(() => runtime.dispose());
+  const { file } = await runtime.start();
+  const c = [{ ...b[0], x: 3 }];
+  await fs.writeFile(file, scene(c));
+  await Promise.all([
+    runtime.acceptBuild(receipt(fixture({ items: a, before: [], step: 2, tokens: 1234 }))),
+    runtime.acceptBuild(receipt(fixture({ items: b, before: a, step: 3, tokens: 20 }))),
+    runtime.acceptBuild(receipt(fixture({ items: c, before: b, step: 3, tokens: 20 }))),
+  ]);
+  assert.equal(storage.state().homeValue.tokens, 1254);
+  assert.equal(storage.state().items[0].x, 3);
+});
