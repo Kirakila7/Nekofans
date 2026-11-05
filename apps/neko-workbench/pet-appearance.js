@@ -5,7 +5,7 @@
   // Common visible bounds across all upstream frames; clip only transparent
   // margins while keeping each animation on the same scale and ground line.
   const pixelFrames=Object.freeze({[CLAUDE_PIXEL]:Object.freeze({x:43,y:35,width:170,height:187,tops:Object.freeze({idle:57,think:62,search:66,read:98,type:81,check:52,success:35,failed:61,'walk-left':57})}),[GEMINI_PIXEL]:Object.freeze({x:48,y:57,width:164,height:165,tops:Object.freeze({idle:62,think:61,search:61,read:97,type:81,check:57,success:58,failed:59,'walk-left':63})})});
-  const choices=Object.freeze([{id:ORIGINAL,label:'大肥鱼 · 原有角色'},{id:CAT,label:'N.E.K.O. 跑动小猫'},{id:GEMINI,label:'Gemini 小猫'},{id:GEMINI_PIXEL,label:'Gemini 小猫 · 像素 Q 版'},{id:DOUBAO,label:'小豆包 · 工作点按'}].map(Object.freeze));
+  const choices=Object.freeze([{id:ORIGINAL,label:'大肥鱼 · 原有角色'},{id:CAT,label:'N.E.K.O. 跑动小猫'},{id:GEMINI,label:'Gemini 小猫'},{id:GEMINI_PIXEL,label:'Gemini 小猫 · 像素 Q 版'},{id:DOUBAO,label:'豆奶 · 工作点按'}].map(Object.freeze));
   const normalizeId=id=>({'crosspet-claude':CLAUDE,'crosspet-gemini':GEMINI})[id]||id;
   const valid=id=>choices.some(choice=>choice.id===normalizeId(id))||[CLAUDE,CLAUDE_PIXEL].includes(normalizeId(id));
   const displayId=id=>[CLAUDE,CLAUDE_PIXEL].includes(normalizeId(id))?ORIGINAL:normalizeId(id);
