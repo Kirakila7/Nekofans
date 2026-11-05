@@ -185,7 +185,7 @@ const communityDaily=createCommunityDaily({dataDir:data,
   getInteractions:()=>mainChatRuntime.history(),
   generate:(rows,signal,options)=>mainChatRuntime.generateCommunityDaily(rows,signal,options),
   publish:request=>visitsController.publishDaily(request),
-  isBusy:()=>quitting||workbenchOnly||!usesMainChatService(mainChatRuntime?.backend)||(mainChatRuntime?.backend==='deepseek-account'&&state.connection!=='ready')||!!activeApiRequest||!!mainChatRuntime?.proactiveAbort||state.actors.some(a=>busy(a))||!!(state.dshRoot&&busy(state.dshRoot))||motionInputs.has('main')||screenShare.read().phase==='sharing'||mainChatRuntime?.opened?.service.state().phase==='replying'||channelLife.status().generating
+  isBusy:()=>quitting||workbenchOnly||!usesMainChatService(mainChatRuntime?.backend)||(mainChatRuntime?.backend==='deepseek-account'&&state.connection!=='ready')||!!activeApiRequest||!!mainChatRuntime?.proactiveAbort||busy(state.actors[0])||motionInputs.has('main')||screenShare.read().phase==='sharing'||mainChatRuntime?.opened?.service.state().phase==='replying'||channelLife.status().generating
 });
 questionRelay=createAgentQuestionRelay({getHost:()=>dshWindow,getSessionId:id=>id!=='main'?state.actors.find(a=>a.id===id)?.sessionId:null,onChange:()=>publishPetQuestions()});
 petQuestionController=createPetQuestionController({BrowserWindow,screen,ipcMain,request:(id,value)=>questionRelay.request(id,value)});
@@ -816,15 +816,23 @@ function channelLifeMenu(){
     ...(snapshot.error?[{label:snapshot.error,enabled:false}]:[])
   ];
 }
+async function signInForCommunityDaily(){
+  openVisits();
+  const visits=visitsController,window=visitsWindow;
+  if(!visits||!window)return;
+  await visits.initialize().catch(()=>{});
+  if(quitting||visitsWindow!==window||window.isDestroyed())return;
+  if(!visits.communityIdentity()&&!visits.snapshot().busy)await visits.action({action:'login'}).catch(()=>{});
+}
 function communityDailyMenu(){
   const snapshot=communityDaily.status();
   const report=()=>{const s=communityDaily.status();notice(state.actors[0],s.error||(s.today==='published'?'今天的社区日常已发布':s.today==='none'?'暂无可发布内容，或主角色正在忙':'今天已提交过发布，请到社区核对'));broadcast();};
   return [
     {label:'自动公开分享今日主聊天摘要',type:'checkbox',checked:snapshot.enabled,click:item=>{try{communityDaily.configure(item.checked);}catch(error){notice(state.actors[0],error.message);broadcast();}}},
-    {label:`北京时间 ${snapshot.sendTime||'20:00'}；每个账号每天最多一条；工作时避让`,enabled:false},
+    {label:`北京时间 ${snapshot.sendTime||'20:00'}；每个账号每天最多一条；主角色忙时延后`,enabled:false},
     {label:'仅当前主会话的今日互动；不读取 QQ 私聊或私人记忆',enabled:false},
-    {label:'社区登录（猫娘串门）…',click:openVisits},
-    {label:'立即检查并分享今日小记',enabled:snapshot.enabled&&!snapshot.generating,click:()=>void communityDaily.tick({force:true}).then(report)},
+    {label:snapshot.connected?'已授权社区账号（猫娘串门）…':'登录并授权社区账号…',click:()=>void signInForCommunityDaily()},
+    {label:'立即检查并分享今日小记',enabled:snapshot.connected&&snapshot.enabled&&!snapshot.generating,click:()=>void communityDaily.tick({force:true}).then(report)},
     {label:`今日状态：${({none:'尚未发布',sending:'已提交待核对',published:'已发布',uncertain:'结果待核对'})[snapshot.today]}${snapshot.generating?' · 正在生成':''}`,enabled:false},
     ...(snapshot.error?[{label:snapshot.error,enabled:false}]:[]),
     {label:'发送时间与内容风格…',click:editCommunityDailySettings}

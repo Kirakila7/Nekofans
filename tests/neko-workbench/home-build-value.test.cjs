@@ -8,14 +8,22 @@ const file=path.resolve('fixture/our-home/scene.json'),a=[{id:'lamp',kind:'lamp'
 const scene=items=>JSON.stringify({version:1,items});
 function fixture({items=a,before=[],step=2,tokens=1234}={}){
  const session={id:'home',events:[{type:'assistant/message',data:{turn:1,step,usage:tokens===null?{}:{totalTokens:tokens,inputTokens:1000,outputTokens:234,cacheReadTokens:500}}},{type:'tool/call',data:{turn:1,step,callId:'call-'+step,name:'write'}}]};
- return {exec:{name:'write',callId:'call-'+step,agent:{session}},result:{isError:false,value:{path:file,before:scene(before),after:scene(items)}},options:{sessionId:'home',sceneFile:file}};
+ return {exec:{name:'write',callId:'call-'+step,agent:{session}},result:{isError:false,value:{path:file,before:scene(before),after:scene(items)}},options:{sceneFile:file}};
 }
 const receipt=f=>homeBuildReceipt(f.exec,f.result,f.options);
 test('native final mutation binds to the home model step and uses reported total once',()=>{
  const f=fixture(),r=receipt(f);assert.equal(r.tokens,1234);assert.equal(r.afterHash,sceneFingerprint(a));assert.match(r.key,/^[a-f0-9]{64}$/);
  f.exec.callId='nested-write';f.exec.rootCallId='call-2';assert.deepEqual(receipt(f),r);
- f.options.sessionId='ordinary-chat';assert.equal(receipt(f),null);f.options.sessionId='home';f.result.isError=true;assert.equal(receipt(f),null);
+ f.result.isError=true;assert.equal(receipt(f),null);
  f.result.isError=false;f.exec.name='bash';assert.equal(receipt(f),null);f.exec.name='write';f.result.value.path=file+'.backup';assert.equal(receipt(f),null);
+});
+test('the same verified scene edit is accounted for in a regular DSH work session',()=>{
+ const f=fixture(),home=receipt(f);
+ f.exec.agent.session.id='ordinary-work';f.exec.name='edit';
+ if(process.platform==='win32')f.result.value.path=file.toUpperCase();
+ const work=receipt(f);
+ assert.equal(work.tokens,home.tokens);assert.equal(work.afterHash,home.afterHash);assert.notEqual(work.key,home.key);
+ f.result.value.path=path.join(path.dirname(file),'unrelated.json');assert.equal(receipt(f),null);
 });
 test('formatting, order, defaults and equivalent colors/rotations do not create value',()=>{
  const f=fixture({before:a});f.result.value.after=JSON.stringify({items:[{color:'#B7A18B',rotation:360,z:0,y:0,x:1,name:'lamp',id:'lamp',kind:'lamp',width:.5,height:2,depth:.5}],version:1},null,4);assert.equal(receipt(f),null);

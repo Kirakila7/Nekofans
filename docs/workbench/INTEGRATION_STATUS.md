@@ -1,8 +1,12 @@
-# Local integration 0.28.43-test.3 / build 86
+# Local integration 0.28.43-test.4 / build 87
+
+2026-11-06 Windows test.4 integrates the home Token accounting and daily community publishing corrections from PR #74 on the test.3 Windows source, keeping the existing local test profile and bundled DSH.
 
 2026-11-06 Windows refresh: retain the test.2 Windows community sign-in defaults and existing Windows account and feedback integrations. Carry forward the merged home accounting correction at `7c63bea` so several writes from one model call retain their scene transitions and count usage once. Use the merged 豆奶 display name while retaining its existing appearance ID. Build the x64 installer and portable ZIP from the same application inventory.
 
-# Local integration 0.28.43-test.2 / build 85
+# Local integration 0.28.43-test.4 / build 87
+
+2026-11-06 Windows test.4 integrates the home Token accounting and daily community publishing corrections from PR #74 on the test.3 Windows source, keeping the existing local test profile and bundled DSH.
 
 2026-11-05 Windows login follow-up: packaged startup supplies the registered N.E.K.O. desktop public OAuth configuration for Visits and Community Daily. The default loopback callback uses port 48913. Explicit OAuth overrides keep their own configuration. All 71 focused installer, OAuth, Visits and Community Daily checks pass. An anonymous PKCE request with this configuration redirected to the official login page. Account consent and live posting still require real account verification.
 
