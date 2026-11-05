@@ -31,6 +31,21 @@ function fixture(reduced=false){
  const presenter=A.install({character,videos,feedback,document:{createElement:()=>new Element()},matchMedia:()=>media,onHeadInset:value=>insets.push(value)});
  return {character,videos,feedback,presenter,media,listeners,calls,insets,original,motion:character.children[0],image:character.children[0].children[0]};
 }
+test('Doubao appearance follows the real helper working state and respects reduced motion',()=>{
+ const state={preferences:A.normalizePreferences({})};
+ assert(A.setDefault(state,'subagent',A.DOUBAO));
+ const actor={id:'subagent-real',kind:'subagent',sessionId:'real-child',active:true,status:'working'};
+ const f=fixture();f.presenter.render(state,actor);
+ assert.equal(A.selected(state,actor),A.DOUBAO);assert.equal(A.frameAspect(state,actor),16/9);
+ assert.equal(f.image.src,'assets/doubao-work/working.webp');
+ const writes=f.image.srcWrites;f.presenter.render(state,actor);assert.equal(f.image.srcWrites,writes);
+ actor.active=false;actor.status='idle';f.presenter.render(state,actor);assert.equal(f.image.src,'assets/doubao-work/still.png');
+ actor.active=true;actor.status='working';f.media.matches=true;for(const listener of f.listeners)listener();assert.equal(f.image.src,'assets/doubao-work/still.png');
+ assert.equal(actor.sessionId,'real-child');assert.equal(A.selected(state,{id:'main'}),A.ORIGINAL);assert.equal(A.selected(state,{id:'task',kind:'task'}),A.ORIGINAL);
+ const bytes=fs.readFileSync(path.resolve(__dirname,'../../apps/neko-workbench/assets/doubao-work/working.webp'));
+ assert(require('../../apps/neko-workbench/pet-appearance-import.cjs').animationFrames(bytes,'image/webp')>1);
+ f.presenter.dispose();
+});
 test('native kitten switches live without stale video playback, keeps work state, stops patrol for drag and restores original media',()=>{
  const f=fixture(),actor={id:'task-real',kind:'task',active:true,status:'working',work:{state:'thinking'}},state={preferences:{taskAppearance:A.CAT}};
  f.presenter.render(state,actor);assert.equal(f.motion.hidden,false);assert.equal(f.image.src,A.assets.idle);assert.equal(f.motion.dataset.phase,'idle');assert(f.videos.every(v=>v.hidden&&v.paused&&v.loaded));
