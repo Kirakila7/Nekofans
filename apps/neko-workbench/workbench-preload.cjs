@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('nekoWorkbench',Object.freeze({
   setAvatar:id=>call('avatar',id),
   uploadAvatar:()=>call('upload-avatar'),
   action:name=>call('action',name),
+  feedback:request=>call('feedback',request),
   fish:action=>call('fish',action),
   qqbot:action=>call('qqbot',action),
   fishQq:request=>call('fish-qq',request),

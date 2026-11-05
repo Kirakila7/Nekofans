@@ -111,3 +111,7 @@ button[data-neko-unified-account][data-collapsed="true"] .neh-providers { displa
 .neh-neko-actions { display:flex; flex-wrap:wrap; gap:6px; margin-top:3px; }.neh-neko-actions [data-neko-login] { margin-bottom:0; }
 .neh-neko-primary { background:var(--dsw-alias-bg-layer-2,#edf3f8); }.neh-neko-actions button:disabled { cursor:wait; opacity:.6; }
 .neh-neko-auth-note { margin:3px 0 0; color:var(--dsw-alias-label-secondary,#62758a); font-size:11px; line-height:17px; overflow-wrap:anywhere; }.neh-neko-auth-note[role=alert] { color:var(--dsw-alias-danger-primary,#9b472a); }
+.neh-feedback { margin:6px 0; padding:8px; border-radius:10px; background:var(--dsw-alias-bg-layer-2,#edf3f8); color:var(--dsw-alias-label-primary,#243b53); font-size:12px; }
+.neh-feedback summary { cursor:pointer; font-weight:600; padding:3px 0; }
+.neh-feedback-row { padding:7px 0; overflow-wrap:anywhere; }
+.neh-feedback-row .neh-neko-actions { margin-top:5px; }

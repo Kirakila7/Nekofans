@@ -262,6 +262,30 @@ function installNekoAccountHabitat(ctx, options) {
     doc.dispatchEvent(new win.CustomEvent('neko-unified-open-community',{detail}));await detail.promise;
     if(startLogin&&!stopped&&isCurrent()){const login=accountsBridge.nekoSignIn||accountsBridge.communityLogin;if(typeof login!=='function')throw Error('unavailable');const result=await login.call(accountsBridge);if(result?.ok===false)throw Error('unavailable');}
   }
+  function feedbackPanel() {
+    const panel=element('details','neh-feedback');panel.dataset.nekoFeedback='';
+    panel.open=menuRecord?.feedbackOpen===true;panel.addEventListener('toggle',()=>{if(menuRecord?.owned.contains(panel))menuRecord.feedbackOpen=panel.open;});
+    panel.append(element('summary','','帮助与反馈'),element('p','neh-menu-help','Nekofans · Acekira'));
+    const status=element('p','neh-menu-help','');status.setAttribute('role','status');status.setAttribute('aria-live','polite');
+    const row=(label,actions)=>{
+      const item=element('div','neh-feedback-row');item.append(element('span','',label));
+      const controls=element('div','neh-neko-actions');
+      for(const [title,action,target] of actions){
+        const button=element('button','neh-account-refresh',title);button.type='button';button.dataset.feedbackTarget=target;button.dataset.feedbackAction=action;
+        button.addEventListener('click',async event=>{
+          event.preventDefault();event.stopPropagation();button.disabled=true;
+          try{if(typeof accountsBridge?.feedback!=='function')throw Error('unavailable');const result=await accountsBridge.feedback({action,target});if(result?.ok!==true)throw Error('failed');status.textContent=action==='copy'?'已复制':target==='email'?'已请求打开邮件客户端':'已请求在浏览器打开';}
+          catch{status.textContent='操作未完成，请重试。';}finally{button.disabled=false;}
+        });controls.append(button);
+      }
+      item.append(controls);panel.append(item);
+    };
+    row('QQ 交流群：1130382639',[['复制群号','copy','qqGroup']]);
+    row('反馈邮箱：acekira3@gmail.com',[['复制邮箱','copy','email'],['发送邮件','open','email']]);
+    row('B 站：Acekira · UID 142818715',[['打开主页','open','bilibili']]);
+    row('GitHub 开源项目：Nekofans',[['项目主页','open','github'],['提交问题 / 功能建议','open','issues']]);
+    panel.append(status);return panel;
+  }
   async function startNekoLogin({reauthorize=false}={}) {
     if(nekoActionPending||nekoCancelPending||nekoFlowBusy())return;const epoch=++nekoActionEpoch;nekoActionPending=true;nekoActionError='';nekoRevision++;render();closeAccountMenu();
     try{if(typeof accountsBridge.nekoSignIn==='function'){const result=await accountsBridge.nekoSignIn({source:'account',...(reauthorize?{reauthorize:true}:{})});if(result?.ok===false)throw Error('unavailable');if(!stopped&&epoch===nekoActionEpoch)await relayAccountLogin(result?.state,()=>!stopped&&epoch===nekoActionEpoch);}else await openNekoCommunity(true,()=>!stopped&&epoch===nekoActionEpoch);}catch{if(!stopped&&epoch===nekoActionEpoch&&!nekoSnapshot?.login?.error)nekoActionError='N.E.K.O. 登录未能开始，请重试。';}
@@ -314,7 +338,7 @@ function installNekoAccountHabitat(ctx, options) {
       element('strong', 'neh-provider-balance', effectiveSignedIn(snap) ? balanceLabel(snap) : '登录后查看钱包余额'),
       element('span', 'neh-provider-source', '官方充值钱包'));
     menuRecord.owned.append(heading);
-    menuRecord.owned.append(workbenchSettings());
+    menuRecord.owned.append(workbenchSettings(),feedbackPanel());
     if (nekoSnapshot||typeof accountsBridge.nekoSignIn==='function'||typeof accountsBridge.communityLogin==='function')menuRecord.owned.append(nekoAccountCard());
     menuRecord.owned.append(dsh, element('p', 'neh-menu-help', 'DSH 沿用本机工作账号；N.E.K.O. 登录与聊天室授权会自动衔接。'));
     if (focused) refresh.focus({ preventScroll: true });
@@ -410,7 +434,7 @@ function installNekoAccountHabitat(ctx, options) {
     const summary = element('div', 'neh-service-summary');
     summary.append(element('strong', '', '账号'), element('span', '', '工作台账号'));
     const help = effectiveSignedIn(snap) ? '账号和充值可在下方设置中管理。' : '使用下方登录按钮连接账号。';
-    menuRecord.owned.append(heading,workbenchSettings(),summary,habitat(snap,true),element('p','neh-menu-help',help));
+    menuRecord.owned.append(heading,workbenchSettings(),feedbackPanel(),summary,habitat(snap,true),element('p','neh-menu-help',help));
   }
   function render() {
     if (stopped) return;

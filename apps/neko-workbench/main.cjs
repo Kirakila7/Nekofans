@@ -22,6 +22,8 @@ const {createScreenShare}=require('./screen-share-controller.cjs');
 const {WorkbenchMainChat,trustedLocalCaller,PERSONA}=require('./main-chat-runtime.cjs');
 const {createMemoryViewer}=require('./memory-viewer.cjs');
 const {createCompanionAccountProvider}=require('./companion-account-provider.cjs');
+const {createFeedback}=require('./feedback.cjs');
+const feedback=createFeedback({openExternal:url=>shell.openExternal(url),copyText:text=>clipboard.writeText(text)});
 const usesMainChatService=backend=>backend==='chat-api'||backend==='deepseek-account';
 const {createVisitsController}=require('./visits/controller.cjs');
 const {createRtcTransport}=require('./visits/rtc-transport.cjs');
@@ -947,6 +949,7 @@ ipcMain.handle('workbench:roles',async(event,method,p={})=>{
 });
 ipcMain.handle('workbench:call',async(event,method,value)=>{
   assertWorkbenchCaller(event);
+  if(method==='feedback')return feedback(value);
   if(method==='window-theme'){updateWorkbenchWindowTheme(dshWindow,value);return {ok:true};}
   if(method==='state')return workbenchState();
   if(method==='workspace'){
