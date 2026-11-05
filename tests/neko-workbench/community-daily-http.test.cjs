@@ -1,6 +1,7 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),http=require('node:http');
 const {createSocialClient}=require('../../apps/neko-workbench/visits/social-client.cjs');
+const {createCommunityDaily}=require('../../apps/neko-workbench/community-daily.cjs');
 const A='11111111-1111-4111-8111-111111111111',B='22222222-2222-4222-8222-222222222222';
 async function server(t,handler){
  const errors=[],s=http.createServer(async(req,res)=>{try{let raw='';for await(const b of req)raw+=b;await handler(req,res,raw);}catch(e){errors.push(e);res.writeHead(500);res.end('{}');}});
@@ -30,4 +31,28 @@ test('invalid account/content/token cannot reach HTTP',async t=>{
  let calls=0;const base=await server(t,(_req,res)=>{calls++;json(res,{});});const api=client(base);
  await assert.rejects(api.publishDaily({...post,ownerId:'invalid'}));await assert.rejects(api.publishDaily({...post,body:'x'.repeat(501)}));
  await assert.rejects(client(base,{getAccessToken:async()=> 'bad token'}).publishDaily(post));assert.equal(calls,0);
+});
+test('a failed account check or refused write can be retried the same day; an accepted write is sent once',async t=>{
+ const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+ const dataDir=fs.mkdtempSync(path.join(os.tmpdir(),'neko-daily-http-'));
+ let mode='expired',writes=0;
+ const base=await server(t,(req,res)=>{
+  if(req.url==='/api/users/me'){
+   if(mode==='expired'){res.writeHead(401);return res.end('{}');}
+   return json(res,{user:{id:A}});
+  }
+  assert.equal(req.url,'/api/posts');writes++;
+  if(mode==='forbidden'){res.writeHead(403);return res.end('{}');}
+  return json(res,{id:'accepted-fixture'});
+ });
+ const api=client(base),now=Date.parse('2026-11-06T12:10:00Z');
+ const daily=createCommunityDaily({dataDir,now:()=>now,getIdentity:()=>({userId:A,epoch:1}),
+  getInteractions:()=>[{role:'user',text:'今天给小窝添了窗帘。',createdAt:now}],
+  generate:async()=>post.body,publish:request=>api.publishDaily({...request,ownerId:request.identity.userId})});
+ t.after(()=>{daily.dispose();fs.rmSync(dataDir,{recursive:true,force:true});});
+ daily.configure(true);
+ await daily.tick();assert.equal(writes,0);assert.equal(daily.status().today,'none');assert.match(daily.status().error,/重新登录/);
+ mode='forbidden';await daily.tick({force:true});assert.equal(writes,1);assert.equal(daily.status().today,'none');assert.match(daily.status().error,/发帖权限/);
+ mode='allowed';await daily.tick({force:true});assert.equal(writes,2);assert.equal(daily.status().today,'published');
+ await daily.tick({force:true});assert.equal(writes,2);
 });

@@ -38,8 +38,9 @@ exports.apply=function(ctx){
   const memoryAccount=createCompanionAccountBridge({...accountDeps,namespace:'memory'});
   const emit=(method,params)=>process.stdout.write(JSON.stringify({method,params})+'\n');
   ctx.on('tools/result',(exec,result)=>{
-    const receipt=homeBuildReceipt(exec,result,{sessionId:homeAgent?.agent.id,sceneFile:path.join(runtimePaths.workspaceDir,'our-home','scene.json')});
-    if(receipt)emit('home-build',receipt);
+    const receipt=homeBuildReceipt(exec,result,{sceneFile:path.join(runtimePaths.workspaceDir,'our-home','scene.json')});
+    const session=exec?.agent?.session;
+    if(receipt&&!channelPrivacy.isPrivate(session.id,session))emit('home-build',receipt);
   });
   const loginWatch=createDshLoginWatch({getAccount:()=>ctx.get?.('deepseekAccount'),emit});
   const qqbotState=value=>emit('qqbot-care-state',value);
