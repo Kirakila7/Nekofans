@@ -1,11 +1,11 @@
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.PetAppearance=api;})(typeof window==='object'?window:globalThis,function(){
   'use strict';
-  const ORIGINAL='dsh-original',CAT='neko-cat',CLAUDE='claude-girl',GEMINI='gemini-cat',CLAUDE_PIXEL='claude-pixel',GEMINI_PIXEL='gemini-pixel',CUSTOM='custom';
+  const ORIGINAL='dsh-original',CAT='neko-cat',CLAUDE='claude-girl',GEMINI='gemini-cat',CLAUDE_PIXEL='claude-pixel',GEMINI_PIXEL='gemini-pixel',DOUBAO='doubao-work',CUSTOM='custom';
   const MAX_CUSTOM_BYTES=4*1024*1024;
   // Common visible bounds across all upstream frames; clip only transparent
   // margins while keeping each animation on the same scale and ground line.
   const pixelFrames=Object.freeze({[CLAUDE_PIXEL]:Object.freeze({x:43,y:35,width:170,height:187,tops:Object.freeze({idle:57,think:62,search:66,read:98,type:81,check:52,success:35,failed:61,'walk-left':57})}),[GEMINI_PIXEL]:Object.freeze({x:48,y:57,width:164,height:165,tops:Object.freeze({idle:62,think:61,search:61,read:97,type:81,check:57,success:58,failed:59,'walk-left':63})})});
-  const choices=Object.freeze([{id:ORIGINAL,label:'大肥鱼 · 原有角色'},{id:CAT,label:'N.E.K.O. 跑动小猫'},{id:GEMINI,label:'Gemini 小猫'},{id:GEMINI_PIXEL,label:'Gemini 小猫 · 像素 Q 版'}].map(Object.freeze));
+  const choices=Object.freeze([{id:ORIGINAL,label:'大肥鱼 · 原有角色'},{id:CAT,label:'N.E.K.O. 跑动小猫'},{id:GEMINI,label:'Gemini 小猫'},{id:GEMINI_PIXEL,label:'Gemini 小猫 · 像素 Q 版'},{id:DOUBAO,label:'小豆包 · 工作点按'}].map(Object.freeze));
   const normalizeId=id=>({'crosspet-claude':CLAUDE,'crosspet-gemini':GEMINI})[id]||id;
   const valid=id=>choices.some(choice=>choice.id===normalizeId(id))||[CLAUDE,CLAUDE_PIXEL].includes(normalizeId(id));
   const displayId=id=>[CLAUDE,CLAUDE_PIXEL].includes(normalizeId(id))?ORIGINAL:normalizeId(id);
@@ -29,7 +29,7 @@
   function setCustom(actor,value){if(!actor||!validCustom(value))return false;actor.customAppearance={name:String(value.name||'我的形象').replace(/[\x00-\x1f\x7f]/g,' ').trim().slice(0,48)||'我的形象',dataUrl:value.dataUrl,animated:true,frameCount:value.frameCount};if(value.stillDataUrl?.startsWith('data:image/png;base64,')&&validImageDataUrl({dataUrl:value.stillDataUrl}))actor.customAppearance.stillDataUrl=value.stillDataUrl;actor.appearanceId=CUSTOM;return true;}
   function scaleFor(state,actor){return Number.isFinite(actor?.appearanceScale)&&actor.appearanceScale>=.4&&actor.appearanceScale<=1?actor.appearanceScale:selected(state,actor)===CAT?.65:1;}
   function setScale(actor,value){if(!actor)return false;if(value===null){delete actor.appearanceScale;return true;}if(!Number.isFinite(value)||value<.4||value>1)return false;actor.appearanceScale=value;return true;}
-  function frameAspect(state,actor){const id=selected(state,actor),frame=pixelFrames[id];return frame?frame.width/frame.height:id===ORIGINAL?16/9:id===CLAUDE||id===GEMINI?192/208:1;}
+  function frameAspect(state,actor){const id=selected(state,actor),frame=pixelFrames[id];return frame?frame.width/frame.height:id===ORIGINAL||id===DOUBAO?16/9:id===CLAUDE||id===GEMINI?192/208:1;}
   function insetFor(id,actor,{dragging=false,reduced=false,failed=false}={}){const frame=pixelFrames[id],clip=reduced||failed?'idle':pixelPose(actor,dragging);return frame?(frame.tops[clip]-frame.y)/frame.height:0;}
   function headInset(state,actor,options){return insetFor(selected(state,actor),actor,options);}
   function layoutOptions(state,actor){return {compact:true,scale:scaleFor(state,actor),aspect:frameAspect(state,actor)};}
@@ -49,6 +49,7 @@
     return actor?.active||actor?.status==='working'?'type':'idle';
   }
   function sourceFor(id,actor,{dragging=false,reduced=false,failed=false,desktopMotion=null}={}){
+    if(id===DOUBAO)return `assets/doubao-work/${!reduced&&!failed&&(actor?.active===true||actor?.status==='working')?'working.webp':'still.png'}`;
     if(id===CAT)return reduced||failed?assets.still:dragging?assets.drag:actor?.presentationRunning?assets.running:actor?.kind==='task'?(phase(actor)==='success'?assets.success:assets.idle):desktopMotion&&desktopMotion.phase!=='gathered'?(desktopMotion.moving?assets.running:assets.idle):assets[phase(actor,dragging)];
     if(id===CUSTOM){const value=actor?.customAppearance;if((reduced||failed)&&value?.stillDataUrl?.startsWith('data:image/png;base64,')&&validImageDataUrl({dataUrl:value.stillDataUrl}))return value.stillDataUrl;if(failed||reduced&&/^data:image\/(gif|webp);/.test(value?.dataUrl||''))return assets.still;return validCustom(value)?value.dataUrl:assets.still;}
     if(id===CLAUDE_PIXEL||id===GEMINI_PIXEL){const folder=id===CLAUDE_PIXEL?'claude':'gemini';return `assets/pixel-ai-girls/${folder}/${reduced||failed?'still.png':pixelPose(actor,dragging)+'.webp'}`;}
@@ -90,5 +91,5 @@
     image.onerror=()=>{if(current!==ORIGINAL&&!failed){failed=true;renderMedia();}};
     return Object.freeze({render,setMotion(value){desktopMotion=value&&['spawning','gathering','clustered','exploring','returning','gathered','resting'].includes(value.phase)?{phase:value.phase,moving:value.moving===true,direction:value.direction===1?1:-1,retire:value.retire!==false}:null;renderMedia();},isCat:()=>current===CAT,isMedia:()=>current!==ORIGINAL,dispose(){if(disposed)return;disposed=true;media?.removeEventListener?.('change',onMotion);image.onerror=null;image.removeAttribute('src');motion.remove();if(feedback.switchTo===wrapped)feedback.switchTo=original;}});
   }
-  return Object.freeze({ORIGINAL,CAT,CLAUDE,GEMINI,CLAUDE_PIXEL,GEMINI_PIXEL,CUSTOM,MAX_CUSTOM_BYTES,choices,valid,normalizeId,validImageDataUrl,validCustom,explicit,kind,preferenceKey,normalizePreferences,selected,setDefault,setActor,setCustom,scaleFor,setScale,frameAspect,headInset,pixelFrames,layoutOptions,phase,pose,pixelPose,sourceFor,assets,install});
+  return Object.freeze({ORIGINAL,CAT,CLAUDE,GEMINI,CLAUDE_PIXEL,GEMINI_PIXEL,DOUBAO,CUSTOM,MAX_CUSTOM_BYTES,choices,valid,normalizeId,validImageDataUrl,validCustom,explicit,kind,preferenceKey,normalizePreferences,selected,setDefault,setActor,setCustom,scaleFor,setScale,frameAspect,headInset,pixelFrames,layoutOptions,phase,pose,pixelPose,sourceFor,assets,install});
 });
