@@ -14,6 +14,7 @@ const {accountRoute}=require('./account-route.cjs');
 const {createChannelSessionPrivacy}=require('./channel-session-privacy.cjs');
 const {createCompanionAccountBridge}=require('./companion-account-bridge.cjs');
 const {createDshLoginWatch}=require('./dsh-login-watch.cjs');
+const {homeBuildReceipt}=require('./home-build-tracker.cjs');
 const runtimePaths=resolveRuntimePaths();
 const runtime=runtimePaths.modulesDir;
 let createUserMessage,createAssistantMessage,carrierKeyOf;
@@ -36,6 +37,10 @@ exports.apply=function(ctx){
   const proactiveAccount=createCompanionAccountBridge({...accountDeps,namespace:'proactive'});
   const memoryAccount=createCompanionAccountBridge({...accountDeps,namespace:'memory'});
   const emit=(method,params)=>process.stdout.write(JSON.stringify({method,params})+'\n');
+  ctx.on('tools/result',(exec,result)=>{
+    const receipt=homeBuildReceipt(exec,result,{sessionId:homeAgent?.agent.id,sceneFile:path.join(runtimePaths.workspaceDir,'our-home','scene.json')});
+    if(receipt)emit('home-build',receipt);
+  });
   const loginWatch=createDshLoginWatch({getAccount:()=>ctx.get?.('deepseekAccount'),emit});
   const qqbotState=value=>emit('qqbot-care-state',value);
   process.on('neko-qqbot-state',qqbotState);

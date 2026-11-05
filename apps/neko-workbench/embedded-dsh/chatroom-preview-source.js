@@ -83,6 +83,7 @@ function createChatroomPreview(doc, avatar = () => '', options = {}) {
       if (disposed) { if (typeof release === 'function') release(); return; }
       releaseHome = typeof release === 'function' ? release : null;
       mounted = true; status.hidden = true;
+      if(selected==='home')stage.dispatchEvent(new doc.defaultView.Event('neko-home-enter'));
     } catch (error) {
       if (!disposed) { status.textContent = error?.message || '家园暂不可用，请稍后重试。'; retry.hidden = false; }
     } finally {
@@ -94,7 +95,7 @@ function createChatroomPreview(doc, avatar = () => '', options = {}) {
   panel.setSplit = enabled => {if(split===!!enabled)return;split=!!enabled;panel.toggleAttribute('data-neko-room-split',split);if(split){content.prepend(empty);content.append(homeView);room.hidden=false;content.hidden=false;empty.hidden=selected!=='welcome';homeView.hidden=selected!=='home';}else{room.append(empty);const detail=selected==='home'||selected==='date';content.hidden=!detail;room.hidden=detail;empty.hidden=false;}};
   panel.showRooms = () => {selection('welcome');homeView.hidden=true;room.hidden=false;content.hidden=!split;empty.hidden=false;panel.removeAttribute('data-home-open');};
   panel.openLobby = () => {selection('lobby');homeView.hidden=true;panel.removeAttribute('data-home-open');if(split){room.hidden=false;content.hidden=false;empty.hidden=true;}};
-  panel.openHome = () => {options.onBeforeHome?.();selection('home');room.hidden=!split;content.hidden=false;empty.hidden=split;homeView.hidden=false;panel.setAttribute('data-home-open','');back.focus();return mount(); };
+  panel.openHome = () => {options.onBeforeHome?.();selection('home');room.hidden=!split;content.hidden=false;empty.hidden=split;homeView.hidden=false;panel.setAttribute('data-home-open','');back.focus();if(mounted&&!disposed){stage.dispatchEvent(new doc.defaultView.Event('neko-home-enter'));return Promise.resolve();}return mount(); };
   panel.openFishDate=()=>{if(!fishDatePanel)return;options.onBeforeDate?.();selection('date');room.hidden=!split;content.hidden=false;empty.hidden=true;homeView.hidden=true;panel.removeAttribute('data-home-open');};
   fishDate?.addEventListener('click',()=>panel.openFishDate());
   home.addEventListener('click', () => { void panel.openHome(); });

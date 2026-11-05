@@ -538,6 +538,7 @@ function rpc(method,params={}){return new Promise((resolve,reject)=>{
 function textContent(value){if(!value)return '';if(typeof value==='string')return value;if(Array.isArray(value))return value.map(textContent).join('');if(value.type==='text')return value.text||'';return textContent(value.content||value.message?.content||value.blocks);}
 function shortReply(text){return text.replace(/```[\s\S]*?```/g,'').replace(/[*#`]/g,'').trim().slice(0,100);}
 function receive(message,replay=false){
+  if(message?.method==='home-build'){if(!replay)void homeReady.then(ready=>ready&&ourHomeRuntime.acceptBuild(message.params));return;}
   if(message?.method==='channel-experience'){if(!replay)try{channelLife.accept(message.params);}catch{}return;}
   if(message?.method==='event'&&message.params?.event?.type==='turn/start')channelLife.interrupt();
   // Consume private authorization projections before generic event logging.
