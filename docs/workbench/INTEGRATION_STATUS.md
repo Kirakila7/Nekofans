@@ -1,5 +1,7 @@
 # Local integration 0.28.41 / build 77
 
+2026-11-05 Windows community login: the packaged launcher supplies the registered desktop public OAuth configuration for Visits and Community Daily, with a loopback callback on port 48913. Explicit OAuth overrides retain their own configuration. An anonymous request from the packaged test build reached the official login page. Real account consent and posting permission still require account verification.
+
 2026-11-05 account rail regression correction: the existing DSH generated-class compatibility test incorrectly required the removed Codex account card. It now supplies the current N.E.K.O. community/lobby account projection, retains a deliberately stale Codex projection, and asserts that only the current account surfaces appear before and after DSH sign-in refresh. Native settings/feedback/login controls and the rail click path remain covered. Production account UI already omits Codex; this changes the regression contract rather than restoring that UI. Based on freshly fetched default-branch commit 01d7926; unrelated local contact and Windows packaging changes remain separate.
 
 Validation: all three account-rail/menu-layer tests pass without skips using jsdom and synthetic accounts. The native fixture changes its Login action to Logout when its signed-in attribute changes, matching the actual menu contract. Test syntax and diff formatting pass; no real account sign-in, installer rebuild or installed-app replacement was performed.
