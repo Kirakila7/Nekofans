@@ -133,15 +133,29 @@ function createSocialClient({ baseUrl = DEFAULT_BASE_URL, getAccessToken, fetch:
     async publishDaily({title,body,ownerId,signal,assertCurrent=()=>{}}){
       check(ownerId,UUID,'invalid_owner');
       if(typeof title!=='string'||!title.trim()||title.length>80||typeof body!=='string'||!body.trim()||body.length>500)throw fail('invalid_daily_post');
-      const token=await getAccessToken();
-      if(typeof token!=='string'||!token||token.length>8192||/\s/.test(token))throw fail('login_required');
-      const headers={Accept:'application/json','X-Client-Id':clientId,Authorization:`Bearer ${token}`};
+      let headers;
       // Use one captured token for both identity proof and write. Never refresh
       // to a different account in between or fall back to the browser's login.
-      const me=await requestJson(new URL('/api/users/me',base).href,{fetch:fetchImpl,headers,timeoutMs,signal});
-      if(me?.user?.id!==ownerId)throw fail('account_changed');assertCurrent();
+      try {
+        const token=await getAccessToken();
+        if(typeof token!=='string'||!token||token.length>8192||/\s/.test(token))throw fail('login_required');
+        headers={Accept:'application/json','X-Client-Id':clientId,Authorization:`Bearer ${token}`};
+        const me=await requestJson(new URL('/api/users/me',base).href,{fetch:fetchImpl,headers,timeoutMs,signal});
+        if(me?.user?.id!==ownerId)throw fail('account_changed');
+        assertCurrent();
+        signal?.throwIfAborted();
+      } catch(error) {
+        const needsLogin=['login_required','account_changed'].includes(error.code)||[400,401,403].includes(error.status);
+        throw fail(needsLogin?'daily_login_required':'daily_not_submitted');
+      }
       const form=new FormData();for(const [key,value] of Object.entries({title,body,visibility:'public',tags:'[]',image_ids:'[]',image_crops:'[]'}))form.append(key,value);
-      const result=await requestJson(new URL('/api/posts',base).href,{fetch:fetchImpl,method:'POST',headers,body:form,timeoutMs,signal});
+      let result;
+      try { result=await requestJson(new URL('/api/posts',base).href,{fetch:fetchImpl,method:'POST',headers,body:form,timeoutMs,signal}); }
+      catch(error){
+        if(error.status===401)throw fail('daily_login_required');
+        if(error.status===403)throw fail('daily_post_forbidden');
+        throw error;
+      }
       if(!result||typeof result.id!=='string'||!result.id||result.id.length>128)throw fail('invalid_service_response');
       return {id:result.id};
     },
