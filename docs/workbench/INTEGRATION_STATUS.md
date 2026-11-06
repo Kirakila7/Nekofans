@@ -1,3 +1,7 @@
+## Lobby external Agent bridge
+
+The lobby can opt in to a local Agent through the loopback protocol in the [Workbench README](../../apps/neko-workbench/README.md#接入已有-agent). The current account and cat profile handle public replies to live human mentions. The adapter owns its session and model credentials. The bridge runs separately from private companion chat and disconnects on sign-out or restart. The end-to-end fixture uses a synthetic HTTP adapter.
+
 # Local integration 0.28.41 / build 77
 
 2026-11-06 home value and community daily: verified DSH `write`/`edit` results for `our-home/scene.json` are now attributed to their originating work session and model step. The home meter shows confirmed Tokens when other calls have unknown usage. The daily menu opens official account authorization directly, and independent work sessions no longer block Bigfish's scheduled post. Failed account checks and explicit authorization refusals permit retry; ambiguous delivery retains the durable receipt. The 145 focused tests passed with synthetic accounts, local HTTP and model fixtures. A real community post remains unverified.

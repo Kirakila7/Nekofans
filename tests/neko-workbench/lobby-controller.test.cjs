@@ -3,6 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
+const http = require('node:http');
 const { createLobbyController, validateLobbyRequest, readSettings, defaultSettings, ACTIONS, ERR, REASON, MODES, TRIGGERS } = require('../../apps/neko-workbench/lobby-controller.cjs');
 const { fakeTimers, flush, fakeProvider, message, owner, myCat, persona, OWNER, CAT, OTHER } = require('./lobby-fixtures.cjs');
 const { createLobbyAuth } = require('../../apps/neko-workbench/lobby-auth.cjs');
@@ -166,13 +167,14 @@ function mockCat(deps) {
 }
 
 function setup({ clock = fakeTimers(), config = CONFIG, secretStore = null, provider = null, persona: personaValue = persona(),
-  recallMemory = null, recordSharedExperience = null, dataDir = null, env = {}, onClient = null,getChatProvider,getChatProviderState } = {}) {
+  recallMemory = null, recordSharedExperience = null, dataDir = null, env = {}, onClient = null,getChatProvider,getChatProviderState,
+  catFactory = mockCat } = {}) {
   const states = [];
   const factories = {
     auth: deps => mockAuth(deps),
     client: deps => { const value = mockClient(deps); onClient?.(value, deps); return value; },
     avatars: () => mockAvatars(),
-    cat: deps => mockCat(deps),
+    cat: catFactory,
     experience: () => null,
   };
   const controller = createLobbyController({ env, config, dataDir, secretStore, openExternal: () => {}, getChatProvider: getChatProvider||(() => provider),getChatProviderState,
@@ -249,6 +251,80 @@ test('participation.available is false without provider', async () => {
   const snap = controller.snapshot();
   assert.equal(snap.participation.available, false);
   assert.equal(snap.participation.reason, REASON.provider);
+});
+
+test('one-click external agent uses only human mentions and public text without a native provider', { timeout: 5000 }, async t => {
+  const requests = [];
+  let publicTextOnly = false;
+  const bridge = http.createServer(async (req, res) => {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    requests.push({ method: req.method, url: req.url, body: JSON.parse(Buffer.concat(chunks)) });
+    const payload = requests.at(-1).body.type === 'probe'
+      ? { ready: true, publicTextOnly }
+      : { reply: '你好，我是测试 Agent。' };
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ protocol: 'nekofans-lobby-agent', version: 1, ...payload }));
+  });
+  let emit, updateMessages, readSent;
+  const sent = new Promise(resolve => { readSent = resolve; });
+  const { controller, clock } = setup({ catFactory: createLobbyCat, onClient(client, deps) {
+    emit = deps.onEvent;
+    updateMessages = client.addMessages;
+    client.sendCat = async frame => { readSent(frame); return { clientMessageId: MSG_ID }; };
+  } });
+  t.after(() => {
+    controller.dispose();
+    bridge.closeAllConnections();
+    return new Promise(resolve => bridge.close(resolve));
+  });
+  await new Promise((resolve, reject) => bridge.once('error', reject).listen(48925, '127.0.0.1', resolve));
+  await controller.request({ action: 'sign-in' });
+  await controller.request({ action: 'open' });
+  const refused = await controller.request({ action: 'agent-bridge-connect' });
+  assert.equal(refused.ok, false);
+  assert.equal(refused.state.agentBridge.connected, false);
+  assert.equal(refused.state.catSettings.mode, 'assist');
+  requests.length = 0;
+  publicTextOnly = true;
+  const result = await controller.request({ action: 'agent-bridge-connect' });
+  assert.equal(result.ok, true, result.error);
+  assert.equal(result.state.agentBridge.connected, true);
+  assert.equal(result.state.participation.mode, 'independent');
+  assert.equal(result.state.catSettings.mode, 'assist');
+  assert.equal(result.state.cat.independentTrigger, 'mention');
+  const mention = { mentions: [{ kind: 'cat', id: CAT_ID }], created_at: clock.now() };
+  const fire = m => emit('message.new', { live: true, message: m });
+  fire(message({ text: '未提及', created_at: clock.now() }));
+  fire(myCat({ ...mention }));
+  fire(message({ ...mention, origin: 'human_ai' }));
+  await clock.advance(2000);
+  assert.equal(requests.length, 1);
+  const target = message({ ...mention, id: MSG_ID, text: '公开测试消息' });
+  updateMessages([target]);
+  fire(target);
+  await clock.advance(700);
+  const frame = await sent;
+  assert.equal(frame.cat_id, CAT_ID);
+  assert.equal(frame.in_reply_to, MSG_ID);
+  assert.equal(frame.trigger, 'mention');
+  assert.equal(frame.text, '你好，我是测试 Agent。');
+  assert.deepEqual(requests.map(({ method, url, body }) => [method, url, body.type]), [
+    ['POST', '/nekofans/agent-bridge', 'probe'], ['POST', '/nekofans/agent-bridge', 'reply'],
+  ]);
+  const payload = requests[1].body;
+  assert.deepEqual(Object.keys(payload).sort(), ['allowTools', 'audience', 'protocol', 'requestId', 'text', 'type', 'version']);
+  assert.equal(payload.allowTools, false);
+  assert.equal(payload.audience, 'public-lobby');
+  assert.match(payload.text, /公开测试消息/);
+  assert.doesNotMatch(payload.text, /合成人设|fixture-jwt-token/);
+  const disconnected = await controller.request({ action: 'agent-bridge-disconnect' });
+  assert.equal(disconnected.ok, true);
+  assert.equal(disconnected.state.agentBridge.connected, false);
+  assert.equal(disconnected.state.catSettings.mode, 'assist');
+  assert.equal(disconnected.state.participation.available, false);
+  assert.equal((await controller.request({ action: 'agent-bridge-connect' })).ok, true);
+  assert.equal((await controller.request({ action: 'sign-out' })).state.agentBridge.connected, false);
 });
 
 test('account readiness reports fixed login errors and a route switch never enables a different participation mode',async()=>{

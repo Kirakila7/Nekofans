@@ -17,6 +17,7 @@ const { createLobbyClient, SAFE_ERROR: CLIENT_ERRORS } = require('./lobby-client
 const { createLobbyAvatars, hueAvatar, isSnapshotAvatar } = require('./lobby-avatars.cjs');
 const { createLobbyCat, ERRORS: CAT_ERRORS, LIMITS: CAT_LIMITS } = require('./lobby-cat.cjs');
 const { createLobbyExperience } = require('./lobby-experience.cjs');
+const { connectLobbyAgentBridge } = require('./lobby-agent-bridge.cjs');
 const { resolveCommunityUrl } = require('./community-config.cjs');
 
 const MODES = Object.freeze(['off', 'assist', 'independent']);
@@ -47,6 +48,8 @@ const ERR = Object.freeze({
   failed: '大厅操作失败，请稍后重试',
   catSync: '猫娘设置尚未同步，请重试保存',
   accountChanged:'频道账号已变化，请重新保存设置',
+  bridgeOffline: '找不到本机 Agent 桥接。请先启动支持 Nekofans 的桥接，再点连接。',
+  bridgeActive: '外部 Agent 已连接。请先断开，再修改参与方式。',
 });
 const REASON = Object.freeze({
   provider: '请先连接主 agent 的聊天线路',
@@ -90,6 +93,7 @@ const SPEC = Object.freeze({
   'send-retry': { clientMessageId: [true, isUuid, '消息 ID 无效'] },
   'send-discard': { clientMessageId: [true, isUuid, '消息 ID 无效'] },
   'load-older': {},
+  'agent-bridge-connect': {}, 'agent-bridge-disconnect': {},
   'mode-set': {
     mode: [true, oneOf(MODES), '参与方式无效'],
     trigger: [false, oneOf(TRIGGERS), '触发方式无效'],
@@ -241,7 +245,7 @@ function fallbackSnapshot(error) {
   return { connection: 'unconfigured', auth: { status: 'unconfigured', message: ERR.unconfigured, error: '', signingIn: false },
     participation: { mode: 'off', providerAvailable: false, available: false, reason: REASON.offline }, loading: false,
     me: null, channel: null, messages: [], hasMore: false, members: [], outbox: [], catSettings: settingsView(defaultSettings()),
-    cat: blankCat(), suggestion: null, nudge: null, error };
+    cat: blankCat(), agentBridge: { connected: false, error: '' }, suggestion: null, nudge: null, error };
 }
 
 /**
@@ -279,6 +283,7 @@ function buildController(deps) {
   let disposed = false, scheduled = false, wantOpen = false, lastAvailable = false;
   let signingIn = false, me = null, meLoading = null, lastError = '', initError = '';
   let catSetupError='',autoCatAttempted=false,settingsTail=Promise.resolve();
+  let externalAgent = null, bridgeAttempt = null, bridgeError = '';
   // /me 的 is_admin = 环境管理员 或 role=admin，且未封禁；记住环境管理员这一半，member.updated 时按同样规则重算。
   let meEnvAdmin = false;
   let auth = null, client = null, avatars = null, cat = null, experience = null;
@@ -298,6 +303,7 @@ function buildController(deps) {
       prompt: typeof value?.prompt === 'string' ? value.prompt : '' };
   };
   const provider = () => (disposed ? null : safeCall(() => deps.getChatProvider?.() || null, null));
+  const publicProvider = () => (disposed ? null : externalAgent || provider());
   const providerState = () => safeCall(() => deps.getChatProviderState?.() || null, null);
   const providerReason = () => ({'account-signed-out':REASON.accountLogin,'account-unavailable':REASON.accountUnavailable})[providerState()?.reason] || REASON.provider;
   const providerKey = () => { const state=providerState(); return state ? `${state.backend}:${state.revision}` : ''; };
@@ -330,7 +336,7 @@ function buildController(deps) {
   if (client) {
     try {
       cat = make.cat({
-        mode: settings.mode, trigger: settings.independentTrigger, getProvider: provider, getPersona: persona,
+        mode: settings.mode, trigger: settings.independentTrigger, getProvider: publicProvider, getPersona: persona,
         getLobby: () => lobbyContext(), catSend: frame => client.sendCat(frame),
         recallMemory: typeof deps.recallMemory === 'function' ? (q, b, s) => deps.recallMemory(q, b, s) : null,
         random, now, newId, timers, onChange: guard(() => schedulePublish()),
@@ -360,11 +366,11 @@ function buildController(deps) {
     return CLIENT_CONNECTION[status] || 'offline';
   }
   const online = () => connection() === 'online';
-  const effectiveMode = () => (provider() ? settings.mode : 'off');
+  const effectiveMode = () => externalAgent ? 'independent' : provider() ? settings.mode : 'off';
   /** Lobby AI participation; separate from private-chat availability, which it never touches. */
   function participation() {
-    if (!provider()) return { mode: 'off', providerAvailable:false, available: false, reason: providerReason() };
-    const mode = settings.mode;
+    if (!publicProvider()) return { mode: 'off', providerAvailable:false, available: false, reason: providerReason() };
+    const mode = effectiveMode();
     const unavailable=reason=>({mode,providerAvailable:true,available:false,reason});
     const chan = clientSnap()?.channel;
     if (!online() || !me || !chan) return unavailable(REASON.offline);
@@ -417,6 +423,7 @@ function buildController(deps) {
         retryAfterMs: e.retryAfterMs, text: e.text, replyToId: e.replyToId, origin: e.origin, assistCatId: e.assistCatId })),
       catSettings: settingsView(settings),
       cat: catState, suggestion: catState.suggestion, nudge: catState.nudge,
+      agentBridge: { connected: !!externalAgent && !bridgeAttempt, error: bridgeError },
       error: configError || initError || catSetupError || lastError || snap?.error?.message || '',
     };
   }
@@ -429,12 +436,13 @@ function buildController(deps) {
   // ---- lobby context for lobby-cat (main process only, never published) ----
   function lobbyContext() {
     const snap = clientSnap();
-    if (!snap || snap.status !== 'online' || !me) return null;
+    if (!snap || snap.status !== 'online' || !wantOpen || !me || me.banned_at) return null;
     const names = new Map();
     for (const m of snap.members || []) names.set(m.kind === 'cat' ? m.cat_id : m.user_id, m.display_name);
     const own = serverCat();
     return { ownerId: me.user?.user_id, ownerName: me.user?.display_name || me.user?.name, catId: own?.id || null,
-      catReady: !!own && !own.admin_disabled && (settings.mode!=='independent'||own.enabled===true), catName: catName(), catsEnabled: snap.channel?.cats_enabled !== false,
+      catReady: !bridgeAttempt && !!own && !own.admin_disabled && (effectiveMode()!=='independent'||own.enabled===true), catName: catName(), catsEnabled: snap.channel?.cats_enabled !== false,
+      humanMentionsOnly: !!externalAgent,
       freeAllowed: !!snap.channel?.cat_free_mode_allowed, mutedUntil: me.muted_until ?? null, note: settings.note,
       messages: snap.messages || [], names };
   }
@@ -448,6 +456,7 @@ function buildController(deps) {
       const status = authStatus();
       if (status !== 'signed-in' && me) {      // expired or revoked elsewhere
         me = null; session += 1;autoCatAttempted=false;catSetupError='';
+        resetAgentBridge();
         if (cat) quiet(() => cat.invalidate());
         if (experience) quiet(() => experience.close());
       }
@@ -456,10 +465,10 @@ function buildController(deps) {
       const available = participation().available;
       if (lastAvailable && !available && cat) quiet(() => cat.invalidate());   // cat disabled, cats off, provider gone, muted
       lastAvailable = available;
-      if (experience) quiet(() => experience.setMode(available ? settings.mode : 'off'));
+      if (experience) quiet(() => experience.setMode(available && !externalAgent ? settings.mode : 'off'));
       // Register the existing companion lazily in assist mode, disabled on the
       // server. This creates no message/model call and never enables autonomy.
-      if(wantOpen&&online()&&me&&!serverCat()&&!autoCatAttempted&&!syncing&&settings.mode==='assist'&&provider()
+      if(wantOpen&&online()&&me&&!serverCat()&&!autoCatAttempted&&!syncing&&!externalAgent&&settings.mode==='assist'&&provider()
         &&!me.cat?.deleted&&!me.banned_at&&clientSnap()?.channel?.cats_enabled===true){
         autoCatAttempted=true;void syncServerCat({create:true,forceDisabled:true});
       }
@@ -500,7 +509,7 @@ function buildController(deps) {
         &&!(Number.isFinite(me.muted_until)&&me.muted_until>now())&&channel?.cats_enabled!==false&&!own?.admin_disabled;
       const name=profile?(settings.name||own?.name||persona().name):(own?.name||settings.name||persona().name);
       const avatarKey=profile&&settings.avatarKey!=='default'?settings.avatarKey:own?.avatar_key||(settings.avatarKey!=='default'?settings.avatarKey:'bigfish');
-      const replyMode=settings.independentTrigger;
+      const replyMode=externalAgent ? 'mention' : settings.independentTrigger;
       if(own&&own.enabled===enabled&&own.reply_mode===replyMode&&(!profile||own.name===name&&own.avatar_key===avatarKey))return true;
       try{
         const updated=await client.rest.putCat({name,avatarKey,replyMode,enabled});
@@ -517,7 +526,7 @@ function buildController(deps) {
   }
 
   const ctxFor = message => ({ channelId: message.channel_id, ownerId: me?.user?.user_id, catId: serverCat()?.id || null,
-    mode: participation().available ? settings.mode : 'off' });
+    mode: participation().available && !externalAgent ? settings.mode : 'off' });
   function onClientEvent(type, payload) {
     if (disposed) return;
     if (type === 'message.new' && payload.message) {
@@ -539,6 +548,7 @@ function buildController(deps) {
     } else if (type === 'resync') {
       if (cat) quiet(() => cat.invalidate());      // gap beyond the resume window: everything in flight is void
     } else if (type === 'signed-out') {
+      resetAgentBridge();
       me = null; session += 1; wantOpen = false;autoCatAttempted=false;catSetupError='';
       if (cat) quiet(() => cat.invalidate());
       if (experience) quiet(() => experience.close());
@@ -562,8 +572,61 @@ function buildController(deps) {
     }
     return '';
   }
+  function resetAgentBridge() {
+    bridgeAttempt?.abort();
+    bridgeAttempt = null;
+    bridgeError = '';
+    if (!externalAgent) return;
+    externalAgent = null;
+    quiet(() => cat?.invalidate());
+    quiet(() => cat?.setMode(effectiveMode(), settings.independentTrigger));
+  }
+  async function connectAgentBridge() {
+    if (externalAgent) return ok();
+    if (!cat) return fail(ERR.init);
+    if (!wantOpen || !online() || !me) return fail(ERR.closed);
+    if (me.banned_at) return fail(REASON.banned);
+    if (Number.isFinite(me.muted_until) && me.muted_until > now()) return fail(REASON.muted);
+    if (clientSnap()?.channel?.cats_enabled === false) return fail(REASON.catsDisabled);
+    if (serverCat()?.admin_disabled) return fail(REASON.adminDisabled);
+    const attempt = new AbortController(), ownerSession = session;
+    const current = () => !disposed && bridgeAttempt === attempt && session === ownerSession && wantOpen && online();
+    bridgeAttempt = attempt;
+    let next;
+    try {
+      next = await connectLobbyAgentBridge({ signal: attempt.signal, onStatus(ready) {
+        if (externalAgent !== next) return;
+        bridgeError = ready ? '' : '外部 Agent 暂未回复，请检查本机桥接。';
+        schedulePublish();
+      } });
+    } catch {
+      const error = current() ? ERR.bridgeOffline : ERR.closed;
+      if (bridgeAttempt === attempt) resetAgentBridge();
+      return fail(error);
+    }
+    if (!current()) {
+      if (bridgeAttempt === attempt) resetAgentBridge();
+      return fail(ERR.closed);
+    }
+    externalAgent = next;
+    quiet(() => cat.invalidate());
+    cat.setMode('independent', 'mention');
+    const synced = await syncServerCat({ create: true });
+    if (!synced || !current()) {
+      const error = catSetupError || (synced ? ERR.closed : ERR.catSync);
+      if (bridgeAttempt === attempt) resetAgentBridge();
+      if (!disposed && session === ownerSession && wantOpen && online()) await syncServerCat();
+      reconcile();
+      return fail(error);
+    }
+    bridgeAttempt = null;
+    reconcile();
+    return ok();
+  }
   /** Local mode changes commit before publishing and explicitly provision a missing server profile. */
   async function applyMode(mode, trigger) {
+    if (externalAgent && mode !== 'off') return fail(ERR.bridgeActive);
+    if (mode === 'off') resetAgentBridge();
     if(mode!=='off'){
       if(!provider())return fail(providerReason());
       if(authStatus()!=='signed-in')return fail(ERR.login);
@@ -595,6 +658,7 @@ function buildController(deps) {
         signingIn = false;
         return ok();
       case 'sign-out':
+        resetAgentBridge();
         me = null; session += 1; wantOpen = false; meFailed = false;autoCatAttempted=false;catSetupError='';
         if (cat) quiet(() => cat.invalidate());
         if (experience) quiet(() => experience.close());
@@ -619,6 +683,12 @@ function buildController(deps) {
     }
     if (action === 'close') {
       wantOpen = false;
+      if (bridgeAttempt) {
+        resetAgentBridge();
+        // Re-read /me on re-entry if the bridge's profile update was in flight.
+        me = null;
+        session += 1;
+      }
       if (cat) quiet(() => cat.invalidate());       // leaving the lobby voids every generation in flight
       if (experience) quiet(() => experience.close());
       quiet(() => client.disconnect());
@@ -628,6 +698,7 @@ function buildController(deps) {
     if (action === 'cat-save') {
       if(!me||!online())return fail(me?ERR.closed:ERR.loading);
       const changes={};for(const key of ['mode','independentTrigger','note','dailyLimit','name','avatarKey'])if(request[key]!==undefined)changes[key]=request[key];
+      if (externalAgent && (changes.mode !== undefined || changes.independentTrigger !== undefined)) return fail(ERR.bridgeActive);
       const error=commitSettings(changes);if(error)return fail(error);
       if(!(await syncServerCat({create:true,profile:true})))return fail(catSetupError||ERR.catSync);
       reconcile();
@@ -647,8 +718,14 @@ function buildController(deps) {
       case 'send-retry': return attempt(() => client.retry(request.clientMessageId));
       case 'send-discard': quiet(() => client.discard(request.clientMessageId)); return ok();
       case 'load-older': return attempt(() => client.loadOlder());
+      case 'agent-bridge-connect': return connectAgentBridge();
+      case 'agent-bridge-disconnect':
+        resetAgentBridge();
+        reconcile();
+        return await syncServerCat() ? ok() : fail(catSetupError || ERR.catSync);
       case 'suggest':
         if (!cat) return fail(ERR.init);
+        if (externalAgent) return fail(CAT_ERRORS.mode);
         if (!provider()) return fail(providerReason());
         if(settings.mode!=='assist')return fail(CAT_ERRORS.mode);
         if(!serverCat()&&!(await syncServerCat({create:true})))return fail(catSetupError||ERR.catSync);
@@ -684,7 +761,7 @@ function buildController(deps) {
   }
 
   async function request(value) {
-    const mutation=value?.action==='mode-set'||value?.action==='cat-save',requestSession=session;
+    const mutation=['mode-set','cat-save','agent-bridge-connect','agent-bridge-disconnect'].includes(value?.action),requestSession=session;
     const execute=async()=>{
       if (disposed) return { ok: false, error: ERR.disposed, state: snapshot() };
       if(mutation&&requestSession!==session)return fail(ERR.accountChanged);
@@ -701,6 +778,7 @@ function buildController(deps) {
   async function signIn(force) {
     if (!healthy()) return fail(configError || initError || ERR.unconfigured);
     if (force) {
+      resetAgentBridge();
       me = null; session += 1; meFailed = false;autoCatAttempted=false;catSetupError='';
       quiet(() => cat?.invalidate()); quiet(() => experience?.close()); quiet(() => client?.reset());
     }
@@ -727,10 +805,10 @@ function buildController(deps) {
     if (disposed) return;
     quiet(() => {
       const had = lastProvider, key=providerKey(); lastProvider = !!provider();
-      if (key !== lastProviderKey && cat) quiet(() => cat.invalidate());
+      if (!externalAgent && key !== lastProviderKey && cat) quiet(() => cat.invalidate());
       lastProviderKey=key;
       reconcile();
-      if(!had&&lastProvider&&cat)quiet(()=>cat.setMode(settings.mode,settings.independentTrigger));
+      if(!externalAgent&&!had&&lastProvider&&cat)quiet(()=>cat.setMode(settings.mode,settings.independentTrigger));
       if(!had&&lastProvider)processPending();
       if (had !== lastProvider && me && online()) void syncServerCat();
     });
@@ -742,6 +820,7 @@ function buildController(deps) {
   function dispose() {
     if (disposed) return;
     disposed = true;
+    resetAgentBridge();
     if (experience) quiet(() => experience.persistOnQuit());
     if (cat) quiet(() => cat.dispose());
     if (client) quiet(() => client.dispose());

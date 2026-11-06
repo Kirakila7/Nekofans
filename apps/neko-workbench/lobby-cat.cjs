@@ -303,6 +303,7 @@ function createLobbyCat(deps) {
   /** Which trigger, if any, a live message satisfies for this cat. */
   function triggerFor(message, lobby) {
     const author = message.author || {}, isCat = author.kind === 'cat' || message.origin === 'cat';
+    if (lobby.humanMentionsOnly && (author.kind !== 'human' || message.origin !== 'human')) return null;
     if (isCat && author.cat_id === lobby.catId) return null;
     if (mentionsCat(message, lobby.catId)) return 'mention';
     if (state.trigger === 'mention') return null;

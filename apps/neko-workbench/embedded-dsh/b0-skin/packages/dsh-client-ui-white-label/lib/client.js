@@ -5488,11 +5488,19 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
   const notice = el('p', 'neko-lobby-error'); notice.setAttribute('role', 'status');
   const modeBar = el('div', 'neko-lobby-modebar'), modeGroup = el('div', 'neko-lobby-modes'); modeGroup.setAttribute('role', 'group'); modeGroup.setAttribute('aria-label', '她在大厅的参与方式');
   const modeButtons = MODES.map(([mode, label]) => { const b = button(label, 'neko-lobby-mode', () => call({ action: 'mode-set', mode })); b.dataset.mode = mode; b.setAttribute('aria-pressed', 'false'); modeGroup.appendChild(b); return b; });
+  const bridgeButton = button('连接已有 Agent', 'neko-lobby-agent-bridge', async () => {
+    if (bridgeButton.disabled) return;
+    bridgeButton.disabled = true;
+    bridgeButton.setAttribute('aria-busy', 'true');
+    try { await call({ action: snap?.agentBridge?.connected ? 'agent-bridge-disconnect' : 'agent-bridge-connect' }); }
+    finally { bridgeButton.disabled = false; bridgeButton.removeAttribute('aria-busy'); }
+  });
+  bridgeButton.title = '连接本机 Agent 桥接，由它回复大厅里的 @';
   const reason = el('span', 'neko-lobby-reason');
   const dots = el('div', 'neko-lobby-dots'); dots.setAttribute('aria-label', '状态');
   const dot = kind => { const n = el('span', 'neko-lobby-dot'); n.dataset.status = kind; n.setAttribute('role', 'status'); dots.appendChild(n); return n; };
   const privateDot = dot('private'), connectionDot = dot('connection'), participationDot = dot('participation');
-  modeBar.append(modeGroup, reason, dots);
+  modeBar.append(modeGroup, bridgeButton, reason, dots);
   const form = el('form', 'neko-lobby-form');
   const replyBar = el('div', 'neko-lobby-reply'), replyText = el('span', 'neko-lobby-reply__text'); replyBar.hidden = true;
   const replyCancel = button('×', 'neko-lobby-reply__cancel', () => setReply(null)); replyCancel.setAttribute('aria-label', '取消回复');
@@ -5966,13 +5974,14 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     const settings = snap?.catSettings || {}, part = snap?.participation || {}, own = snap?.me?.cat;
     const myName = snap?.me?.display_name || snap?.me?.name || '我';
     const startName = settings.name || own?.name || '大肥鱼', savedAvatar = settings.avatarKey && settings.avatarKey !== 'default' ? settings.avatarKey : own?.avatar_key || 'bigfish', startAvatar=savedAvatar==='claude'?'bigfish':savedAvatar; let avatarChanged=false;
-    const startMode = settings.mode || part.mode || 'assist';
+    const bridgeConnected = !!snap?.agentBridge?.connected;
+    const startMode = bridgeConnected ? 'independent' : settings.mode || part.mode || 'assist';
     // Configuration needs only the main-agent route, not an existing server
     // cat profile: saving is what creates that profile the first time.
     const needsApi = !lineReady();
     const api = el('p', 'neko-lobby-cat-api'); api.dataset.ready = String(!needsApi);
-    api.textContent = needsApi ? (part.reason || '主 agent 聊天线路暂不可用') + '。现在只能选「她不参与」，你自己照常聊天，私聊不受影响。' : part.available ? '已连接主 agent 聊天线路' : '已连接主 agent 聊天线路。' + (part.reason ? '她现在还不能参与：' + part.reason + '。' : '') + '选好方式后保存即可。';
-    const mode = choiceGroup('参与方式', MODES, needsApi ? 'off' : startMode, value => value !== 'off' && needsApi); mode.classList.add('neko-lobby-cat-mode');
+    api.textContent = bridgeConnected ? '已连接外部 Agent · 被真人 @ 时回复。' : needsApi ? (part.reason || '主 agent 聊天线路暂不可用') + '。也可以在大厅点「连接已有 Agent」。' : part.available ? '已连接主 agent 聊天线路' : '已连接主 agent 聊天线路。' + (part.reason ? '她现在还不能参与：' + part.reason + '。' : '') + '选好方式后保存即可。';
+    const mode = choiceGroup('参与方式', MODES, needsApi ? 'off' : startMode, value => bridgeConnected || (value !== 'off' && needsApi)); mode.classList.add('neko-lobby-cat-mode');
     const name = el('input', 'neko-lobby-cat-name'); name.maxLength = 32; name.value = startName; name.setAttribute('aria-label', '猫娘名字');
     const preview = el('span', 'neko-lobby-cat-preview');
     const sync = () => { const n = name.value.trim() || '大肥鱼'; preview.textContent = '你看到「我的' + n + '」，别人看到「' + myName + '的' + n + '」'; };
@@ -5984,19 +5993,21 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
       b.appendChild(image(avatar(id), 'neko-lobby-cat-avatar__img')); return b;
     });
     avatars.append(...avatarButtons);
-    const trigger = choiceGroup('她自己说话时什么时候开口', TRIGGERS, settings.independentTrigger || 'mention'); trigger.classList.add('neko-lobby-cat-trigger');
+    const trigger = choiceGroup('她自己说话时什么时候开口', TRIGGERS, bridgeConnected ? 'mention' : settings.independentTrigger || 'mention', () => bridgeConnected); trigger.classList.add('neko-lobby-cat-trigger');
     const note = el('textarea', 'neko-lobby-cat-note'); note.maxLength = 500; note.rows = 3; note.value = settings.note || '';
     note.placeholder = '可选：大厅里所有人都可能读到她按这段说明说的话'; note.setAttribute('aria-label', '频道补充说明');
     const usage = snap?.cat?.usage;
-    const cost = el('p', 'neko-lobby-cat-cost', '猫猫回复复用主 agent 的 DeepSeek 账号额度或 API，自由发言会消耗更多额度。' + (usage && Number.isFinite(usage.today) ? '今日已用 ' + usage.today + ' / ' + usage.limit + ' 次。' : ''));
-    const nodes = [api, field('参与方式', mode), field('名字', name, ''), preview, field('头像', avatars), field('她自己说话时', trigger), field('频道补充说明（公开）', note, '最多 500 字。别写私事，这段会影响她在公共频道里的发言。'), cost];
+    const cost = el('p', 'neko-lobby-cat-cost', (bridgeConnected ? '回复由外部 Agent 生成。' : '猫猫回复复用主 agent 的 DeepSeek 账号额度或 API，自由发言会消耗更多额度。') + (usage && Number.isFinite(usage.today) ? '今日已用 ' + usage.today + ' / ' + usage.limit + ' 次。' : ''));
+    const nodes = [api, field('参与方式', mode), field('名字', name, ''), preview, field('头像', avatars), field('她自己说话时', trigger)];
+    if (!bridgeConnected) nodes.push(field('频道补充说明（公开）', note, '最多 500 字。别写私事，这段会影响她在公共频道里的发言。'));
+    nodes.push(cost);
     function request() {
       const out = { action: 'cat-save' }, n = name.value.trim();
       if (!n || Array.from(n).length > 32) return '猫娘名字 1–32 字';
       if (n !== startName) out.name = n;
       if (avatarChanged && avatars.dataset.value !== savedAvatar) out.avatarKey = avatars.dataset.value;
-      if (!needsApi && mode.dataset.value !== startMode) out.mode = mode.dataset.value;   // without a provider only 她不参与 is possible; keep the saved choice
-      if (trigger.dataset.value !== (settings.independentTrigger || 'mention')) out.independentTrigger = trigger.dataset.value;
+      if (!bridgeConnected && !needsApi && mode.dataset.value !== startMode) out.mode = mode.dataset.value;
+      if (!bridgeConnected && trigger.dataset.value !== (settings.independentTrigger || 'mention')) out.independentTrigger = trigger.dataset.value;
       if (note.value !== (settings.note || '')) out.note = note.value;
       // An unchanged save is still meaningful once the route is ready: the
       // host idempotently creates the first server profile (initially disabled).
@@ -6040,8 +6051,13 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     // Choices unlock with the route; whether she actually takes part is still
     // part.available (a missing profile is created by choosing a mode).
     const ready = lineReady(), current = ready ? part.mode || 'off' : 'off';
-    for (const b of modeButtons) { b.setAttribute('aria-pressed', String(b.dataset.mode === current)); b.disabled = b.dataset.mode !== 'off' && !ready; }
-    reason.textContent = part.available ? '' : part.reason || ''; reason.hidden = !reason.textContent;
+    const bridge = snap?.agentBridge;
+    bridgeButton.hidden = connection() !== 'online' || !snap?.me;
+    bridgeButton.textContent = bridge?.connected ? '断开外部 Agent' : '连接已有 Agent';
+    bridgeButton.setAttribute('aria-pressed', String(!!bridge?.connected));
+    for (const b of modeButtons) { b.setAttribute('aria-pressed', String(b.dataset.mode === current)); b.disabled = b.dataset.mode !== 'off' && (!ready || !!bridge?.connected); }
+    reason.textContent = bridge?.connected && bridge.error ? bridge.error : !part.available ? part.reason || '' : bridge?.connected ? '外部 Agent 已连接 · 被真人 @ 时回复' : '';
+    reason.hidden = !reason.textContent;
   }
   let identityKey = '';
   function renderLog() {

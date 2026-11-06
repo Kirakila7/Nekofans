@@ -168,6 +168,26 @@ test('mode bar and three status dots; unavailable participation leaves only 她�
  assert.equal(doc.querySelector('.neko-lobby-dot[data-status="private"]').dataset.on,'true');
 });
 
+test('external Agent connects in one click even when the native model is unavailable',{skip:DOM_SKIP},async t=>{
+ const disconnected=snapshot({participation:{mode:'off',providerAvailable:false,available:false,reason:'需要聊天 API'}});
+ const connected=snapshot({agentBridge:{connected:true,error:''},participation:{mode:'independent',providerAvailable:true,available:true}});
+ const {doc,calls}=setup(t,{snap:disconnected,respond:r=>{
+   if(r.action==='agent-bridge-connect')return {ok:true,state:connected};
+   if(r.action==='agent-bridge-disconnect')return {ok:true,state:disconnected};
+ }});
+ await tick();doc.querySelector('.neko-lobby-switch').click();await tick();
+ const button=doc.querySelector('.neko-lobby-agent-bridge');
+ assert.equal(button.hidden,false);
+ assert.equal(button.textContent,'连接已有 Agent');
+ button.click();await tick();
+ assert.deepEqual(calls.lobby.at(-1),{action:'agent-bridge-connect'});
+ assert.equal(button.textContent,'断开外部 Agent');
+ assert.match(doc.querySelector('.neko-lobby-reason').textContent,/被真人 @ 时回复/);
+ button.click();await tick();
+ assert.deepEqual(calls.lobby.at(-1),{action:'agent-bridge-disconnect'});
+ assert.equal(button.textContent,'连接已有 Agent');
+});
+
 test('sign-in state: unconfigured and signed-out gates; signing in joins the lobby',{skip:DOM_SKIP},async t=>{
  const signedOut=snapshot({connection:'signed-out',auth:{status:'signed-out',message:'登录后即可进入频道。',error:'',signingIn:false},me:null,messages:[],members:[],channel:null,hasMore:false});
  const f=setup(t,{snap:signedOut,respond:(r)=>{if(r.action==='sign-in'){f.setCurrent(snapshot());return {ok:true,state:snapshot()};}}}),{doc,calls}=f;await tick();
