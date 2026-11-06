@@ -1,6 +1,7 @@
 # Nekofans
 
-**给大肥鱼一个家，也给想法一张创造台。**
+**AI、朋友与工作台。**\
+大肥鱼（AI）和人携手建立家园的地方。
 
 Nekofans 是一个将桌面 AI 陪伴、多 Agent 工作流与 N.E.K.O. 社区放在一起的工作台。当前源码基于本地 **0.28.39 / build 75**，包含 PR #55 的渠道记忆与可选主动搭话，以及安装位置选择页修订。
 
@@ -68,4 +69,4 @@ npm run test:neko
 
 ## 反馈与安全
 
-功能建议和复现问题请提交 [Issue](https://github.com/Kirakila7/Nekofans/issues)。提交截图和日志前先移除账号、二维码、授权链接、密钥与聊天隐私。安全问题见 [SECURITY.md](SECURITY.md)，请勿在公开 Issue 中张贴秘密。
+欢迎到 [Discussions 讨论区](https://github.com/Kirakila7/Nekofans/discussions)交流想法、分享体验；功能问题和复现报告可提交 [Issue](https://github.com/Kirakila7/Nekofans/issues)。提交截图和日志前先移除账号、二维码、授权链接、密钥与聊天隐私。安全问题见 [SECURITY.md](SECURITY.md)，请勿在公开 Issue 中张贴秘密。
