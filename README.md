@@ -1,9 +1,14 @@
 # Nekofans
 
-**AI、朋友与工作台。**\
-大肥鱼（AI）和人携手建立家园的地方。
+**🤖 AI、朋友与工作台。**  
+🏠 大肥鱼（AI）和人携手建立家园的地方。
 
-Nekofans 是一个将桌面 AI 陪伴、多 Agent 工作流与 N.E.K.O. 社区放在一起的工作台。当前源码基于本地 **0.28.39 / build 75**，包含 PR #55 的渠道记忆与可选主动搭话，以及安装位置选择页修订。
+Nekofans 是一个正在建设中的开源 AI 陪伴与社交平台（内置 DSH 工作台）。你可以和大肥鱼一起聊天与生活，为她布置一个温暖的小窝 🏡；大肥鱼也会召唤她的小鱼来帮助你 🐟；带着她走进社区，认识新朋友，分享一起经历的趣事 💬。
+
+**🤖 AI, friends, and a workbench.**  
+🏠 A place where Big Fish (AI) and people build a home together.
+
+Nekofans is an open-source AI companion and social platform in development, with a built-in DSH workbench. Chat and spend time with Big Fish, create a cozy home for her 🏡, and let her call on her little fish to help you 🐟. Bring her into the community to meet new friends and share the moments you experience together 💬.
 
 这是独立社区项目，与 DeepSeek、Project N.E.K.O. 及角色所对应的模型厂商不存在官方隶属或背书关系。第三方组件和角色素材保留各自的许可与署名。
 
