@@ -5993,7 +5993,9 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     note.placeholder = '可选：大厅里所有人都可能读到她按这段说明说的话'; note.setAttribute('aria-label', '频道补充说明');
     const usage = snap?.cat?.usage;
     const cost = el('p', 'neko-lobby-cat-cost', '猫猫回复复用主 agent 的 DeepSeek 账号额度或 API，自由发言会消耗更多额度。' + (usage && Number.isFinite(usage.today) ? '今日已用 ' + usage.today + ' / ' + usage.limit + ' 次。' : ''));
-    const nodes = [api, field('参与方式', mode), field('名字', name, ''), preview, field('头像', avatars), field('她自己说话时', trigger), field('频道补充说明（公开）', note, '最多 500 字。别写私事，这段会影响她在公共频道里的发言。'), cost];
+    const triggerHint = snap?.channel?.cat_free_mode_allowed === false
+      ? '此频道限制自由发言。选了自由发言时，她会在你发言或她被 @ 时开口。' : '';
+    const nodes = [api, field('参与方式', mode), field('名字', name, ''), preview, field('头像', avatars), field('她自己说话时', trigger, triggerHint), field('频道补充说明（公开）', note, '最多 500 字。别写私事，这段会影响她在公共频道里的发言。'), cost];
     function request() {
       const out = { action: 'cat-save' }, n = name.value.trim();
       if (!n || Array.from(n).length > 32) return '猫娘名字 1–32 字';

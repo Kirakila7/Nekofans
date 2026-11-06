@@ -1,10 +1,14 @@
-# Local integration 0.28.43-test.4 / build 87
+# Local integration 0.28.43-test.5 / build 88
+
+Windows test.5 uses the Bigfish icon in the notification area and uses the permitted owner-or-mention reply mode when a lobby disallows free speech. The saved trigger remains available in a channel that permits it. The targeted suite passed 158 checks. The separate rail placement assertion also fails on test.4.
 
 2026-11-06 Windows test.4 integrates the home Token accounting and daily community publishing corrections from PR #74 on the test.3 Windows source, keeping the existing local test profile and bundled DSH.
 
 2026-11-06 Windows refresh: retain the test.2 Windows community sign-in defaults and existing Windows account and feedback integrations. Carry forward the merged home accounting correction at `7c63bea` so several writes from one model call retain their scene transitions and count usage once. Use the merged 豆奶 display name while retaining its existing appearance ID. Build the x64 installer and portable ZIP from the same application inventory.
 
-# Local integration 0.28.43-test.4 / build 87
+# Local integration 0.28.43-test.5 / build 88
+
+Windows test.5 uses the Bigfish icon in the notification area and uses the permitted owner-or-mention reply mode when a lobby disallows free speech. The saved trigger remains available in a channel that permits it. The targeted suite passed 158 checks. The separate rail placement assertion also fails on test.4.
 
 2026-11-06 Windows test.4 integrates the home Token accounting and daily community publishing corrections from PR #74 on the test.3 Windows source, keeping the existing local test profile and bundled DSH.
 
