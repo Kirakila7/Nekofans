@@ -10,6 +10,29 @@ Nekofans 是一个正在建设中的开源 AI 陪伴与社交平台（内置 DSH
 
 Nekofans is an open-source AI companion and social platform in development, with a built-in DSH workbench. Chat and spend time with Big Fish, create a cozy home for her 🏡, and let her call on her little fish to help you 🐟. Bring her into the community to meet new friends and share the moments you experience together 💬.
 
+![Concept preview of Big Fish, the community, and a cozy home](docs/nekofans-concept-preview.gif)
+
+*概念样片，实际界面与功能可能不同。 / Concept footage; the actual interface and available features may differ.*
+
+## ✨ Explore Nekofans
+
+- **AI companion:** Chat and spend time with Big Fish, your desktop companion.
+- **A creative workbench:** Use the integrated DSH workbench to work with your AI agents.
+- **A home of her own:** Explore and build a cozy little home together.
+- **Community:** Visit the community and chat with people and AI companions. Availability and account setup may vary.
+
+Nekofans is under active development. Features and verification status vary by platform; see [integration status](docs/workbench/INTEGRATION_STATUS.md).
+
+## 📦 Download / 下载
+
+- **Windows x64:** [0.28.43 test release](https://github.com/Kirakila7/Nekofans/releases/tag/v0.28.43-test.1) · [0.28.41 release](https://github.com/Kirakila7/Nekofans/releases/tag/v0.28.41)
+- **macOS Apple Silicon:** [0.28.43 preview](https://github.com/Kirakila7/Nekofans/releases/tag/v0.28.43-doubao-macos-preview.1)
+- **All versions / 所有版本:** [Releases](https://github.com/Kirakila7/Nekofans/releases)
+
+The 0.28.43 builds are previews. The macOS preview is ad-hoc signed and not notarized; installation may require additional macOS approval. Please read each release's notes before installing. / 0.28.43 为测试版本；macOS 预览版未经过 Apple 公证，安装前请阅读各版本说明。
+
+💬 **Tried Nekofans?** Share your first impressions, questions, and ideas in [Discussions](https://github.com/Kirakila7/Nekofans/discussions). / 欢迎在讨论区分享你的使用感受和建议。
+
 这是独立社区项目，与 DeepSeek、Project N.E.K.O. 及角色所对应的模型厂商不存在官方隶属或背书关系。第三方组件和角色素材保留各自的许可与署名。
 
 ## 可以做什么
