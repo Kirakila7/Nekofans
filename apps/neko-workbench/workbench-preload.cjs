@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('nekoWorkbench',Object.freeze({
   qqbot:action=>call('qqbot',action),
   fishQq:request=>call('fish-qq',request),
   lobby:request=>ipcRenderer.invoke('workbench:lobby',request),
+  gameHub:request=>ipcRenderer.invoke('workbench:game-hub',request),
   subscribeLobby:callback=>{if(typeof callback!=='function')throw new TypeError('callback must be a function');const listener=(_event,state)=>callback(state);ipcRenderer.on('workbench:lobby-state',listener);return()=>ipcRenderer.removeListener('workbench:lobby-state',listener);},
   community:request=>ipcRenderer.invoke('workbench:community',request),
   home:request=>ipcRenderer.invoke('workbench:home',request),

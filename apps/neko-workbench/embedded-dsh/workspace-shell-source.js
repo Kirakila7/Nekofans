@@ -1759,9 +1759,10 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
   const headerActions = el('div', 'neko-lobby-header__actions');
   const membersToggle = button('成员', 'neko-lobby-members-toggle', () => { const expanded = panel.toggleAttribute('data-members-open'); membersToggle.setAttribute('aria-expanded', String(expanded)); });
   membersToggle.setAttribute('aria-controls', 'neko-lobby-members'); membersToggle.setAttribute('aria-expanded', 'false');
+  const gameShareButton = button('分享游戏', 'neko-lobby-game-share', () => openDialog('game')); gameShareButton.setAttribute('aria-haspopup', 'dialog');
   const catSettingsButton = button('猫猫设置', 'neko-lobby-cat-settings', () => openDialog('cat')); catSettingsButton.setAttribute('aria-haspopup', 'dialog');
   const adminButton = button('管理', 'neko-lobby-admin-open', () => openDialog('admin')); adminButton.setAttribute('aria-haspopup', 'dialog'); adminButton.dataset.admin = '';
-  headerActions.append(membersToggle, catSettingsButton, signOut);
+  headerActions.append(membersToggle, gameShareButton, catSettingsButton, signOut);
   header.append(back, title, topic, onlineCount, headerActions);
   const gate = el('div', 'neko-lobby-gate'), gateText = el('p', 'neko-lobby-gate__text');
   const signIn = button(typeof bridge.nekoSignIn==='function'?'一键登录 N.E.K.O.':'登录频道', 'neko-lobby-sign-in', () => {void beginSignIn();});
@@ -1968,6 +1969,8 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     else {
       body.appendChild(richText(m.text, 'neko-lobby-text'));
       const actions = el('div', 'neko-lobby-actions'), reply = button('回复', 'neko-lobby-reply-to', () => setReply(m.id));
+      const invite = /^来一起玩「[^\r\n]{1,80}」：(https:\/\/[a-z0-9-]+\.trycloudflare\.com\/\?room=[A-Za-z0-9_-]{24})$/.exec(m.text || '');
+      if (invite && typeof bridge.gameHub === 'function') actions.appendChild(button('在工作台加入', 'neko-lobby-game-join', () => openDialog('game-room', invite[1])));
       reply.setAttribute('aria-label', '回复 ' + originLabel(m.origin, m.label, m.author)); actions.appendChild(reply);
       if (assistOn() && !row.dataset.mine) {
         const help = button('请她帮我回', 'neko-lobby-assist-this', () => requestAssist(m.id));
@@ -2236,18 +2239,20 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     group.dataset.value = current; group.append(...buttons);
     return group;
   }
-  function closeDialog() { if (!dialog) return; const from = dialog.from; dialog.node.remove(); dialog = null; from?.focus?.(); onChange?.(); }
-  function openDialog(kind) {
+  function closeDialog() { if (!dialog) return; const from = dialog.from; dialog.cleanup?.(); dialog.node.remove(); dialog = null; from?.focus?.(); onChange?.(); }
+  function openDialog(kind, inviteUrl) {
     closeDialog();
     if (kind === 'admin' && !isAdmin()) return;
     const node = el('div', 'neko-lobby-dialog'), box = el('form', 'neko-lobby-dialog__card');
     node.setAttribute('role', 'dialog'); node.setAttribute('aria-modal', 'true'); node.dataset.dialog = kind;
     if (kind === 'admin') node.dataset.admin = '';
-    const heading = el('h2', 'neko-lobby-dialog__title', kind === 'cat' ? '猫猫设置' : '频道管理'); heading.id = 'neko-lobby-dialog-title'; node.setAttribute('aria-labelledby', heading.id);
+    const game = kind === 'game' || kind === 'game-room';
+    const heading = el('h2', 'neko-lobby-dialog__title', kind === 'cat' ? '猫猫设置' : kind === 'game' ? '分享游戏' : kind === 'game-room' ? '秘密规则棋局' : '频道管理'); heading.id = 'neko-lobby-dialog-title'; node.setAttribute('aria-labelledby', heading.id);
     const status = el('p', 'neko-lobby-dialog__error'); status.setAttribute('role', 'status'); status.hidden = true;
     const save = el('button', 'neko-lobby-dialog-save', '保存'); save.type = 'submit';
-    const footer = el('div', 'neko-lobby-dialog__footer'); footer.append(button('取消', 'neko-lobby-dialog-cancel', () => closeDialog()), save);
-    const build = kind === 'cat' ? catFields() : adminFields();
+    if (game) save.textContent = '发送到聊天室';
+    const footer = el('div', 'neko-lobby-dialog__footer'); footer.append(button(kind === 'game-room' ? '关闭棋局窗口' : '取消', 'neko-lobby-dialog-cancel', () => closeDialog()), save);
+    const build = kind === 'cat' ? catFields() : kind === 'game' ? gameFields() : kind === 'game-room' ? gameRoomFields(inviteUrl) : adminFields();
     box.append(heading, ...build.nodes, status, footer); node.appendChild(box);
     box.addEventListener('submit', async event => {
       event.preventDefault();
@@ -2258,16 +2263,158 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
       if (typeof request === 'string') { status.textContent = request; status.hidden = false; return; }
       if (!request) { closeDialog(); return; }
       save.disabled = true;
-      const result = await call(request);
+      let result;
+      if (game) {
+        try { result = await bridge.gameHub(request); } catch { result = {ok:false,error:'游戏链接无法分享，请检查链接及频道连接'}; }
+      } else result = await call(request);
       if (!dialog || dialog.node !== node) return;
       save.disabled = false;
-      if (result?.ok === false) { status.textContent = result.error || '保存失败'; status.hidden = false; return; }
-      closeDialog();
+      if (result?.ok === false || (game && result?.ok !== true)) { status.textContent = result?.error || (game ? '没有收到发送确认，请检查聊天室' : '保存失败'); status.hidden = false; return; }
+      if (kind === 'game-room') { status.textContent='邀请已发送到聊天室。'; status.hidden=false; }
+      else closeDialog();
     });
     node.addEventListener('keydown', event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeDialog(); } });
     node.addEventListener('mousedown', event => { if (event.target === node) closeDialog(); });
-    dialog = { kind, node, from: doc.activeElement, owner: meId() };
+    dialog = { kind, node, from: doc.activeElement, owner: meId(), cleanup:build.cleanup };
     panel.appendChild(node); (box.querySelector('input,textarea,button:not(:disabled)'))?.focus?.(); onChange?.();
+    build.open?.();
+  }
+  async function callGame(request) {
+    try { return await bridge.gameHub(request); }
+    catch { return {ok:false,error:'游戏服务暂不可用，请检查 DeepSeek 登录和服务器连接。'}; }
+  }
+  function gameRoomFields(inviteUrl) {
+    const win=doc.defaultView;
+    const state=el('p','neko-lobby-game-status','正在核对邀请并加入棋局…');state.setAttribute('role','status');
+    const feedback=el('p','neko-lobby-game-status');feedback.setAttribute('role','status');
+    const controls=el('section','neko-lobby-game-room-controls');controls.hidden=true;
+    const rule=el('input','neko-lobby-game-own-rule');rule.type='password';rule.autocomplete='off';rule.maxLength=80;
+    const seatRequest=(action,extra)=>callGame({action,inviteUrl,...extra});
+    let view=null,timer=null,closed=false,refreshing=false,submitting=false,playing=false;
+    const board=el('iframe','neko-lobby-game-board');board.title='国际象棋棋盘';board.setAttribute('sandbox','allow-scripts');board.hidden=true;
+    const publish=()=>{if(view)board.contentWindow?.postMessage({type:'nekofans:state',seat:view.seat,actions:view.actions,ready:view.ready&&view.agent?.status!=='running'},'*');};
+    const submitRule=button('提交本方秘密规则','neko-lobby-game-submit-rule',async()=>{
+      if(submitting||submitRule.disabled)return;
+      submitting=true;submitRule.disabled=true;
+      try{
+        const result=await seatRequest('private-submit-own-rule',{text:rule.value});
+        if(closed)return;
+        if(result.status==='ready')rule.value='';
+        feedback.textContent=({ready:'本方规则已就绪。',unsupported:'暂不支持这条规则。',invalid:'请填写有效规则。','waiting-for-player':'等朋友入座后再提交。','reconciliation-required':'规则提交结果需要核对。','submission-unknown':'规则提交结果未知，请勿重复提交。'})[result.status]||result.error||'规则暂未提交。';
+      }finally{submitting=false;void refresh();}
+    });
+    const start=button('让本方队友接手','neko-lobby-game-agent-start',async()=>{
+      if(start.disabled)return;start.disabled=true;
+      const result=await seatRequest('private-agent-start');
+      if(closed)return;
+      feedback.textContent=({started:'本方队友已启动。','account-unavailable':'请先登录自己的 DeepSeek 账号。','own-agent-unavailable':'请先配置本机主伙伴。','own-rule-unavailable':'请在自己的工作台提交本方规则。','reconciliation-required':'上次走子结果不明，请先核对棋局。',busy:'队友或手动走子正在运行。'})[result.status]||result.error||'队友暂时无法启动。';
+      void refresh();
+    });
+    const stop=button('接回手动操作','neko-lobby-game-agent-stop',async()=>{
+      await seatRequest('private-agent-stop');
+      if(closed)return;feedback.textContent='已请求停止队友，正在核对棋局。';void refresh();
+    });
+    controls.append(field('本方秘密规则',rule,'双方各一条，规则效果会在棋局中体现。'),submitRule,start,stop,el('p','neko-lobby-field__hint','启动队友会使用自己的 DeepSeek 额度。关闭窗口后，队友会继续行动。'));
+    async function refresh(){
+      if(closed||refreshing)return;
+      refreshing=true;clearTimeout(timer);
+      try{
+        const next=await seatRequest('private-seat-view');
+        if(closed)return;
+        if(next.status!=='ready'){state.textContent='暂时无法同步棋局。';if(view){view={...view,ready:false};publish();}submitRule.disabled=true;start.disabled=true;return;}
+        view=next;
+        const agentRunning=view.agent?.status==='running';
+        const roomText=view.players<2?'等待朋友加入':view.decisionRequired?'等待双方商定如何继续':view.ready?'棋局已就绪':!view.executorOnline?'女神暂未连接':'等待双方提交规则';
+        const agentText=({running:'队友行动中','model-timeout':'队友推理超时','model-unavailable':'队友模型暂不可用','submission-unknown':'队友走子结果待核对',rejected:'队友的走法未通过校验',conflict:'队友已停，棋局有更新','invalid-action':'队友未给出合法走法'})[view.agent?.status];
+        state.textContent=(view.seat===0?'白方':'黑方')+' · '+roomText+(agentText?' · '+agentText:'');
+        rule.disabled=submitting||view.ownRuleStatus!=='empty'||view.players<2;
+        submitRule.disabled=rule.disabled;
+        start.disabled=agentRunning||view.ownRuleStatus!=='ready';
+        stop.disabled=!agentRunning;
+        publish();
+      }finally{refreshing=false;if(!closed)timer=setTimeout(refresh,3000);}
+    }
+    async function fromBoard(event){
+      if(closed||event.source!==board.contentWindow||event.origin!=='null'||!event.data)return;
+      if(event.data.type==='nekofans:ready'){publish();return;}
+      const move=event.data.action;
+      if(event.data.type!=='nekofans:action'||playing||!view?.ready||typeof move!=='string'||!/^[a-h][1-8][a-h][1-8][qrbn]?$/.test(move))return;
+      if(event.data.expectedVersion!==view.actions.length){publish();return;}
+      playing=true;
+      try{
+        const result=await seatRequest('private-seat-move',{move,expectedVersion:view.actions.length});
+        if(closed)return;
+        feedback.textContent=({applied:'',rejected:'这一步暂时不可用。',conflict:'棋局已变化，已请求同步。',busy:'队友或另一手正在行动。','submission-unknown':'走子结果未知，请先核对棋局。','reconciliation-required':'请先核对上一次走子。'})[result.status]??'走子未确认。';
+        await refresh();
+      }finally{playing=false;}
+    }
+    async function open(){
+      const result=await seatRequest('private-open-seat');
+      if(closed)return;
+      if(result.status!=='paired'){
+        state.textContent=({'invalid-invite':'这不是受支持的棋局邀请。','room-not-found':'房间不存在或已过期。','room-full':'房间已满。若你已在浏览器入座，请用原来的配对码关联。','join-unknown':'入座结果暂时无法确认，请先向房主核对。',busy:'另一个入座请求正在处理。','seat-limit':'本次工作台会话的棋局数已达上限。'})[result.status]||result.error||'暂时无法加入。';return;
+      }
+      controls.hidden=false;
+      const content=await seatRequest('private-seat-board');
+      if(closed)return;
+      if(content.status==='ready'&&typeof content.html==='string'){
+        win.addEventListener('message',fromBoard);
+        board.srcdoc="<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:\">"+content.html;
+        board.hidden=false;
+      }else feedback.textContent='棋盘资源暂不可用。';
+      await refresh();
+    }
+    return {nodes:[state,controls,feedback,board],open,cleanup(){closed=true;clearTimeout(timer);win.removeEventListener('message',fromBoard);},
+      request:()=>view?{action:'share',title:'双人国际象棋',roomUrl:inviteUrl}:'请先确认已加入棋局。'};
+  }
+  function gameFields() {
+    const title = el('input', 'neko-lobby-game-title'); title.maxLength = 80; title.setAttribute('aria-label', '游戏名称'); title.placeholder = '例如：双人国际象棋';
+    const url = el('input', 'neko-lobby-game-url'); url.type = 'url'; url.setAttribute('aria-label', '游戏邀请链接'); url.placeholder = 'https://…/?room=…';
+    const server = el('input','neko-lobby-game-server'); server.type='url'; server.setAttribute('aria-label','游戏服务器'); server.placeholder='https://…trycloudflare.com';
+    const roleNote=el('p','neko-lobby-game-role-note','你和本机主伙伴（如大肥鱼）组成对局队伍。女神负责创作游戏和处理规则；双方通过各自入口参与同一局游戏。');
+    const goddessHeading=el('h3','neko-lobby-game-goddess-heading','女神 · 游戏创作与规则处理');
+    const teammateHeading=el('h3','neko-lobby-game-teammate-heading','我与决策队友 · 参与对局');
+    const gameState=el('p','neko-lobby-game-status','先连接女神的规则处理服务。连接使用你的 DeepSeek 工作台账号额度。');gameState.setAttribute('role','status');
+    const publicKey=el('textarea','neko-lobby-game-public-key');publicKey.readOnly=true;publicKey.rows=3;publicKey.hidden=true;publicKey.setAttribute('aria-label','游戏配对公钥');
+    const pairing=button('显示配对公钥','neko-lobby-game-pair',async()=>{const result=await callGame({action:'private-public-key'});if(result.ok){publicKey.value=result.publicKey;publicKey.hidden=false;gameState.textContent='将公钥配置到你的游戏服务器；私钥只保存在本机加密存储中。';}else gameState.textContent=result.error||'无法获取配对公钥';});
+    const connect=button('连接女神的规则服务','neko-lobby-game-connect',async()=>{connect.disabled=true;try{const result=await callGame({action:'private-start',url:server.value.trim().replace(/\/$/,'')});gameState.textContent=result.connected?'女神的规则处理服务已连接。':'暂时未连接，请检查服务器配对。';}finally{connect.disabled=false;}});
+    const create=button('创建秘密规则棋局','neko-lobby-game-create',async()=>{create.disabled=true;try{const result=await callGame({action:'private-create',url:server.value.trim().replace(/\/$/,'')});if(!create.isConnected)return;if(result.ok){openDialog('game-room',result.inviteUrl);}else gameState.textContent=result.error||'创建失败，请检查连接。';}finally{create.disabled=false;}});
+    const openRoom=button('在工作台打开棋局','neko-lobby-game-open-room',()=>openDialog('game-room',url.value.trim()));
+    const pairCode=el('input','neko-lobby-game-seat-code');pairCode.setAttribute('aria-label','自己的席位配对码');pairCode.autocomplete='off';pairCode.maxLength=24;
+    const pairSeat=button('关联我的席位','neko-lobby-game-seat-pair',async()=>{let invite;try{invite=new URL(url.value.trim());if(invite.hash||invite.pathname!=='/'||!/^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/.test(invite.origin)||!/^[A-Za-z0-9_-]{24}$/.test(invite.searchParams.get('room')||''))throw Error();}catch{gameState.textContent='请先填写自己的游戏邀请链接。';return;}pairSeat.disabled=true;try{const result=await callGame({action:'private-pair-seat',url:invite.origin,roomId:invite.searchParams.get('room'),code:pairCode.value.trim()});if(result.status==='paired'){pairCode.value='';gameState.textContent='已关联自己的'+(result.seat===0?'白方':'黑方')+'席位；决策队友尚未开始行动。';}else gameState.textContent=result.error||'配对失败，请重新生成配对码。';}finally{pairSeat.disabled=false;}});
+    const ownRule=el('input','neko-lobby-game-own-rule');ownRule.type='password';ownRule.autocomplete='off';ownRule.maxLength=80;ownRule.setAttribute('aria-label','本方秘密规则');
+    const submitRule=button('私密提交本方规则','neko-lobby-game-submit-rule',async()=>{submitRule.disabled=true;try{const result=await callGame({action:'private-submit-own-rule',text:ownRule.value});if(result.status==='ready'){ownRule.value='';gameState.textContent='规则已确认，本方决策队友可以读取自己的规则。';}else gameState.textContent=({unsupported:'暂不支持该规则，请换一种写法。',invalid:'请填写有效规则。',busy:'正在处理规则。',unavailable:'DeepSeek 暂时不可用。','not-paired':'请先关联自己的席位。','already-submitted':'这方已经提交规则。','submission-unknown':'提交结果不确定，请勿重复提交。','reconciliation-required':'规则状态需要核对，请勿重复提交。'})[result.status]||result.error||'提交未完成，请检查状态。';}finally{submitRule.disabled=false;}});
+    const startAgent=button('让决策队友参与','neko-lobby-game-agent-start',async()=>{const result=await callGame({action:'private-agent-start'});gameState.textContent=({started:'已启动本方决策队友，最多走 100 步、运行 1 小时；会消耗自己的 DeepSeek 额度。',busy:'本方决策队友已在运行。','not-paired':'请先关联自己的席位。','own-rule-unavailable':'请先在自己的工作台提交本方规则。','account-unavailable':'请先登录自己的 DeepSeek 账号。','own-agent-unavailable':'请先配置本机主伙伴作为决策队友。','reconciliation-required':'上次走子结果不确定，请先核对棋局。'})[result.status]||result.error||'决策队友暂时无法启动。';});
+    const agentStatus=button('查看决策队友状态','neko-lobby-game-agent-status',async()=>{const result=await callGame({action:'private-agent-status'});const statuses={running:'运行中',finished:'棋局结束','move-limit':'达到走子上限','wait-limit':'等待对手超时',cancelled:'已停止','room-unavailable':'读取棋局失败','room-timeout':'读取棋局超时','model-unavailable':'DeepSeek 请求失败','model-timeout':'DeepSeek 请求超时','submission-unknown':'提交结果不确定，请先核对棋局','invalid-action':'模型未返回合法走法',rejected:'走法被服务器拒绝',conflict:'棋局已更新，请核对后重新启动'};gameState.textContent='本方决策队友状态：'+(statuses[result.status]||result.status||'未知')+'，已走 '+(result.moves||0)+' 步。';});
+    const stopAgent=button('停止决策队友','neko-lobby-game-agent-stop',async()=>{await callGame({action:'private-agent-stop'});gameState.textContent='已请求停止本方决策队友。';});
+    // 本地棋局原型 · 真实账号模型桥: the renderer receives only the ephemeral
+    // start command and plain status text; never persona or rule bodies.
+    const relayHeading=el('h3','neko-lobby-game-prototype-heading','本地棋局原型 · 真实账号模型桥');
+    const relayState=el('p','neko-lobby-game-status','一键启动会打开已绑定模型桥的本机剧情棋局。');relayState.setAttribute('role','status');
+    const relayRoom=el('input','neko-lobby-game-prototype-room');relayRoom.maxLength=10;relayRoom.setAttribute('aria-label','本地原型房间码');relayRoom.placeholder='8 位房间码或 r-xxxxxxxx';relayRoom.autocomplete='off';
+    const relayOrigin=el('input','neko-lobby-game-prototype-origin');relayOrigin.type='url';relayOrigin.setAttribute('aria-label','本地原型地址');relayOrigin.value='http://127.0.0.1:8787';
+    const relayCommand=el('textarea','neko-lobby-game-prototype-command');relayCommand.readOnly=true;relayCommand.rows=3;relayCommand.hidden=true;relayCommand.setAttribute('aria-label','本地原型启动命令');
+    const relayWarning=el('p','neko-lobby-game-prototype-warning','命令含一次性桥接令牌，只在本次启动有效；不要发给别人或投屏。');relayWarning.hidden=true;
+    const loopbackOrigin=value=>{let parsed;try{parsed=new URL(value);}catch{return null;}if((parsed.protocol!=='http:'&&parsed.protocol!=='https:')||parsed.username||parsed.password||parsed.search||parsed.hash||parsed.pathname!=='/')return null;return ['127.0.0.1','localhost','[::1]'].includes(parsed.hostname)?parsed.origin:null;};
+    const relayStart=button('启动受控适配器','neko-lobby-game-prototype-start',async()=>{relayStart.disabled=true;try{const result=await callGame({action:'prototype-relay-start'});if(result.ok&&result.baseUrl&&result.token&&result.model&&result.label){relayCommand.value='NEKO_AI_BRIDGE_URL='+result.baseUrl+' NEKO_AI_BRIDGE_TOKEN='+result.token+' NEKO_AI_MODEL='+result.model+' NEKO_AI_BRIDGE_LABEL="'+String(result.label).replace(/"/gu,'')+'" npm start';relayCommand.hidden=false;relayWarning.hidden=false;relayState.textContent='适配器已启动（限时有效，最多 '+(Number.isFinite(result.maxCalls)?result.maxCalls:0)+' 次调用）。把命令粘贴到本地原型终端，创建房间后填写房间码并绑定。';}else if(result.ok&&result.status==='running'){relayState.textContent='适配器已在运行；如需新的启动命令，请先停止再启动。';}else relayState.textContent='适配器暂时无法启动，请检查 DeepSeek 登录后重试。';}finally{relayStart.disabled=false;}});
+    const storyStart=button('一键启动剧情对局','neko-lobby-game-story-start',async()=>{
+      storyStart.disabled=true;relayState.textContent='正在启动、建房并绑定模型桥…';
+      try{
+        const result=await callGame({action:'prototype-story-start'});
+        relayState.textContent=({opened:'已打开并绑定本机剧情棋局。',busy:'正在打开剧情棋局，请稍候。','already-bound':'适配器已绑定其他房间。可以继续原房间，或停止后另开一局。','missing-project':'请先设置 NEKO_STORY_PROJECT_DIR，指向含有 server.js 的剧情工程。','bridge-unavailable':'模型适配器未就绪，请检查 DeepSeek 登录。','room-unavailable':'暂时无法打开本机剧情棋局。',timeout:'本机剧情服务启动超时。'})[result.status]||'剧情棋局未打开。';
+      }finally{storyStart.disabled=false;}
+    });
+    const relayBind=button('绑定原型房间','neko-lobby-game-prototype-bind',async()=>{const roomId=relayRoom.value.trim().toUpperCase(),origin=loopbackOrigin(relayOrigin.value.trim());if(!/^(?:[A-HJ-NP-Z2-9]{8}|R-[0-9A-F]{8})$/.test(roomId)){relayState.textContent='请输入原型房间码或剧情房间 r-xxxxxxxx。';return;}if(!origin){relayState.textContent='原型地址只允许本机回环地址。';return;}relayBind.disabled=true;try{const result=await callGame({action:'prototype-relay-bind',roomId,prototypeOrigin:origin});relayState.textContent=({bound:'已绑定房间 '+(result.roomId||roomId)+'。女神可读取双方规则，决策队友只读取本方规则。','room-not-found':'原型里找不到这个房间，请先在原型里创建房间。','prototype-unavailable':'无法连接本地原型，请确认已用上面的命令启动。','invalid-room':'请输入原型房间码或剧情房间 r-xxxxxxxx。','invalid-origin':'原型地址只允许本机回环地址。','account-unavailable':'请先登录 DeepSeek 工作台账号。','already-bound':'适配器已经绑定房间。',busy:'正在核对原型房间，请稍候。',locked:'已经发生过模型调用，不能改绑房间；请停止后重新启动。','not-running':'适配器未运行或已过期，请重新启动。',expired:'适配器未运行或已过期，请重新启动。'})[result.status]||'绑定未完成，请检查原型和适配器状态。';}finally{relayBind.disabled=false;}});
+    const relayStatus=button('查看适配器状态','neko-lobby-game-prototype-status',async()=>{const result=await callGame({action:'prototype-relay-status'});if(result.ok===false){relayState.textContent='暂时无法读取适配器状态，请稍后重试。';return;}relayState.textContent='适配器：'+(result.status==='running'?'运行中':'未运行')+'，已绑定房间 '+(result.roomId||'-')+'，已调用 '+(Number.isFinite(result.calls)?result.calls:0)+'/'+(Number.isFinite(result.maxCalls)?result.maxCalls:0)+' 次。';});
+    const relayStop=button('停止适配器','neko-lobby-game-prototype-stop',async()=>{let result;try{result=await callGame({action:'prototype-relay-stop'});}catch{result={ok:false};}if(result&&result.ok===false){relayState.textContent='停止未确认，请检查适配器状态或稍后重试。';return;}relayCommand.value='';relayCommand.hidden=true;relayWarning.hidden=true;relayState.textContent='已停止；启动命令立即失效。';});
+    const prompt=el('textarea','neko-lobby-game-prompt');prompt.rows=2;prompt.maxLength=2000;prompt.setAttribute('aria-label','游戏制作要求');prompt.placeholder='告诉女神想创建或怎样修改游戏';let revisionId;
+    const draft=button('让女神生成或修改草稿','neko-lobby-game-draft',async()=>{draft.disabled=true;gameState.textContent='女神正在制作游戏草稿…';try{const result=await callGame({action:'draft-game',prompt:prompt.value,revisionId});if(result.status==='draft'){revisionId=result.revisionId;gameState.textContent='草稿已生成，可继续输入修改要求。草稿尚未通过隔离验证，暂不能发布。';}else gameState.textContent='草稿生成失败或内容过长，请检查账号后重试。';}finally{draft.disabled=false;}});
+    const advanced=el('details','neko-lobby-game-advanced');
+    advanced.append(el('summary','','高级设置与旧版配对'),pairing,publicKey,connect,field('自己的席位配对码',pairCode,'已在浏览器入座时使用。'),pairSeat,field('本方秘密规则',ownRule,'请在此提交，本机队友才能读取。'),submitRule,startAgent,agentStatus,stopAgent,field('本地原型房间码',relayRoom),field('本地原型地址',relayOrigin),relayStart,relayBind,relayStatus,relayCommand,relayWarning);
+    return { nodes: [roleNote,goddessHeading,field('游戏服务器',server),create,gameState,field('制作游戏',prompt),draft,teammateHeading,field('游戏名称',title),field('游戏邀请链接',url,'只填写公开邀请链接。'),openRoom,relayHeading,relayState,storyStart,relayStop,advanced], request() {
+      if (!title.value.trim() || !url.value.trim()) return '请填写游戏名称和邀请链接';
+      return {action:'share',title:title.value.trim(),roomUrl:url.value.trim()};
+    } };
   }
   function catFields() {
     const settings = snap?.catSettings || {}, part = snap?.participation || {}, own = snap?.me?.cat;
@@ -2388,6 +2535,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     input.disabled = conn !== 'online' || muted || banned; send.disabled = input.disabled || sending;
     input.placeholder = banned ? '你已被频道封禁' : muted ? '你正在禁言中' : conn === 'online' ? '在频道里说点什么… Enter 发送，Shift+Enter 换行，@ 提及成员' : '连接频道后才能发言';
     if (replyToId && !findMessage(replyToId)) setReply(null);
+    gameShareButton.hidden = conn !== 'online' || !snap?.me || typeof bridge.gameHub !== 'function';
     notice.textContent = error || snap?.error || ''; notice.hidden = !notice.textContent;
     // An identity change discards any open form drafted for the previous owner.
     if (dialog && dialog.owner !== meId()) closeDialog();
@@ -2414,7 +2562,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     if (disposed) return;
     ++loginEpoch;
     if (joined) { joined = false; try { Promise.resolve(bridge.lobby({ action: 'close' })).catch(() => {}); } catch {} }
-    disposed = true;loginReturn=null; if (typeof release === 'function') release();if(typeof releaseNeko==='function')releaseNeko(); rows.clear(); if (dialog) { dialog.node.remove(); dialog = null; } panel.remove(); railButton.remove();
+    disposed = true;loginReturn=null; if (typeof release === 'function') release();if(typeof releaseNeko==='function')releaseNeko(); rows.clear(); if (dialog) { dialog.cleanup?.(); dialog.node.remove(); dialog = null; } panel.remove(); railButton.remove();
   }
   return { panel, railButton, show, hide, isOpen: () => open, dialogOpen: () => !!dialog, place, renderStatus, dispose };
 }
