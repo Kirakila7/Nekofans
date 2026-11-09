@@ -337,6 +337,9 @@ body[data-neko-room-columns] .neko-companion-dock[data-neko-companion-expanded]{
    card centres in the remaining width so no field or button is beneath her. */
 .neko-lobby-panel[style*="--neko-lobby-dialog-companion-reserve"] .neko-lobby-dialog { padding-right:max(24px,var(--neko-lobby-dialog-companion-reserve,24px)); }
 .neko-lobby-dialog__card { width:min(460px,92%); max-height:85%; overflow:auto; display:grid; gap:10px; background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:16px; box-shadow:0 24px 80px #17303d30; padding:18px; }
+.neko-lobby-dialog[data-dialog="game-room"] .neko-lobby-dialog__card { width:min(840px,94%); }
+.neko-lobby-game-board { width:100%; height:760px; border:1px solid var(--nws-border); border-radius:12px; }
+.neko-lobby-game-room-controls:not([hidden]) { display:grid; gap:8px; }
 .neko-lobby-dialog__title { margin:0; font-size:16px; }
 .neko-lobby-field { display:grid; gap:4px; font-size:12px; }
 .neko-lobby-field__label { font-weight:600; }

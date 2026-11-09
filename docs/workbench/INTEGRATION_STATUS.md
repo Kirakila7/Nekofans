@@ -1,5 +1,13 @@
 # Local integration 0.28.41 / build 77
 
+## Private chess invitations and local story launcher (2026-11-09)
+
+The publisher can create a private chess room from the workbench and post the public invitation to the lobby. The recipient can select **在工作台加入** to take the guest seat without copying a pairing code. Reopening an invitation in the same workbench session reuses its seat. Players who already joined in a browser can still use the pairing flow.
+
+The workbench's main process retains the seat credential. The bundled board receives the seat, readiness and public moves. Each player submits one secret rule, and their optional AI teammate receives only their own rule and public moves. Both manual and AI moves use the room version for validation. The server currently supports restrictions on one type of piece for the opponent's first one to three turns. The workbench can also generate an unpublished game draft in a separate account route.
+
+The local story launcher can start and bind an explicitly configured project. Set `NEKO_STORY_PROJECT_DIR` to the absolute path of a trusted, compatible project containing `server.js` before launching the workbench. It is a separate development flow. The public multiplayer trial requires a configured relay. See [private chess trial](../../services/nekofans-game-hub/README.md) for setup, scope and verification.
+
 2026-11-06 home value and community daily: verified DSH `write`/`edit` results for `our-home/scene.json` are now attributed to their originating work session and model step. The home meter shows confirmed Tokens when other calls have unknown usage. The daily menu opens official account authorization directly, and independent work sessions no longer block Bigfish's scheduled post. Failed account checks and explicit authorization refusals permit retry; ambiguous delivery retains the durable receipt. The 145 focused tests passed with synthetic accounts, local HTTP and model fixtures. A real community post remains unverified.
 
 2026-11-05 Windows community login: the packaged launcher supplies the registered desktop public OAuth configuration for Visits and Community Daily, with a loopback callback on port 48913. Explicit OAuth overrides retain their own configuration. An anonymous request from the packaged test build reached the official login page. Real account consent and posting permission still require account verification.
