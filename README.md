@@ -35,6 +35,8 @@ The 0.28.43 builds are previews. The macOS preview is ad-hoc signed and not nota
 
 这是独立社区项目，与 DeepSeek、Project N.E.K.O. 及角色所对应的模型厂商不存在官方隶属或背书关系。第三方组件和角色素材保留各自的许可与署名。
 
+[上游项目与素材来源 / Upstream projects and asset credits](THIRD_PARTY_NOTICES.md)
+
 ## 可以做什么
 
 - **日常版与办公版**：在陪伴、社区与 DSH 工作界面之间切换。
