@@ -27,6 +27,7 @@ const usesMainChatService=backend=>backend==='chat-api'||backend==='deepseek-acc
 const {createVisitsController}=require('./visits/controller.cjs');
 const {createWorkbenchCommunity}=require('./community-friends.cjs');
 const {createRtcTransport}=require('./visits/rtc-transport.cjs');
+const {taskRecord,screenRecord,createProjectTracker,isRootWorkSession}=require('./activity-memory.cjs');
 const {pathToFileURL}=require('node:url');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -74,12 +75,13 @@ const workspaceLayout=createWorkspaceLayout(path.join(data,'workspace-layout.jso
 const paneLayout=createPaneLayout(path.join(data,'pane-layout.json'));
 const videoPlatform=createVideoPlatform(path.join(data,'video-platform.json'));
 const codexModelChoices=createCodexModelChoices(path.join(data,'codex-model-choices.json'));
-let workspaceRevision=0, codexHadActiveWork=false;
+let workspaceRevision=0, codexHadActiveWork=false, projectMemoryEpoch=0;
+const projectConsent=()=>state.mainChat?.projectActivityMemory===true?projectMemoryEpoch:null;
 const codexWorkspace=createCodexWorkspace({defaultCwd:workspace,onState:value=>{
   if(dshWindow&&!dshWindow.isDestroyed()&&isWorkbenchOrigin(dshWindow.webContents.getURL()))dshWindow.webContents.send('workbench:office-state',value);
   const active=value.status==='working'||!!value.approvals?.length;
   if(!CODEX_AVAILABLE&&active!==codexHadActiveWork){codexHadActiveWork=active;workspaceRevision++;broadcast();}
-}});
+},memoryConsent:projectConsent,onCompleted:value=>recordActivity(taskRecord({provider:'Codex',...value}))});
 const workspaceController=createWorkspaceController({layout:workspaceLayout,codex:codexWorkspace,readDsh:params=>{
   if(state.connection!=='ready')throw Error('DSH 尚未就绪');return rpc('workspace-catalog',params);
 }});
@@ -114,7 +116,11 @@ const nativeDividerController=createNativeDividerController({WebContentsView,ipc
 const nativeComposerController=createNativeComposerController({WebContentsView,BrowserWindow,screen,ipcMain});
 const communityController=createSocialController({WebContentsView,openExternal:url=>shell.openExternal(url),copyText:text=>clipboard.writeText(text),
   onHide:()=>communityAccount?.cancel(),
-  onAccountState:value=>{unifiedNekoLogin?.communityChanged(value);publishNekoAccount();},
+  onAccountState:value=>{
+    if(value.status==='signed-in'||value.status==='signed-out')
+      privateGameRuntime?.communitySeatOwnerChanged(value.userId??null);
+    unifiedNekoLogin?.communityChanged(value);publishNekoAccount();
+  },
   onState:(host,value)=>{if(host===dshWindow&&!host.isDestroyed()&&isWorkbenchOrigin(host.webContents.getURL())){host.webContents.send('workbench:community-state',value);nativeDividerController.setEnabled(communityController.hasVisibleView);nativeDividerController.raise(value.status==='ready');nativeComposerController.raise();}},
   onExternalError:()=>dialog.showErrorBox('链接未打开','系统浏览器未能打开这个链接，请稍后重试。')});
 const videoFloatController=createVideoFloatController({BrowserWindow,WebContentsView,ipcMain,screen,shell,clipboard});
@@ -163,6 +169,7 @@ const terminalTimers=new Map();
 const busy=a=>['working','stopping'].includes(a.status);
 const screenShare=createScreenShare({WebContentsView,desktopCapturer,systemPreferences,dataDir:data,repositoryRoot:path.resolve(base,'../..'),safeStorage,
   getChat:()=>mainChatRuntime,getHost:()=>dshWindow,isChatBusy:()=>!!activeApiRequest||busy(state.actors[0]),
+  onRecord:record=>recordActivity(screenRecord(record)),
   onReply:reply=>{if(quitting)return;state.actors[0].screenReply=reply;if(reply)state.actors[0].notice=null;broadcast();},
   onOpen:async()=>{await communityController.action(dshWindow,{action:'hide'});}});
 const channelRevisions={fish:0,qqbot:0};
@@ -350,6 +357,7 @@ function applyMainChat(snapshot){
   if(quitting)return;
   const a=state.actors[0],oldBackend=a.chatBackend,previous=state.mainChat?.chat;
   if(oldBackend!==snapshot.backend)screenShare.interrupt();
+  if((state.mainChat?.projectActivityMemory===true)!==(snapshot.projectActivityMemory===true)){projectMemoryEpoch++;projectMemory.reset();}
   state.mainChat=snapshot;
   if(oldBackend!==snapshot.backend){
     if(oldBackend==='neko')state.neko.history=a.messages;
@@ -550,6 +558,14 @@ function rpc(method,params={}){return new Promise((resolve,reject)=>{
 });}
 function textContent(value){if(!value)return '';if(typeof value==='string')return value;if(Array.isArray(value))return value.map(textContent).join('');if(value.type==='text')return value.text||'';return textContent(value.content||value.message?.content||value.blocks);}
 function shortReply(text){return text.replace(/```[\s\S]*?```/g,'').replace(/[*#`]/g,'').trim().slice(0,100);}
+function recordActivity(value){
+  if(!value||quitting||!usesMainChatService(mainChatRuntime?.backend)||!mainChatRuntime.memorySystem)return;
+  if(value.source==='project'&&projectConsent()===null)return;
+  void mainChatRuntime.memorySystem.recordActivity(value).catch(()=>{
+    if(!quitting){state.mainChat={...state.mainChat,error:'活动摘要未能写入记忆'};broadcast();}
+  });
+}
+const projectMemory=createProjectTracker(recordActivity,session=>isRootWorkSession(state,session));
 function receive(message,replay=false){
   if(message?.method==='home-build'){if(!replay)void homeReady.then(ready=>ready&&ourHomeRuntime.acceptBuild(message.params));return;}
   if(message?.method==='channel-experience'){if(!replay)try{channelLife.accept(message.params);}catch{}return;}
@@ -566,6 +582,7 @@ function receive(message,replay=false){
   if(message.method==='task-meta'){syncTask(p);return;}
   if(message.method==='task-roster'&&acceptTaskRoster(state,p)){update();return;}
   if(message.method==='agent-roster'&&p.source==='dsh-subagent-catalog'&&Array.isArray(p.sessionIds)){state.catalogOrder=[...new Set(p.sessionIds.map(String))];update();return;}
+  if(!replay&&message.method==='event'&&projectConsent()!==null)projectMemory.accept(p.sessionId,p.event);
   const a=actorBySession(p.sessionId);
   if(!a){
     if(p.sessionId&&['event','status','subagent-activity','session-context'].includes(message.method)){
@@ -935,8 +952,21 @@ function gameRuntime(){
   return privateGameRuntime??=require('./private-game-runtime.cjs').createPrivateGameRuntime({
     rpc,repositoryRoot:path.resolve(base,'../..'),dataDir:data,safeStorage,getOwnPersona:async()=>ownGamePersona(),
     getSeatOwner:async()=>lobbyController.snapshot()?.me?.user_id ?? (await lobbyController.verifyIdentity?.())?.userId ?? null,
+    getCommunityOwner:()=>{const account=communityController.accountState;return account.status==='signed-in'?account.userId:null;},
+    getInviteTicket:request=>communityController.readGameTicket(dshWindow,request),
   });
 }
+ipcMain.handle('workbench:game-friend-invites',async(event,request)=>{
+  assertWorkbenchCaller(event);
+  const runtime=gameRuntime();
+  const availability=await runtime.friendInviteStatus();
+  if(request?.action==='status')return availability;
+  if(!availability.enabled)return {status:'unavailable'};
+  if(request?.action==='list')return runtime.readFriendInvites();
+  if(request?.action==='send')return runtime.sendFriendInvite({inviteUrl:request.inviteUrl,friendId:request.friendId});
+  if(request?.action==='accept')return runtime.acceptFriendInvite(request.id);
+  throw Error('未知好友邀请操作');
+});
 // Trusted-main-process-only local prototype bridge. The renderer receives only
 // an ephemeral start command; it never receives the account persona or rules.
 function prototypeRelay(){return privatePrototypeRelay??=require('./prototype-model-relay.cjs').createPrototypeModelRelay({rpc,getOwnPersona:async()=>ownGamePersona()});}
@@ -1040,6 +1070,9 @@ ipcMain.on('workbench:community-web-account',(event,value)=>{
 });
 ipcMain.on('workbench:community-web-friends-result',(event,value)=>{
   communityController.acceptFriends(event,value);
+});
+ipcMain.on('workbench:community-game-ticket-result',(event,value)=>{
+  communityController.acceptGameTicket(event,value);
 });
 function nekoAccountSnapshot(){
   const lobby=lobbyController.snapshot();return {community:communityController.accountState,lobby:{status:lobby?.auth?.status||'unavailable'},login:unifiedNekoLogin?.snapshot()||{status:'idle',message:'',error:''}};

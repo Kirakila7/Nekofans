@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('nekoWorkbench',Object.freeze({
   lobby:request=>ipcRenderer.invoke('workbench:lobby',request),
   friends:(action,id)=>ipcRenderer.invoke('workbench:friends',action,id),
   gameHub:request=>ipcRenderer.invoke('workbench:game-hub',request),
+  gameInvites:request=>ipcRenderer.invoke('workbench:game-friend-invites',request),
   subscribeGameInvite:callback=>{
     const listener=()=>callback();
     ipcRenderer.on('workbench:game-invite',listener);

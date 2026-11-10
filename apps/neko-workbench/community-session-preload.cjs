@@ -91,6 +91,48 @@ if(process.isMainFrame&&location.origin==='https://community.project-neko.cn'){
    return answer({status:error.status===401?'sign-in-required':error.status===403?'permission-denied':'unavailable'});
   }
  });
+ ipcRenderer.on('workbench:community-game-ticket',async(_event,id,input)=>{
+  if(!Number.isSafeInteger(id)||id<1||location.origin!=='https://community.project-neko.cn')return;
+  const reply=value=>ipcRenderer.send('workbench:community-game-ticket-result',{id,...value});
+  const op=input?.op;
+  if(op!=='inbox'&&op!=='send')return reply({status:'unavailable'});
+  if(op==='send'&&(!/^[a-f0-9-]{36}$/.test(input.target||'')||!/^[A-Za-z0-9_-]{24}$/.test(input.room||'')))return reply({status:'unavailable'});
+  try{
+   const session=current();
+   if(!session.token)return reply({status:'sign-in-required'});
+   if(!same(verified,session)){
+    const identity=await read();
+    if(!same(session,current()))return reply({status:'account-changed'});
+    if(identity?.status!=='signed-in')return reply({status:identity?.status==='signed-out'?'sign-in-required':'unavailable'});
+   }
+   const response=await fetch('/api/game-invites/ticket',{
+    method:'POST',redirect:'error',cache:'no-store',signal:AbortSignal.timeout(8000),
+    headers:{Accept:'application/json','Content-Type':'application/json',Authorization:'Bearer '+session.token},
+    body:JSON.stringify(op==='send'?{op,target:input.target,room:input.room}:{op}),
+   });
+   if(!same(session,current()))return reply({status:'account-changed'});
+   if(response.status===401)return reply({status:'sign-in-required'});
+   if(response.status===403)return reply({status:'forbidden'});
+   if(!response.ok)return reply({status:'unavailable'});
+   const reader=response.body.getReader();
+   const decoder=new TextDecoder();
+   let body='',length=0;
+   try{
+    for(;;){
+     const {done,value}=await reader.read();
+     if(done)break;
+     length+=value.byteLength;
+     if(length>4096){await reader.cancel();return reply({status:'unavailable'});}
+     body+=decoder.decode(value,{stream:true});
+    }
+   }finally{reader.releaseLock();}
+   if(!same(session,current()))return reply({status:'account-changed'});
+   const {ticket,userId}=JSON.parse(body+decoder.decode());
+   if(typeof ticket!=='string'||ticket.length>2040||!/^[-\w]+\.[-\w]+\.[-\w]+$/.test(ticket)||
+      typeof userId!=='string'||!/^[a-f0-9-]{36}$/.test(userId))return reply({status:'unavailable'});
+   return reply({status:'ready',ticket,userId});
+  }catch{return reply({status:'unavailable'});}
+ });
  ipcRenderer.on('workbench:community-web-login-cancel',cancelLogin);
  ipcRenderer.on('workbench:community-web-login',async()=>{
   // Let the official page own its authorization UI and token refresh flow.

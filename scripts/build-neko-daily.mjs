@@ -36,7 +36,7 @@ const baseEntries=baseCommit?run('git',['ls-tree','-r','-z',baseCommit],{cwd:roo
 const tracked=manifestOnly?[]:baseEntries?baseEntries.map(x=>x.name):run('git',['ls-files','-z'],{cwd:root}).split('\0').filter(Boolean);
 const files=tracked.filter(p=>p.startsWith('apps/neko-workbench/')||p.startsWith('packages/')||p.startsWith('config/')||p.startsWith('services/neko-memory/')||p==='scripts/install-neko-daily.cjs');
 for(const name of gameRuntimeFiles)if(!files.includes(name))files.push(name);
-for(const name of ['community-social-client.cjs','community-oauth.cjs','community-friends.cjs']){
+for(const name of ['community-social-client.cjs','community-oauth.cjs','community-friends.cjs','activity-memory.cjs']){
   const entry='apps/neko-workbench/'+name;
   if(!files.includes(entry))files.push(entry);
 }

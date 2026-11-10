@@ -66,7 +66,16 @@ function installWorkspaceShell(options = {}) {
   const memoryIcon=el('span','neko-memory-icon');memoryIcon.setAttribute('aria-hidden','true');memoryButton.append(memoryIcon);
   railTop.append(memoryButton);
   // Lobby (频道): optional. The room list opens it; older shells retain the rail fallback.
-  const lobby = typeof bridge.lobby === 'function' ? createLobbyView({ doc, bridge, el, button, image, avatar, composer: options.lobbyComposer || (typeof WORKBENCH_LOBBY_COMPOSER !== 'undefined' ? WORKBENCH_LOBBY_COMPOSER : null) || win.WorkbenchLobbyComposer || null, companion: () => state?.companion, onOpen: () => { hideSocial(); closeSettings();roomPreview?.openLobby?.(); }, onFriendsOpen: () => { hideSocial();closeSettings(); }, onBack: () => {roomPreview?.showRooms?.();Promise.resolve().then(() => roomPreview?.querySelector('button.neko-chatroom-preview__room')?.focus());}, onChange: () => { renderOffice(); schedule(); } }) : null;
+  let inboxButton=null;
+  const lobby = typeof bridge.lobby === 'function' ? createLobbyView({ doc, bridge, el, button, image, avatar, composer: options.lobbyComposer || (typeof WORKBENCH_LOBBY_COMPOSER !== 'undefined' ? WORKBENCH_LOBBY_COMPOSER : null) || win.WorkbenchLobbyComposer || null, companion: () => state?.companion, onOpen: () => { hideSocial(); closeSettings();roomPreview?.openLobby?.(); }, onFriendsOpen: () => { hideSocial();closeSettings(); }, onBack: () => {roomPreview?.showRooms?.();Promise.resolve().then(() => roomPreview?.querySelector('button.neko-chatroom-preview__room')?.focus());}, onChange: () => { renderOffice(); schedule(); },
+    enterInvitedRoom:url=>enterGameRoom(url),
+    onInboxState:(enabled,count)=>{
+      if(!inboxButton)return;
+      inboxButton.hidden=!enabled;
+      inboxButton.dataset.count=count?String(count):'';
+      inboxButton.setAttribute('aria-label',count?'游戏邀请，'+count+' 条待加入':'游戏邀请');
+    },
+  }) : null;
   if (lobby) { own(lobby.panel); releases.push(lobby.dispose); }
   async function enterGameRoom(inviteUrl, notice) {
     if (isOfficeEdition() && !await saveLayout({workbenchEdition:'daily'})) return false;
@@ -97,6 +106,14 @@ function installWorkspaceShell(options = {}) {
     icon.firstChild.setAttribute('d','M12 20s-7-4.4-7-9a3.8 3.8 0 0 1 7-2 3.8 3.8 0 0 1 7 2c0 4.6-7 9-7 9Z');
     friendsButton.append(icon);
     communityButton.after(friendsButton);
+    if(typeof bridge.gameInvites==='function'){
+      inboxButton=button('', 'neko-side-rail__button neko-game-inbox',()=>lobby.openGameInbox());
+      inboxButton.hidden=true;inboxButton.title='游戏邀请';
+      inboxButton.setAttribute('aria-label','游戏邀请');
+      const mail=communitySvg.cloneNode(true);
+      mail.firstChild.setAttribute('d','M4 6h16v12H4zM4 7l8 6 8-6');
+      inboxButton.append(mail);friendsButton.after(inboxButton);
+    }
   }
   const leaveViews = () => { hideSocial(); lobby?.hide(); };
   // The room is a local visual preview. It never touches the work session or
@@ -1818,7 +1835,7 @@ function installWorkspaceShell(options = {}) {
 // Lobby (频道) view. Renderer only: every value from the lobby snapshot is written with textContent or DOM
 // calls, never parsed as HTML. Drafts, the reply target and picked mentions stay in this closure.
 // It never hides, inerts or rebuilds the companion dock, and degrades to nothing when bridge.lobby fails.
-function createLobbyView({ doc, bridge, el, button, image, avatar, composer, companion, onOpen, onFriendsOpen, onBack, onChange }) {
+function createLobbyView({ doc, bridge, el, button, image, avatar, composer, companion, onOpen, onFriendsOpen, onBack, onChange, enterInvitedRoom, onInboxState }) {
   const MAX_TEXT = 2000, MAX_NODES = 300, MENTION = /<@([uc]):([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})>/gi;
   const MODES = [['off', '她不参与'], ['assist', '一起回复'], ['independent', '她自己说话']];
   let snap = null, open = false, joined = false, disposed = false, error = '', replyToId = null, picked = [], picker = null, sending = false;
@@ -2341,19 +2358,19 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     if (kind === 'admin') node.dataset.admin = '';
     const studio = kind === 'game-studio';
     const invite = kind === 'game-invite';
-    const friends = kind === 'friends';
+    const friends = kind === 'friends', inbox=kind==='game-inbox', contacts=friends||inbox;
     const game = studio || invite || kind === 'game' || kind === 'game-room';
-    const heading = el('h2', 'neko-lobby-dialog__title', friends ? 'N.E.K.O. 好友' : kind === 'cat' ? '猫猫设置' : studio ? '创造台 · 游戏制作' : invite || kind === 'game' ? '加入棋局' : kind === 'game-room' ? '秘密规则棋局' : '频道管理'); heading.id = 'neko-lobby-dialog-title'; node.setAttribute('aria-labelledby', heading.id);
+    const heading = el('h2', 'neko-lobby-dialog__title', inbox?'游戏邀请':friends ? 'N.E.K.O. 好友' : kind === 'cat' ? '猫猫设置' : studio ? '创造台 · 游戏制作' : invite || kind === 'game' ? '加入棋局' : kind === 'game-room' ? '秘密规则棋局' : '频道管理'); heading.id = 'neko-lobby-dialog-title'; node.setAttribute('aria-labelledby', heading.id);
     const status = el('p', 'neko-lobby-dialog__error'); status.setAttribute('role', 'status'); status.hidden = true;
     const save = el('button', 'neko-lobby-dialog-save', '保存'); save.type = 'submit';
-    if(friends)save.hidden=true;
+    if(contacts)save.hidden=true;
     if (game) { save.textContent = '发送到聊天室'; save.hidden = studio || invite || kind === 'game' || snap?.connection !== 'online' || !snap?.me; }
-    const footer = el('div', 'neko-lobby-dialog__footer'); footer.append(button(friends?'关闭':kind === 'game-room' ? '关闭棋局窗口' : '取消', 'neko-lobby-dialog-cancel', () => closeDialog()), save);
-    const build = friends ? friendFields() : kind === 'cat' ? catFields() : studio ? gameFields(enterRoom) : invite || kind === 'game' ? gameJoinFields(inviteUrl, enterRoom) : kind === 'game-room' ? gameRoomFields(inviteUrl, notice) : adminFields();
+    const footer = el('div', 'neko-lobby-dialog__footer'); footer.append(button(contacts?'关闭':kind === 'game-room' ? '关闭棋局窗口' : '取消', 'neko-lobby-dialog-cancel', () => closeDialog()), save);
+    const build = inbox ? inboxFields() : friends ? friendFields() : kind === 'cat' ? catFields() : studio ? gameFields(enterRoom) : invite || kind === 'game' ? gameJoinFields(inviteUrl, enterRoom) : kind === 'game-room' ? gameRoomFields(inviteUrl, notice) : adminFields();
     box.append(heading, ...build.nodes, status, footer); node.appendChild(box);
     box.addEventListener('submit', async event => {
       event.preventDefault();
-      if(friends)return;
+      if(contacts)return;
       // The form belongs to the account that opened it. After a switch it is
       // discarded; it must never be saved through another account's session.
       if (!dialog || dialog.node !== node || dialog.owner !== meId()) { closeDialog(); return; }
@@ -2374,8 +2391,8 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     });
     node.addEventListener('keydown', event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeDialog(); } });
     node.addEventListener('mousedown', event => { if (event.target === node) closeDialog(); });
-    dialog = { kind, node, from: doc.activeElement, owner: meId(), cleanup:build.cleanup, reloadFriends:friends?build.open:build.reloadFriends };
-    if (studio || invite || friends) {
+    dialog = { kind, node, from: doc.activeElement, owner: meId(), cleanup:build.cleanup, reloadFriends:friends?build.open:build.reloadFriends, renderInbox:build.renderInbox };
+    if (studio || invite || contacts) {
       node.classList.add('neko-workspace-modal');
       node.style.position='fixed';
       node.style.zIndex='2147482500';
@@ -2392,12 +2409,12 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
   }
   function finishFriendLogin(flow){
     if(!friendLoginReturn||flow?.source!=='friends'||flow.flowId<friendLoginReturn.minimum||!loginTerminal(flow.status))return;
-    friendLoginReturn=null;
-    if(!dialog)openFriends();
+    const {restore}=friendLoginReturn;friendLoginReturn=null;
+    if(!dialog)restore();
   }
-  function beginFriendLogin(){
+  function beginFriendLogin(restore=openFriends){
     if(friendLoginReturn||unifiedBusy())return;
-    const attempt={minimum:(unifiedLoginState?.flowId||0)+1};
+    const attempt={minimum:(unifiedLoginState?.flowId||0)+1,restore};
     friendLoginReturn=attempt;
     const detail={source:'friends',isCurrent:()=>!disposed&&friendLoginReturn===attempt};
     closeDialog();
@@ -2405,11 +2422,65 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     Promise.resolve(detail.handled?detail.promise:Promise.reject(Error('登录入口暂不可用')))
       .then(result=>{
         if(result?.state?.source==='friends')finishFriendLogin(result.state);
-        else if(friendLoginReturn===attempt){friendLoginReturn=null;if(!dialog)openFriends();}
+        else if(friendLoginReturn===attempt){friendLoginReturn=null;if(!dialog)restore();}
       })
-      .catch(()=>{if(friendLoginReturn===attempt){friendLoginReturn=null;if(!dialog)openFriends();}});
+      .catch(()=>{if(friendLoginReturn===attempt){friendLoginReturn=null;if(!dialog)restore();}});
   }
-  function friendFields(){
+  let inviteEnabled=false,inboxEntries=[],inboxStatus='loading',inboxGeneration=0,inboxTimer=null,joiningInvite=false;
+  function openGameInbox(){
+    if(!inviteEnabled)return;
+    onFriendsOpen?.();openDialog('game-inbox');
+  }
+  function publishInbox(){
+    onInboxState?.(inviteEnabled,inboxEntries.filter(item=>!item.accepted).length);
+    dialog?.renderInbox?.();
+  }
+  async function requestInvitation(request){
+    try{return await bridge.gameInvites(request);}catch{return {status:'unavailable'};}
+  }
+  async function refreshInbox(){
+    if(disposed||!inviteEnabled)return;
+    clearTimeout(inboxTimer);
+    const request=++inboxGeneration,result=await requestInvitation({action:'list'});
+    if(disposed||request!==inboxGeneration)return;
+    inboxStatus=result?.status;inboxEntries=result?.status==='ready'?result.invitations:[];
+    publishInbox();
+    inboxTimer=setTimeout(refreshInbox,25000);
+  }
+  function inboxFields(){
+    const status=el('p','neko-friends-status');status.setAttribute('role','status');
+    const rows=el('ul','neko-lobby-friend-list');rows.setAttribute('aria-label','游戏邀请');
+    const login=button('连接 N.E.K.O. 账号','neko-lobby-friends-login',()=>beginFriendLogin(openGameInbox));
+    const refresh=button('刷新','neko-lobby-friends-refresh',()=>refreshInbox());
+    async function join(item){
+      if(joiningInvite)return;
+      joiningInvite=true;renderInbox();
+      const owner=lastFriendsAccount, current=dialog?.node;
+      try{
+        const result=await requestInvitation({action:'accept',id:item.id});
+        if(disposed||current!==dialog?.node||owner!==lastFriendsAccount)return;
+        if(result?.status==='joined'){
+          inboxEntries=inboxEntries.map(entry=>entry.id===item.id?{...entry,accepted:true}:entry);
+          publishInbox();
+          if(await enterInvitedRoom?.(result.inviteUrl))return;
+        }
+        status.textContent=({'not-found':'邀请已失效。','room-full':'房间已满。','account-changed':'账号已切换，请重新打开邀请。','sign-in-required':'请先连接 N.E.K.O. 账号。'})[result?.status]||'暂时未能进房，可以再试一次。';
+      }finally{joiningInvite=false;for(const item of rows.querySelectorAll('button'))item.disabled=false;}
+    }
+    function renderInbox(){
+      login.hidden=inboxStatus!=='sign-in-required';
+      status.textContent=({loading:'正在读取邀请…','sign-in-required':'连接 N.E.K.O. 账号后即可查看游戏邀请。',ready:inboxEntries.length?'':'还没有好友游戏邀请。'})[inboxStatus]??'暂时无法读取邀请。';
+      rows.replaceChildren(...inboxEntries.map(item=>{
+        const row=el('li','neko-friends-contact'),info=el('div','neko-friends-contact__name');
+        info.append(el('strong','',item.title),el('div','neko-friends-status',item.sender+' 邀请你一起玩'));
+        const accept=button(item.accepted?'继续':'加入','neko-game-inbox-join',()=>join(item));accept.disabled=joiningInvite;
+        accept.setAttribute('aria-label',(item.accepted?'继续 ':'加入 ')+item.title);
+        row.append(info,accept);return row;
+      }));
+    }
+    return {nodes:[status,login,rows,refresh],open(){renderInbox();void refreshInbox();},renderInbox};
+  }
+  function friendFields({onInvite}={}){
     const surface=el('section','neko-friends-panel');surface.dataset.state='loading';
     const summary=el('div','neko-friends-overview');
     const identity=el('div','neko-friends-overview__identity');
@@ -2419,7 +2490,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     const tools=el('div','neko-friends-tools');tools.hidden=true;
     const search=el('input','neko-friends-search');search.type='search';search.placeholder='搜索好友昵称';
     search.setAttribute('aria-label','搜索好友昵称');
-    let contacts=[],onlineOnly=false,avatarObserver=null,generation=0;
+    let contacts=[],onlineOnly=false,avatarObserver=null,generation=0,canInvite=false;
     const filters=el('div','neko-friends-filters');
     const all=button('全部','neko-friends-filter',()=>{onlineOnly=false;render();});
     const online=button('在线','neko-friends-filter',()=>{onlineOnly=true;render();});
@@ -2429,7 +2500,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     const rows=el('ul','neko-lobby-friend-list');rows.setAttribute('aria-label','N.E.K.O. 好友名单');
     const empty=el('div','neko-friends-empty');
     const status=el('p','neko-friends-status');status.setAttribute('role','status');
-    const signIn=button('连接 N.E.K.O. 账号','neko-lobby-friends-login',beginFriendLogin);
+    const signIn=button('连接 N.E.K.O. 账号','neko-lobby-friends-login',()=>beginFriendLogin());
     const retry=button('重新读取','neko-lobby-friends-retry',()=>load());
     signIn.hidden=true;
     retry.hidden=true;
@@ -2461,8 +2532,10 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
       const shown=contacts.filter(friend=>(!onlineOnly||friend.online)&&friend.displayName.toLocaleLowerCase().includes(key));
       all.setAttribute('aria-pressed',String(!onlineOnly));online.setAttribute('aria-pressed',String(onlineOnly));
       rows.replaceChildren(...shown.slice(0,150).map((friend,index)=>{
-        const row=el('li','neko-friends-contact'),monogram=el('span','neko-friends-avatar',[...friend.displayName].slice(0,1).join(''));
-        monogram.setAttribute('aria-hidden','true');
+        const row=el('li','neko-friends-contact'),letter=[...friend.displayName].slice(0,1).join('');
+        const monogram=canInvite?button(letter,'neko-friends-avatar neko-friends-avatar--invite',()=>onInvite(friend)):el('span','neko-friends-avatar',letter);
+        if(canInvite){monogram.setAttribute('aria-label','邀请 '+friend.displayName);monogram.title='邀请 '+friend.displayName;}
+        else monogram.setAttribute('aria-hidden','true');
         if(Number.isInteger(friend.hue))monogram.style.setProperty('--neko-friend-hue',String(friend.hue));
         if(friend.hasAvatar&&typeof friend.id==='string'){
           monogram.dataset.friendId=friend.id;
@@ -2507,15 +2580,22 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
       }catch{if(request===generation&&status.isConnected){count.textContent='同步未完成';status.textContent='暂时无法读取好友名单。';retry.hidden=false;}}
       finally{if(request===generation)refresh.disabled=false;}
     }
-    return {nodes:[surface],open:load,cleanup,request:()=>null};
+    return {nodes:[surface],open:load,cleanup,request:()=>null,setInviting(value){
+      if(value!==canInvite){canInvite=value;if(contacts.length)render();}
+    }};
   }
-  function friendListDisclosure(){
+  function friendListDisclosure(onInvite){
     if(typeof bridge.friends!=='function')return null;
     const panel=el('details','neko-lobby-game-room-controls');
-    const fields=friendFields();
-    panel.append(el('summary','','查看 N.E.K.O. 好友'),...fields.nodes);
+    const summary=el('summary','','查看 N.E.K.O. 好友'),feedback=el('p','neko-friends-status');
+    feedback.setAttribute('role','status');
+    const fields=friendFields({onInvite:friend=>onInvite(friend,feedback)});
+    panel.append(summary,...fields.nodes,feedback);
     panel.addEventListener('toggle',()=>{if(panel.open)fields.open();else fields.cleanup();});
-    return {panel,reload:()=>{if(panel.open)fields.open();},cleanup:fields.cleanup};
+    return {panel,reload:()=>{if(panel.open)fields.open();},cleanup:fields.cleanup,setInviting(value){
+      summary.textContent=value?'邀请 N.E.K.O. 好友 · 点击头像':'查看 N.E.K.O. 好友';
+      fields.setInviting(value);
+    }};
   }
   async function callGame(request) {
     try { return await bridge.gameHub(request); }
@@ -2550,7 +2630,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     }
     choice.addEventListener('change',updateRuleFields);
     const seatRequest=(action,extra)=>callGame({action,inviteUrl,...extra});
-    let view=null,timer=null,closed=false,refreshing=false,submitting=false,playing=false;
+    let view=null,timer=null,closed=false,refreshing=false,submitting=false,playing=false,sendingInvite=false;
     const board=el('iframe','neko-lobby-game-board');board.title='国际象棋棋盘';board.setAttribute('sandbox','allow-scripts');board.hidden=true;
     const publish=()=>{if(view)board.contentWindow?.postMessage({type:'nekofans:state',seat:view.seat,actions:view.actions,ready:view.ready&&view.agent?.status!=='running'},'*');};
     const submitRule=button('提交本方秘密规则','neko-lobby-game-submit-rule',async()=>{
@@ -2583,8 +2663,9 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
       try{
         const next=await seatRequest('private-seat-view');
         if(closed)return;
-        if(next.status!=='ready'){state.textContent='暂时无法同步对局。';if(view){view={...view,ready:false};publish();}submitRule.disabled=true;start.disabled=true;return;}
+        if(next.status!=='ready'){state.textContent='暂时无法同步对局。';if(view){view={...view,ready:false};publish();}friends?.setInviting(false);submitRule.disabled=true;start.disabled=true;return;}
         view=next;configureGame(view.game);
+        friends?.setInviting(inviteEnabled&&view.seat===0&&view.players===1&&typeof inviteUrl==='string'&&inviteUrl.startsWith('https://play.nekofans.games/?room='));
         const agentRunning=view.agent?.status==='running';
         const roomText=view.finished?'对局已结束':view.players<2?'等待朋友加入':view.decisionRequired?'等待双方商定如何继续':view.ready?'对局已就绪':view.game?.customRules&&!view.executorOnline?'等待规则 · 女神暂未连接，仍可用快捷规则':'等待双方提交规则';
         const agentText=({running:'队友行动中','model-timeout':'队友推理超时','model-unavailable':'队友模型暂不可用','submission-unknown':'队友走子结果待核对',rejected:'队友的走法未通过校验',conflict:'队友已停，棋局有更新','invalid-action':'队友未给出合法走法'})[view.agent?.status];
@@ -2619,7 +2700,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
       const result=await seatRequest('private-open-seat');
       if(closed)return;
       if(result.status!=='paired'){
-        state.textContent=({'invalid-invite':'这不是受支持的游戏邀请。','room-not-found':'房间不存在或已过期。','room-full':'房间已满。若你已在浏览器入座，请用原来的配对码关联。','account-changed':'请切回原先入座的 N.E.K.O. 账号。','join-unknown':'入座结果暂时无法确认，请先向房主核对。',busy:'另一个入座请求正在处理。','seat-limit':'本次工作台会话的房间数已达上限。'})[result.status]||result.error||'暂时无法加入。';return;
+        state.textContent=({'invalid-invite':'这不是受支持的游戏邀请。','room-not-found':'房间不存在或已过期。','room-full':'房间已满。若你已在浏览器入座，请用原来的配对码关联。','invite-reserved':'这个席位已为受邀好友保留，请从「游戏邀请」进入。','account-changed':'请切回原先入座的 N.E.K.O. 账号。','join-unknown':'入座结果暂时无法确认，请先向房主核对。',busy:'另一个入座请求正在处理。','seat-limit':'本次工作台会话的房间数已达上限。'})[result.status]||result.error||'暂时无法加入。';return;
       }
       controls.hidden=false;
       const content=await seatRequest('private-seat-board');
@@ -2636,7 +2717,14 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
       const result=await seatRequest('private-copy-invite');
       if(!closed)feedback.textContent=result?.ok?'邀请链接已复制，朋友打开即可进入 Nekofans。':'未能复制邀请，请重试。';
     });
-    const friends=friendListDisclosure();
+    const friends=friendListDisclosure(async(friend,notice)=>{
+      if(sendingInvite||view?.seat!==0||view.players!==1)return;
+      sendingInvite=true;notice.textContent='正在发送邀请…';
+      try{
+        const result=await requestInvitation({action:'send',inviteUrl,friendId:friend.id});
+        if(!closed)notice.textContent=({sent:'已邀请 '+friend.displayName+'。对方可在「游戏邀请」中加入。','room-full':'朋友已经入座。',forbidden:'无法邀请这位好友，请刷新列表。','sign-in-required':'请先连接 N.E.K.O. 账号。','account-changed':'账号已切换，请重新选择好友。'})[result?.status]||'邀请暂未确认，请稍后重试。';
+      }finally{sendingInvite=false;}
+    });
     return {nodes:[state,copyInvite,...(friends?[friends.panel]:[]),controls,feedback,board],open,reloadFriends:friends?.reload,cleanup(){closed=true;clearTimeout(timer);friends?.cleanup();win.removeEventListener('message',fromBoard);},
       request:()=>view?{action:'share',title:view.game?.title||'双人国际象棋',roomUrl:inviteUrl}:'请先确认已加入房间。'};
   }
@@ -2712,7 +2800,17 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
         showShareResult(result);
       }finally{create.disabled=inviteFriend.disabled=gamePicker.disabled=false;}
     });
-    const inviteFriend=button('创建并复制好友邀请','neko-lobby-game-create-friend',async()=>{
+    async function openNewFriendRoom(){
+      if(inviteEnabled&&url.value.startsWith('https://play.nekofans.games/?room=')){
+        if(!await enterRoom(url.value,'打开「邀请 N.E.K.O. 好友」，点击头像即可发送邀请。'))
+          gameState.textContent='房间已创建。可以点「进入房间并提交规则」继续。';
+        return;
+      }
+      const copied=await callGame({action:'private-copy-invite',inviteUrl:url.value});
+      gameState.textContent=copied.ok?'好友邀请已复制。':'房间已创建，可以手动复制邀请链接。';
+      if(copied.ok)await enterRoom(url.value,'好友邀请已复制，可发给对方。');
+    }
+    const inviteFriend=button(inviteEnabled?'创建房间并邀请好友':'创建并复制好友邀请','neko-lobby-game-create-friend',async()=>{
       if(inviteFriend.disabled||inviteFriend.hidden)return;
       inviteFriend.disabled=create.disabled=gamePicker.disabled=true;
       gameState.textContent='正在创建房间…';
@@ -2722,9 +2820,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
         if(!inviteFriend.isConnected)return;
         if(!result.inviteUrl){showShareResult(result);return;}
         url.value=result.inviteUrl;resultActions.hidden=false;inviteFriend.hidden=create.hidden=true;
-        const copied=await callGame({action:'private-copy-invite',inviteUrl:url.value});
-        gameState.textContent=copied.ok?'好友邀请已复制。':'房间已创建，可以手动复制邀请链接。';
-        if(copied.ok)await enterRoom(url.value,'好友邀请已复制，可发给对方。');
+        await openNewFriendRoom();
       }finally{inviteFriend.disabled=create.disabled=gamePicker.disabled=false;}
     });
     const pairCode=el('input','neko-lobby-game-seat-code');pairCode.setAttribute('aria-label','自己的席位配对码');pairCode.autocomplete='off';pairCode.maxLength=24;
@@ -2774,7 +2870,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
         draft.textContent='修改游戏';gameState.textContent='游戏已做好，可以修改或开房邀请朋友。';
       }finally{draft.disabled=false;publish.disabled=!revisionId;}
     });
-    const publish=button('开房并复制好友邀请','neko-lobby-game-publish',async()=>{
+    const publish=button(inviteEnabled?'开房并邀请好友':'开房并复制好友邀请','neko-lobby-game-publish',async()=>{
       if(publish.disabled||!revisionId)return;
       draft.disabled=publish.disabled=true;gameState.textContent='正在为这款游戏开房…';
       try{
@@ -2783,9 +2879,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
         if(!result.inviteUrl){showShareResult(result);return;}
         url.value=result.inviteUrl;resultActions.hidden=false;shareAgain.hidden=true;
         publish.hidden=true;
-        const copied=await callGame({action:'private-copy-invite',inviteUrl:url.value});
-        gameState.textContent=copied.ok?'好友邀请已复制。':'房间已创建，可以手动复制邀请链接。';
-        if(copied.ok)await enterRoom(url.value,'好友邀请已复制，可发给对方。');
+        await openNewFriendRoom();
       }finally{draft.disabled=publish.disabled=false;}
     });
     publish.disabled=true;
@@ -2953,19 +3047,26 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
   if(typeof bridge.subscribeNekoAccount==='function'){try{releaseNeko=bridge.subscribeNekoAccount(value=>{
     observeUnifiedLogin(value?.login);
     const next=value?.community?.status==='signed-in'?value.community.userId:null;
-    if(next!==lastFriendsAccount){lastFriendsAccount=next;dialog?.reloadFriends?.();}
+    if(next!==lastFriendsAccount){
+      lastFriendsAccount=next;dialog?.reloadFriends?.();
+      inboxEntries=[];inboxStatus='loading';publishInbox();void refreshInbox();
+    }
     finishFriendLogin(value?.login);
   });}catch{}}
   call({ action: 'state' });
+  if(typeof bridge.gameInvites==='function')void requestInvitation({action:'status'}).then(result=>{
+    if(disposed||result?.enabled!==true)return;
+    inviteEnabled=true;publishInbox();void refreshInbox();
+  });
   render();
   function dispose() {
     if (disposed) return;
     ++loginEpoch;
     if (joined) { joined = false; try { Promise.resolve(bridge.lobby({ action: 'close' })).catch(() => {}); } catch {} }
-    disposed = true;loginReturn=null; if (typeof release === 'function') release();if(typeof releaseNeko==='function')releaseNeko(); rows.clear(); if (dialog) { dialog.cleanup?.(); dialog.node.remove(); dialog = null; } panel.remove(); railButton.remove();
+    disposed = true;loginReturn=null;clearTimeout(inboxTimer); if (typeof release === 'function') release();if(typeof releaseNeko==='function')releaseNeko(); rows.clear(); if (dialog) { dialog.cleanup?.(); dialog.node.remove(); dialog = null; } panel.remove(); railButton.remove();
   }
   return { panel, railButton, show, hide, isOpen: () => open, dialogOpen: () => !!dialog, place, renderStatus,
-    openFriends,
+    openFriends,openGameInbox,
     openGameStudio: enterRoom=>openDialog('game-studio',null,enterRoom),
     openGameInvite: (inviteUrl,enterRoom)=>openDialog('game-invite',inviteUrl,enterRoom),
     openGameRoom: (inviteUrl,notice)=>openDialog('game-room',inviteUrl,null,notice),

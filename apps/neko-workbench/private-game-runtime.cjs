@@ -6,20 +6,21 @@ const {WorkbenchSecretStore}=require('./main-chat-secret.cjs');
 const {createCompanionAccountProvider}=require('./companion-account-provider.cjs');
 const {createOwnRuleStore}=require('./private-own-rule-store.cjs');
 
-function createPrivateGameRuntime({rpc,repositoryRoot,dataDir,safeStorage,fetchImpl=fetch,getOwnPersona=async()=>null,getSeatOwner=async()=>null}={}){
+function createPrivateGameRuntime({rpc,repositoryRoot,dataDir,safeStorage,fetchImpl=fetch,getOwnPersona=async()=>null,getSeatOwner=async()=>null,
+ getCommunityOwner=()=>null,getInviteTicket=async()=>({status:'unavailable'})}={}){
  if(typeof rpc!=='function'||typeof repositoryRoot!=='string'||typeof dataDir!=='string')throw TypeError('game runtime dependencies required');
  const store=new WorkbenchSecretStore(path.join(dataDir,'private-game','signing-key.encrypted'),safeStorage);
  const {GAME_ORIGIN,isPrivateGameOrigin:validOrigin}=require(path.join(repositoryRoot,'services/nekofans-game-hub/private-game-origin.cjs'));
  const catalog=require(path.join(repositoryRoot,'services/nekofans-game-hub/game-catalog.cjs'));
  let keyPromise,worker=null,controller=null,timer=null,heartbeatTimer=null,lastSuccess=0,connectionIssue=null,epoch=0,origin=null,seatSession=null;
  const localSeats=new Map();
- const gameBySeat=new WeakMap(),ownerBySeat=new WeakMap(),studioBySeat=new WeakMap();
+ const gameBySeat=new WeakMap(),ownerBySeat=new WeakMap(),studioBySeat=new WeakMap(),communityBySeat=new WeakMap();
  let connectingSeat=false,seatEpoch=0,manualMove=null;
  const loadSeatClient=()=>import(pathToFileURL(path.join(repositoryRoot,'services/nekofans-game-hub/private-seat-client.mjs')).href);
  const seatKey=session=>session.inviteUrl+':'+session.seat;
- const ownRule=createOwnRuleStore({getOwnSeatSession:()=>seatSession,timeoutMs:55000,submitRule:({session,rule,preset,signal})=>session.transport.submitOwnRule({rule,preset,signal})});
+ const ownRule=createOwnRuleStore({getOwnSeatSession,timeoutMs:55000,submitRule:({session,rule,preset,signal})=>session.transport.submitOwnRule({rule,preset,signal})});
  const {createPrivateAgentSession}=require('./private-agent-session.cjs');
- const agent=createPrivateAgentSession({repositoryRoot,getOwnSeatSession:()=>seatSession,getOwnRule:ownRule.getOwnRule,getOwnPersona,provider:createCompanionAccountProvider(rpc,{namespace:'game-player'})});
+ const agent=createPrivateAgentSession({repositoryRoot,getOwnSeatSession,getOwnRule:ownRule.getOwnRule,getOwnPersona,provider:createCompanionAccountProvider(rpc,{namespace:'game-player'})});
  let agentStatus={status:'idle'},agentRun=null,agentStarting=false,agentEpoch=0;const uncertainGames=new Set();
  async function identity(){
   if(keyPromise)return keyPromise;
@@ -109,8 +110,10 @@ function createPrivateGameRuntime({rpc,repositoryRoot,dataDir,safeStorage,fetchI
   if(connectingSeat)return {status:'busy'};
   connectingSeat=true;const current=seatEpoch;
   try{
-   const owner=await getSeatOwner();
    const saved=localSeats.get(invite.inviteUrl);
+   const community=saved&&communityBySeat.get(saved);
+   if(community)return community===getCommunityOwner()?activateSeat(saved):{status:'account-changed'};
+   const owner=await getSeatOwner();
    if(seatEpoch!==current)return {status:'cancelled'};
    if(saved){
     const knownOwner=ownerBySeat.get(saved);
@@ -136,6 +139,69 @@ function createPrivateGameRuntime({rpc,repositoryRoot,dataDir,safeStorage,fetchI
   }catch{return {status:'join-unknown'};}
   finally{connectingSeat=false;}
  }
+ const inviteId=/^[A-Za-z0-9_-]{24}$/;
+ let inviteAvailability=null,inviteAvailabilityCheck=null;
+ async function inviteRequest(path,options){
+  const {friendInviteRequest}=await loadSeatClient();
+  return friendInviteRequest(path,{...options,fetchImpl});
+ }
+ async function friendInviteStatus(){
+  if(inviteAvailability&&inviteAvailability.until>Date.now())return inviteAvailability.value;
+  if(!inviteAvailabilityCheck)inviteAvailabilityCheck=inviteRequest('/invitations/status')
+   .catch(()=>({enabled:false})).then(value=>{
+    inviteAvailability={value,until:Date.now()+60000};return value;
+   }).finally(()=>{inviteAvailabilityCheck=null;});
+  return inviteAvailabilityCheck;
+ }
+ async function sendFriendInvite({inviteUrl,friendId}){
+  const seat=seatSession;
+  if(!seat||seat.inviteUrl!==inviteUrl||seat.origin!==GAME_ORIGIN||seat.seat!==0)return {status:'forbidden'};
+  if(typeof friendId!=='string'||!/^[a-f0-9-]{36}$/.test(friendId))return {status:'forbidden'};
+  try{
+   const auth=await getInviteTicket({op:'send',target:friendId,room:seat.roomId});
+   if(auth.status!=='ready')return {status:auth.status};
+   if(seat!==seatSession||auth.userId!==getCommunityOwner())return {status:'account-changed'};
+   const result=await seat.transport.inviteFriend(auth.ticket);
+   return {status:result.status};
+  }catch{return {status:'unavailable'};}
+ }
+ async function readFriendInvites(){
+  try{
+   const auth=await getInviteTicket({op:'inbox'});
+   if(auth.status!=='ready')return {status:auth.status};
+   const result=await inviteRequest('/invitations',{ticket:auth.ticket});
+   if(auth.userId!==getCommunityOwner())return {status:'account-changed'};
+   if(result.status!=='ready'||!Array.isArray(result.invitations)||result.invitations.length>24)return {status:'unavailable'};
+   const invitations=result.invitations.filter(item=>typeof item?.id==='string'&&inviteId.test(item.id)&&
+     typeof item.sender==='string'&&typeof item.title==='string').map(item=>({
+      id:item.id,sender:item.sender.slice(0,80),title:item.title.slice(0,80),accepted:item.accepted===true,
+     }));
+   return {status:'ready',invitations};
+  }catch{return {status:'unavailable'};}
+ }
+ async function acceptFriendInvite(id){
+  if(typeof id!=='string'||!inviteId.test(id))return {status:'not-found'};
+  if(connectingSeat)return {status:'busy'};
+  if(localSeats.size>=24)return {status:'seat-limit'};
+  connectingSeat=true;const current=seatEpoch;
+  try{
+   const auth=await getInviteTicket({op:'inbox'});
+   if(auth.status!=='ready')return {status:auth.status};
+   if(auth.userId!==getCommunityOwner())return {status:'account-changed'};
+   const result=await inviteRequest('/invitations/'+id+'/accept',{method:'POST',ticket:auth.ticket});
+   if(result.status!=='joined')return {status:result.status};
+   if(result.seat!==1||typeof result.roomId!=='string'||!inviteId.test(result.roomId))return {status:'unavailable'};
+   const {createOwnSeatSession}=await loadSeatClient();
+   if(seatEpoch!==current||auth.userId!==getCommunityOwner())return {status:'account-changed'};
+   const inviteUrl=GAME_ORIGIN+'/?room='+result.roomId;
+   const known=localSeats.get(inviteUrl);
+   if(known&&communityBySeat.get(known)===auth.userId){activateSeat(known);return {status:'joined',inviteUrl};}
+   const session=createOwnSeatSession({origin:GAME_ORIGIN,roomId:result.roomId,seat:1,token:result.token,fetchImpl});
+   communityBySeat.set(session,auth.userId);activateSeat(session);
+   return {status:'joined',inviteUrl};
+  }catch{return {status:'unavailable'};}
+  finally{connectingSeat=false;}
+ }
  async function pairOwnSeat({url,roomId,code}={}){
   if(connectingSeat)return {status:'busy'};
   if(localSeats.size>=24)return {status:'seat-limit'};
@@ -153,14 +219,30 @@ function createPrivateGameRuntime({rpc,repositoryRoot,dataDir,safeStorage,fetchI
   }finally{connectingSeat=false;}
  }
  // Trusted main-process callers only; never expose this transport through IPC.
- function getOwnSeatSession(){return seatSession;}
+ function getOwnSeatSession(){
+  const owner=seatSession&&communityBySeat.get(seatSession);
+  return owner&&owner!==getCommunityOwner()?null:seatSession;
+ }
  function forgetOwnSeat(){seatEpoch++;agentEpoch++;agent.stop();ownRule.clear();seatSession=null;localSeats.clear();uncertainGames.clear();}
  function seatOwnerChanged(owner){
   const previous=seatSession&&ownerBySeat.get(seatSession);
   if(!previous||previous===owner)return;
   seatEpoch++;agentEpoch++;agent.stop();ownRule.clear();seatSession=null;agentStatus={status:'idle'};
  }
- const matchesSeat=inviteUrl=>!!seatSession&&(inviteUrl===undefined||seatSession.inviteUrl===inviteUrl);
+ function communitySeatOwnerChanged(owner){
+  for(const [url,session] of localSeats){
+   const known=communityBySeat.get(session);
+   if(!known||known===owner)continue;
+   localSeats.delete(url);uncertainGames.delete(seatKey(session));
+   if(seatSession===session){
+    seatEpoch++;agentEpoch++;agent.stop();ownRule.clear();seatSession=null;agentStatus={status:'idle'};
+   }
+  }
+ }
+ const matchesSeat=inviteUrl=>{
+  const session=getOwnSeatSession();
+  return !!session&&(inviteUrl===undefined||session.inviteUrl===inviteUrl);
+ };
  function submitOwnRule({inviteUrl,text,preset}={}){
   if(!matchesSeat(inviteUrl))return {status:'not-paired'};
   const game=catalog.getGame(gameBySeat.get(seatSession)??catalog.DEFAULT_GAME);
@@ -186,7 +268,7 @@ function createPrivateGameRuntime({rpc,repositoryRoot,dataDir,safeStorage,fetchI
     if(!adapter)return {status:'unavailable'};
     studioBySeat.set(session,adapter);
    }
-   if(session!==seatSession)return {status:'not-paired'};
+   if(session!==getOwnSeatSession())return {status:'not-paired'};
    gameBySeat.set(session,view.gameId);
    return {status:'ready',seat:session.seat,...view,game:studioBySeat.get(session)?.info??catalog.gameInfo(view.gameId),agent:agentStatus};
   }catch{return {status:'unavailable'};}
@@ -195,10 +277,10 @@ function createPrivateGameRuntime({rpc,repositoryRoot,dataDir,safeStorage,fetchI
   if(typeof inviteUrl!=='string'||!matchesSeat(inviteUrl))return {status:'not-paired'};
   const session=seatSession;
   const current=await readSeatView({inviteUrl});
-  if(current.status!=='ready'||session!==seatSession)return {status:'unavailable'};
+  if(current.status!=='ready'||session!==getOwnSeatSession())return {status:'unavailable'};
   const {gameAdapter}=await import(pathToFileURL(path.join(repositoryRoot,'services/nekofans-game-hub/private-game-registry.mjs')).href);
   const adapter=studioBySeat.get(session)??gameAdapter(current.gameId);
-  return session===seatSession?{status:'ready',html:adapter.html,game:current.game}:{status:'not-paired'};
+  return session===getOwnSeatSession()?{status:'ready',html:adapter.html,game:current.game}:{status:'not-paired'};
  }
  async function playMove({inviteUrl,action,expectedVersion}={}){
   if(typeof inviteUrl!=='string'||!matchesSeat(inviteUrl))return {status:'not-paired'};
@@ -223,6 +305,8 @@ function createPrivateGameRuntime({rpc,repositoryRoot,dataDir,safeStorage,fetchI
   return {status:'started'};}finally{agentStarting=false;}
  }
  function stopAgent({inviteUrl}={}){if(inviteUrl!==undefined&&!matchesSeat(inviteUrl))return {status:'not-paired'};agentEpoch++;agent.stop();return {status:agentRun||agentStarting?'stopping':'idle'};}
- return Object.freeze({status,publicKey,start,stop,create,pairOwnSeat,openOwnSeat,readSeatView,boardHtml,playMove,getOwnSeatSession,forgetOwnSeat,seatOwnerChanged,submitOwnRule,ownRuleStatus:ownRule.view,getOwnRule:ownRule.getOwnRule,startAgent,stopAgent,agentStatus:()=>agentStatus});
+ return Object.freeze({status,publicKey,start,stop,create,pairOwnSeat,openOwnSeat,readSeatView,boardHtml,playMove,getOwnSeatSession,forgetOwnSeat,seatOwnerChanged,
+  communitySeatOwnerChanged,friendInviteStatus,sendFriendInvite,readFriendInvites,acceptFriendInvite,
+  submitOwnRule,ownRuleStatus:ownRule.view,getOwnRule:ownRule.getOwnRule,startAgent,stopAgent,agentStatus:()=>agentStatus});
 }
 module.exports={createPrivateGameRuntime};

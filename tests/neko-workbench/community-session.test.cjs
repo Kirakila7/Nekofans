@@ -3,7 +3,60 @@ const {test}=require('node:test'),assert=require('node:assert/strict'),fs=requir
 const {JSDOM}=require(path.join(process.env.NEKO_DOM_DEPS,'node_modules/jsdom'));
 const source=fs.readFileSync(path.resolve(__dirname,'../../apps/neko-workbench/community-session-preload.cjs'),'utf8');
 const response=user=>({ok:true,status:200,text:async()=>JSON.stringify({user})});
-function fixture(t,{origin='https://community.project-neko.cn',fetchImpl,isMainFrame=true}={}){const dom=new JSDOM('<button>登录 / 注册</button>',{url:origin,runScripts:'outside-only'});t.after(()=>dom.window.close());const w=dom.window,sent=[],handlers={},tasks=[],requests=[];w.process={isMainFrame};w.require=()=>({ipcRenderer:{send:(name,state)=>sent.push([name,state]),on:(name,fn)=>handlers[name]=fn}});w.AbortSignal=AbortSignal;w.fetch=(...args)=>{requests.push(args);return (fetchImpl|| (async()=>response({id:'user-fixture',display_name:'测试喵'})))(...args);};w.setTimeout=fn=>{tasks.push(fn);return tasks.length;};w.clearTimeout=()=>{};w.setInterval=()=>{};w.eval(source);return {w,sent,handlers,requests,async flush(){tasks.splice(0).at(-1)?.();await new Promise(resolve=>setImmediate(resolve));},async read(){w.dispatchEvent(new w.Event('neko-auth-changed'));await this.flush();}};}
+function fixture(t,{origin='https://community.project-neko.cn',fetchImpl,isMainFrame=true}={}){const dom=new JSDOM('<button>登录 / 注册</button>',{url:origin,runScripts:'outside-only'});t.after(()=>dom.window.close());const w=dom.window,sent=[],handlers={},tasks=[],requests=[];w.process={isMainFrame};w.require=()=>({ipcRenderer:{send:(name,state)=>sent.push([name,state]),on:(name,fn)=>handlers[name]=fn}});w.AbortSignal=AbortSignal;w.TextDecoder=TextDecoder;w.fetch=(...args)=>{requests.push(args);return (fetchImpl|| (async()=>response({id:'user-fixture',display_name:'测试喵'})))(...args);};w.setTimeout=fn=>{tasks.push(fn);return tasks.length;};w.clearTimeout=()=>{};w.setInterval=()=>{};w.eval(source);return {w,sent,handlers,requests,async flush(){tasks.splice(0).at(-1)?.();await new Promise(resolve=>setImmediate(resolve));},async read(){w.dispatchEvent(new w.Event('neko-auth-changed'));await this.flush();}};}
+const me='11111111-1111-4111-8111-111111111111';
+const friend='22222222-2222-4222-8222-222222222222';
+const blocked='33333333-3333-4333-8333-333333333333';
+const unreciprocated='44444444-4444-4444-8444-444444444444';
+test('friends use the verified community web account and expose only mutual, unblocked contacts',async t=>{
+ const f=fixture(t,{fetchImpl:async route=>{
+  if(route==='/api/users/me')return Response.json({user:{id:me}});
+  if(route.endsWith('offset=0'))return Response.json({total:3,items:[
+   {id:blocked,is_mutual:true,blocks_viewer:true},
+   {id:unreciprocated,is_mutual:false},
+  ]});
+  return Response.json({total:3,items:[{id:friend,display_name:'好友',is_mutual:true,online:true,avatar_url:'hue:180',access_token:'private-field'}]});
+ }});
+ await f.handlers['workbench:community-web-friends']({},1);
+ assert.deepEqual(structuredClone(f.sent.at(-1)),['workbench:community-web-friends-result',{id:1,status:'sign-in-required'}]);
+ assert.equal(f.requests.length,0);
+ f.w.localStorage.setItem('neko_oauth_access_token','shared-web-token');
+ await f.handlers['workbench:community-web-friends']({},2);
+ assert.deepEqual(structuredClone(f.sent.at(-1)),['workbench:community-web-friends-result',{id:2,status:'ready',userId:me,friends:[{id:friend,displayName:'好友',online:true,avatar:'hue:180'}]}]);
+ assert.deepEqual(f.requests.map(([route])=>route),['/api/users/me',`/api/users/${me}/following?limit=100&offset=0`,`/api/users/${me}/following?limit=100&offset=2`]);
+ for(const [,init] of f.requests){assert.equal(init.headers.Authorization,'Bearer shared-web-token');assert.equal(init.redirect,'error');}
+ assert.doesNotMatch(JSON.stringify(f.sent),/shared-web-token|private-field/);
+});
+test('a friends response from a former community session is discarded',async t=>{
+ let release,started;
+ const pending=new Promise(resolve=>started=resolve);
+ const f=fixture(t,{fetchImpl:async route=>{
+  if(route==='/api/users/me')return Response.json({user:{id:me}});
+  return new Promise(resolve=>{release=resolve;started();});
+ }});
+ f.w.localStorage.setItem('neko_oauth_access_token','old-web-token');
+ const read=f.handlers['workbench:community-web-friends']({},1);
+ await pending;
+ f.w.localStorage.setItem('neko_oauth_access_token','new-web-token');
+ release(Response.json({total:1,items:[{id:friend,display_name:'旧账号好友',is_mutual:true}]}));
+ await read;
+ assert.deepEqual(structuredClone(f.sent.at(-1)),['workbench:community-web-friends-result',{id:1,status:'account-changed'}]);
+});
+test('a game invitation asks the official session for only a game ticket',async t=>{
+ const f=fixture(t,{fetchImpl:async route=>route==='/api/users/me'?response({id:me}):
+  Response.json({userId:me,ticket:'fixture.payload.signature',refresh_token:'unrelated-secret'})});
+ f.w.localStorage.setItem('neko_oauth_access_token','only-for-community');
+ const room='abcdefghijklmnopqrstuvwx';
+ await f.handlers['workbench:community-game-ticket']({},42,{op:'send',target:friend,room});
+ const [route,request]=f.requests.at(-1);
+ assert.equal(route,'/api/game-invites/ticket');
+ assert.equal(request.redirect,'error');
+ assert.equal(request.headers.Authorization,'Bearer only-for-community');
+ assert.deepEqual(JSON.parse(request.body),{op:'send',target:friend,room});
+ assert.deepEqual(structuredClone(f.sent.at(-1)),['workbench:community-game-ticket-result',
+  {id:42,status:'ready',userId:me,ticket:'fixture.payload.signature'}]);
+ assert.doesNotMatch(JSON.stringify(f.sent),/only-for-community|unrelated-secret/);
+});
 test('community adapter verifies server, projects no credentials, reacts to logout and ignores foreign origins',async t=>{
  const f=fixture(t);f.w.localStorage.setItem('neko_oauth_access_token','synthetic-token');await f.read();assert.deepEqual(JSON.parse(JSON.stringify(f.sent.at(-1)[1])),{status:'signed-in',userId:'user-fixture',name:'测试喵'});assert(!JSON.stringify(f.sent).includes('synthetic-token'));f.w.localStorage.removeItem('neko_oauth_access_token');await f.read();assert.equal(f.sent.at(-1)[1].status,'signed-out');
  const bad=fixture(t,{origin:'https://auth.project-neko.cn'});await bad.read();assert.equal(bad.sent.length,0);assert.equal(Object.keys(bad.handlers).length,0);

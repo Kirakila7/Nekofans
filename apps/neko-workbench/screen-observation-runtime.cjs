@@ -3,8 +3,8 @@ const { randomUUID } = require('node:crypto');
 const { imageParts } = require('./screen-vision.cjs');
 const silent = text => '[安静]'.startsWith(text.trim()) || text.trim().startsWith('[安静]');
 class ScreenObservation {
-  constructor({ observe, onState = () => {}, onReply = () => {}, isChatBusy = () => false, now = Date.now, intervalMs = 6000, maxRequests = 120 } = {}) {
-    this.observe = observe; this.onState = onState; this.onReply = onReply; this.isChatBusy = isChatBusy;
+  constructor({ observe, onState = () => {}, onReply = () => {}, onRecord = () => {}, isChatBusy = () => false, now = Date.now, intervalMs = 6000, maxRequests = 120 } = {}) {
+    this.observe = observe; this.onState = onState; this.onReply = onReply; this.onRecord = onRecord; this.isChatBusy = isChatBusy;
     this.now = now; this.intervalMs = intervalMs; this.maxRequests = maxRequests;
     this.generation = 0; this.phase = 'idle'; this.requests = 0; this.records = []; this.seq = 0; this.lastAt = 0;
     this.source = null; this.active = null; this.latest = null; this.question = ''; this.error = ''; this.reply = null; this.capability = 'unverified';
@@ -16,14 +16,14 @@ class ScreenObservation {
     this.generation++; clearTimeout(this.timer); this.timer = null; this.latest = null; this.question = ''; this.reply = null;
     this.active?.controller.abort(); this.onReply(null); this.seq = 0;
   }
-  start(source, target, contextConsent = null) {
+  start(source, target, contextConsent = null, memoryConsent = false) {
     if (!source || typeof source.id !== 'string' || !/^(window|screen):[0-9]+:[0-9]+$/.test(source.id)) throw new Error('请先选择一个窗口或屏幕');
     const sameSource = this.source?.id === source.id;
-    this.invalidate(); this.source = { id: source.id, name: String(source.name).slice(0, 200) }; this.target = target; this.contextConsent = contextConsent; this.phase = 'sharing';
+    this.invalidate(); this.source = { id: source.id, name: String(source.name).slice(0, 200) }; this.target = target; this.contextConsent = contextConsent; this.memoryConsent = memoryConsent === true; this.phase = 'sharing';
     this.records = sameSource ? this.records : []; this.requests = 0; this.lastAt = -Infinity; this.error = ''; this.capability = 'unverified'; this.publish(); return this.read();
   }
   pause(reason = '') { this.invalidate(); this.phase = this.source ? 'paused' : 'idle'; this.error = reason; this.publish(); return this.read(); }
-  stop() { this.invalidate(); this.target = null; this.contextConsent = null; this.phase = 'idle'; this.source = null; this.error = ''; this.publish(); return this.read(); }
+  stop() { this.invalidate(); this.target = null; this.contextConsent = null; this.memoryConsent = false; this.phase = 'idle'; this.source = null; this.error = ''; this.publish(); return this.read(); }
   frame(value) {
     if (this.phase !== 'sharing' || value?.generation !== this.generation) return { accepted: false };
     if (!Number.isSafeInteger(value.seq) || value.seq <= this.seq || !Number.isFinite(value.capturedAt)
@@ -60,6 +60,7 @@ class ScreenObservation {
       if (!silent(result.text) && result.text !== this.records.at(-1)?.text) {
         const record = { id: active.id, text: result.text, question, capturedAt: frame.capturedAt, elapsedMs: this.now() - this.lastAt, usage: result.usage };
         this.records.push(record); this.records = this.records.slice(-30);
+        if (this.memoryConsent) try { this.onRecord({id:record.id,question:record.question,text:record.text}); } catch {}
         this.reply = { id: active.id, text: result.text, streaming: false, source: 'screen' }; this.onReply(this.reply);
       } else this.onReply(null);
     } catch (error) {

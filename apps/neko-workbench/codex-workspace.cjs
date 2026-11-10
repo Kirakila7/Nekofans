@@ -29,9 +29,10 @@ function visibleItem(item) {
   if (item.type === 'mcpToolCall') return { id: item.id, kind: 'activity', title: text(item.server, 100) + ' / ' + text(item.tool, 100), text: text(item.status, 80) };
   return null;
 }
-function createCodexWorkspace({ env = process.env, spawnProcess = spawn, resolveExecutable = () => resolveCodex({ env }), defaultCwd, onState = () => {}, timeoutMs = 25000 } = {}) {
+function createCodexWorkspace({ env = process.env, spawnProcess = spawn, resolveExecutable = () => resolveCodex({ env }), defaultCwd, onState = () => {}, onCompleted = () => {}, memoryConsent = () => null, timeoutMs = 25000 } = {}) {
   let child = null, ready = null, closed = false, seq = 0, selectionVersion = 0, buffer = '', selected = null, view = { status: 'idle', thread: null, items: [], approvals: [], error: '' };
   const pending = new Map(), rows = new Map(), loaded = new Set(), ownedTurns = new Map(), finishedTurns = new Set(), starting = new Set(), approvals = new Map(), roots = new Set([defaultCwd].filter(Boolean));
+  const memoryTurns = new Map();
   let modelCatalog = null, modelsLoading = null, modelsUpdatedAt = 0;
   const emit = () => onState(structuredClone(view));
   function failure() { return Error('Codex 本地接口暂不可用，请检查原生登录或稍后重试'); }
@@ -51,6 +52,23 @@ function createCodexWorkspace({ env = process.env, spawnProcess = spawn, resolve
     if (view.items.length > 240) view.items.splice(0, view.items.length - 240);
   }
   function notification(method, p = {}) {
+    const ownCompleted = method === 'turn/completed' && (ownedTurns.has(p.threadId) || starting.has(p.threadId));
+    const consent=memoryConsent();
+    if(method==='turn/started' && consent!==null && (starting.has(p.threadId)||ownedTurns.has(p.threadId)) && p.turn?.id)memoryTurns.set(p.threadId,{id:p.turn.id,task:'',result:'',consent});
+    let memoryTurn=memoryTurns.get(p.threadId);
+    if(memoryTurn&&memoryTurn.consent!==consent){memoryTurns.delete(p.threadId);memoryTurn=null;}
+    if(method==='item/completed' && memoryTurn && (!p.turnId || p.turnId===memoryTurn.id)){
+      if(p.item?.type==='agentMessage')memoryTurn.result=text(p.item.text,12000);
+      if(p.item?.type==='userMessage')memoryTurn.task=(p.item.content||[]).filter(v=>v.type==='text').map(v=>text(v.text,1000)).join('\n');
+    }
+    if(method==='turn/completed' && memoryTurn && p.turn?.id===memoryTurn.id){
+      memoryTurns.delete(p.threadId);
+      if(ownCompleted && p.turn.status==='completed'){
+        const items=p.turn.items||[],result=items.filter(v=>v.type==='agentMessage').at(-1)?.text||memoryTurn.result;
+        const task=items.find(v=>v.type==='userMessage')?.content?.filter(v=>v.type==='text').map(v=>v.text).join('\n')||memoryTurn.task;
+        if(result)try{onCompleted({session:p.threadId,turn:p.turn.id,task,result});}catch{}
+      }
+    }
     if (method === 'turn/completed') {
       ownedTurns.delete(p.threadId); if (p.turn?.id) { finishedTurns.add(p.turn.id); if (finishedTurns.size > 200) finishedTurns.delete(finishedTurns.values().next().value); }
       for (const [key, a] of approvals) if (a.threadId === p.threadId) approvals.delete(key);
