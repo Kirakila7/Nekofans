@@ -1,5 +1,11 @@
 # Local integration 0.28.41 / build 77
 
+## macOS follow-up: find work and recover invitations (2026-11-11)
+
+The compact composer opens Project Records with ⌘K on macOS or Ctrl+K on Windows. Search filters the current list by project and session title, and the arrow keys and Enter navigate it through the existing draft guard. Older sessions remain reachable through Load More.
+
+The game invitation capability is rechecked when opening its related surfaces and periodically while the workbench is visible. Opening another screen sharing session starts a fresh observation deduplication window, so opting in on the same source can save the new observation.
+
 ## macOS daily branch: game invitations and optional activity memory (2026-11-10)
 
 This macOS branch starts from the source manifest of daily build 90. It retains the daily UI, account relay and local data paths. It ports activity summaries from the upstream `macos` commit `ccf43f0` without importing its Windows-only Bilibili experiment or reverting the verified account relay.

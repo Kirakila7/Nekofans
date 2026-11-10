@@ -113,6 +113,18 @@ test('screen persistence requires fresh per-session opt-in and discards late res
 });
 
 
+test('resuming the same screen can save identical text after fresh consent',async t=>{
+ const saved=[],r=new ScreenObservation({intervalMs:1,onRecord:v=>saved.push(v),observe:async()=>({text:'同一个窗口仍在显示报告'})});t.after(()=>r.stop());
+ const source={id:'window:1:0',name:'screen'};
+ const image='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+X2Z8AAAAASUVORK5CYII=';
+ const frame=async(seq)=>{r.frame({generation:r.generation,seq,capturedAt:Date.now(),width:1,height:1,image});await new Promise(resolve=>setImmediate(resolve));};
+ r.start(source,{});await frame(1);assert.equal(saved.length,0);
+ r.pause();r.start(source,{},null,true);await frame(1);
+ assert.equal(saved.length,1);assert.equal(saved[0].text,'同一个窗口仍在显示报告');
+ await new Promise(resolve=>setTimeout(resolve,3));await frame(2);
+ assert.equal(saved.length,1,'same share still deduplicates repeated observations');
+});
+
 test('buffers an unclassified start until task metadata confirms a human work session',()=>{
  const state={dshRoot:{sessionId:'root'},actors:[]},records=[],tracker=createProjectTracker(v=>records.push(v),id=>isRootWorkSession(state,id));
  tracker.accept('task',{type:'turn/start',seq:9});

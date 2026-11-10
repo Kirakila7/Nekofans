@@ -149,7 +149,7 @@ function createPrivateGameRuntime({rpc,repositoryRoot,dataDir,safeStorage,fetchI
   if(inviteAvailability&&inviteAvailability.until>Date.now())return inviteAvailability.value;
   if(!inviteAvailabilityCheck)inviteAvailabilityCheck=inviteRequest('/invitations/status')
    .catch(()=>({enabled:false})).then(value=>{
-    inviteAvailability={value,until:Date.now()+60000};return value;
+    inviteAvailability={value,until:Date.now()+(value.enabled?60000:5000)};return value;
    }).finally(()=>{inviteAvailabilityCheck=null;});
   return inviteAvailabilityCheck;
  }

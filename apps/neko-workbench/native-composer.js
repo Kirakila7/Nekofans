@@ -156,6 +156,10 @@
     submitQueued = true; refresh(); sendEdit(); sendSubmit();
   });
   const records = document.getElementById('records'), recordsList = document.getElementById('records-list'), recordsToggle = document.getElementById('records-toggle'), resizeHandle = document.getElementById('records-resize'), recordsStatus = document.getElementById('records-status'), recordsMore = document.getElementById('records-more'), recordsRefresh = document.getElementById('records-refresh');
+  const recordsSearch = document.getElementById('records-search');
+  const macShortcut = !api.platform || api.platform === 'darwin';
+  recordsToggle.setAttribute('aria-keyshortcuts', macShortcut ? 'Meta+K' : 'Control+K');
+  recordsToggle.title = '项目记录 · ' + (macShortcut ? '⌘K' : 'Ctrl+K');
   let recordsOpen = false, recordsDesired = null, resizing = null, recordsRenderKey = '', recordOpenSequence = 0, recordOpenPending = null, recordOpenUnknown = false;
   const modelPanel = document.getElementById('model-panel'), modelToggle = document.getElementById('model-toggle'), modelSelect = document.getElementById('model-select'), reasoningSelect = document.getElementById('reasoning-select'), modelRefresh = document.getElementById('model-refresh'), modelStatus = document.getElementById('model-status');
   let modelOpen = false, modelDesired = null;
@@ -206,9 +210,17 @@
   modelSelect.addEventListener('change', selectModel);
   reasoningSelect.addEventListener('change', selectModel);
   document.addEventListener('keydown', event => {
+    if (event.isComposing || event.keyCode === 229 || event.defaultPrevented) return;
+    const shortcut = (macShortcut ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey) && !event.shiftKey && !event.altKey;
+    if (shortcut && event.key.toLowerCase() === 'k') {
+      event.preventDefault();
+      if (!recordsOpen) showRecords();
+      else recordsSearch.focus();
+      return;
+    }
     if (event.key !== 'Escape' || !(modelOpen || recordsOpen || projectOpen || detailsOpen)) return;
     event.preventDefault();
-    if (recordsOpen) { closeRecords(); modelToggle.focus(); }
+    if (recordsOpen) closeRecords();
     else if (modelOpen) { modelOpen = false; modelDesired = false; renderModels(); api.send({type:'model-toggle',open:false}); modelToggle.focus(); }
     else if (projectOpen) { setProjectOpen(false); projectToggle.focus(); }
     else { setDetailsOpen(false); detailsToggle.focus(); }
@@ -219,20 +231,58 @@
   function renderRecords() {
     records.hidden = !recordsOpen; syncPanelAttr(); recordsToggle.setAttribute('aria-expanded', String(recordsOpen));
     recordsToggle.setAttribute('aria-label', recordsOpen ? '收起项目记录' : '展开项目记录');
-    recordsStatus.textContent = state.recordsStatus || ''; recordsMore.hidden = !state.recordsHasMore; recordsMore.disabled = state.recordsLoading === true; recordsRefresh.disabled = state.recordsLoading === true;
-    const key = JSON.stringify(state.records || []); if (key === recordsRenderKey) return;
+    const query = recordsSearch.value.trim().toLocaleLowerCase();
+    const words = query.split(/\s+/u).filter(Boolean);
+    const matches = (state.records || []).filter(item => {
+      const text = (item.project + ' ' + item.title).toLocaleLowerCase();
+      return words.every(word => text.includes(word));
+    });
+    recordsStatus.textContent = state.recordsStatus || (query
+      ? (matches.length ? matches.length + ' 条匹配' : '当前列表没有匹配的会话') + (state.recordsHasMore ? ' · 可加载更多' : '')
+      : '↑ ↓ 选择 · 回车打开 · Esc 返回');
+    recordsMore.hidden = !state.recordsHasMore;
+    recordsMore.disabled = recordsRefresh.disabled = state.recordsLoading === true;
+    const currentId = state.sessionToken ? 'dsh:' + state.sessionToken : '';
+    const key = JSON.stringify([currentId, matches]); if (key === recordsRenderKey) return;
     recordsRenderKey = key; const scroll = recordsList.scrollTop, focused = document.activeElement?.dataset?.recordId;
     recordsList.replaceChildren();
-    for (const item of state.records || []) {
+    for (const item of matches) {
       const row = document.createElement('button'); row.type = 'button'; row.textContent = item.project + ' · ' + item.title; row.dataset.recordId = item.id; row.disabled = item.enabled !== true;
+      if (item.id === currentId) row.setAttribute('aria-current', 'true');
       row.addEventListener('click', () => openRecord(item.id));
       recordsList.appendChild(row);
     }
     recordsList.scrollTop = scroll; if (focused) Array.from(recordsList.querySelectorAll('button')).find(row => row.dataset.recordId === focused)?.focus();
   }
   function openRecord(id) { if (!canSwitch()) { status.textContent = '请先等待草稿同步完成'; status.hidden = false; return; } recordOpenPending = {id:++recordOpenSequence}; const request = recordOpenPending; request.timer = setTimeout(() => { if (recordOpenPending !== request) return; recordOpenPending = null; conflict = true; recordOpenUnknown = true; status.textContent = state.chatOnly ? '会话切换结果未确认，请切换办公版核对' : '会话切换结果未确认，请展开工作区核对'; status.hidden = false; refresh(); }, 5000); refresh(); api.send({ type:'record-open', id, sessionToken:state.sessionToken, revision:state.revision, openId:request.id }); }
-  recordsToggle.addEventListener('click', () => { recordsOpen = !recordsOpen; recordsDesired = recordsOpen; if (recordsOpen) { modelOpen = false; modelDesired = false; renderModels(); closeLocalPanels(); } renderRecords(); api.send({type:'records-toggle', open:recordsOpen}); });
-  function closeRecords() { recordsOpen = false; recordsDesired = false; renderRecords(); api.send({type:'records-toggle',open:false}); }
+  recordsSearch.addEventListener('input', renderRecords);
+  records.addEventListener('keydown', event => {
+    if (event.isComposing || event.keyCode === 229 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+    const fromSearch = event.target === recordsSearch;
+    const rows = Array.from(recordsList.querySelectorAll('button:not(:disabled)'));
+    const index = rows.indexOf(event.target);
+    if (!fromSearch && index < 0) return;
+    if (event.key === 'Enter' && fromSearch && recordsSearch.value.trim() && rows.length) {
+      event.preventDefault(); rows[0].click();
+    } else if (event.key === 'ArrowDown' && rows.length) {
+      event.preventDefault(); rows[Math.min(index + 1, rows.length - 1)].focus();
+    } else if (event.key === 'ArrowUp' && index >= 0) {
+      event.preventDefault(); (rows[index - 1] || recordsSearch).focus();
+    }
+  });
+  function showRecords() {
+    recordsOpen = true; recordsDesired = true;
+    modelOpen = false; modelDesired = false;
+    renderModels(); closeLocalPanels(); renderRecords();
+    api.send({type:'records-toggle',open:true});
+    recordsSearch.focus();
+  }
+  function closeRecords() {
+    recordsOpen = false; recordsDesired = false; renderRecords();
+    api.send({type:'records-toggle',open:false});
+    modelToggle.focus();
+  }
+  recordsToggle.addEventListener('click', () => { if (recordsOpen) closeRecords(); else showRecords(); });
   document.getElementById('records-close').addEventListener('click', closeRecords);
   // ---- workspace project chooser and current-project details ------------
   const projectToggle = document.getElementById('project-toggle'), projectPanel = document.getElementById('project-panel'), projectList = document.getElementById('project-list'), projectStatus = document.getElementById('project-status');

@@ -20,7 +20,7 @@ class ScreenObservation {
     if (!source || typeof source.id !== 'string' || !/^(window|screen):[0-9]+:[0-9]+$/.test(source.id)) throw new Error('请先选择一个窗口或屏幕');
     const sameSource = this.source?.id === source.id;
     this.invalidate(); this.source = { id: source.id, name: String(source.name).slice(0, 200) }; this.target = target; this.contextConsent = contextConsent; this.memoryConsent = memoryConsent === true; this.phase = 'sharing';
-    this.records = sameSource ? this.records : []; this.requests = 0; this.lastAt = -Infinity; this.error = ''; this.capability = 'unverified'; this.publish(); return this.read();
+    this.records = sameSource ? this.records : []; this.lastObservedText = null; this.requests = 0; this.lastAt = -Infinity; this.error = ''; this.capability = 'unverified'; this.publish(); return this.read();
   }
   pause(reason = '') { this.invalidate(); this.phase = this.source ? 'paused' : 'idle'; this.error = reason; this.publish(); return this.read(); }
   stop() { this.invalidate(); this.target = null; this.contextConsent = null; this.memoryConsent = false; this.phase = 'idle'; this.source = null; this.error = ''; this.publish(); return this.read(); }
@@ -57,7 +57,8 @@ class ScreenObservation {
         onText: text => { if (!valid() || silent(text)) return; this.reply = { id: active.id, text, streaming: true, source: 'screen' }; this.onReply(this.reply); this.publish(); } });
       if (!valid()) return;
       this.capability = 'responded'; this.reply = null;
-      if (!silent(result.text) && result.text !== this.records.at(-1)?.text) {
+      if (!silent(result.text) && result.text !== this.lastObservedText) {
+        this.lastObservedText = result.text;
         const record = { id: active.id, text: result.text, question, capturedAt: frame.capturedAt, elapsedMs: this.now() - this.lastAt, usage: result.usage };
         this.records.push(record); this.records = this.records.slice(-30);
         if (this.memoryConsent) try { this.onRecord({id:record.id,question:record.question,text:record.text}); } catch {}

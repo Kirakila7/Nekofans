@@ -185,6 +185,23 @@ test('friends reuse the unified account route, return to contacts, and filter th
  assert.deepEqual(requests.filter(action=>action!=='avatar'),['list','list']);
 });
 
+test('opening Friends recovers the invite entry after an unavailable startup check',{skip:DOM_SKIP},async t=>{
+ let serviceReady=false,statusChecks=0;
+ const {doc}=setup(t,{workbenchEdition:'daily',friends:async()=>({status:'ready',friends:[]}),
+  gameInvites:async input=>{
+   if(input.action==='status'){statusChecks++;return {enabled:serviceReady};}
+   return {status:'ready',invitations:[{id:'zyxwvutsrqponmlkjihgfedc',sender:'房主',title:'测试房间',accepted:false}]};
+  }});
+ await tick();
+ const inbox=doc.querySelector('.neko-game-inbox');
+ assert(inbox.hidden);
+ serviceReady=true;
+ doc.querySelector('.neko-friends').click();await tick();
+ assert(statusChecks>=2);
+ assert.equal(inbox.hidden,false);
+ assert.match(inbox.getAttribute('aria-label'),/1 条待加入/);
+});
+
 test('clicking a friend avatar sends one private invite and Join opens the game room without copying',{skip:DOM_SKIP},async t=>{
  const inviteUrl='https://play.nekofans.games/?room=abcdefghijklmnopqrstuvwx',id='zyxwvutsrqponmlkjihgfedc';
  const game={id:'tic-tac-toe',title:'双人井字棋',sides:['先手','后手'],preset:{choices:[['center','中心']],turns:[1]},customRules:false};

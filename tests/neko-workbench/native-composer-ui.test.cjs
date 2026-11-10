@@ -15,6 +15,26 @@ test('creation desk is a compact input with accessible model and closable histor
  toggle.click();d.dispatchEvent(new x.w.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));assert(d.getElementById('model-panel').hidden);assert.equal(x.events.at(-1).open,false);
 });
 
+test('the compact composer searches visible records and opens a match by keyboard',{skip:!JSDOM},t=>{
+ const records=[{id:'dsh:s1',project:'月球',title:'修复页面',enabled:true},
+  {id:'two',project:'月球',title:'布局草案',enabled:true},{id:'three',project:'海边',title:'布局草案',enabled:true}];
+ const x=setup(t,{initial:{chatOnly:true,records,recordsHasMore:true}}),d=x.w.document;
+ const key=(target,options)=>target.dispatchEvent(new x.w.KeyboardEvent('keydown',{...options,bubbles:true,cancelable:true}));
+ key(x.el,{key:'k',metaKey:true});
+ const search=d.getElementById('records-search');
+ assert.equal(d.activeElement,search);assert.equal(x.events.at(-1).type,'records-toggle');
+ assert.equal(d.querySelector('#records-list [aria-current=true]').dataset.recordId,'dsh:s1');
+ search.value='月球 布局';search.dispatchEvent(new x.w.Event('input',{bubbles:true}));
+ assert.deepEqual(Array.from(d.querySelectorAll('#records-list button'),row=>row.dataset.recordId),['two']);
+ assert.match(d.getElementById('records-status').textContent,/可加载更多/);
+ key(search,{key:'Enter',isComposing:true});assert.equal(x.events.at(-1).type,'records-toggle');
+ key(search,{key:'ArrowDown'});assert.equal(d.activeElement.dataset.recordId,'two');
+ key(d.activeElement,{key:'ArrowUp'});assert.equal(d.activeElement,search);
+ key(search,{key:'Enter'});assert.equal(x.events.at(-1).type,'record-open');assert.equal(x.events.at(-1).id,'two');
+ x.snap(1,'',{records,chatOnly:true,recordsOpen:true,settledRecordOpenId:x.events.at(-1).openId});
+ key(search,{key:'Escape'});assert(d.getElementById('records').hidden);assert.equal(d.activeElement.id,'model-toggle');
+});
+
 test('model choice is catalog-bound and holds sends until the matching selection acknowledgement',{skip:!JSDOM},t=>{
  const options=[{id:'flash',label:'DeepSeek-V4.1-Flash',reasoningOptions:[{id:'high',label:'High'}]},{id:'other',label:'Other model',reasoningOptions:[{id:'high',label:'High'}]}];
  const fields={chatOnly:true,modelOptions:options,modelId:'flash',modelLabel:'DeepSeek-V4.1-Flash',reasoningId:'high',reasoningLabel:'High'};

@@ -2391,7 +2391,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     });
     node.addEventListener('keydown', event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeDialog(); } });
     node.addEventListener('mousedown', event => { if (event.target === node) closeDialog(); });
-    dialog = { kind, node, from: doc.activeElement, owner: meId(), cleanup:build.cleanup, reloadFriends:friends?build.open:build.reloadFriends, renderInbox:build.renderInbox };
+    dialog = { kind, node, from: doc.activeElement, owner: meId(), cleanup:build.cleanup, reloadFriends:friends?build.open:build.reloadFriends, renderInbox:build.renderInbox, syncInviteAvailability:build.syncInviteAvailability };
     if (studio || invite || contacts) {
       node.classList.add('neko-workspace-modal');
       node.style.position='fixed';
@@ -2401,6 +2401,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     } else panel.appendChild(node);
     (box.querySelector('input,textarea,button:not(:disabled)'))?.focus?.(); onChange?.();
     build.open?.();
+    if (contacts || game) void checkInviteAvailability();
   }
   let friendLoginReturn=null,lastFriendsAccount=null;
   function openFriends(){
@@ -2427,6 +2428,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
       .catch(()=>{if(friendLoginReturn===attempt){friendLoginReturn=null;if(!dialog)restore();}});
   }
   let inviteEnabled=false,inboxEntries=[],inboxStatus='loading',inboxGeneration=0,inboxTimer=null,joiningInvite=false;
+  let inviteCheck=null, inviteStatusTimer=null;
   function openGameInbox(){
     if(!inviteEnabled)return;
     onFriendsOpen?.();openDialog('game-inbox');
@@ -2437,6 +2439,23 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
   }
   async function requestInvitation(request){
     try{return await bridge.gameInvites(request);}catch{return {status:'unavailable'};}
+  }
+  function checkInviteAvailability() {
+    if (disposed || typeof bridge.gameInvites !== 'function') return;
+    if (!inviteCheck) inviteCheck = requestInvitation({ action:'status' }).then(result => {
+      if (disposed) return;
+      const enabled = result?.enabled === true;
+      if (enabled === inviteEnabled) return;
+      inviteEnabled = enabled;
+      ++inboxGeneration;
+      clearTimeout(inboxTimer);
+      inboxEntries = [];
+      inboxStatus = enabled ? 'loading' : 'unavailable';
+      publishInbox();
+      dialog?.syncInviteAvailability?.();
+      if (enabled) void refreshInbox();
+    }).finally(() => { inviteCheck = null; });
+    return inviteCheck;
   }
   async function refreshInbox(){
     if(disposed||!inviteEnabled)return;
@@ -2451,7 +2470,11 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     const status=el('p','neko-friends-status');status.setAttribute('role','status');
     const rows=el('ul','neko-lobby-friend-list');rows.setAttribute('aria-label','游戏邀请');
     const login=button('连接 N.E.K.O. 账号','neko-lobby-friends-login',()=>beginFriendLogin(openGameInbox));
-    const refresh=button('刷新','neko-lobby-friends-refresh',()=>refreshInbox());
+    const refresh=button('刷新','neko-lobby-friends-refresh',async()=>{
+      const wasEnabled=inviteEnabled;
+      await checkInviteAvailability();
+      if(wasEnabled&&inviteEnabled)void refreshInbox();
+    });
     async function join(item){
       if(joiningInvite)return;
       joiningInvite=true;renderInbox();
@@ -2495,7 +2518,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     const all=button('全部','neko-friends-filter',()=>{onlineOnly=false;render();});
     const online=button('在线','neko-friends-filter',()=>{onlineOnly=true;render();});
     filters.append(all,online);
-    const refresh=button('刷新','neko-lobby-friends-refresh',()=>load());
+    const refresh=button('刷新','neko-lobby-friends-refresh',()=>{ void checkInviteAvailability(); void load(); });
     tools.append(search,filters,refresh);
     const rows=el('ul','neko-lobby-friend-list');rows.setAttribute('aria-label','N.E.K.O. 好友名单');
     const empty=el('div','neko-friends-empty');
@@ -2896,7 +2919,11 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
       }
       if(teammateName)identityNote.textContent='女神：房主的 DeepSeek。你的主 Agent：'+teammateName+'。';
     }
-    return {nodes:[field('描述你想玩的游戏',prompt,'创造台可以制作双人回合制游戏。'),draft,preview,gameState,resultActions,identityNote,samples,advanced],open,request:()=>null};
+    function syncInviteAvailability() {
+      inviteFriend.textContent = inviteEnabled ? '创建房间并邀请好友' : '创建并复制好友邀请';
+      publish.textContent = inviteEnabled ? '开房并邀请好友' : '开房并复制好友邀请';
+    }
+    return {nodes:[field('描述你想玩的游戏',prompt,'创造台可以制作双人回合制游戏。'),draft,preview,gameState,resultActions,identityNote,samples,advanced],open,syncInviteAvailability,request:()=>null};
   }
   function catFields() {
     const settings = snap?.catSettings || {}, part = snap?.participation || {}, own = snap?.me?.cat;
@@ -3054,16 +3081,18 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     finishFriendLogin(value?.login);
   });}catch{}}
   call({ action: 'state' });
-  if(typeof bridge.gameInvites==='function')void requestInvitation({action:'status'}).then(result=>{
-    if(disposed||result?.enabled!==true)return;
-    inviteEnabled=true;publishInbox();void refreshInbox();
-  });
+  if (typeof bridge.gameInvites === 'function') {
+    void checkInviteAvailability();
+    inviteStatusTimer = doc.defaultView.setInterval(() => {
+      if (doc.visibilityState !== 'hidden') void checkInviteAvailability();
+    }, 30000);
+  }
   render();
   function dispose() {
     if (disposed) return;
     ++loginEpoch;
     if (joined) { joined = false; try { Promise.resolve(bridge.lobby({ action: 'close' })).catch(() => {}); } catch {} }
-    disposed = true;loginReturn=null;clearTimeout(inboxTimer); if (typeof release === 'function') release();if(typeof releaseNeko==='function')releaseNeko(); rows.clear(); if (dialog) { dialog.cleanup?.(); dialog.node.remove(); dialog = null; } panel.remove(); railButton.remove();
+    disposed = true;loginReturn=null;clearTimeout(inboxTimer);doc.defaultView.clearInterval(inviteStatusTimer); if (typeof release === 'function') release();if(typeof releaseNeko==='function')releaseNeko(); rows.clear(); if (dialog) { dialog.cleanup?.(); dialog.node.remove(); dialog = null; } panel.remove(); railButton.remove();
   }
   return { panel, railButton, show, hide, isOpen: () => open, dialogOpen: () => !!dialog, place, renderStatus,
     openFriends,openGameInbox,
