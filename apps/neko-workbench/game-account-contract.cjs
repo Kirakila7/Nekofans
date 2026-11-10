@@ -9,10 +9,9 @@
 // goddess job (or vice versa) by relabeling its prompt. The local prototype
 // bridge has its own dedicated entries below instead of borrowing the room /
 // rule-compiler / studio purposes.
-const gameNamespaces = Object.freeze(['game', 'game-player']);
+const gameNamespaces = Object.freeze(['game', 'game-player', 'game-studio']);
 const privateGamePurposes = Object.freeze({
   'private-game-rule-compiler': 'private-game-rules',
-  'game-studio': 'private-game-draft',
   'private-game-prototype-goddess': 'private-game-prototype-rules',
 });
 const goddessPersonas = Object.freeze(Object.keys(privateGamePurposes));
@@ -30,9 +29,11 @@ function assertGameAccountInput(namespace, input) {
     if (input[key] !== undefined && (!Array.isArray(input[key]) || input[key].length)) fail();
   }
   if (namespace === 'game-player') {
-    if (!gamePlayerConversations.includes(message.conversationId) || goddessPersonas.includes(persona.id)) fail();
+    if (!gamePlayerConversations.includes(message.conversationId) || goddessPersonas.includes(persona.id) || persona.id==='game-studio') fail();
+  } else if (namespace === 'game-studio') {
+    if (persona.id !== 'game-studio' || message.conversationId !== 'private-game-draft') fail();
   } else {
-    const expected = privateGamePurposes[persona.id];
+    const expected = Object.hasOwn(privateGamePurposes,persona.id) && privateGamePurposes[persona.id];
     if (!expected || message.conversationId !== expected) fail();
   }
 }

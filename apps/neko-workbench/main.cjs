@@ -22,8 +22,10 @@ const {createScreenShare}=require('./screen-share-controller.cjs');
 const {WorkbenchMainChat,trustedLocalCaller,PERSONA}=require('./main-chat-runtime.cjs');
 const {createMemoryViewer}=require('./memory-viewer.cjs');
 const {createCompanionAccountProvider}=require('./companion-account-provider.cjs');
+const {parsePrivateRoomInvite,parseGameLaunchUrl}=require('../../services/nekofans-game-hub/private-game-origin.cjs');
 const usesMainChatService=backend=>backend==='chat-api'||backend==='deepseek-account';
 const {createVisitsController}=require('./visits/controller.cjs');
+const {createWorkbenchCommunity}=require('./community-friends.cjs');
 const {createRtcTransport}=require('./visits/rtc-transport.cjs');
 const {pathToFileURL}=require('node:url');
 const fs = require('node:fs');
@@ -50,7 +52,7 @@ const {createRolesStore}=require('./workbench-roles.cjs');
 const {createWorkspaceLayout}=require('./workspace-layout.cjs');
 const {createPaneLayout}=require('./pane-layout.cjs');
 const {createVideoPlatform}=require('./video-platform.cjs');
-const {createWorkspaceController,companionSnapshot}=require('./workspace-controller.cjs');
+const {createWorkspaceController,companionSnapshot,homeTaskSnapshot}=require('./workspace-controller.cjs');
 const {createCodexWorkspace}=require('./codex-workspace.cjs');
 const {createCodexModelChoices}=require('./codex-model-choices.cjs');
 const {createCodexAccountService}=require('./codex-account.cjs');
@@ -81,7 +83,7 @@ const codexWorkspace=createCodexWorkspace({defaultCwd:workspace,onState:value=>{
 const workspaceController=createWorkspaceController({layout:workspaceLayout,codex:codexWorkspace,readDsh:params=>{
   if(state.connection!=='ready')throw Error('DSH 尚未就绪');return rpc('workspace-catalog',params);
 }});
-app.setName('N.E.K.O. 桌宠工作台');
+app.setName('Nekofans');
 app.setPath('userData',runtimePaths.userDataDir);
 if(!globalThis.__nekoTrialInstanceLocked&&!app.requestSingleInstanceLock())app.quit();
 let state={version:3,rootId:null,memory:[],diary:[],preferences:{helpersVisible:true},positions:{},actors:[
@@ -124,6 +126,7 @@ communityAccount=createCommunityAccount({getBaseUrl:()=>state.neko.baseUrl,
 // Public lobby (频道). Optional and contained: a missing module, bad config or any lobby failure leaves a
 // no-op controller, so workbench:companion and the private chat never depend on it.
 const lobbyOffline=Object.freeze({request:async()=>({ok:false,error:'频道暂不可用',state:null}),snapshot:()=>null,refresh(){},processPending(){},dispose(){}});
+let privateGameRuntime=null;
 function createLobby(){
   try{
     const {createLobbyController}=require('./lobby-controller.cjs'),{providerGetter,readWorkbenchPersona}=require('./lobby-cat.cjs');
@@ -136,7 +139,7 @@ function createLobby(){
       getPersona:id=>{const runtime=chatApi();return runtime&&id===PERSONA?readWorkbenchPersona(path.join(runtime.personasDir,PERSONA+'.json')):null;},
       recallMemory:async(query,budget,signal)=>{const memory=chatApi()?.lobbyMemory();return memory?memory.recall(query,budget,signal):[];},
       recordSharedExperience:async entry=>{const memory=chatApi()?.lobbyMemory();if(!memory)throw new Error('大厅记忆仅在主聊天模式可用');return memory.recordSharedExperience(entry);},
-      onState:value=>{if(dshWindow&&!dshWindow.isDestroyed()&&isWorkbenchOrigin(dshWindow.webContents.getURL()))dshWindow.webContents.send('workbench:lobby-state',value);unifiedNekoLogin?.lobbyChanged();publishNekoAccount();}});
+      onState:value=>{if(value.me?.user_id||value.auth?.status==='signed-out')privateGameRuntime?.seatOwnerChanged(value.me?.user_id??null);if(dshWindow&&!dshWindow.isDestroyed()&&isWorkbenchOrigin(dshWindow.webContents.getURL()))dshWindow.webContents.send('workbench:lobby-state',value);unifiedNekoLogin?.lobbyChanged();publishNekoAccount();}});
   }catch{return lobbyOffline;}
 }
 const lobbyController=createLobby();
@@ -183,7 +186,7 @@ const communityDaily=createCommunityDaily({dataDir:data,
   getInteractions:()=>mainChatRuntime.history(),
   generate:(rows,signal,options)=>mainChatRuntime.generateCommunityDaily(rows,signal,options),
   publish:request=>visitsController.publishDaily(request),
-  isBusy:()=>quitting||workbenchOnly||!usesMainChatService(mainChatRuntime?.backend)||(mainChatRuntime?.backend==='deepseek-account'&&state.connection!=='ready')||!!activeApiRequest||!!mainChatRuntime?.proactiveAbort||busy(state.actors[0])||motionInputs.has('main')||screenShare.read().phase==='sharing'||mainChatRuntime?.opened?.service.state().phase==='replying'||channelLife.status().generating
+  isBusy:()=>quitting||workbenchOnly||!usesMainChatService(mainChatRuntime?.backend)||(mainChatRuntime?.backend==='deepseek-account'&&state.connection!=='ready')||!!activeApiRequest||!!mainChatRuntime?.proactiveAbort||state.actors.some(a=>busy(a))||!!(state.dshRoot&&busy(state.dshRoot))||motionInputs.has('main')||screenShare.read().phase==='sharing'||mainChatRuntime?.opened?.service.state().phase==='replying'||channelLife.status().generating
 });
 questionRelay=createAgentQuestionRelay({getHost:()=>dshWindow,getSessionId:id=>id!=='main'?state.actors.find(a=>a.id===id)?.sessionId:null,onChange:()=>publishPetQuestions()});
 petQuestionController=createPetQuestionController({BrowserWindow,screen,ipcMain,request:(id,value)=>questionRelay.request(id,value)});
@@ -204,13 +207,17 @@ ipcMain.handle('workbench:community-daily-settings',async(event,action,payload)=
   if(action==='save'){communityDaily.saveSettings(payload);return communityDaily.status();}
   throw Error('未知社区日常设置操作');
 });
+let workbenchCommunity;
+function ensureWorkbenchCommunity(){
+  return workbenchCommunity??=createWorkbenchCommunity({dataDir:data,safeStorage,openExternal:url=>shell.openExternal(url)});
+}
 function ensureVisitsController(){
+  const shared=ensureWorkbenchCommunity();
   return visitsController??=createVisitsController({dataDir:data,repositoryRoot:path.resolve(base,'../..'),safeStorage,
+    oauth:shared.oauth,config:{baseUrl:shared.baseUrl},
     openExternal:url=>shell.openExternal(url),getModelConfig:()=>mainChatRuntime?.read().settings,
     getModelSecret:()=>mainChatRuntime?.secretStore.get(),
     createTransport:(grant,signal)=>createRtcTransport({BrowserWindow,ipcMain,grant,signal}),
-    config:{baseUrl:process.env.NEKO_VISIT_COMMUNITY_URL,authorizationUrl:process.env.NEKO_VISIT_AUTHORIZATION_URL,
-      tokenUrl:process.env.NEKO_VISIT_TOKEN_URL,clientId:process.env.NEKO_VISIT_OAUTH_CLIENT_ID,redirectUri:process.env.NEKO_VISIT_REDIRECT_URI},
     onChange:snapshot=>{if(visitsWindow&&!visitsWindow.isDestroyed())visitsWindow.webContents.send('workbench:visits-state',snapshot);}});
 }
 function openVisits(){
@@ -239,6 +246,12 @@ ipcMain.handle('workbench:visits',async(event,payload)=>{
 });
 function isWorkbenchOrigin(candidate){try{const target=new URL(candidate),launch=new URL(dshLaunchUrl);return launch.protocol==='http:'&&launch.hostname==='127.0.0.1'&&target.origin===launch.origin;}catch{return false;}}
 function assertWorkbenchCaller(event){if(!dshWindow||dshWindow.isDestroyed()||event.sender!==dshWindow.webContents||event.senderFrame!==event.sender.mainFrame||!isWorkbenchOrigin(event.senderFrame?.url))throw new Error('请从工作台操作');}
+ipcMain.handle('workbench:friends',async(event,action,id)=>{
+  assertWorkbenchCaller(event);
+  if(action==='list')return communityController.readFriends(dshWindow);
+  if(action==='avatar'&&typeof id==='string'&&id.length===36)return communityController.readFriendAvatar(id);
+  throw Error('未知好友操作');
+});
 function rolesState(){return {...workbenchRoles.get(),workspaceSessionId:state.dshRoot?.sessionId??null};}
 function publishRoles(){if(dshWindow&&!dshWindow.isDestroyed()&&isWorkbenchOrigin(dshWindow.webContents.getURL()))dshWindow.webContents.send('workbench:roles-state',rolesState());}
 async function chooseAvatar(title='上传工作台头像'){
@@ -250,7 +263,7 @@ async function chooseAvatar(title='上传工作台头像'){
   const side=Math.min(size.width,size.height),png=image.crop({x:Math.floor((size.width-side)/2),y:Math.floor((size.height-side)/2),width:side,height:side}).resize({width:256,height:256,quality:'best'}).toPNG();
   return 'data:image/png;base64,'+png.toString('base64');
 }
-function workbenchState(){return {avatar:workbenchAppearance.get(),workspaceRoot:workspace,workspaceRevision,companion:companionSnapshot(state),navigation:workbenchNavigation,fish:state.fish,qqbot:state.qqbot,fishQq:fishQqCoordinator.snapshot(),neko:{enabled:state.neko.enabled===true,connection:state.neko.connection,character:state.neko.character,error:String(state.neko.error||'').slice(0,300)},workbench:{connection:state.connection,error:String(state.error||'').slice(0,300)}};}
+function workbenchState(){return {avatar:workbenchAppearance.get(),workspaceRoot:workspace,workspaceRevision,companion:companionSnapshot(state),homeTask:homeTaskSnapshot(state),navigation:workbenchNavigation,fish:state.fish,qqbot:state.qqbot,fishQq:fishQqCoordinator.snapshot(),neko:{enabled:state.neko.enabled===true,connection:state.neko.connection,character:state.neko.character,error:String(state.neko.error||'').slice(0,300)},workbench:{connection:state.connection,error:String(state.error||'').slice(0,300)}};}
 async function openFishSettings(){screenShare.hide();workbenchNavigation={...workbenchNavigation,fishSettingsRevision:(workbenchNavigation?.fishSettingsRevision||0)+1};await openDsh();await communityController.action(dshWindow,{action:'hide'});broadcast();}
 function projectChannelState(name,value){
   const phases=['paused','checking','starting','login-required','model-login-required','scope-required','bound','connecting','running','error'];
@@ -814,23 +827,15 @@ function channelLifeMenu(){
     ...(snapshot.error?[{label:snapshot.error,enabled:false}]:[])
   ];
 }
-async function signInForCommunityDaily(){
-  openVisits();
-  const visits=visitsController,window=visitsWindow;
-  if(!visits||!window)return;
-  await visits.initialize().catch(()=>{});
-  if(quitting||visitsWindow!==window||window.isDestroyed())return;
-  if(!visits.communityIdentity()&&!visits.snapshot().busy)await visits.action({action:'login'}).catch(()=>{});
-}
 function communityDailyMenu(){
   const snapshot=communityDaily.status();
   const report=()=>{const s=communityDaily.status();notice(state.actors[0],s.error||(s.today==='published'?'今天的社区日常已发布':s.today==='none'?'暂无可发布内容，或主角色正在忙':'今天已提交过发布，请到社区核对'));broadcast();};
   return [
     {label:'自动公开分享今日主聊天摘要',type:'checkbox',checked:snapshot.enabled,click:item=>{try{communityDaily.configure(item.checked);}catch(error){notice(state.actors[0],error.message);broadcast();}}},
-    {label:`北京时间 ${snapshot.sendTime||'20:00'}；每个账号每天最多一条；主角色忙时延后`,enabled:false},
+    {label:`北京时间 ${snapshot.sendTime||'20:00'}；每个账号每天最多一条；工作时避让`,enabled:false},
     {label:'仅当前主会话的今日互动；不读取 QQ 私聊或私人记忆',enabled:false},
-    {label:snapshot.connected?'已授权社区账号（猫娘串门）…':'登录并授权社区账号…',click:()=>void signInForCommunityDaily()},
-    {label:'立即检查并分享今日小记',enabled:snapshot.connected&&snapshot.enabled&&!snapshot.generating,click:()=>void communityDaily.tick({force:true}).then(report)},
+    {label:'社区登录（猫娘串门）…',click:openVisits},
+    {label:'立即检查并分享今日小记',enabled:snapshot.enabled&&!snapshot.generating,click:()=>void communityDaily.tick({force:true}).then(report)},
     {label:`今日状态：${({none:'尚未发布',sending:'已提交待核对',published:'已发布',uncertain:'结果待核对'})[snapshot.today]}${snapshot.generating?' · 正在生成':''}`,enabled:false},
     ...(snapshot.error?[{label:snapshot.error,enabled:false}]:[]),
     {label:'发送时间与内容风格…',click:editCommunityDailySettings}
@@ -902,18 +907,59 @@ ipcMain.handle('workbench:lobby',async(event,request)=>{
   if(['state','open','cat-save','mode-set','suggest'].includes(request?.action))await mainChatRuntime?.refreshLobbyAccount({force:request.action!=='state'});
   return lobbyController.request(request);
 });
-let privateGameRuntime=null,privateGameStudio=null,privatePrototypeRelay=null,storyPrototypeLauncher=null;
-function ownGamePersona(){const runtime=mainChatRuntime;if(!runtime||runtime.closed||!usesMainChatService(runtime.backend))return null;const persona=require('./lobby-cat.cjs').readWorkbenchPersona(path.join(runtime.personasDir,PERSONA+'.json'));return {id:PERSONA,...persona};}
-function gameRuntime(){return privateGameRuntime??=require('./private-game-runtime.cjs').createPrivateGameRuntime({rpc,repositoryRoot:path.resolve(base,'../..'),dataDir:data,safeStorage,getOwnPersona:async()=>ownGamePersona()});}
+let privateGameStudio=null,privatePrototypeRelay=null,storyPrototypeLauncher=null;
+let pendingGameInvite=null;
+function queueGameInvite(value) {
+  const inviteUrl=parseGameLaunchUrl(value);
+  if(!inviteUrl)return false;
+  pendingGameInvite=inviteUrl;
+  void app.whenReady().then(async()=>{
+    await openDsh();
+    if(dshWindow&&!dshWindow.isDestroyed()&&isWorkbenchOrigin(dshWindow.webContents.getURL())) {
+      dshWindow.webContents.send('workbench:game-invite');
+    }
+  }).catch(engineError);
+  return true;
+}
+function ownGamePersona(){
+  const runtime=mainChatRuntime;
+  if(!runtime||runtime.closed||!usesMainChatService(runtime.backend))return null;
+  const persona=require('./lobby-cat.cjs').readWorkbenchPersona(path.join(runtime.personasDir,PERSONA+'.json'));
+  const actor=state.actors.find(actor=>actor.id==='main');
+  const appearance=petAppearance.selected(state,actor);
+  const name=appearance===petAppearance.CUSTOM ? actor?.customAppearance?.name :
+    appearance===petAppearance.ORIGINAL ? persona.name : petAppearance.choices.find(choice=>choice.id===appearance)?.label.split(' · ')[0];
+  return {id:PERSONA,...persona,name:name||persona.name};
+}
+function gameRuntime(){
+  return privateGameRuntime??=require('./private-game-runtime.cjs').createPrivateGameRuntime({
+    rpc,repositoryRoot:path.resolve(base,'../..'),dataDir:data,safeStorage,getOwnPersona:async()=>ownGamePersona(),
+    getSeatOwner:async()=>lobbyController.snapshot()?.me?.user_id ?? (await lobbyController.verifyIdentity?.())?.userId ?? null,
+  });
+}
 // Trusted-main-process-only local prototype bridge. The renderer receives only
 // an ephemeral start command; it never receives the account persona or rules.
 function prototypeRelay(){return privatePrototypeRelay??=require('./prototype-model-relay.cjs').createPrototypeModelRelay({rpc,getOwnPersona:async()=>ownGamePersona()});}
-function storyPrototype(){return storyPrototypeLauncher??=require('./story-prototype-launcher.cjs').createStoryPrototypeLauncher({projectDir:process.env.NEKO_STORY_PROJECT_DIR,executable:process.execPath,relay:prototypeRelay()});}
+function storyPrototype(){return storyPrototypeLauncher??=require('./story-prototype-launcher.cjs').createStoryPrototypeLauncher({projectDir:process.env.NEKO_STORY_PROJECT_DIR||path.join(app.getPath('documents'),'ChatGPT','猫娘计划','output','开源与抹除_对局录制','剧情规则_创造台'),executable:process.execPath,relay:prototypeRelay()});}
 ipcMain.handle('workbench:game-hub',async(event,request)=>{
   assertWorkbenchCaller(event);
   const {createGameHubBridge}=require('./game-hub-bridge.cjs');
-  const bridge=createGameHubBridge({lobbyController});
+  const gameCatalog=require('../../services/nekofans-game-hub/game-catalog.cjs');
+  const bridge=createGameHubBridge({lobbyController,privateGame:gameRuntime,gameCatalog,
+    privateGameOrigin:require('../../services/nekofans-game-hub/private-game-origin.cjs')});
   if(request?.action==='share')return bridge.share({title:request.title,roomUrl:request.roomUrl});
+  if(request?.action==='private-games')return {ok:true,games:gameCatalog.listGames(),teammateName:ownGamePersona()?.name};
+  if(request?.action==='private-create-share')return bridge.createAndSharePrivate({url:request.url,gameId:request.gameId});
+  if(request?.action==='private-share')return bridge.sharePrivate({roomUrl:request.inviteUrl,gameId:request.gameId});
+  if(request?.action==='private-pending-invite'){
+    const inviteUrl=pendingGameInvite;
+    pendingGameInvite=null;
+    return {ok:true,inviteUrl};
+  }
+  if(request?.action==='private-copy-invite'){
+    clipboard.writeText(parsePrivateRoomInvite(request.inviteUrl).inviteUrl);
+    return {ok:true};
+  }
   if(request?.action==='private-status')return {ok:true,...gameRuntime().status()};
   if(request?.action==='private-public-key')return {ok:true,publicKey:await gameRuntime().publicKey()};
   if(request?.action==='private-start')return {ok:true,...await gameRuntime().start({url:request.url})};
@@ -923,10 +969,10 @@ ipcMain.handle('workbench:game-hub',async(event,request)=>{
     catch(error){return {ok:false,error:require('./game-hub-bridge.cjs').safeGamePairError(error)};}
   }
   if(request?.action==='private-open-seat')return {ok:true,...await gameRuntime().openOwnSeat({inviteUrl:request.inviteUrl})};
-  if(request?.action==='private-seat-view')return {ok:true,...await gameRuntime().readSeatView({inviteUrl:request.inviteUrl})};
+  if(request?.action==='private-seat-view')return {ok:true,...await gameRuntime().readSeatView({inviteUrl:request.inviteUrl}),teammateName:ownGamePersona()?.name};
   if(request?.action==='private-seat-board')return {ok:true,...await gameRuntime().boardHtml({inviteUrl:request.inviteUrl})};
   if(request?.action==='private-seat-move')return {ok:true,...await gameRuntime().playMove({inviteUrl:request.inviteUrl,action:request.move,expectedVersion:request.expectedVersion})};
-  if(request?.action==='private-submit-own-rule')return {ok:true,...await gameRuntime().submitOwnRule({inviteUrl:request.inviteUrl,text:request.text})};
+  if(request?.action==='private-submit-own-rule')return {ok:true,...await gameRuntime().submitOwnRule({inviteUrl:request.inviteUrl,text:request.text,preset:request.preset})};
   if(request?.action==='private-agent-start')return {ok:true,...await gameRuntime().startAgent({inviteUrl:request.inviteUrl})};
   if(request?.action==='private-agent-stop')return {ok:true,...gameRuntime().stopAgent({inviteUrl:request.inviteUrl})};
   if(request?.action==='private-agent-status')return {ok:true,...gameRuntime().agentStatus()};
@@ -939,11 +985,17 @@ ipcMain.handle('workbench:game-hub',async(event,request)=>{
   if(request?.action==='prototype-relay-status')return {ok:true,...prototypeRelay().status()};
   if(request?.action==='prototype-relay-stop')return {ok:true,...await (storyPrototypeLauncher?storyPrototypeLauncher.stop():prototypeRelay().stop('stopped'))};
   if(request?.action==='private-create'){
-    const room=await gameRuntime().create({url:request.url});
+    const room=await gameRuntime().create({url:request.url,gameId:request.gameId});
+    return {ok:room.status==='created',status:room.status,inviteUrl:room.inviteUrl};
+  }
+  if(request?.action==='publish-game'){
+    const revision=typeof request.revisionId==='string'&&privateGameStudio?.inspect(request.revisionId);
+    if(!revision)return {ok:false,status:'not-found'};
+    const room=await gameRuntime().create({url:request.url,gameId:gameCatalog.STUDIO_GAME,definition:revision.game});
     return {ok:room.status==='created',status:room.status,inviteUrl:room.inviteUrl};
   }
   if(request?.action==='draft-game'){
-    if(!privateGameStudio){const {createGameStudio}=await import(pathToFileURL(path.join(base,'../../services/nekofans-game-hub/game-studio.mjs')).href);privateGameStudio=createGameStudio({provider:createCompanionAccountProvider(rpc,{namespace:'game'})});}
+    if(!privateGameStudio){const {createGameStudio}=await import(pathToFileURL(path.join(base,'../../services/nekofans-game-hub/game-studio.mjs')).href);privateGameStudio=createGameStudio({provider:createCompanionAccountProvider(rpc,{namespace:'game-studio'})});}
     return privateGameStudio.propose({prompt:request.prompt,revisionId:request.revisionId});
   }
   throw Error('未知游戏房间操作');
@@ -967,6 +1019,7 @@ ipcMain.handle('workbench:account-menu-layer',(event,request)=>{
 ipcMain.handle('workbench:questions',(event,request)=>{assertWorkbenchCaller(event);return questionRelay.accept(event.sender,request);});
 ipcMain.handle('workbench:native-composer',(event,request)=>{
   assertWorkbenchCaller(event);
+  if(request?.action==='check-safety')return nativeComposerController.checkSafety();
   if(request?.action==='update')return nativeComposerController.update(request.state);
   if(request?.action==='place'||request?.action==='remove'){
     const result=nativeComposerController.place(dshWindow,request);
@@ -984,6 +1037,9 @@ ipcMain.handle('workbench:community-account',async(event,action)=>{
 });
 ipcMain.on('workbench:community-web-account',(event,value)=>{
   communityController.acceptAccountState(event,value);
+});
+ipcMain.on('workbench:community-web-friends-result',(event,value)=>{
+  communityController.acceptFriends(event,value);
 });
 function nekoAccountSnapshot(){
   const lobby=lobbyController.snapshot();return {community:communityController.accountState,lobby:{status:lobby?.auth?.status||'unavailable'},login:unifiedNekoLogin?.snapshot()||{status:'idle',message:'',error:''}};
@@ -1149,7 +1205,10 @@ ipcMain.handle('pet:call',async(event,method,p={})=>{
 });
 // Opt-in read-only native evidence capture; disabled for normal launches.
 if(process.env.PET_CAPTURE_SIGNAL==='1')process.on('SIGUSR1',()=>capture().catch(error=>fs.appendFileSync(path.join(data,'capture-error.log'),String(error)+'\n')));
-app.on('second-instance',()=>{openDsh().catch(engineError);});
+app.on('open-url',(event,url)=>{if(queueGameInvite(url))event.preventDefault();});
+app.on('second-instance',(_event,argv)=>{if(!argv?.some(queueGameInvite))openDsh().catch(engineError);});
+if(process.platform==='win32'&&!process.defaultApp)app.setAsDefaultProtocolClient('nekofans');
+process.argv.some(queueGameInvite);
 app.on('activate',()=>{if(workbenchOnly&&dshWindow&&!dshWindow.isDestroyed()&&dshWindow.isVisible()){dshWindow.focus();return;}if(petWindows.size&&![...petWindows.values()].some(w=>!w.isDestroyed()&&w.isVisible()))showInput();});
 app.whenReady().then(async()=>{
   prepareRuntimeDirectories(runtimePaths);
@@ -1158,6 +1217,19 @@ app.whenReady().then(async()=>{
   if(quitting)return;
   if(communityDaily.status().enabled){try{void ensureVisitsController().initialize().catch(()=>{}).finally(()=>communityDaily.start());}catch{communityDaily.start();}}else communityDaily.start();
   channelLife.start();startEngine().catch(engineError);connectNeko();if(process.env.PET_OPEN_WORKBENCH==='1')openDsh().catch(engineError);
+  // Opt-in for a local recording session; ordinary launches never start games.
+  if(process.env.NEKO_STORY_AUTOSTART==='1')void (async()=>{
+    const started=await storyPrototype().start();
+    const roomId=process.env.NEKO_STORY_AUTOBIND||'';
+    if(started.status==='started'&&/^r-[0-9a-f]{8}$/.test(roomId)){
+      for(let attempt=0;attempt<20&&!quitting;attempt++){
+        const result=await prototypeRelay().bind({roomId,prototypeOrigin:'http://127.0.0.1:8787'});
+        if(result.status==='bound'||result.status==='already-bound')break;
+        if(!['account-unavailable','prototype-unavailable','busy'].includes(result.status))break;
+        await new Promise(resolve=>setTimeout(resolve,2000));
+      }
+    }
+  })();
 });
 let shutdownStarted=false,shutdownComplete=false;
 app.on('before-quit',event=>{
@@ -1171,7 +1243,7 @@ app.on('before-quit',event=>{
   shutdownStarted=true;quitting=true;unifiedNekoLogin.dispose();nekoSsoWindow.dispose();ourHomeRuntime.dispose();videoFloatController.dispose();nativeComposerController.dispose();nativeDividerController.dispose();communityController.dispose();communityAccount.cancel();lobbyController.dispose();screenShare.dispose();catMotion.dispose();clearTimeout(nekoRetry);clearTimeout(rosterTimer);for(const timer of terminalTimers.values())clearTimeout(timer);terminalTimers.clear();nekoChat.close();save();
   const current=childLifecycle;
   privateGameRuntime?.forgetOwnSeat();
-  Promise.allSettled([privateGameRuntime?.stop(),storyPrototypeLauncher?storyPrototypeLauncher.stop():privatePrototypeRelay?.stop('shutdown'),visitsController?.close(),mainChatRuntime?.close(),current?.stop(),codexAccount.dispose(),codexWorkspace.dispose()]).finally(()=>{shutdownComplete=true;app.quit();});
+  Promise.allSettled([privateGameRuntime?.stop(),storyPrototypeLauncher?storyPrototypeLauncher.stop():privatePrototypeRelay?.stop('shutdown'),visitsController?visitsController.close():workbenchCommunity?.oauth.close(),mainChatRuntime?.close(),current?.stop(),codexAccount.dispose(),codexWorkspace.dispose()]).finally(()=>{shutdownComplete=true;app.quit();});
 });
 process.on('SIGTERM',()=>app.quit());
 process.on('SIGINT',()=>app.quit());

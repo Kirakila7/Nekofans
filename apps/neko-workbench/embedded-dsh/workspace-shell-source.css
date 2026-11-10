@@ -194,6 +194,7 @@ body[data-neko-workbench-edition="office"] .neko-companion-dock[data-neko-office
 .neko-office-choice { flex:1 1 88px; min-width:0; display:grid; justify-items:center; gap:7px; padding:14px 8px !important; }
 .neko-office-choice img { width:45px; height:45px; object-fit:contain; }
 .neko-office-choice[aria-pressed="true"] { outline:2px solid #4c89ad; outline-offset:-2px; }
+.neko-display-choice__detail { color:var(--nws-muted); font-size:11px; text-align:center; }
 .neko-workspace-palettes { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:18px; }
 .neko-workspace-palettes button { padding:4px; }
 .neko-workspace-palettes img { width:35px; height:35px; object-fit:contain; }
@@ -338,6 +339,31 @@ body[data-neko-room-columns] .neko-companion-dock[data-neko-companion-expanded]{
 .neko-lobby-panel[style*="--neko-lobby-dialog-companion-reserve"] .neko-lobby-dialog { padding-right:max(24px,var(--neko-lobby-dialog-companion-reserve,24px)); }
 .neko-lobby-dialog__card { width:min(460px,92%); max-height:85%; overflow:auto; display:grid; gap:10px; background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:16px; box-shadow:0 24px 80px #17303d30; padding:18px; }
 .neko-lobby-dialog[data-dialog="game-room"] .neko-lobby-dialog__card { width:min(840px,94%); }
+.neko-lobby-dialog[data-dialog="friends"] .neko-lobby-dialog__card { width:min(640px,95%); max-height:min(78vh,650px); padding:clamp(16px,3vw,26px); gap:14px; }
+.neko-lobby-dialog[data-dialog="friends"] .neko-lobby-dialog__title { font-size:clamp(18px,3vw,24px); }
+.neko-friends-panel { min-width:0; display:grid; gap:10px; }
+.neko-friends-overview { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:12px 14px; border:1px solid var(--nws-border); border-radius:13px; background:linear-gradient(105deg,var(--nws-hover),var(--nws-bg)); }
+.neko-friends-overview__identity { display:flex; align-items:center; gap:10px; font-size:14px; }
+.neko-friends-overview__mark { display:grid; place-items:center; width:32px; height:32px; border-radius:10px; background:var(--nws-bg); color:#5482b2; font:22px/1 system-ui,sans-serif; }
+.neko-friends-overview__count { color:var(--nws-muted); font-size:12px; }
+.neko-friends-tools { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.neko-friends-search { min-width:120px; flex:1; padding:8px 10px; border:1px solid var(--nws-border); border-radius:8px; background:var(--nws-bg); color:inherit; font:inherit; }
+.neko-friends-filters { display:flex; gap:3px; }
+.neko-friends-filter[aria-pressed="true"] { background:var(--nws-hover); font-weight:600; }
+.neko-lobby-friend-list { list-style:none; padding:0; margin:0; max-height:310px; overflow:auto; }
+.neko-lobby-friend-list:empty { display:none; }
+.neko-friends-contact { display:flex; align-items:center; gap:12px; padding:8px 9px; border-bottom:1px solid var(--nws-border); }
+.neko-friends-contact:last-child { border-bottom:0; }
+.neko-friends-avatar { position:relative; flex:0 0 38px; height:38px; display:grid; place-items:center; border-radius:50%; overflow:hidden; background:color-mix(in srgb,hsl(var(--neko-friend-hue,200) 70% 72%) 30%,var(--nws-bg)); color:var(--nws-text); font-weight:700; }
+.neko-friends-avatar__image { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+.neko-friends-contact__name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; }
+.neko-friends-presence { display:flex; align-items:center; gap:5px; flex:none; color:var(--nws-muted); font-size:12px; }
+.neko-friends-presence::before { content:''; width:7px; height:7px; border-radius:50%; background:currentColor; opacity:.45; }
+.neko-friends-presence[data-online="true"]::before { background:#39a47b; opacity:1; }
+.neko-friends-empty { min-height:80px; display:grid; justify-items:center; align-content:center; gap:12px; text-align:center; padding:12px; }
+.neko-friends-status { color:var(--nws-muted); margin:0; }
+.neko-friends-panel .neko-lobby-friends-login { background:var(--nws-hover); font-weight:600; }
+.neko-friends-panel [hidden] { display:none!important; }
 .neko-lobby-game-board { width:100%; height:760px; border:1px solid var(--nws-border); border-radius:12px; }
 .neko-lobby-game-room-controls:not([hidden]) { display:grid; gap:8px; }
 .neko-lobby-dialog__title { margin:0; font-size:16px; }

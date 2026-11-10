@@ -71,6 +71,10 @@ function createWorkspaceController({ layout, codex, readDsh, now = Date.now, cod
     codex,
   };
 }
+function homeTaskSnapshot(state){
+  const id=state?.homeSessionId;
+  return {active:typeof id==='string'&&id.length>0&&Array.isArray(state?.actors)&&state.actors.some(a=>a.kind==='task'&&a.sessionId===id&&a.active===true)};
+}
 function companionSnapshot(state) {
   const main = state.actors?.find(a => a.id === 'main');
   const runtime = state.mainChat || {};
@@ -86,4 +90,4 @@ function companionSnapshot(state) {
     error: String((failed && chat.errorMessage) || runtime.error || (backend === 'neko' && state.neko?.error) || (workbenchStatus === 'starting' ? '工作台正在连接…' : workbenchStatus === 'unavailable' ? '工作台未连接，请重连后再聊天。' : '') || '').slice(0, 240),
     failedText: failed ? String(chat.lastUserMessage || '').slice(0, 8000) : '' };
 }
-module.exports = { createWorkspaceController, companionSnapshot };
+module.exports = { createWorkspaceController, companionSnapshot, homeTaskSnapshot };

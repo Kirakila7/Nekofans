@@ -4,12 +4,11 @@ const {parseHomeScene,sceneFingerprint}=require('./our-home-scene.cjs');
 
 // Observe the native tool registry's FINAL result. Never infer a mutation from
 // a prompt, elapsed time, fs watcher, bash command text, or a renderer total.
-function homeBuildReceipt(exec,result,{sceneFile}){
+function homeBuildReceipt(exec,result,{sessionId,sceneFile}){
  const session=exec?.agent?.session;
- const sessionId=session?.id;
- if(typeof sessionId!=='string'||!sessionId||result?.isError!==false||!['write','edit'].includes(exec.name))return null;
+ if(!sessionId||String(session?.id)!==String(sessionId)||result?.isError!==false||!['write','edit'].includes(exec.name))return null;
  const value=result.value;
- if(!value||typeof value.path!=='string'||!path.isAbsolute(value.path)||path.relative(sceneFile,value.path)!==''||typeof value.after!=='string'||!(value.before===null||typeof value.before==='string'))return null;
+ if(!value||typeof value.path!=='string'||!path.isAbsolute(value.path)||path.resolve(value.path)!==path.resolve(sceneFile)||typeof value.after!=='string'||!(value.before===null||typeof value.before==='string'))return null;
  let items,beforeHash,afterHash;
  try{items=parseHomeScene(value.after);beforeHash=sceneFingerprint(value.before===null?[]:parseHomeScene(value.before));afterHash=sceneFingerprint(items);}catch{return null;}
  if(beforeHash===afterHash)return null;

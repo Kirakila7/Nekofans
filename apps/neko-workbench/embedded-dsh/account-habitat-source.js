@@ -304,7 +304,7 @@ function installNekoAccountHabitat(ctx, options) {
     clearOwned(menuRecord.owned);
     const heading = element('div', 'neh-menu-heading');
     const refresh = element('button', 'neh-account-refresh', '刷新');
-    refresh.type = 'button'; refresh.dataset.nekoAccountRefresh = ''; refresh.setAttribute('aria-label', '刷新 DSH、N.E.K.O. 和聊天室登录状态');
+    refresh.type = 'button'; refresh.dataset.nekoAccountRefresh = ''; refresh.setAttribute('aria-label', '刷新 DSH、N.E.K.O. 和聊天室状态');
     refresh.addEventListener('click', event => {
       event.preventDefault(); event.stopPropagation(); reader.refresh(); refreshNekoAccount(true);
     });

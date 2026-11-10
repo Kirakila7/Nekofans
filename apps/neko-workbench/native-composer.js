@@ -4,7 +4,7 @@
   const copyShortcut = api.platform && api.platform !== 'darwin' ? 'Ctrl+C' : '⌘C';
   document.documentElement.dataset.platform = api.platform || '';
   copy.title = '选中草稿后按 ' + copyShortcut + ' 复制';
-  let state = { value:'', enabled:false, busy:false, sessionToken:'', revision:0 }, composing = false, dirty = false, conflict = false, blockedDraft = false, submitUnknown = false;
+  let state = { value:'', enabled:false, busy:false, sessionToken:'', revision:0, chatOnly:true }, composing = false, dirty = false, conflict = false, blockedDraft = false, submitUnknown = false;
   let pendingEdit = null, pendingSubmit = null, submitQueued = false, expandQueued = false, expandAction = 'expand', confirmExpand = false, expandTimer = null, editSequence = 0, submitSequence = 0;
   let draftOwner = '', recoveryOwner = '', storageFailed = false;
   let pendingModel = null, modelSequence = 0, modelUnknown = false, modelRefreshPending = false, unconfirmedModelId = null;
@@ -79,7 +79,7 @@
     copy.hidden = !(blockedDraft || conflict);
     files.disabled = message.disabled || conflict || blockedDraft || pendingSubmit !== null || submitQueued || expandQueued || recordOpenPending !== null;
     send.disabled = !!state.question || message.disabled || state.busy || conflict || blockedDraft || submitQueued || pendingSubmit !== null || recordOpenPending !== null || projectSelectPending !== null || pendingModel !== null || state.modelBusy === true || modelUnknown || !!state.modelError || (state.targetRequired === true && !state.targetLabel) || !message.value.trim();
-    target.textContent = state.targetLabel ? '创造台：' + state.targetLabel : state.chatOnly ? '从项目记录选择会话' : '当前会话未确认，请展开工作区核对';
+    target.textContent = state.targetLabel ? '创造台：' + state.targetLabel : state.chatOnly ? '工作会话未确认，请从项目记录选择' : '当前会话未确认，请展开工作区核对';
     target.title = target.textContent;
     target.hidden = true;
     renderModels(); renderProjects(); renderDetails();
@@ -92,7 +92,7 @@
       if (pendingEdit?.id !== id) return;
       pendingEdit = null; conflict = true; expandQueued = false; confirmExpand = false;
       if (expandTimer !== null) clearTimeout(expandTimer); expandTimer = null;
-      status.textContent = '无法确认草稿是否同步，请先复制再展开工作区处理'; status.hidden = false; refresh();
+      status.textContent = state.chatOnly ? '无法确认草稿是否同步，请先复制再切换办公版处理' : '无法确认草稿是否同步，请先复制再展开工作区处理'; status.hidden = false; refresh();
     }, 5000);
     api.send({ type:'edit', value:pendingEdit.value, sessionToken:state.sessionToken, revision:state.revision, editId:pendingEdit.id });
   }
@@ -111,7 +111,7 @@
       pendingSubmit = null; submitUnknown = true; conflict = true; expandQueued = false; confirmExpand = false;
       if (expandTimer !== null) clearTimeout(expandTimer); expandTimer = null;
       message.value = request.value; draftOwner = request.sessionToken; rememberRecovery('submit-unknown');
-      status.textContent = '发送结果未确认，可能已发送；请展开工作区核对，勿重复发送'; status.hidden = false; refresh();
+      status.textContent = state.chatOnly ? '发送结果未确认，可能已发送；请切换办公版核对，勿重复发送' : '发送结果未确认，可能已发送；请展开工作区核对，勿重复发送'; status.hidden = false; refresh();
     }, 5000);
     refresh();
     api.send({ type:'submit', value:request.value, sessionToken:request.sessionToken, revision:request.revision, submissionId:request.id });
@@ -230,7 +230,7 @@
     }
     recordsList.scrollTop = scroll; if (focused) Array.from(recordsList.querySelectorAll('button')).find(row => row.dataset.recordId === focused)?.focus();
   }
-  function openRecord(id) { if (!canSwitch()) { status.textContent = '请先等待草稿同步完成'; status.hidden = false; return; } recordOpenPending = {id:++recordOpenSequence}; const request = recordOpenPending; request.timer = setTimeout(() => { if (recordOpenPending !== request) return; recordOpenPending = null; conflict = true; recordOpenUnknown = true; status.textContent = '会话切换结果未确认，请展开工作区核对'; status.hidden = false; refresh(); }, 5000); refresh(); api.send({ type:'record-open', id, sessionToken:state.sessionToken, revision:state.revision, openId:request.id }); }
+  function openRecord(id) { if (!canSwitch()) { status.textContent = '请先等待草稿同步完成'; status.hidden = false; return; } recordOpenPending = {id:++recordOpenSequence}; const request = recordOpenPending; request.timer = setTimeout(() => { if (recordOpenPending !== request) return; recordOpenPending = null; conflict = true; recordOpenUnknown = true; status.textContent = state.chatOnly ? '会话切换结果未确认，请切换办公版核对' : '会话切换结果未确认，请展开工作区核对'; status.hidden = false; refresh(); }, 5000); refresh(); api.send({ type:'record-open', id, sessionToken:state.sessionToken, revision:state.revision, openId:request.id }); }
   recordsToggle.addEventListener('click', () => { recordsOpen = !recordsOpen; recordsDesired = recordsOpen; if (recordsOpen) { modelOpen = false; modelDesired = false; renderModels(); closeLocalPanels(); } renderRecords(); api.send({type:'records-toggle', open:recordsOpen}); });
   function closeRecords() { recordsOpen = false; recordsDesired = false; renderRecords(); api.send({type:'records-toggle',open:false}); }
   document.getElementById('records-close').addEventListener('click', closeRecords);
@@ -333,7 +333,20 @@
   expand.addEventListener('click', () => requestExpand('expand'));
   files.addEventListener('click', () => requestExpand('files'));
 
-  copy.addEventListener('click', () => { message.focus(); message.select(); status.textContent = '草稿已选中，请按 ' + copyShortcut + ' 复制'; status.hidden = false; });
+  // Check the actual child state, even when a modal has detached this view.
+  // A lost/unknown send can be investigated in office mode if its exact
+  // session-scoped recovery copy is already persisted.
+  api.onSafetyCheck?.(id => {
+    if (!Number.isSafeInteger(id) || id <= 0) return;
+    const owner=recoveryOwner || draftOwner || state.sessionToken;
+    const saved=readRecovery(owner);
+    const recoverable=!!saved && saved.value===message.value && saved.sessionToken===owner;
+    const needsRecovery=dirty || blockedDraft || conflict || submitUnknown;
+    const emptyUnknownRecord=recordOpenUnknown && !message.value;
+    const unsafe=composing || pendingEdit!==null || pendingSubmit!==null || submitQueued || expandQueued || recordOpenPending!==null || projectSelectPending!==null || pendingModel!==null || (needsRecovery && !recoverable && !emptyUnknownRecord);
+    api.send({type:'safety-result',id,safe:!unsafe});
+  });
+  copy.addEventListener('click', () => { message.focus(); message.select(); status.textContent = storageFailed ? '草稿未能保存到本机，请按 ' + copyShortcut + ' 复制并保持窗口打开' : '草稿已选中，请按 ' + copyShortcut + ' 复制'; status.hidden = false; });
   if(window.WorkbenchQuestions&&document.getElementById('question-panel'))questionForm=window.WorkbenchQuestions.mount({host:document.getElementById('question-panel'),toggleButton:document.getElementById('question-toggle'),
     onVisibility:(open,q)=>{document.body.toggleAttribute('data-question-open',open);api.send({type:'question-visibility',open,...(q?{sessionId:q.sessionId,key:q.key,revision:q.revision}:{})});syncPanelAttr();},
     onAction:action=>api.send({...action,type:'question-action',questionAction:action.type,...(action.type==='answer'?{questionSelectionId:++questionSelectionSequence}:{})})});
@@ -391,6 +404,7 @@
     }
     if (!composing && !dirty && pendingEdit === null && pendingSubmit === null && !conflict && !blockedDraft) message.value = next.value;
     status.textContent = submitUnknown ? '发送结果未确认，可能已发送；请展开工作区核对，勿重复发送' : blockedDraft ? '会话已切换或发现未同步的本地草稿；请先复制再展开工作区处理' : conflict ? '原工作区草稿已变化；请先复制再展开工作区处理' : modelUnknown ? '模型设置结果未确认，请刷新模型后再发送' : storageFailed && (dirty || composing || pendingEdit !== null || pendingSubmit !== null) ? '未同步输入暂不能保存到本机，请保持窗口打开' : (next.status || next.modelError || '');
+    if (state.chatOnly && status.textContent) status.textContent = status.textContent.replaceAll('展开工作区', '切换办公版');
     status.hidden = !status.textContent;
     refresh();
     if (!changedSession && !conflict && !blockedDraft) { sendEdit(); sendSubmit(); refresh(); finishExpand(); }

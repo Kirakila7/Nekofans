@@ -8,7 +8,7 @@ const fields = Object.freeze({
   camera: ['azimuth','elevation','zoom'], perspective: ['mode'],
   avatar: ['position'], avatar_checkpoint: ['position'], avatar_reset: [],
   'return-home':[],'avatar_look':['yaw','pitch'],'avatar_walk':['dx','dz'],
-  'pet-animations':[],'pet-animation':['name'],'avatar_place':['x','z'],
+  'pet-animations':[],'pet-animation':['name'],'home-task-avatar':[],'avatar_place':['x','z'],
 });
 
 function validateRequest(request) {
@@ -36,6 +36,12 @@ function createYuiHomeIpc({assertCaller, userDataDirectory, publish, createStora
     validateRequest(request);
     if(request.action==='pet-animations')return {ok:true,animations:await petAssets.manifest()};
     if(request.action==='pet-animation')return {ok:true,animation:await petAssets.load(request.name)};
+    if(request.action==='home-task-avatar'){
+      const fs=require('node:fs/promises'),path=require('node:path');
+      const bytes=await fs.readFile(path.join(__dirname,'assets/doubao-work/working.webp'));
+      if(bytes.length>2*1024*1024)throw Error('工作形象素材过大');
+      assertCaller(event);return {ok:true,src:'data:image/webp;base64,'+bytes.toString('base64')};
+    }
     if (request.action === 'textures' || request.action === 'textures-retry') {
       if (request.action === 'textures-retry') textureProvider.clearCache();
       const result = await textureProvider.load();

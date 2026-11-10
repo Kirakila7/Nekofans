@@ -239,7 +239,7 @@ function communityBounds(host, bounds) {
 const LOAD_ERROR = '社区页面未能打开，请检查网络后重试';
 const CANCEL_ERROR = '社区已隐藏或工作台页面已离开';
 function createCommunityController({ WebContentsView, openExternal, copyText, env = process.env, site = 'community', youtubeAppId = YOUTUBE_APP_ID,
-  onState = () => {}, onHide = () => {}, onDispose = () => {}, onExternalError, adaptiveVideoViewport = false } = {}) {
+  onState = () => {}, onHide = () => {}, onDispose = () => {}, onExternalError, adaptiveVideoViewport = false, communityLoadTimeoutMs = 15000 } = {}) {
   if (!['community', 'bilibili', 'youtube'].includes(site)) throw new Error('未知内容入口');
   const isBilibili = site === 'bilibili';
   const isYoutube = site === 'youtube';
@@ -360,13 +360,13 @@ function createCommunityController({ WebContentsView, openExternal, copyText, en
   }
   function fail(record) {
     record.failed = true; record.loaded = false; record.backPending = false; detach(record);
-    state(record, 'error', LOAD_ERROR);
+    if (record.wanted) state(record, 'error', LOAD_ERROR);
   }
-  function create(host, bounds, requestId) {
+  function create(host, bounds, requestId, wanted = true) {
     const communityUrl = isYoutube ? YOUTUBE_SAMPLE_URL : isBilibili ? BILIBILI_URL : resolveCommunityUrl(env.NEKO_WORKBENCH_COMMUNITY_URL);
     const view = new WebContentsView({ webPreferences: {...communityWebPreferences(isYoutube ? YOUTUBE_PARTITION : isBilibili ? BILIBILI_PARTITION : COMMUNITY_PARTITION),...(!isYoutube&&!isBilibili?{preload:path.join(__dirname,'community-session-preload.cjs')}:adaptiveVideoViewport?{preload:path.join(__dirname,'video-gesture-preload.cjs')}:{})} });
     const record = { host, view, webContents: view.webContents, communityUrl, bounds, requestId,
-      epoch: 0, loadId: 0, loading: null, loaded: false, failed: false, wanted: true,
+      epoch: 0, loadId: 0, loading: null, loaded: false, failed: false, wanted,
       attached: false, popups: new Set(), responseCode: 0 };
     current = record;
     const contents = record.webContents;
@@ -423,7 +423,7 @@ function createCommunityController({ WebContentsView, openExternal, copyText, en
     if (record.loading) return record.loading;
     const id = ++record.loadId;
     record.failed = false; record.loaded = false; record.responseCode = 0;
-    state(record, 'loading');
+    if (record.wanted) state(record, 'loading');
     let cancelLoad;
     const canceled = new Promise(resolve => { cancelLoad = () => resolve(false); });
     record.cancelLoad = cancelLoad;
@@ -433,16 +433,34 @@ function createCommunityController({ WebContentsView, openExternal, copyText, en
       await record.webContents.loadURL(url, isYoutube ? { httpReferrer: youtubeIdentity } : undefined);
       return true;
     });
+    // The community's welcome and login UI can be used before slow media
+    // finish loading. Still wait for the main document, and bound the wait.
+    let documentReady, timeout;
+    const candidates = [navigation, canceled];
+    if (site === 'community') {
+      candidates.push(new Promise(resolve => {
+        documentReady = () => {
+          if (!record.failed && record.responseCode < 400 &&
+              classify(record.webContents.getURL(), record.communityUrl).kind === 'internal') resolve(true);
+        };
+        record.webContents.on('dom-ready', documentReady);
+        timeout = setTimeout(() => resolve(false), communityLoadTimeoutMs);
+      }));
+    }
     const loading = Promise.resolve().then(async () => {
       try {
-        if (!await Promise.race([navigation, canceled])) throw new Error(CANCEL_ERROR);
+        if (!await Promise.race(candidates)) throw new Error(CANCEL_ERROR);
         if (current !== record || record.webContents.isDestroyed() || id !== record.loadId) throw new Error(CANCEL_ERROR);
         if (record.failed || record.responseCode >= 400) throw new Error(LOAD_ERROR);
         record.loaded = true;
       } catch (error) {
         if (current !== record || id !== record.loadId) throw new Error(CANCEL_ERROR);
-        fail(record); throw new Error(LOAD_ERROR);
+        fail(record);
+        if (documentReady && !record.webContents.isDestroyed()) record.webContents.stop?.();
+        throw new Error(LOAD_ERROR);
       } finally {
+        clearTimeout(timeout);
+        if (documentReady) record.webContents.removeListener('dom-ready', documentReady);
         if (record.loading === loading) record.loading = null;
         if (record.cancelLoad === cancelLoad) record.cancelLoad = null;
       }
@@ -572,7 +590,16 @@ function createCommunityController({ WebContentsView, openExternal, copyText, en
     if (current !== record || !record.wanted || epoch !== record.epoch) throw new Error(CANCEL_ERROR);
     place(record); state(record, 'ready');
   }
-  return Object.freeze({ action, handoff, bindHost, dispose: () => unbind(true),
+  async function ensureSession(host){
+    if(isBilibili||isYoutube||host.isDestroyed()||host.webContents.isDestroyed())throw Error(CANCEL_ERROR);
+    bindHost(host);
+    const record=current||create(host,null,undefined,false);
+    if(!record.loaded)await load(record,record.communityUrl);
+    if(current!==record||record.webContents.isDestroyed()||
+       parseWebUrl(record.webContents.getURL())?.origin!==new URL(DEFAULT_COMMUNITY_URL).origin)throw Error(CANCEL_ERROR);
+    return record.webContents;
+  }
+  return Object.freeze({ action, handoff, bindHost, ensureSession, dispose: () => unbind(true),
     get isOpen() { return !!current?.wanted; }, get view() { return current?.view || null; } });
 }
 
@@ -581,9 +608,23 @@ function createCommunityController({ WebContentsView, openExternal, copyText, en
 // Calls without a slot keep the original single-active-view behaviour.
 function createSocialController(options = {}) {
   let accountState = {status:'unknown'};
+  let friendRequestId=0;
+  let friendRead=null;
+  let friendAvatars=null, friendAvatarLoader, avatarReads=0;
+  function finishFriends(result){
+    if(!friendRead)return;
+    const request=friendRead;friendRead=null;
+    clearTimeout(request.timeout);request.resolve(result);
+  }
   let loginWanted = false;
   let communityReady = false;
-  function accountChanged(value){accountState=value;try{options.onAccountState?.({...value});}catch{}}
+  function accountChanged(value){
+    if(friendAvatars&&(value.status!=='signed-in'||value.userId!==friendAvatars.owner)){
+      friendAvatars=null;friendAvatarLoader?.clear();
+    }
+    accountState=value;
+    try{options.onAccountState?.({...value});}catch{}
+  }
   function sendState(){const contents=controllers.community.view?.webContents;if(contents&&!contents.isDestroyed())contents.send('workbench:community-web-state');}
   function sendLogin(){const contents=controllers.community.view?.webContents;if(contents&&!contents.isDestroyed()){contents.send('workbench:community-web-login');loginWanted=false;}}
   const publish = options.onState || (() => {});
@@ -593,7 +634,7 @@ function createSocialController(options = {}) {
   const slotOf = site => [...slots].find(([, entry]) => entry.site === site)?.[0];
   const controllers = Object.fromEntries(['community', 'bilibili', 'youtube'].map(site => [site,
     createCommunityController({ ...options, site, onHide: site === 'community' ? options.onHide : undefined,
-      onDispose:site==='community'?()=>{communityReady=false;accountChanged({status:'unknown'});}:undefined,onState: (host, value) => {
+      onDispose:site==='community'?()=>{communityReady=false;finishFriends({status:'unavailable'});accountChanged({status:'unknown'});}:undefined,onState: (host, value) => {
       if(site==='community')communityReady=value.status==='ready';
       const slot = slotOf(site);
       publish(host, { ...value, site, ...(slot ? { slot } : {}) });
@@ -695,7 +736,66 @@ function createSocialController(options = {}) {
     }
     return controllers[active].action(host, request);
   }
-  return Object.freeze({ action,
+  async function readFriends(host){
+    try{
+      const contents=await controllers.community.ensureSession(host);
+      if(friendRead?.contents===contents)return friendRead.promise;
+      finishFriends({status:'unavailable'});
+      const id=++friendRequestId;
+      let resolve;
+      const promise=new Promise(done=>{resolve=done;});
+      friendRead={id,contents,promise,resolve,timeout:setTimeout(()=>finishFriends({status:'unavailable'}),14000)};
+      try{contents.send('workbench:community-web-friends',id);}catch{finishFriends({status:'unavailable'});}
+      return promise;
+    }catch{return {status:'unavailable'};}
+  }
+  function acceptFriends(event,value){
+    const request=friendRead;
+    if(!request||value?.id!==request.id||event.sender!==request.contents||
+       event.senderFrame!==request.contents.mainFrame||
+       parseWebUrl(event.senderFrame?.url)?.origin!==new URL(DEFAULT_COMMUNITY_URL).origin||
+       parseWebUrl(request.contents.getURL())?.origin!==new URL(DEFAULT_COMMUNITY_URL).origin)return false;
+    const {status}=value;
+    if(['unavailable','sign-in-required','account-changed','permission-denied'].includes(status)){
+      friendAvatars=null;friendAvatarLoader?.clear();
+      finishFriends({status});return true;
+    }
+    if(status!=='ready'||typeof value.userId!=='string'||!Array.isArray(value.friends)||value.friends.length>10000)return false;
+    if(accountState.status==='signed-in'&&accountState.userId!==value.userId){
+      finishFriends({status:'account-changed'});return true;
+    }
+    const {allowedAvatarUrl,hashHue}=require('./lobby-avatars.cjs');
+    const origin=new URL(DEFAULT_COMMUNITY_URL).origin, urls=new Map(), friends=[];
+    for(const friend of value.friends){
+      if(typeof friend?.id!=='string'||!(/^[0-9a-f-]{36}$/i.test(friend.id))||typeof friend.displayName!=='string'||!friend.displayName.trim())continue;
+      const {id}=friend,displayName=friend.displayName.trim().slice(0,100);
+      let url=null;
+      if(typeof friend.avatar==='string'&&friend.avatar.length<=1024){
+        try{
+          const raw=new URL(friend.avatar,origin);
+          if(!raw.search&&!raw.hash)url=allowedAvatarUrl(raw.href,origin);
+        }catch{/* A malformed or missing avatar uses the monogram. */}
+      }
+      if(url)urls.set(id,{url,displayName});
+      const rawHue=/^hue:(\d{1,3})$/.exec(typeof friend.avatar==='string'?friend.avatar:'');
+      const hue=rawHue&&Number(rawHue[1])<=360?Number(rawHue[1])%360:hashHue(id);
+      friends.push({id,displayName,online:friend.online===true,hue,hasAvatar:!!url});
+    }
+    if(friendAvatars&&friendAvatars.owner!==value.userId)friendAvatarLoader?.clear();
+    friendAvatars={owner:value.userId,urls};
+    finishFriends({status:'ready',friends});return true;
+  }
+  async function readFriendAvatar(id){
+    const snapshot=friendAvatars,friend=snapshot?.urls.get(id);
+    if(!friend||avatarReads>=16||accountState.status==='signed-out')return null;
+    friendAvatarLoader??=require('./lobby-avatars.cjs').createLobbyAvatars({fetchImpl:options.fetchImpl});
+    avatarReads++;
+    try{
+      const result=await friendAvatarLoader.resolve({kind:'image',url:friend.url},{seed:id,name:friend.displayName});
+      return snapshot===friendAvatars&&result.kind==='image'?result.url:null;
+    }finally{avatarReads--;}
+  }
+  return Object.freeze({ action, readFriends, readFriendAvatar, acceptFriends,
     get accountState(){return {...accountState};},
     acceptAccountState(event,value){
       const contents=controllers.community.view?.webContents;

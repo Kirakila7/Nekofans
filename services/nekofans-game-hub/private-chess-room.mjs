@@ -1,4 +1,4 @@
-import { compilePrivateRule, permitsPrivateMove, inspectPrivateTurn } from './private-chess-compiler.mjs';
+import { compilePrivateRule, parseRuleProposal, permitsPrivateMove, inspectPrivateTurn } from './private-chess-compiler.mjs';
 
 // Construct only inside the trusted authoritative game process. Player
 // endpoints must authenticate seats before calling this object. Its closures
@@ -10,12 +10,19 @@ export function createPrivateChessRoom({ provider } = {}) {
     if (![0,1].includes(seat)) throw new TypeError('invalid seat');
     return { ownStatus:entries[seat].status, opponentReady:entries[1-seat].status === 'ready', rulesActive:locked };
   };
-  async function submit({ seat, rule, signal } = {}) {
+  async function submit({ seat, rule, preset, signal } = {}) {
     if (![0,1].includes(seat)) return {status:'invalid'};
     if (locked || entries[seat].status === 'ready') return {status:'already-submitted'};
     if (entries[seat].status === 'processing') return {status:'busy'};
+    if (preset !== undefined) {
+      if (rule !== undefined || !preset || Object.keys(preset).sort().join(',') !== 'choice,turns') return {status:'invalid'};
+      const effect = parseRuleProposal(JSON.stringify({kind:'opponent-piece-ban',piece:preset.choice,turns:preset.turns}));
+      if (!effect) return {status:'invalid'};
+      entries[seat] = {status:'ready',effect};
+      return {status:'ready'};
+    }
     entries[seat].status='processing';
-    const result=await compilePrivateRule({provider,rule,signal});
+    const result=await compilePrivateRule({provider,rule,signal,timeoutMs:50000});
     if (result.status === 'compiled') {entries[seat]={status:'ready',effect:result.effect}; return {status:'ready'};}
     entries[seat]={status:'empty',effect:null};
     return {status:result.status};

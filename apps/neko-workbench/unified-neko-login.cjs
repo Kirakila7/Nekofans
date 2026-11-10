@@ -43,7 +43,7 @@ function createUnifiedNekoLogin({getCommunity,getLobby,requestCommunityLogin,can
   }catch{finish(operation,'partial',TEXT.failed,TEXT.failed);}
  }
  function begin(request={}){
-  if(!request||typeof request!=='object'||Array.isArray(request)||Object.keys(request).some(key=>!['source','reauthorize'].includes(key))||request.source!==undefined&&!['lobby','account'].includes(request.source)||request.reauthorize!==undefined&&typeof request.reauthorize!=='boolean')throw Error('N.E.K.O. 登录来源无效');
+  if(!request||typeof request!=='object'||Array.isArray(request)||Object.keys(request).some(key=>!['source','reauthorize'].includes(key))||request.source!==undefined&&!['lobby','account','friends'].includes(request.source)||request.reauthorize!==undefined&&typeof request.reauthorize!=='boolean')throw Error('N.E.K.O. 登录来源无效');
   if(disposed)return {ok:false,state:snapshot()};if(current)return {ok:true,state:snapshot()};
   const operation={id:++serial,source:request.source||'account',reauthorize:request.reauthorize===true,phase:'community',running:false,communityId:null,timer:null};current=operation;
   operation.timer=timers.setTimeout(()=>{if(alive(operation))cancel(TEXT.timeout,'error');},timeoutMs);operation.timer?.unref?.();

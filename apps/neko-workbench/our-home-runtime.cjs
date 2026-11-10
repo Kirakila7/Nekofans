@@ -22,15 +22,7 @@ function createOurHomeRuntime({workspaceDir,getStorage,onError=()=>{},intervalMs
   // an unmatched receipt for an unrelated future scene that happens to match.
   for(const [key,receipt]of observed)if(pending.get(key)===receipt)pending.delete(key);
  }catch(e){error=e.code==='ENOENT'?'':e.message||'小窝场景未能更新';if(error)onError(error);}}
- function acceptBuild(receipt){try{if(!receipt||!(/^[a-f0-9]{64}$/.test(receipt.key))||!(/^[a-f0-9]{64}$/.test(receipt.beforeHash))||receipt.beforeHash===receipt.afterHash||sceneFingerprint(validateHomeItems(receipt.items))!==receipt.afterHash||!(receipt.tokens===null||Number.isSafeInteger(receipt.tokens)&&receipt.tokens>=0))return Promise.resolve();
-    // Keep each write in the scene chain. Storage counts each model call once.
-    const transition = `${receipt.key}:${receipt.beforeHash}:${receipt.afterHash}`;
-    pending.set(transition, receipt);
-    return refresh();
-  } catch {
-    return Promise.resolve();
-  }
- }
+ function acceptBuild(receipt){try{if(!receipt||!(/^[a-f0-9]{64}$/.test(receipt.key))||!(/^[a-f0-9]{64}$/.test(receipt.beforeHash))||receipt.beforeHash===receipt.afterHash||sceneFingerprint(validateHomeItems(receipt.items))!==receipt.afterHash||!(receipt.tokens===null||Number.isSafeInteger(receipt.tokens)&&receipt.tokens>=0))return Promise.resolve();pending.set(receipt.key,receipt);return refresh();}catch{return Promise.resolve();}}
  async function start(){const storage=await getStorage();snapshot=storage.state();unsubscribe=storage.subscribe(value=>snapshot=value);await fs.mkdir(directory,{recursive:true});const dir=await fs.lstat(directory);if(!dir.isDirectory()||dir.isSymbolicLink())throw Error('小窝共建目录不能是链接');
   try{await fs.writeFile(file,JSON.stringify({version:1,items:snapshot.items||[]},null,2)+'\n',{flag:'wx'});}catch(e){if(e.code!=='EEXIST')throw e;}
   const accounting='\n<!-- neko-home-build-accounting-v1 -->\n修改 scene.json 时使用原生 write 或 edit 工具，便于工作台以真实修改结果和模型 usage 记录建造 Token。不要用 bash、脚本或 str_replace_editor 改写场景。普通讨论、查看文件和手动布置不计入价值；不要自行编造或修改累计值。\n';

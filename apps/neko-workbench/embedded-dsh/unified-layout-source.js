@@ -14,6 +14,7 @@ function installUnifiedLayout(options = {}) {
   // Keep the legacy multi-pane engine for compatibility, but do not expose it
   // in the daily UI while the compact floating work area is in use.
   const allowLegacyMultiPane = options.allowLegacyMultiPane === true;
+  const socialFloatingOnly = options.socialFloatingOnly === true;
   const SLOT_NAMES = { side: '侧栏', left: '左面板', right: '右面板' };
   const MIN_RATIO = 0.25, MAX_RATIO = 0.75;
   const clampRatio = value => Math.max(MIN_RATIO, Math.min(MAX_RATIO, Number.isFinite(value) ? value : 0.5));
@@ -140,7 +141,7 @@ function installUnifiedLayout(options = {}) {
     if (disposed || fixedScene || isOfficeEdition()) return;
     if (doc.body.hasAttribute('data-neko-daily-compact') && typeof bridge.videoWindow === 'function') { void openSideSurface(videoSite); return; }
     closeSideSurface();
-    doc.dispatchEvent(new win.Event('neko-workspace-expand'));
+    if (!socialFloatingOnly) doc.dispatchEvent(new win.Event('neko-workspace-expand'));
     activateFlexRoom();
     ++revision;
     ++videoSelectionRevision;
@@ -550,7 +551,7 @@ function installUnifiedLayout(options = {}) {
     for (const key of ['--neko-flex-compact-right','--neko-flex-compact-width','--neko-flex-compact-bottom']) doc.body.style.removeProperty(key);
   }
   function expandFlexWorkspace() {
-    if (doc.body.hasAttribute('data-neko-daily-compact')) return;
+    if (socialFloatingOnly || doc.body.hasAttribute('data-neko-daily-compact')) return;
     if (!flexCompact) return;
     if (fixedScene) { exitFixedScene(); doc.dispatchEvent(new win.Event('neko-chatroom-show-workspace')); return; }
     clearFlexCompact(); schedule();
@@ -558,7 +559,7 @@ function installUnifiedLayout(options = {}) {
   doc.addEventListener('neko-workspace-expand', expandFlexWorkspace);
   const flexTabs=el('nav','neko-flex-tabs'); flexTabs.hidden=true; flexTabs.setAttribute('aria-label','窗口较小时切换区域');
   const flexTabButtons={};
-  for (const [name,label] of [['social','聊天室'],['bilibili','B站'],['coding','工作区']]) { const b=button(label,'',()=>{flexActive=name;schedule();}); b.setAttribute('aria-label','显示'+label); flexTabButtons[name]=b; flexTabs.appendChild(b); }
+  for (const [name,label] of [['social','聊天室'],['bilibili','B站'],['coding','工作区']]) { const b=button(label,'',()=>{if (socialFloatingOnly && name === 'coding') return; flexActive=name;schedule();}); b.setAttribute('aria-label','显示'+label); if (socialFloatingOnly && name === 'coding') b.hidden=true; flexTabButtons[name]=b; flexTabs.appendChild(b); }
   doc.body.appendChild(flexTabs);
   const flexHandles = {}, flexDrops = {};
   for (const [name,label] of [['social','聊天室'],['bilibili','B站视频'],['coding','工作区']]) {
@@ -622,6 +623,7 @@ function installUnifiedLayout(options = {}) {
     const full={x:frameRect.left,y:frameRect.top,width:frameRect.width,height:frameRect.height};
     if (full.width<=0 || full.height<=0) { clearFlex(); return; }
     const flex=layout.flex;
+    if (socialFloatingOnly) { flex.slots = ['social','bilibili','coding']; flexCompact = true; if (flexActive === 'coding') flexActive = 'social'; }
     // Compact mode is meaningful only for the right-hand B站/workspace pair.
     // Leaving this arrangement restores the original panes and their state.
     if (flexCompact && !(flex.slots[0] === 'social' && flex.slots[1] === 'bilibili' && flex.slots[2] === 'coding')) clearFlexCompact();
@@ -634,7 +636,7 @@ function installUnifiedLayout(options = {}) {
     const combine=(a,b,axis)=>axis==='x'?{width:a.width+b.width,height:Math.max(a.height,b.height)}:{width:Math.max(a.width,b.width),height:a.height+b.height};
     const stackMin=combine(secondMin,thirdMin,flex.stackAxis), totalMin=combine(firstMin,stackMin,flex.rootAxis);
     if (full.width < totalMin.width || full.height < totalMin.height) {
-      if (!fixedScene) clearFlexCompact();
+      if (!fixedScene && !socialFloatingOnly) clearFlexCompact();
       // No positive split can keep all regions usable. Present one full-sized
       // region with explicit tabs; keep the saved arrangement and ratios intact.
       flexRects=null; divider.hidden=flexDivider.hidden=true; mobile.hidden=true; flexTabs.hidden=false;
@@ -644,7 +646,7 @@ function installUnifiedLayout(options = {}) {
       for (const id of Object.keys(flexNativeKeys)) if (typeof bridge.divider==='function') void Promise.resolve(bridge.divider({action:'remove',id})).catch(()=>{});
       flexNativeKeys={};
       const single={...full,y:full.y+36,height:Math.max(0,full.height-36)};
-      if (fixedScene && flexCompact) {
+      if ((fixedScene || socialFloatingOnly) && flexCompact) {
         for (const [key,value] of Object.entries({'--neko-flex-compact-right':'16px','--neko-flex-compact-width':`${Math.max(0, Math.min(480, Math.floor(full.width - 32)))}px`,'--neko-flex-compact-bottom':'16px'})) if (doc.body.style.getPropertyValue(key) !== value) doc.body.style.setProperty(key,value);
         if (!doc.body.hasAttribute('data-neko-flex-workspace-collapsed')) doc.body.setAttribute('data-neko-flex-workspace-collapsed','');
       }
@@ -990,7 +992,12 @@ function installUnifiedLayout(options = {}) {
     observe(); schedule();
   }).catch(() => { if (!disposed) showNotice('布局暂不可用，请更新工作台后重试'); });
   renderConfig();
+  if (options.presentationState?.unified?.fixedScene) {
+    options.presentationState.unified.fixedScene = false;
+    openFixedScene();
+  }
   return () => {
+    if (options.presentationState) options.presentationState.unified = { fixedScene };
     exitFixedScene();
     closeSideSurface();
     disposed = true; revision++; hideAll(); clearCoding(); postNativeDivider(null); if (typeof unsubscribeNativeDivider === 'function') unsubscribeNativeDivider(); doc.body.removeAttribute('data-neko-unified-enabled');

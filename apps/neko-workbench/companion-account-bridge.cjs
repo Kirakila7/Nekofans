@@ -7,7 +7,7 @@ function createCompanionAccountBridge({ctx, route, createUserMessage, createAssi
   if (route?.provider!=='deepseek-account' || route?.model!=='deepseek-flash' || typeof createUserMessage!=='function' || typeof createAssistantMessage!=='function') throw Error('陪伴聊天账号路线无效。');
   if (!['companion','lobby','proactive','memory',...gameNamespaces].includes(namespace)) throw Error('聊天账号用途无效。');
   // "game-player-" is a separate channel, not a request ID in "game-".
-  const validId=new RegExp('^'+namespace+'-'+(namespace==='game'?'(?!player-)':'')+'[a-zA-Z0-9_-]{1,100}$');
+  const validId=new RegExp('^'+namespace+'-'+(namespace==='game'?'(?!(?:player|studio)-)':'')+'[a-zA-Z0-9_-]{1,100}$');
   let active=null, disposed=false, cleanupFailed=false, pendingCleanup=0;
   const seen=new Set();
   const cleanupError=()=>Error('陪伴聊天请求清理未确认，请重启工作台后检查。');

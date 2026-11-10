@@ -37,5 +37,6 @@ if(!accountPattern.test(code)) throw new Error('Missing account habitat CSS cons
 code=code.replace(accountPattern,()=> 'const ACCOUNT_HABITAT_CSS = '+JSON.stringify(accountCss)+';');
 code=code.replace(/mountHome: stage => mountYuiHome\(stage, \{ avatar: builtinSrc(?:, posterSrc: ACCOUNT_PET_ART.still)? \}\)/g,'mountHome: stage => mountYuiHome(stage, { avatar: builtinSrc, posterSrc: ACCOUNT_PET_ART.still })');
 code=code.replace(/nativeComposerBindings: \{ getSelection: \(\) => ctx\.uiWorkspace\?\.selection\?\.getSnapshot\?\.\(\), getMainSessionId: \(\) => ctx\.uiWorkspace\?\.mainReference\?\.sessionId, getBinding: id => ctx\.uiWorkspace\?\.sessions\?\.binding\?\.\(id\), getShell: \(_binding, id\) => ctx\.get\?\.\('conversation'\)\?\.input\?\.shell\?\.\(id\), subscribeSelection: callback => ctx\.uiWorkspace\?\.selection\?\.subscribe\?\.\(callback\) \}/g,'nativeComposerBindings: createNativeComposerDshBindings(ctx)');
+// Preserve all five selected characters.
 const output=patchVisibleAvatarUi(code);
 fs.writeFileSync(file,originalCode.includes('\r\n')?output.replace(/\n/g,'\r\n'):output);

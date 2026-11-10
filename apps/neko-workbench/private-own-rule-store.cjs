@@ -9,7 +9,7 @@ function createOwnRuleStore({getOwnSeatSession,submitRule,timeoutMs=30000}={}) {
  function current(){const s=getOwnSeatSession();return s&&[0,1].includes(s.seat)&&typeof s.roomId==='string'?s:null}
  const key=s=>(s.origin||'')+':'+s.roomId+':'+s.seat;
  function view(){const s=current();return {status:!s?'not-paired':records.has(s)?'ready':uncertainSeats.has(key(s))?'reconciliation-required':pending?'processing':'empty'};}
- async function submit({text,signal}={}){
+ async function submit({text,preset,signal}={}){
   const session=current();
   if(!session)return {status:'not-paired'};
   if(records.has(session))return {status:'already-submitted'};
@@ -24,7 +24,7 @@ function createOwnRuleStore({getOwnSeatSession,submitRule,timeoutMs=30000}={}) {
     try{result=await new Promise((resolve,reject)=>{
       const abort=()=>reject(Error('cancelled'));if(controller.signal.aborted)return abort();
       controller.signal.addEventListener('abort',abort,{once:true});
-      Promise.resolve().then(()=>submitRule({session,rule,signal:controller.signal})).then(resolve,reject).finally(()=>controller.signal.removeEventListener('abort',abort));
+      Promise.resolve().then(()=>submitRule({session,rule,preset,signal:controller.signal})).then(resolve,reject).finally(()=>controller.signal.removeEventListener('abort',abort));
     });}catch{uncertainSeats.add(key(session));return {status:'submission-unknown'};}
     if(current()!==session||controller.signal.aborted){uncertainSeats.add(key(session));return {status:'submission-unknown'};}
     if(result?.status==='ready'){records.set(session,rule);return {status:'ready'};}

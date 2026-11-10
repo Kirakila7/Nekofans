@@ -52,6 +52,7 @@ function installWorkbenchSideRail(options = {}) {
   // Office and social layouts have separate remembered widths. Office always
   // keeps both the project list and work area visible.
   let gridMode = null, officeRatio = null, socialRatio = 1;
+  const socialFloatingOnly = options.socialFloatingOnly === true;
   let nativeDividerKey = '';
   function postNativeDivider(rect) {
     if (typeof bridge.divider !== 'function') return;
@@ -133,6 +134,7 @@ function installWorkbenchSideRail(options = {}) {
   }
   function setChatRatio(next) {
     if (!Number.isFinite(next)) return;
+    if (socialFloatingOnly && gridMode === 'social') next = 1;
     // A small snap area at the edge lets a pointer reach the collapsed state
     // without requiring a pixel-perfect drag to the window boundary.
     if (gridMode === 'social' && lastChatGeometry && next >= 1 - Math.min(24 / lastChatGeometry.width, .06)) next = 1;
@@ -158,6 +160,7 @@ function installWorkbenchSideRail(options = {}) {
       const nativeWidth = /^\s*(\d+(?:\.\d+)?)px(?:\s|$)/.exec(rawColumns);
       preferredRatio = mode === 'office' ? (officeRatio ?? (nativeWidth ? Number(nativeWidth[1]) / geometry.width : .32)) : socialRatio;
     }
+    if (socialFloatingOnly && mode === 'social') preferredRatio = socialRatio = 1;
     const dividerLabel = mode === 'office' ? '调整项目列表和工作区宽度' : '调整左侧内容和工作区宽度';
     if (chatDivider.getAttribute('aria-label') !== dividerLabel) chatDivider.setAttribute('aria-label', dividerLabel);
     chatDivider.title = mode === 'office' ? '拖动调整宽度 · 双击恢复默认 · 方向键调整' : '拖动调整宽度 · 双击恢复 3:1 · 方向键调整';
@@ -179,8 +182,8 @@ function installWorkbenchSideRail(options = {}) {
     // can otherwise cover the half protruding into the neighboring region.
     for (const [key, value] of Object.entries({ left: `${Math.round(geometry.bounds.left + width - 12)}px`, top:`${Math.round(geometry.bounds.top)}px`, height:`${Math.round(geometry.bounds.height)}px` }))
       if (chatDivider.style[key] !== value) chatDivider.style[key] = value;
-    chatDivider.hidden = dailyCompact;
-    postNativeDivider(dailyCompact ? null : {x:Math.round(geometry.bounds.left + width - 12),y:Math.round(geometry.bounds.top),width:12,height:Math.round(geometry.bounds.height)});
+    chatDivider.hidden = dailyCompact || (socialFloatingOnly && mode === 'social');
+    postNativeDivider(chatDivider.hidden ? null : {x:Math.round(geometry.bounds.left + width - 12),y:Math.round(geometry.bounds.top),width:12,height:Math.round(geometry.bounds.height)});
     chatDivider.setAttribute('aria-valuemin', String(Math.round(geometry.min / geometry.width * 100)));
     chatDivider.setAttribute('aria-valuemax', String(Math.round(geometry.max / geometry.width * 100)));
     chatDivider.setAttribute('aria-valuenow', String(Math.round(width / geometry.width * 100)));
@@ -306,10 +309,10 @@ function installWorkbenchSideRail(options = {}) {
     event.preventDefault(); setChatRatio(next);
   };
   const onChatReset = () => setChatRatio(gridMode === 'office' ? .32 : .75);
-  const onWorkspaceExpand = () => { if (!doc.body.hasAttribute('data-neko-daily-compact') && doc.body.hasAttribute('data-neko-workspace-collapsed')) setChatRatio(restoreRatio < 1 ? restoreRatio : .75); };
+  const onWorkspaceExpand = () => { if (!(socialFloatingOnly && gridMode === 'social') && !doc.body.hasAttribute('data-neko-daily-compact') && doc.body.hasAttribute('data-neko-workspace-collapsed')) setChatRatio(restoreRatio < 1 ? restoreRatio : .75); };
   doc.addEventListener('neko-workspace-expand', onWorkspaceExpand);
   const unsubscribeNativeDivider = typeof bridge.subscribeDivider === 'function' ? bridge.subscribeDivider(event => {
-    if (event?.id !== 'chat' || !lastChatGeometry) return;
+    if (event?.id !== 'chat' || !lastChatGeometry || socialFloatingOnly && gridMode === 'social') return;
     if (event.type === 'start') { if (!chatDrag) { if (preferredRatio < 1) restoreRatio = preferredRatio; chatDrag = {id:'native',started:preferredRatio}; chatDivider.dataset.dragging='true'; } }
     else if (event.type === 'move' && chatDrag?.id === 'native' && Number.isFinite(event.x)) {
       const {bounds,width,min,max}=lastChatGeometry; setChatRatio(Math.max(min,Math.min(max,event.x-bounds.left))/width);

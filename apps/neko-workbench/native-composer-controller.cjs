@@ -13,17 +13,21 @@ function createNativeComposerController({ WebContentsView, BrowserWindow, screen
   const positions = new Map();
   let host = null, view = null, rect = null, enabled = false, attached = false, ready = false, pendingSubmit = null, pendingEdit = null, pendingModel = null, pendingProject = null;
   let menuLayer = null, nativeDismissed = false, deferredMenuShow = false;
-  let state = { value: '', placeholder: '创造台未连接', enabled: false, busy: false, sessionToken: '', revision: 0 };
+  let safetySequence = 0, safetyUnavailable = false;
+  const safetyPending = new Map();
+  let state = { value: '', placeholder: '创造台未连接', enabled: false, busy: false, sessionToken: '', revision: 0, chatOnly: true };
   let pendingQuestion=null;
   const listeners = [];
   function unlisten() { for (const [obj, event, fn] of listeners.splice(0)) obj.removeListener(event, fn); }
   function detach() { nativeMoving=false;deferredMenuShow=false; if (desktop) { if (view && !view.isDestroyed()) view.hide(); } else if (attached && host && !host.isDestroyed()) host.contentView.removeChildView(view); attached = false; }
   function close() {
+    for (const {timer, resolve} of safetyPending.values()) { clearTimeout(timer); resolve({safe:false}); }
+    safetyPending.clear(); safetyUnavailable = false;
     pendingQuestion=null;
     menuLayer?.dispose(); menuLayer=null;
     detach();
     if (view && !view.webContents.isDestroyed()) { if (desktop) view.destroy(); else view.webContents.close({ waitForBeforeUnload: false }); }
-    view = null; ready = false; rect = null; enabled = false; pendingSubmit = null; pendingEdit = null; pendingModel=null; pendingProject=null; state = { value: '', placeholder: '创造台未连接', enabled: false, busy: false, sessionToken: '', revision: 0 };
+    view = null; ready = false; rect = null; enabled = false; pendingSubmit = null; pendingEdit = null; pendingModel=null; pendingProject=null; state = { value: '', placeholder: '创造台未连接', enabled: false, busy: false, sessionToken: '', revision: 0, chatOnly: true };
     unlisten(); host = null; moved = false; nativeMoving = false; nativeDismissed = false; relativePosition = null; lastHostOrigin = null; lastApplied = null; positionKey = 'default'; positions.clear();
   }
   function wantsDesktopVisible() { return !!(desktop&&host&&!host.isDestroyed()&&view&&!view.isDestroyed()&&enabled&&ready&&rect&&!nativeDismissed&&host.isVisible?.()!==false&&host.isMinimized?.()!==true); }
@@ -91,6 +95,9 @@ function createNativeComposerController({ WebContentsView, BrowserWindow, screen
   }
   function unavailable(child) {
     if (view !== child) return;
+    safetyUnavailable = true;
+    for (const {timer, resolve} of safetyPending.values()) { clearTimeout(timer); resolve({safe:false}); }
+    safetyPending.clear();
     detach(); view = null; ready = false;
     if (rect && host && !host.isDestroyed() && !host.webContents.isDestroyed()) host.webContents.send('workbench:native-composer-event', { type: 'unavailable' });
     if (!child.webContents.isDestroyed()) { if (desktop) child.destroy(); else child.webContents.close({ waitForBeforeUnload: false }); }
@@ -132,7 +139,7 @@ function createNativeComposerController({ WebContentsView, BrowserWindow, screen
     child.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     child.webContents.on('will-navigate', event => event.preventDefault());
     child.webContents.on('render-process-gone', () => unavailable(child));
-    void child.webContents.loadFile(path.join(baseDir, 'native-composer.html')).then(() => { if (view !== child) return; ready = true; refresh(); }).catch(() => unavailable(child));
+    void child.webContents.loadFile(path.join(baseDir, 'native-composer.html')).then(() => { if (view !== child) return; ready = true; safetyUnavailable = false; refresh(); }).catch(() => unavailable(child));
   }
   function place(window, request) {
     if (!request || !['place', 'remove'].includes(request.action)) throw Error('无效悬浮输入操作');
@@ -180,7 +187,15 @@ function createNativeComposerController({ WebContentsView, BrowserWindow, screen
     publish(); return { ok: true };
   }
   function input(event, message) {
-    if (!host || host.isDestroyed() || !view || !ready || !attached || !enabled || event.sender !== view.webContents || event.senderFrame !== view.webContents.mainFrame || !message || !['move', 'edit', 'submit', 'expand', 'files', 'records-toggle', 'records-resize', 'records-refresh', 'records-more', 'record-open','model-toggle','model-refresh','model-select','project-toggle','project-refresh','project-select','details-toggle','details-resize','question-action','question-visibility'].includes(message.type)) return;
+    if (!host || host.isDestroyed() || !view || !ready || event.sender !== view.webContents || event.senderFrame !== view.webContents.mainFrame || !message) return;
+    // The child may be detached by an open settings modal; only its trusted
+    // top frame may answer a pending, one-use safety challenge.
+    if (message.type === 'safety-result') {
+      const pending=safetyPending.get(message.id);
+      if (!pending || typeof message.safe !== 'boolean') return;
+      safetyPending.delete(message.id); clearTimeout(pending.timer); pending.resolve({safe:message.safe}); return;
+    }
+    if (!attached || !enabled || !['move', 'edit', 'submit', 'expand', 'files', 'records-toggle', 'records-resize', 'records-refresh', 'records-more', 'record-open','model-toggle','model-refresh','model-select','project-toggle','project-refresh','project-select','details-toggle','details-resize','question-action','question-visibility'].includes(message.type)) return;
     if(message.type==='question-visibility'){const q=state.question;if(typeof message.open==='boolean'&&(q?message.sessionId===q.sessionId&&message.key===q.key&&message.revision===q.revision:message.open===false))host.webContents.send('workbench:native-composer-event',{type:message.type,open:message.open,...(q?{sessionId:q.sessionId,key:q.key,revision:q.revision}:{})});return;}
     if(message.type==='question-action'){
       const q=state.question,type=message.questionAction;
@@ -250,7 +265,7 @@ function createNativeComposerController({ WebContentsView, BrowserWindow, screen
       if (invalid) {
         // Never strand the user's draft when a session/revision changes before
         // a send reaches us. An in-flight send cannot be acknowledged here.
-        if (message.type === 'edit' && pendingEdit === null && Number.isSafeInteger(message.editId) && message.editId > 0) view.webContents.send('neko-composer-state', { ...state, settledEditId: message.editId, editConflict: true, status: '原工作区草稿已变化，请展开工作区处理' });
+        if (message.type === 'edit' && pendingEdit === null && Number.isSafeInteger(message.editId) && message.editId > 0) view.webContents.send('neko-composer-state', { ...state, settledEditId: message.editId, editConflict: true, status: state.chatOnly ? '原工作区草稿已变化，请切换办公版处理' : '原工作区草稿已变化，请展开工作区处理' });
         if (message.type === 'submit' && pendingSubmit === null && Number.isSafeInteger(message.submissionId) && message.submissionId > 0) view.webContents.send('neko-composer-state', { ...state, settledSubmitId: message.submissionId, status: '当前会话已变化，请检查后重试' });
         return;
       }
@@ -259,7 +274,18 @@ function createNativeComposerController({ WebContentsView, BrowserWindow, screen
     if (message.type === 'edit') pendingEdit = message.editId;
     if (!host.webContents.isDestroyed()) host.webContents.send('workbench:native-composer-event', message.type === 'expand' ? { type: 'expand' } : { type: message.type, value: message.value, sessionToken: state.sessionToken, revision: state.revision, ...(message.type === 'submit' ? {submissionId:message.submissionId} : {editId:message.editId}) });
   }
+  function checkSafety() {
+    if (!view) return Promise.resolve({safe:!safetyUnavailable});
+    if (!ready || view.webContents.isDestroyed()) return Promise.resolve({safe:false});
+    const id=++safetySequence;
+    return new Promise(resolve => {
+      const timer=setTimeout(() => { safetyPending.delete(id); resolve({safe:false}); }, 1500);
+      safetyPending.set(id,{timer,resolve});
+      try { view.webContents.send('neko-composer-safety-check',id); }
+      catch { clearTimeout(timer); safetyPending.delete(id); resolve({safe:false}); }
+    });
+  }
   ipcMain.on('neko-composer-input', input);
-  return Object.freeze({ bind, place, update, setAccountMenuRect(value) { menuLayer?.setMenuRect(value); refresh(); return {ok:true}; }, setEnabled(value) { enabled = value === true; refresh(); }, raise() { if (attached&&!menuLayer?.isBlocked()) { if (desktop) view.moveTop?.(); else host.contentView.addChildView(view) } }, dispose() { close(); ipcMain.removeListener('neko-composer-input', input); } });
+  return Object.freeze({ bind, place, update, checkSafety, setAccountMenuRect(value) { menuLayer?.setMenuRect(value); refresh(); return {ok:true}; }, setEnabled(value) { enabled = value === true; refresh(); }, raise() { if (attached&&!menuLayer?.isBlocked()) { if (desktop) view.moveTop?.(); else { detach(); refresh(); } } }, dispose() { close(); ipcMain.removeListener('neko-composer-input', input); } });
 }
 module.exports = { createNativeComposerController };

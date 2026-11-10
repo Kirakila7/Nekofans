@@ -21,7 +21,7 @@ export function createExecutorVerifier({publicKey,now=Date.now}={}) {
 
 // A single private job goes only to the authenticated executor. Both raw rule
 // and validated effect stay out of all player-visible views and server logs.
-export function createPrivateRuleRelay({timeoutMs=24000,maxJobs=12}={}) {
+export function createPrivateRuleRelay({timeoutMs=45000,maxJobs=12}={}) {
   const jobs=new Map();let executorAt=0,closed=false;
   function heartbeat(){executorAt=Date.now();}
   function online(){return !closed&&executorAt>0&&Date.now()-executorAt<15000;}
@@ -45,7 +45,7 @@ export function createPrivateRuleRelay({timeoutMs=24000,maxJobs=12}={}) {
     job.done(result);return true;
   }
   function close(){closed=true;for(const job of jobs.values())job.done({status:'unavailable'});}
-  return Object.freeze({submit,next,settle,online,close});
+  return Object.freeze({submit,next,settle,heartbeat,online,close});
 }
 
 // Adapter into the existing strictly validated private compiler. The AI worker
@@ -53,7 +53,7 @@ export function createPrivateRuleRelay({timeoutMs=24000,maxJobs=12}={}) {
 export function createRelayProvider(relay){
   return {async *stream(input){
     let value;try{value=JSON.parse(input.messages?.[0]?.text||'');}catch{return;}
-    const result=await relay.submit(value.rule,{signal:input.signal});
+      const result=await relay.submit(value.rule,{signal:input.signal});
     if(result.status==='compiled')yield {type:'delta',text:JSON.stringify(result.effect)};
     else if(result.status==='unsupported')yield {type:'delta',text:'{"kind":"unsupported"}'};
     else return;

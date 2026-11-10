@@ -9,8 +9,26 @@ function safeGamePairError(error) {
 
 // This adapter must be called by the trusted main process, never by generated
 // game code. Calling share is an explicit user action; suggestion is private.
-function createGameHubBridge({ getProvider, lobbyController }) {
+function createGameHubBridge({ getProvider, lobbyController, privateGame, privateGameOrigin, gameCatalog }) {
+  const prepareInvitation = () => lobbyController?.prepareGameInvitation?.() || (async () => ({status:'not-sent'}));
+  async function publishInvite(send, roomUrl, gameId) {
+    const { inviteUrl } = privateGameOrigin.parsePrivateRoomInvite(roomUrl);
+    const { invitationText } = await import('./game-assistant.mjs');
+    const text = invitationText(gameCatalog?.gameInfo(gameId)?.title || '双人国际象棋', inviteUrl);
+    let status;
+    try { ({status} = await send(text)); } catch { status='delivery-unknown'; }
+    return {ok:status==='shared',status,inviteUrl};
+  }
   return {
+    async createAndSharePrivate({ url, gameId }) {
+      const send = prepareInvitation();
+      const room = await privateGame().create({url:url || privateGameOrigin.GAME_ORIGIN,gameId});
+      if (room.status !== 'created') return {ok:false,status:room.status};
+      return publishInvite(send, room.inviteUrl, gameId);
+    },
+    async sharePrivate({ roomUrl, gameId }) {
+      return publishInvite(prepareInvitation(), roomUrl, gameId);
+    },
     async suggest({ ownState, question, signal }) {
       const provider = getProvider?.();
       if (!provider) throw new Error('主 agent 聊天线路不可用');

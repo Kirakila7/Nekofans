@@ -21,16 +21,6 @@ else {
     NEKO_WORKBENCH_DSH_HOME:'',NEKO_WORKBENCH_DSH_PROFILE:'web',DSH_DESKTOP_NODE_EXECUTABLE:'',
     PET_OPEN_WORKBENCH:'1',PET_WORKBENCH_ONLY:''
   });
-  const visitOAuth = {
-    NEKO_VISIT_COMMUNITY_URL: 'https://community.project-neko.cn',
-    NEKO_VISIT_AUTHORIZATION_URL: 'https://auth.project-neko.cn/oauth2/auth',
-    NEKO_VISIT_TOKEN_URL: 'https://auth.project-neko.cn/oauth2/token',
-    NEKO_VISIT_OAUTH_CLIENT_ID: 'neko-servers-desktop-prod',
-    NEKO_VISIT_REDIRECT_URI: 'http://127.0.0.1:48913/oauth/callback',
-  };
-  // Use the registered desktop configuration as a unit. An explicit override
-  // must supply its own OAuth tuple so tokens stay bound to the intended service.
-  if (!Object.keys(visitOAuth).some(key => process.env[key])) Object.assign(process.env, visitOAuth);
   const python=path.join(base,'memory-runtime/python.exe');
   if(fs.existsSync(python)){
     process.env.NEKO_WORKBENCH_MEMORY_PYTHON_DIRECT=python;
