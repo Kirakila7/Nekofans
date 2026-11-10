@@ -339,8 +339,8 @@ body[data-neko-room-columns] .neko-companion-dock[data-neko-companion-expanded]{
 .neko-lobby-panel[style*="--neko-lobby-dialog-companion-reserve"] .neko-lobby-dialog { padding-right:max(24px,var(--neko-lobby-dialog-companion-reserve,24px)); }
 .neko-lobby-dialog__card { width:min(460px,92%); max-height:85%; overflow:auto; display:grid; gap:10px; background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:16px; box-shadow:0 24px 80px #17303d30; padding:18px; }
 .neko-lobby-dialog[data-dialog="game-room"] .neko-lobby-dialog__card { width:min(840px,94%); }
-.neko-lobby-dialog[data-dialog="friends"] .neko-lobby-dialog__card { width:min(640px,95%); max-height:min(78vh,650px); padding:clamp(16px,3vw,26px); gap:14px; }
-.neko-lobby-dialog[data-dialog="friends"] .neko-lobby-dialog__title { font-size:clamp(18px,3vw,24px); }
+.neko-lobby-dialog:is([data-dialog="friends"],[data-dialog="game-inbox"]) .neko-lobby-dialog__card { width:min(640px,95%); max-height:min(78vh,650px); padding:clamp(16px,3vw,26px); gap:14px; }
+.neko-lobby-dialog:is([data-dialog="friends"],[data-dialog="game-inbox"]) .neko-lobby-dialog__title { font-size:clamp(18px,3vw,24px); }
 .neko-friends-panel { min-width:0; display:grid; gap:10px; }
 .neko-friends-overview { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:12px 14px; border:1px solid var(--nws-border); border-radius:13px; background:linear-gradient(105deg,var(--nws-hover),var(--nws-bg)); }
 .neko-friends-overview__identity { display:flex; align-items:center; gap:10px; font-size:14px; }
@@ -356,6 +356,10 @@ body[data-neko-room-columns] .neko-companion-dock[data-neko-companion-expanded]{
 .neko-friends-contact:last-child { border-bottom:0; }
 .neko-friends-avatar { position:relative; flex:0 0 38px; height:38px; display:grid; place-items:center; border-radius:50%; overflow:hidden; background:color-mix(in srgb,hsl(var(--neko-friend-hue,200) 70% 72%) 30%,var(--nws-bg)); color:var(--nws-text); font-weight:700; }
 .neko-friends-avatar__image { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+.neko-friends-contact button.neko-friends-avatar--invite { border:1px solid var(--nws-border); border-radius:50%; padding:0; cursor:pointer; }
+.neko-friends-avatar--invite:is(:hover,:focus-visible) { outline:2px solid #4c89ad; outline-offset:2px; }
+.neko-game-inbox { position:relative; }
+.neko-game-inbox:not([data-count=""])::after { content:attr(data-count); position:absolute; top:2px; right:1px; min-width:14px; border-radius:999px; padding:1px 3px; background:#4c79b4; color:white; font:10px/1.4 system-ui,sans-serif; }
 .neko-friends-contact__name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; }
 .neko-friends-presence { display:flex; align-items:center; gap:5px; flex:none; color:var(--nws-muted); font-size:12px; }
 .neko-friends-presence::before { content:''; width:7px; height:7px; border-radius:50%; background:currentColor; opacity:.45; }

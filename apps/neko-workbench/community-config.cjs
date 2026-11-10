@@ -611,6 +611,13 @@ function createSocialController(options = {}) {
   let friendRequestId=0;
   let friendRead=null;
   let friendAvatars=null, friendAvatarLoader, avatarReads=0;
+  let ticketId=0;
+  const ticketRequests=new Map();
+  function finishTicket(id,result){
+    const request=ticketRequests.get(id);
+    if(!request)return;
+    ticketRequests.delete(id);clearTimeout(request.timer);request.resolve(result);
+  }
   function finishFriends(result){
     if(!friendRead)return;
     const request=friendRead;friendRead=null;
@@ -622,6 +629,8 @@ function createSocialController(options = {}) {
     if(friendAvatars&&(value.status!=='signed-in'||value.userId!==friendAvatars.owner)){
       friendAvatars=null;friendAvatarLoader?.clear();
     }
+    if(accountState.status==='signed-in'&&(value.status!=='signed-in'||value.userId!==accountState.userId))
+      for(const id of ticketRequests.keys())finishTicket(id,{status:'account-changed'});
     accountState=value;
     try{options.onAccountState?.({...value});}catch{}
   }
@@ -634,7 +643,11 @@ function createSocialController(options = {}) {
   const slotOf = site => [...slots].find(([, entry]) => entry.site === site)?.[0];
   const controllers = Object.fromEntries(['community', 'bilibili', 'youtube'].map(site => [site,
     createCommunityController({ ...options, site, onHide: site === 'community' ? options.onHide : undefined,
-      onDispose:site==='community'?()=>{communityReady=false;finishFriends({status:'unavailable'});accountChanged({status:'unknown'});}:undefined,onState: (host, value) => {
+      onDispose:site==='community'?()=>{
+        communityReady=false;finishFriends({status:'unavailable'});
+        for(const id of ticketRequests.keys())finishTicket(id,{status:'unavailable'});
+        accountChanged({status:'unknown'});
+      }:undefined,onState: (host, value) => {
       if(site==='community')communityReady=value.status==='ready';
       const slot = slotOf(site);
       publish(host, { ...value, site, ...(slot ? { slot } : {}) });
@@ -795,7 +808,32 @@ function createSocialController(options = {}) {
       return snapshot===friendAvatars&&result.kind==='image'?result.url:null;
     }finally{avatarReads--;}
   }
-  return Object.freeze({ action, readFriends, readFriendAvatar, acceptFriends,
+  async function readGameTicket(host,input){
+    try{
+      const contents=await controllers.community.ensureSession(host);
+      if(ticketRequests.size>=4)return {status:'unavailable'};
+      const id=++ticketId;
+      return await new Promise(resolve=>{
+        ticketRequests.set(id,{contents,resolve,timer:setTimeout(()=>finishTicket(id,{status:'unavailable'}),10000)});
+        try{contents.send('workbench:community-game-ticket',id,input);}catch{finishTicket(id,{status:'unavailable'});}
+      });
+    }catch{return {status:'unavailable'};}
+  }
+  function acceptGameTicket(event,value){
+    const contents=ticketRequests.get(value?.id)?.contents;
+    const origin=new URL(DEFAULT_COMMUNITY_URL).origin;
+    if(!contents||contents.isDestroyed()||event.sender!==contents||event.senderFrame!==contents.mainFrame||
+       parseWebUrl(event.senderFrame?.url)?.origin!==origin||parseWebUrl(contents.getURL())?.origin!==origin)return false;
+    if(['unavailable','sign-in-required','account-changed','forbidden'].includes(value.status)){
+      finishTicket(value.id,{status:value.status});return true;
+    }
+    if(value.status!=='ready'||typeof value.userId!=='string'||typeof value.ticket!=='string'||value.ticket.length>2040)return false;
+    if(accountState.status!=='signed-in'||accountState.userId!==value.userId){
+      finishTicket(value.id,{status:'account-changed'});return true;
+    }
+    finishTicket(value.id,{status:'ready',userId:value.userId,ticket:value.ticket});return true;
+  }
+  return Object.freeze({ action, readFriends, readFriendAvatar, acceptFriends, readGameTicket, acceptGameTicket,
     get accountState(){return {...accountState};},
     acceptAccountState(event,value){
       const contents=controllers.community.view?.webContents;

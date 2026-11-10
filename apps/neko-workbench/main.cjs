@@ -114,7 +114,11 @@ const nativeDividerController=createNativeDividerController({WebContentsView,ipc
 const nativeComposerController=createNativeComposerController({WebContentsView,BrowserWindow,screen,ipcMain});
 const communityController=createSocialController({WebContentsView,openExternal:url=>shell.openExternal(url),copyText:text=>clipboard.writeText(text),
   onHide:()=>communityAccount?.cancel(),
-  onAccountState:value=>{unifiedNekoLogin?.communityChanged(value);publishNekoAccount();},
+  onAccountState:value=>{
+    if(value.status==='signed-in'||value.status==='signed-out')
+      privateGameRuntime?.communitySeatOwnerChanged(value.userId??null);
+    unifiedNekoLogin?.communityChanged(value);publishNekoAccount();
+  },
   onState:(host,value)=>{if(host===dshWindow&&!host.isDestroyed()&&isWorkbenchOrigin(host.webContents.getURL())){host.webContents.send('workbench:community-state',value);nativeDividerController.setEnabled(communityController.hasVisibleView);nativeDividerController.raise(value.status==='ready');nativeComposerController.raise();}},
   onExternalError:()=>dialog.showErrorBox('链接未打开','系统浏览器未能打开这个链接，请稍后重试。')});
 const videoFloatController=createVideoFloatController({BrowserWindow,WebContentsView,ipcMain,screen,shell,clipboard});
@@ -935,8 +939,21 @@ function gameRuntime(){
   return privateGameRuntime??=require('./private-game-runtime.cjs').createPrivateGameRuntime({
     rpc,repositoryRoot:path.resolve(base,'../..'),dataDir:data,safeStorage,getOwnPersona:async()=>ownGamePersona(),
     getSeatOwner:async()=>lobbyController.snapshot()?.me?.user_id ?? (await lobbyController.verifyIdentity?.())?.userId ?? null,
+    getCommunityOwner:()=>{const account=communityController.accountState;return account.status==='signed-in'?account.userId:null;},
+    getInviteTicket:request=>communityController.readGameTicket(dshWindow,request),
   });
 }
+ipcMain.handle('workbench:game-friend-invites',async(event,request)=>{
+  assertWorkbenchCaller(event);
+  const runtime=gameRuntime();
+  const availability=await runtime.friendInviteStatus();
+  if(request?.action==='status')return availability;
+  if(!availability.enabled)return {status:'unavailable'};
+  if(request?.action==='list')return runtime.readFriendInvites();
+  if(request?.action==='send')return runtime.sendFriendInvite({inviteUrl:request.inviteUrl,friendId:request.friendId});
+  if(request?.action==='accept')return runtime.acceptFriendInvite(request.id);
+  throw Error('未知好友邀请操作');
+});
 // Trusted-main-process-only local prototype bridge. The renderer receives only
 // an ephemeral start command; it never receives the account persona or rules.
 function prototypeRelay(){return privatePrototypeRelay??=require('./prototype-model-relay.cjs').createPrototypeModelRelay({rpc,getOwnPersona:async()=>ownGamePersona()});}
@@ -1040,6 +1057,9 @@ ipcMain.on('workbench:community-web-account',(event,value)=>{
 });
 ipcMain.on('workbench:community-web-friends-result',(event,value)=>{
   communityController.acceptFriends(event,value);
+});
+ipcMain.on('workbench:community-game-ticket-result',(event,value)=>{
+  communityController.acceptGameTicket(event,value);
 });
 function nekoAccountSnapshot(){
   const lobby=lobbyController.snapshot();return {community:communityController.accountState,lobby:{status:lobby?.auth?.status||'unavailable'},login:unifiedNekoLogin?.snapshot()||{status:'idle',message:'',error:''}};
