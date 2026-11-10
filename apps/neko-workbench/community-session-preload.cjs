@@ -44,10 +44,11 @@ if(process.isMainFrame&&location.origin==='https://community.project-neko.cn'){
   cancelLogin();const attempt={observer:null,timer:null,checks:0,checking:false};loginAttempt=attempt;
   const active=()=>loginAttempt===attempt;
   const result=await read();if(!active()||result?.status==='signed-in')return;
-  const open=()=>{if(!active()||attempt.checking)return;const target=[...document.querySelectorAll('button,a,[role="button"]')].find(n=>/登录\s*[/／]\s*注册/.test(n.getAttribute('aria-label')||n.textContent)&&n.getClientRects().length);if(!target)return;
+  const welcomeOpen=()=>document.getElementById('community-manifesto-title')?.getClientRects().length>0;
+  const open=()=>{if(!active()||attempt.checking||welcomeOpen())return;const target=[...document.querySelectorAll('button,a,[role="button"]')].find(n=>/登录\s*[/／]\s*注册/.test(n.getAttribute('aria-label')||n.textContent)&&n.getClientRects().length);if(!target)return;
    attempt.checking=true;void read().then(value=>{if(!active()||value?.status==='signed-in')return;if(!value)return;cancelLogin();if(target.isConnected&&target.getClientRects().length)target.click();}).finally(()=>{attempt.checking=false;});};
   attempt.observer=new MutationObserver(open);attempt.observer.observe(document,{childList:true,subtree:true});open();
-  const retry=()=>{if(!active())return;if(++attempt.checks>=30){cancelLogin();return;}open();if(active())attempt.timer=setTimeout(retry,1000);};attempt.timer=setTimeout(retry,1000);
+  const retry=()=>{if(!active())return;if(!welcomeOpen()&&++attempt.checks>=30){cancelLogin();publish({status:'unavailable'});return;}open();if(active())attempt.timer=setTimeout(retry,1000);};attempt.timer=setTimeout(retry,1000);
  });
  window.addEventListener('DOMContentLoaded',schedule);if(document.readyState!=='loading')schedule();setInterval(()=>void read(),30000);
 }

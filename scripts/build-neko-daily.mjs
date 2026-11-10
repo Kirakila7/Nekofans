@@ -27,6 +27,7 @@ const entry=join(resources,'app');mkdirSync(entry,{recursive:true});cpSync(join(
 writeFileSync(join(entry,'package.json'),JSON.stringify({name:'neko-workbench-daily',version:release.version,main:'bootstrap.cjs'},null,2)+'\n');
 run('/usr/bin/plutil',['-replace','CFBundleIdentifier','-string',release.bundleIdentifier,join(app,'Contents/Info.plist')]);
 for(const [key,text] of [['CFBundleName','Nekofans'],['CFBundleDisplayName','Nekofans'],['CFBundleShortVersionString',release.version],['CFBundleVersion',release.build]])run('/usr/bin/plutil',['-replace',key,'-string',text,join(app,'Contents/Info.plist')]);
+run('/usr/bin/plutil',['-insert','CFBundleURLTypes','-json',JSON.stringify([{CFBundleURLName:release.bundleIdentifier+'.game-invite',CFBundleURLSchemes:['nekofans']}]),join(app,'Contents/Info.plist')]);
 const manifest={...release,sourceCommit:run('git',['rev-parse','HEAD'],{cwd:root}).trim(),runtimeArchiveSha256:createHash('sha256').update(readFileSync(runtime)).digest('hex'),files:hashes};
 writeFileSync(join(resources,'WORKBENCH_BUILD.json'),JSON.stringify(manifest,null,2)+'\n');
 for(const attr of ['com.apple.FinderInfo','com.apple.ResourceFork'])spawnSync('/usr/bin/xattr',['-dr',attr,app]);

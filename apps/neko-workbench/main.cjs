@@ -50,6 +50,7 @@ const {createRolesStore}=require('./workbench-roles.cjs');
 const {createWorkspaceLayout}=require('./workspace-layout.cjs');
 const {createPaneLayout}=require('./pane-layout.cjs');
 const {createVideoPlatform}=require('./video-platform.cjs');
+const {parsePrivateRoomInvite,parseGameLaunchUrl}=require('../../services/nekofans-game-hub/private-game-origin.cjs');
 const {createWorkspaceController,companionSnapshot}=require('./workspace-controller.cjs');
 const {createCodexWorkspace}=require('./codex-workspace.cjs');
 const {createCodexModelChoices}=require('./codex-model-choices.cjs');
@@ -904,6 +905,20 @@ ipcMain.handle('workbench:lobby',async(event,request)=>{
 });
 let privateGameRuntime=null,privateGameStudio=null,privatePrototypeRelay=null,storyPrototypeLauncher=null;
 function ownGamePersona(){const runtime=mainChatRuntime;if(!runtime||runtime.closed||!usesMainChatService(runtime.backend))return null;const persona=require('./lobby-cat.cjs').readWorkbenchPersona(path.join(runtime.personasDir,PERSONA+'.json'));return {id:PERSONA,...persona};}
+let pendingGameInvite=null;
+function queueGameInvite(value) {
+  const inviteUrl=parseGameLaunchUrl(value);
+  if(!inviteUrl)return false;
+  pendingGameInvite=inviteUrl;
+  void app.whenReady().then(async()=>{
+    await openDsh();
+    if(dshWindow&&!dshWindow.isDestroyed()&&isWorkbenchOrigin(dshWindow.webContents.getURL())) {
+      dshWindow.webContents.send('workbench:game-invite');
+    }
+  }).catch(engineError);
+  return true;
+}
+function ownGamePersona(){const runtime=mainChatRuntime;if(!runtime||runtime.closed||!usesMainChatService(runtime.backend))return null;const persona=require('./lobby-cat.cjs').readWorkbenchPersona(path.join(runtime.personasDir,PERSONA+'.json'));return {id:PERSONA,...persona};}
 function gameRuntime(){return privateGameRuntime??=require('./private-game-runtime.cjs').createPrivateGameRuntime({rpc,repositoryRoot:path.resolve(base,'../..'),dataDir:data,safeStorage,getOwnPersona:async()=>ownGamePersona()});}
 // Trusted-main-process-only local prototype bridge. The renderer receives only
 // an ephemeral start command; it never receives the account persona or rules.
@@ -914,6 +929,16 @@ ipcMain.handle('workbench:game-hub',async(event,request)=>{
   const {createGameHubBridge}=require('./game-hub-bridge.cjs');
   const bridge=createGameHubBridge({lobbyController});
   if(request?.action==='share')return bridge.share({title:request.title,roomUrl:request.roomUrl});
+  if(request?.action==='private-status')return {ok:true,...gameRuntime().status()};
+  if(request?.action==='private-pending-invite'){
+    const inviteUrl=pendingGameInvite;
+    pendingGameInvite=null;
+    return {ok:true,inviteUrl};
+  }
+  if(request?.action==='private-copy-invite'){
+    clipboard.writeText(parsePrivateRoomInvite(request.inviteUrl).inviteUrl);
+    return {ok:true};
+  }
   if(request?.action==='private-status')return {ok:true,...gameRuntime().status()};
   if(request?.action==='private-public-key')return {ok:true,publicKey:await gameRuntime().publicKey()};
   if(request?.action==='private-start')return {ok:true,...await gameRuntime().start({url:request.url})};
@@ -1149,7 +1174,10 @@ ipcMain.handle('pet:call',async(event,method,p={})=>{
 });
 // Opt-in read-only native evidence capture; disabled for normal launches.
 if(process.env.PET_CAPTURE_SIGNAL==='1')process.on('SIGUSR1',()=>capture().catch(error=>fs.appendFileSync(path.join(data,'capture-error.log'),String(error)+'\n')));
-app.on('second-instance',()=>{openDsh().catch(engineError);});
+app.on('open-url',(event,url)=>{if(queueGameInvite(url))event.preventDefault();});
+app.on('second-instance',(_event,argv)=>{if(!argv?.some(queueGameInvite))openDsh().catch(engineError);});
+if(process.platform==='win32'&&!process.defaultApp)app.setAsDefaultProtocolClient('nekofans');
+process.argv.some(queueGameInvite);
 app.on('activate',()=>{if(workbenchOnly&&dshWindow&&!dshWindow.isDestroyed()&&dshWindow.isVisible()){dshWindow.focus();return;}if(petWindows.size&&![...petWindows.values()].some(w=>!w.isDestroyed()&&w.isVisible()))showInput();});
 app.whenReady().then(async()=>{
   prepareRuntimeDirectories(runtimePaths);

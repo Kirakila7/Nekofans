@@ -1,8 +1,26 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const { EventEmitter } = require('node:events');
 const { sharedProfileStatus, waitForSharedProfile, claimWorkbenchInstance, queueEarlyInstanceNotifications } = require('../../apps/neko-workbench/startup-conflict.cjs');
 const profile = '/users/test/.dsh/profiles/desktop';
+
+test('startup forwards a game invitation received while the shared profile is busy', async () => {
+  const app = new EventEmitter();
+  app.whenReady = async () => {};
+  const early = queueEarlyInstanceNotifications(app);
+  const url = 'nekofans://join?invite=fixture';
+  let prevented = false;
+  app.emit('open-url', {preventDefault() { prevented = true; }}, url);
+  app.emit('second-instance', {}, ['Nekofans.exe', url], '/tmp', {});
+  const received = [];
+  app.on('open-url', (_event, value) => received.push(value));
+  app.on('second-instance', (_event, argv) => received.push(argv.at(-1)));
+  early.forward();
+  await app.whenReady();
+  assert.equal(prevented, true);
+  assert.deepEqual(received, [url, url]);
+});
 
 test('shared profile detection fails closed and ignores unrelated hosts', () => {
   assert.equal(sharedProfileStatus(() => '100 node dsh-desktop-host/lib/index.js ' + profile, profile), 'busy');

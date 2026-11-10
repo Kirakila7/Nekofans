@@ -77,6 +77,37 @@ function fixture(env = {}, useSocial = false, extra = {}) {
 test('floating B站 viewport adapts to compact and expanded sizes without reloading the page',async()=>{
  const f=fixture({},false,{site:'bilibili',adaptiveVideoViewport:true});await f.open({x:10,y:56,width:460,height:264});const view=f.views[0];assert.equal(view.webContents.zoomFactor,460/1100);const loads=view.webContents.loads.length;await f.action({action:'layout',bounds:{x:10,y:56,width:940,height:560}});assert.equal(view.webContents.zoomFactor,940/1100);assert.equal(view.webContents.loads.length,loads);f.controller.dispose();
 });
+test('community login becomes visible when its document is ready even if assets are still loading', async () => {
+  const f = fixture({}, true);
+  const pending = deferred();
+  f.controller.requestLogin();
+  const opening = f.open();
+  const view = f.views[0];
+  view.webContents.behavior = () => pending.promise;
+  await tick();
+  view.webContents.emit('dom-ready');
+  await opening;
+  assert(f.host.children.has(view));
+  assert(view.webContents.sent.some(([name]) => name === 'workbench:community-web-login'));
+  pending.resolve();
+  await tick();
+  f.controller.dispose();
+});
+
+test('a stalled community document reports failure and can be opened again', async () => {
+  const f = fixture({}, false, {communityLoadTimeoutMs:20});
+  const pending = deferred();
+  const opening = f.open();
+  const contents = f.views[0].webContents;
+  contents.behavior = () => pending.promise;
+  contents.stop = () => pending.reject(Error('aborted'));
+  await assert.rejects(opening, /未能打开/);
+  assert.equal(f.states.at(-1).status, 'error');
+  contents.behavior = null;
+  await f.open();
+  assert.equal(f.states.at(-1).status, 'ready');
+  f.controller.dispose();
+});
 test('community status accepts only its own official top frame and login entry reuses the same web session',async()=>{
  const publicStates=[];const f=fixture({},true,{onAccountState:value=>publicStates.push(value)});f.controller.requestLogin();await f.open();const contents=f.views[0].webContents;contents.mainFrame={url:contents.url};assert(contents.sent.some(([name])=>name==='workbench:community-web-login'));
  assert.equal(f.controller.acceptAccountState({sender:contents,senderFrame:{}},{status:'signed-in'}),false);assert.equal(f.controller.accountState.status,'unknown');

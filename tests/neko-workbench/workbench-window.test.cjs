@@ -9,7 +9,16 @@ test('Windows startup fits the selected display work area at any DPI and keeps n
     assert(r.minWidth<=r.width&&r.minHeight<=r.height);assert.equal(r.frame,true);assert.equal(r.autoHideMenuBar,true);
     assert.equal(r.titleBarStyle,'hidden');assert.equal(r.titleBarOverlay.height,36);
   }
-  assert.deepEqual(workbenchWindowOptions('darwin',{x:0,y:0,width:640,height:480}),{width:1100,height:780,minWidth:800,minHeight:560});
+});
+
+test('macOS startup fits and centers in the selected display work area',()=>{
+  for(const area of [{x:0,y:25,width:1024,height:650},{x:-1440,y:20,width:640,height:480},{x:100,y:0,width:1920,height:1080}]){
+    const r=workbenchWindowOptions('darwin',area);
+    assert(r.x>=area.x&&r.y>=area.y);assert(r.x+r.width<=area.x+area.width);assert(r.y+r.height<=area.y+area.height);
+    assert(r.minWidth<=r.width&&r.minHeight<=r.height);
+    assert.equal(r.frame,undefined);assert.equal(r.titleBarOverlay,undefined);
+  }
+  assert.deepEqual(workbenchWindowOptions('darwin',null),{width:1100,height:780,minWidth:800,minHeight:560});
 });
 
 test('caption theme accepts only a boolean and leaves native controls in place',()=>{

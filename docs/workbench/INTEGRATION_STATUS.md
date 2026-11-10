@@ -1,5 +1,11 @@
 # Local integration 0.28.41 / build 77
 
+## Stable chess invitations and local link-room preview (2026-11-10)
+
+The workbench uses `https://play.nekofans.games` as the default private-chess endpoint. A `nekofans://join` invitation opens a confirmation screen in the workbench. The public link carries a room identifier and seat credentials stay in the workbench. Temporary trial links remain supported. The community page can present its welcome and login UI after the main document is ready, even when media are still loading.
+
+macOS packaging targets 0.28.43 build 84 and registers the invite URL scheme. The installer verifies the incoming application and retains a recoverable backup. The main window fits the selected display. The fixed public endpoint and two-account play require deployment and live acceptance testing. The generic link room remains a separate local preview. Its data is in memory and it does not integrate external game synchronization or verdicts. See `游戏世界_架构与流程设计.md`.
+
 ## Private chess invitations and local story launcher (2026-11-09)
 
 The publisher can create a private chess room from the workbench and post the public invitation to the lobby. The recipient can select **在工作台加入** to take the guest seat without copying a pairing code. Reopening an invitation in the same workbench session reuses its seat. Players who already joined in a browser can still use the pairing flow.

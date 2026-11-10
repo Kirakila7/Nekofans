@@ -239,7 +239,7 @@ function communityBounds(host, bounds) {
 const LOAD_ERROR = '社区页面未能打开，请检查网络后重试';
 const CANCEL_ERROR = '社区已隐藏或工作台页面已离开';
 function createCommunityController({ WebContentsView, openExternal, copyText, env = process.env, site = 'community', youtubeAppId = YOUTUBE_APP_ID,
-  onState = () => {}, onHide = () => {}, onDispose = () => {}, onExternalError, adaptiveVideoViewport = false } = {}) {
+  onState = () => {}, onHide = () => {}, onDispose = () => {}, onExternalError, adaptiveVideoViewport = false, communityLoadTimeoutMs = 15000 } = {}) {
   if (!['community', 'bilibili', 'youtube'].includes(site)) throw new Error('未知内容入口');
   const isBilibili = site === 'bilibili';
   const isYoutube = site === 'youtube';
@@ -433,16 +433,34 @@ function createCommunityController({ WebContentsView, openExternal, copyText, en
       await record.webContents.loadURL(url, isYoutube ? { httpReferrer: youtubeIdentity } : undefined);
       return true;
     });
+    // The community's welcome and login UI can be used before slow media
+    // finish loading. Still wait for the main document, and bound the wait.
+    let documentReady, timeout;
+    const candidates = [navigation, canceled];
+    if (site === 'community') {
+      candidates.push(new Promise(resolve => {
+        documentReady = () => {
+          if (!record.failed && record.responseCode < 400 &&
+              classify(record.webContents.getURL(), record.communityUrl).kind === 'internal') resolve(true);
+        };
+        record.webContents.on('dom-ready', documentReady);
+        timeout = setTimeout(() => resolve(false), communityLoadTimeoutMs);
+      }));
+    }
     const loading = Promise.resolve().then(async () => {
       try {
-        if (!await Promise.race([navigation, canceled])) throw new Error(CANCEL_ERROR);
+        if (!await Promise.race(candidates)) throw new Error(CANCEL_ERROR);
         if (current !== record || record.webContents.isDestroyed() || id !== record.loadId) throw new Error(CANCEL_ERROR);
         if (record.failed || record.responseCode >= 400) throw new Error(LOAD_ERROR);
         record.loaded = true;
       } catch (error) {
         if (current !== record || id !== record.loadId) throw new Error(CANCEL_ERROR);
-        fail(record); throw new Error(LOAD_ERROR);
+        fail(record);
+        if (documentReady && !record.webContents.isDestroyed()) record.webContents.stop?.();
+        throw new Error(LOAD_ERROR);
       } finally {
+        clearTimeout(timeout);
+        if (documentReady) record.webContents.removeListener('dom-ready', documentReady);
         if (record.loading === loading) record.loading = null;
         if (record.cancelLoad === cancelLoad) record.cancelLoad = null;
       }

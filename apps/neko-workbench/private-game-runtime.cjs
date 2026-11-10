@@ -9,6 +9,7 @@ const {createOwnRuleStore}=require('./private-own-rule-store.cjs');
 function createPrivateGameRuntime({rpc,repositoryRoot,dataDir,safeStorage,fetchImpl=fetch,getOwnPersona=async()=>null}={}){
  if(typeof rpc!=='function'||typeof repositoryRoot!=='string'||typeof dataDir!=='string')throw TypeError('game runtime dependencies required');
  const store=new WorkbenchSecretStore(path.join(dataDir,'private-game','signing-key.encrypted'),safeStorage);
+ const {GAME_ORIGIN,isPrivateGameOrigin:validOrigin}=require(path.join(repositoryRoot,'services/nekofans-game-hub/private-game-origin.cjs'));
  let keyPromise,worker=null,controller=null,timer=null,lastSuccess=0,epoch=0,origin=null,seatSession=null;
  const localSeats=new Map();
  let connectingSeat=false,seatEpoch=0,manualMove=null;
@@ -29,7 +30,7 @@ function createPrivateGameRuntime({rpc,repositoryRoot,dataDir,safeStorage,fetchI
  async function publicKey(){return (await identity()).publicKey;}
  async function stop(){epoch++;controller?.abort();controller=null;clearTimeout(timer);timer=null;worker=null;origin=null;lastSuccess=0;return status();}
  async function start({url}={}){
-  if(typeof url!=='string'||!/^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/.test(url)||new URL(url).origin!==url)throw Error('请输入有效的临时游戏服务器地址');
+  if(!validOrigin(url))throw Error('请输入有效的游戏服务器地址');
   await stop();const myEpoch=epoch,id=await identity(),provider=createCompanionAccountProvider(rpc,{namespace:'game'});
   if((await provider.status()).status!=='signed-in')throw Error('请先登录 DeepSeek 工作台账号');
   const {createPrivateGameWorker}=await import(pathToFileURL(path.join(repositoryRoot,'services/nekofans-game-hub/private-game-worker.mjs')).href);
@@ -37,7 +38,8 @@ function createPrivateGameRuntime({rpc,repositoryRoot,dataDir,safeStorage,fetchI
   origin=url;controller=new AbortController();worker=createPrivateGameWorker({origin:url,privateKey:id.privateKey,provider,fetchImpl});
   const current=worker,signal=controller.signal;
   const tick=async()=>{if(epoch!==myEpoch||signal.aborted)return;const result=await current.runOnce({signal});if(epoch!==myEpoch||signal.aborted)return;if(['idle','processed'].includes(result.status))lastSuccess=Date.now();timer=setTimeout(tick,1500);timer.unref?.();};
-  await tick();return status();
+  await tick();
+  return status();
  }
  function activateSeat(next){
   if(seatSession!==next){agentEpoch++;agent.stop();seatSession=next;agentStatus={status:'idle'};}
@@ -49,7 +51,8 @@ function createPrivateGameRuntime({rpc,repositoryRoot,dataDir,safeStorage,fetchI
   if(localSeats.size>=24)return {status:'seat-limit'};
   connectingSeat=true;const current=seatEpoch;
   try{
-   if(url&&(!worker||url!==origin))await start({url});
+   url=url||origin||GAME_ORIGIN;
+   if(!status().connected||url!==origin)await start({url});
    if(!status().connected)throw Error('游戏服务器或 DeepSeek 尚未连接');
    const result=await worker.createRoom({signal:controller.signal});
    if(result.status!=='created')throw Error('创建房间失败');

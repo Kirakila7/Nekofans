@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>创建游戏房间 · Nekofans</title>
+<style>
+:root{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;color:#27364d;background:#eef3fb;font-size:15px}*{box-sizing:border-box}body{margin:0}.shell{max-width:1140px;margin:0 auto;padding:42px 24px 70px}.brand{font-size:13px;font-weight:800;letter-spacing:.14em;color:#6b86ae}.intro{margin:16px 0 28px}h1{font-size:clamp(28px,4vw,38px);margin:0 0 10px;letter-spacing:-.04em}h2{font-size:20px;margin:0 0 8px}h3{font-size:15px;margin:0 0 12px}.sub{color:#6a7b93;line-height:1.7;margin:0}.layout{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(280px,.85fr);gap:18px;align-items:start}.card{background:#fff;border:1px solid #dbe5f3;border-radius:18px;padding:24px;box-shadow:0 12px 35px #466d9b0c}.card+ .card{margin-top:16px}.label{display:block;font-size:13px;font-weight:700;color:#465974;margin:20px 0 8px}input,textarea{width:100%;border:1px solid #ccd9eb;background:#fafcff;border-radius:10px;padding:12px 13px;color:#27364d;font:inherit;outline:none}textarea{min-height:88px;resize:vertical;line-height:1.5}input:focus,textarea:focus{border-color:#789fe1;box-shadow:0 0 0 3px #dbe8ff}button{font:inherit;cursor:pointer;border:0;border-radius:10px;padding:11px 17px;background:#638fd0;color:white;font-weight:700}button:hover{background:#527fbf}button:disabled{cursor:not-allowed;opacity:.55}.secondary{background:#edf3fc;color:#5375a7}.secondary:hover{background:#e0ebfa}.full{width:100%;margin-top:20px}.note{font-size:12px;line-height:1.65;color:#7b8aa1;margin:8px 0 0}.notice{background:#f3f7fd;border:1px solid #dbe7f6;color:#607895;padding:13px 15px;border-radius:11px;line-height:1.7;font-size:13px}.room-head{display:flex;gap:12px;justify-content:space-between;align-items:flex-start}.pill{white-space:nowrap;font-size:12px;border-radius:30px;padding:6px 10px;background:#eaf2ff;color:#5a7cae}.condition{font-size:15px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere;color:#354960}.share{display:flex;gap:8px;align-items:center}.share input{min-width:0}.actions{display:flex;flex-wrap:wrap;gap:9px;margin-top:14px}.rows{display:grid;gap:9px}.row{padding:13px;border:1px solid #e5ebf5;border-radius:11px;background:#fbfcff}.row-title{display:flex;justify-content:space-between;gap:10px;font-weight:700}.badges{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px}.badge{font-size:11px;color:#7d8ba0;background:#eff2f6;border-radius:20px;padding:4px 8px}.badge.yes{background:#e8f7ef;color:#438a65}.check{display:flex;align-items:flex-start;gap:9px;line-height:1.6;margin-top:17px;color:#485b74}.check input{width:17px;height:17px;margin:3px 0 0;flex:none}.status{min-height:20px;color:#607895;font-size:13px;margin:13px 0 0;line-height:1.6}.status.error{color:#af4d4d}.link{display:inline-block;color:#577db7;word-break:break-all;font-size:13px;margin-top:8px}.private-label{display:flex;gap:8px;align-items:center}.small-pill{font-size:11px;padding:3px 7px;border-radius:20px;color:#7c71a0;background:#f2edf9}.hidden,[hidden]{display:none!important}.steps{list-style:none;padding:0;margin:16px 0 0;display:grid;gap:14px}.steps li{display:flex;gap:11px;color:#667a95;line-height:1.55}.step-num{width:25px;height:25px;border-radius:50%;display:grid;place-items:center;background:#eaf2ff;color:#6c8ec0;flex:none;font-weight:700;font-size:12px}@media(max-width:760px){.shell{padding:25px 15px}.layout{grid-template-columns:1fr}.card{padding:19px}.room-head{flex-wrap:wrap}}
+</style>
+</head>
+<body>
+<main class="shell">
+  <div class="brand">NEKOFANS · 游戏世界</div>
+  <div class="intro"><h1>一起创造一场对局</h1><p class="sub">把创造台生成的游戏带进房间，约定胜负条件，再各自悄悄写下自己的规则。</p></div>
+  <div class="layout">
+    <section>
+      <form class="card" id="create-panel">
+        <h2>创建游戏</h2><p class="sub">先准备游戏链接和双方要遵守的决胜条件。</p>
+        <label class="label" for="title">游戏名称</label><input id="title" maxlength="80" placeholder="例如：双人国际象棋" required>
+        <label class="label" for="game-url">游戏链接</label><input id="game-url" type="url" placeholder="粘贴 https:// 开头的游戏链接" autocomplete="off" required>
+        <p class="note">游戏链接会展示给双方，请勿粘贴含个人凭证的链接。</p>
+        <label class="label" for="condition">公开的决胜条件</label><textarea id="condition" maxlength="500" placeholder="例如：按照双方约定，先将死对方的国王获胜。" required></textarea>
+        <p class="note">这里填写双方都能看到的条件；秘密规则稍后各自在自己的房间页面提交。</p>
+        <button class="full" type="submit" id="create">生成游戏房间</button><p class="status" id="create-status" role="status"></p>
+      </form>
+      <div class="card" id="join-panel" hidden>
+        <h2>加入游戏房间</h2><p class="sub">加入后将在本页分配你自己的席位。</p><button id="join" class="full" type="button">加入房间</button><p class="status" id="join-status" role="status"></p>
+      </div>
+      <div id="room-panel" hidden>
+        <div class="card">
+          <div class="room-head"><div><h2 id="room-title">游戏房间</h2><p class="sub" id="seat-label"></p></div><span class="pill" id="phase">等待双方准备</span></div>
+          <label class="label" for="invitation">邀请另一方</label><div class="share"><input id="invitation" readonly aria-label="房间邀请链接"><button class="secondary" id="copy" type="button">复制</button></div>
+          <label class="label">游戏链接</label><a class="link" id="external-game" target="_blank" rel="noopener noreferrer"></a>
+          <label class="label">双方公开约定的决胜条件</label><div class="condition" id="room-condition"></div>
+          <div class="notice" style="margin-top:18px">当前是本地房间流程预览。游戏链接仅供打开，尚未接入外部游戏同步、规则执行或女神自动裁决；请勿将准备状态当成实际开局。</div>
+        </div>
+        <div class="card">
+          <h2 class="private-label">我的隐藏规则 <span class="small-pill">仅本方提交</span></h2><p class="sub">规则只发给房间服务处理；对方席位页面不会显示内容。本页提交后清空输入。</p>
+          <label class="label" for="own-rule">写给女神的规则</label><textarea id="own-rule" maxlength="200" autocomplete="off" placeholder="在这里填写你的秘密规则"></textarea>
+          <div class="actions"><button id="submit-rule" type="button">提交我的规则</button></div><p class="status" id="rule-status" role="status"></p>
+        </div>
+        <div class="card">
+          <h2>准备好了吗</h2><p class="sub">确认公开的决胜条件，并等待你和对方的 AI 伙伴各自连接。</p>
+          <label class="check"><input type="checkbox" id="confirm"><span>我已阅读并同意本局公开的决胜条件</span></label>
+          <div class="actions"><button id="ready" type="button">我已准备</button><button class="secondary" id="unready" type="button">取消准备</button><button class="secondary" id="refresh" type="button">刷新状态</button></div>
+          <p class="status" id="ready-status" role="status"></p>
+        </div>
+      </div>
+    </section>
+    <aside>
+      <div class="card" id="side-intro"><h3>每局的约定</h3><ol class="steps"><li><span class="step-num">1</span><span>创造台制作游戏，你粘贴链接创建房间。</span></li><li><span class="step-num">2</span><span>双方各自在自己的席位提出隐藏规则。</span></li><li><span class="step-num">3</span><span>双方确认决胜条件，玩家与各自的伙伴准备。</span></li><li><span class="step-num">4</span><span>未来由女神依据约定主持对局和判断结果。</span></li></ol></div>
+      <div class="card" id="players-panel" hidden><h3>对局准备</h3><div class="rows" id="players"></div><p class="note">伙伴状态来自服务端适配器，不能由页面手动设置。状态就绪不表示外链游戏已接入。</p></div>
+      <div class="card"><h3>关于秘密规则</h3><p class="note" style="margin-top:0">对手只能看到规则是否提交，游戏表现仍可能让对方猜出规则。此预览不构成对服务提供方或服务器管理者的保密保证。</p></div>
+    </aside>
+  </div>
+</main>
+<script>
+'use strict';
+(()=>{
+  const $=id=>document.getElementById(id), create=$('create-panel'), join=$('join-panel'), room=$('room-panel');
+  const params=new URLSearchParams(location.search), roomParam=params.get('room');
+  const validId=id=>typeof id==='string'&&/^[A-Za-z0-9_-]{8,128}$/.test(id);
+  let roomId=validId(roomParam)?roomParam:null, token=null, state=null, inflight=false;
+  const key=id=>'nekofans-link-room-seat:'+id;
+  function setStatus(id,msg,error=false){const n=$(id);n.textContent=msg;n.classList.toggle('error',error);}
+  async function api(path,{method='GET',body,auth=true}={}){
+    const headers={};if(body!==undefined)headers['content-type']='application/json';if(auth&&token)headers.authorization='Bearer '+token;
+    const res=await fetch(path,{method,headers,body:body===undefined?undefined:JSON.stringify(body),cache:'no-store',credentials:'same-origin'});
+    let data={};try{data=await res.json()}catch{};if(!res.ok)throw new Error(typeof data.error==='string'?data.error:'请求没有完成，请稍后重试。');return data;
+  }
+  const path=suffix=>'/link-rooms/'+encodeURIComponent(roomId)+(suffix||'');
+  function saveSeat(data){if(!validId(data.roomId)||typeof data.token!=='string'||!data.token)throw new Error('房间信息不完整，请重试。');roomId=data.roomId;token=data.token;sessionStorage.setItem(key(roomId),token);const target=new URL(location.href);target.search='';target.searchParams.set('room',roomId);history.replaceState(null,'',target.pathname+target.search);}
+  function statusBadges(player){const values=[['已加入','等待加入',player.joined],['规则已提交','未提交规则',player.ruleReady],['条件已确认','未确认条件',player.conditionConfirmed],['玩家已准备','玩家未准备',player.playerReady],['伙伴已连接','伙伴未连接',player.agentReady]];return values.map(([yes,no,on])=>{const s=document.createElement('span');s.className='badge'+(on?' yes':'');s.textContent=on?yes:no;return s;});}
+  function render(data){
+    state=data;create.hidden=true;join.hidden=true;room.hidden=false;$('players-panel').hidden=false;$('side-intro').hidden=true;
+    $('room-title').textContent=data.title||'游戏房间';$('seat-label').textContent='你是'+(data.seat===0?'房主':'加入者')+' · 邀请链接不含席位凭证';
+    $('room-condition').textContent=data.victoryCondition||'未提供';$('external-game').textContent=data.gameUrl||'';
+    try{const u=new URL(data.gameUrl);if(u.protocol==='https:'&&!u.username&&!u.password)$('external-game').href=u.href;else $('external-game').removeAttribute('href');}catch{$('external-game').removeAttribute('href');}
+    const invitation=new URL(location.href);invitation.search='';invitation.searchParams.set('room',roomId);$('invitation').value=invitation.href;
+    $('phase').textContent=data.phase==='ready-to-connect'?'等待游戏与伙伴接入':'等待双方准备';
+    const players=Array.isArray(data.players)?data.players:[];const own=players[data.seat]||{};
+    $('confirm').checked=!!own.conditionConfirmed;$('confirm').disabled=!!own.conditionConfirmed;$('ready').disabled=!!own.playerReady;$('unready').disabled=!own.playerReady;
+    if(own.ruleReady)setStatus('rule-status','你的规则已提交；输入内容不会在本页面回显。');
+    const out=$('players');out.replaceChildren();for(let i=0;i<2;i++){const p=players[i]||{},row=document.createElement('div'),heading=document.createElement('div'),name=document.createElement('span'),side=document.createElement('span'),badges=document.createElement('div');row.className='row';heading.className='row-title';name.textContent=i===data.seat?'我和我的伙伴':'对方和对方的伙伴';side.textContent=p.joined?'已加入':'等待加入';heading.append(name,side);badges.className='badges';badges.append(...statusBadges(p));row.append(heading,badges);out.append(row);}
+  }
+  async function refresh(){if(!roomId||!token)return;try{render(await api(path('/state')));}catch(e){if(room.hidden){create.hidden=true;join.hidden=false;setStatus('join-status','无法恢复席位：'+e.message,true);}else setStatus('ready-status',e.message,true);}}
+  create.addEventListener('submit',async e=>{e.preventDefault();if(inflight)return;inflight=true;$('create').disabled=true;setStatus('create-status','正在创建房间…');try{const data=await api('/link-rooms',{method:'POST',auth:false,body:{title:$('title').value.trim(),gameUrl:$('game-url').value.trim(),victoryCondition:$('condition').value.trim()}});saveSeat(data);await refresh();}catch(err){setStatus('create-status',err.message,true)}finally{inflight=false;$('create').disabled=false;}});
+  $('join').addEventListener('click',async()=>{if(inflight)return;inflight=true;$('join').disabled=true;setStatus('join-status','正在加入…');try{saveSeat(await api(path('/join'),{method:'POST',auth:false,body:{}}));await refresh()}catch(err){setStatus('join-status',err.message,true)}finally{inflight=false;$('join').disabled=false;}});
+  $('submit-rule').addEventListener('click',async()=>{const input=$('own-rule'),rule=input.value.trim();if(!rule){setStatus('rule-status','请先填写自己的隐藏规则。',true);return;}$('submit-rule').disabled=true;try{await api(path('/rule'),{method:'POST',body:{rule}});input.value='';setStatus('rule-status','规则已提交。');await refresh()}catch(e){setStatus('rule-status',e.message,true)}finally{$('submit-rule').disabled=false;}});
+  async function ready(value){$('ready').disabled=true;$('unready').disabled=true;try{await api(path('/ready'),{method:'POST',body:{playerReady:value,conditionConfirmed:$('confirm').checked}});setStatus('ready-status',value?'已发送准备状态。':'已取消准备。');await refresh()}catch(e){setStatus('ready-status',e.message,true);if(state)render(state)}}
+  $('ready').addEventListener('click',()=>ready(true));$('unready').addEventListener('click',()=>ready(false));$('refresh').addEventListener('click',refresh);
+  $('copy').addEventListener('click',async()=>{try{await navigator.clipboard.writeText($('invitation').value);setStatus('ready-status','邀请链接已复制。')}catch{$('invitation').select();setStatus('ready-status','请复制选中的邀请链接。')}});
+  if(roomId){try{token=sessionStorage.getItem(key(roomId))}catch{};if(token){refresh()}else{create.hidden=true;join.hidden=false}}else if(roomParam){setStatus('create-status','房间链接无效，请检查后重试。',true)}
+})();
+</script>
+</body>
+</html>

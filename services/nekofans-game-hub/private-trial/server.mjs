@@ -6,12 +6,13 @@ import {createExecutorVerifier,createPrivateRuleRelay,createRelayProvider} from 
 import {createPrivateChessRoom} from '../private-chess-room.mjs';
 import {createSeatPairing} from '../private-seat-pairing.mjs';
 import {privateChessBoard as game} from '../private-chess-board.mjs';
+import gameOrigin from '../private-game-origin.cjs';
 
 const token=()=>randomBytes(18).toString('base64url');
 const same=(a,b)=>typeof a==='string'&&typeof b==='string'&&Buffer.byteLength(a)===Buffer.byteLength(b)&&timingSafeEqual(Buffer.from(a),Buffer.from(b));
 const page=readFileSync(new URL('./index.html',import.meta.url));
 export function createPrivateTrial({publicOrigin,publicKey,now=Date.now,relay=createPrivateRuleRelay()}={}){
- if(!/^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/.test(publicOrigin||''))throw Error('a single temporary HTTPS origin is required');
+ if(!gameOrigin.isPrivateGameOrigin(publicOrigin))throw Error('a trusted HTTPS game origin is required');
  const verifyRequest=createExecutorVerifier({publicKey,now}),rooms=new Map(),rates=new Map(),provider=createRelayProvider(relay);
  const send=(res,code,value)=>{res.writeHead(code,{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer'});res.end(JSON.stringify(value));};
  async function read(req){let size=0,body='';for await(const chunk of req){size+=chunk.length;if(size>4096)throw Error('too large');body+=chunk;}return body;}

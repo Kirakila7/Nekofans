@@ -1,5 +1,6 @@
 // Game modules and the board page loaded by the desktop workbench at runtime.
 export const gameRuntimeFiles = new Set([
+  'services/nekofans-game-hub/private-game-origin.cjs',
   'services/nekofans-game-hub/game-studio.mjs',
   'services/nekofans-game-hub/private-game-worker.mjs',
   'services/nekofans-game-hub/private-relay.mjs',

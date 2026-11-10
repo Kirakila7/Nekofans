@@ -1,10 +1,11 @@
+import gameOrigin from './private-game-origin.cjs';
 import {signExecutorRequest} from './private-relay.mjs';
 import {compilePrivateRule} from './private-chess-compiler.mjs';
 
 // Runs in the publisher's trusted workbench main process. No rule text,
 // signing key or model response is sent to any renderer or chat history.
 export function createPrivateGameWorker({origin,privateKey,provider,fetchImpl=fetch}={}) {
-  if(typeof origin!=='string'||!/^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/.test(origin)||new URL(origin).origin!==origin)throw TypeError('invalid temporary origin');
+  if(!gameOrigin.isPrivateGameOrigin(origin))throw TypeError('invalid game origin');
   if(!privateKey||!provider||typeof provider.stream!=='function'||typeof fetchImpl!=='function')throw TypeError('worker dependencies required');
   let active=false;
   async function request(path,method,body='',signal){
