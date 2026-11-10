@@ -500,7 +500,8 @@ function buildController(deps) {
         &&!(Number.isFinite(me.muted_until)&&me.muted_until>now())&&channel?.cats_enabled!==false&&!own?.admin_disabled;
       const name=profile?(settings.name||own?.name||persona().name):(own?.name||settings.name||persona().name);
       const avatarKey=profile&&settings.avatarKey!=='default'?settings.avatarKey:own?.avatar_key||(settings.avatarKey!=='default'?settings.avatarKey:'bigfish');
-      const replyMode=settings.independentTrigger;
+      const replyMode=settings.independentTrigger==='free'&&channel?.cat_free_mode_allowed!==true
+        ? 'owner_or_mention' : settings.independentTrigger;
       if(own&&own.enabled===enabled&&own.reply_mode===replyMode&&(!profile||own.name===name&&own.avatar_key===avatarKey))return true;
       try{
         const updated=await client.rest.putCat({name,avatarKey,replyMode,enabled});
