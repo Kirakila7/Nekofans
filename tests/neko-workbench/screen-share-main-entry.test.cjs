@@ -21,7 +21,7 @@ test('screen panel IPC delegates to its own authority; workbench may only hide f
 
 test('state serialization never persists screen feedback',()=>{
  const calls=[],saved={connection:'PRIVATE_CONNECTION',mainChat:{text:'PRIVATE_SERVICE_STATE'},actors:[{id:'main',chatBackend:'neko',screenReply:{text:'PRIVATE_SCREEN'},returningHome:{private:'PRIVATE_RETURN'},chatReply:'PRIVATE_REPLY',lastUserMessage:'PRIVATE_USER',name:'cat'}]};
- const save=source.slice(source.indexOf('function save(){'),source.indexOf('function broadcast(){'));
+ const save=source.slice(source.indexOf('function save(){'),source.indexOf('\n',source.indexOf('function save(){')));
  const predicate=source.match(/^const usesMainChatService\s*=.*;$/m)?.[0];
  assert(predicate, 'missing main chat backend predicate');
  const saveFn=vm.runInNewContext(predicate+'\n'+save+';save',{state:saved,data:'/tmp/fixture',path,writeAtomicStateFileSync:(_file,value)=>calls.push(value)});
@@ -38,7 +38,7 @@ test('state serialization never persists screen feedback',()=>{
 });
 
 test('main save delegates to the atomic writer synchronously and retains a permanent filesystem error',()=>{
- const save=source.slice(source.indexOf('function save(){'),source.indexOf('function broadcast(){')),predicate=source.match(/^const usesMainChatService\s*=.*;$/m)[0],error=Object.assign(Error('synthetic permanent save failure'),{code:'ENOSPC'}),target=path.join('/tmp/fixture','state.json');let calls=0;
+ const save=source.slice(source.indexOf('function save(){'),source.indexOf('\n',source.indexOf('function save(){'))),predicate=source.match(/^const usesMainChatService\s*=.*;$/m)[0],error=Object.assign(Error('synthetic permanent save failure'),{code:'ENOSPC'}),target=path.join('/tmp/fixture','state.json');let calls=0;
  const saveFn=vm.runInNewContext(predicate+'\n'+save+';save',{state:{actors:[]},data:'/tmp/fixture',path,writeAtomicStateFileSync:(file,text)=>{calls++;assert.equal(file,target);assert.deepEqual(JSON.parse(text),{actors:[]});throw error;}});
  assert.throws(saveFn,thrown=>thrown===error);assert.equal(calls,1);assert.match(source,/require\('\.\/atomic-state-file\.cjs'\)/);
 });

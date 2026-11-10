@@ -1,5 +1,13 @@
 # Local integration 0.28.41 / build 77
 
+## macOS daily branch: game invitations and optional activity memory (2026-11-10)
+
+This macOS branch starts from the source manifest of daily build 90. It retains the daily UI, account relay and local data paths. It ports activity summaries from the upstream `macos` commit `ccf43f0` without importing its Windows-only Bilibili experiment or reverting the verified account relay.
+
+In **鱼的记忆 → N.E.K.O. 记忆组件与整理模型**, the user can opt in to private summaries of completed project tasks they start. Existing tasks and replayed events are excluded. The screen share panel asks separately on every share whether to keep text observations. Screen images and raw tool output do not enter these records.
+
+Game rooms show N.E.K.O. friends and their avatars. The account-bound inbox enables one-click invitations and direct room entry when the N.E.K.O. community can issue a game service ticket. Without that capability, the existing room link remains available.
+
 ## Private chess invitations and local story launcher (2026-11-09)
 
 The publisher can create a private chess room from the workbench and post the public invitation to the lobby. The recipient can select **在工作台加入** to take the guest seat without copying a pairing code. Reopening an invitation in the same workbench session reuses its seat. Players who already joined in a browser can still use the pairing flow.

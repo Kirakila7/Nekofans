@@ -27,6 +27,7 @@ const usesMainChatService=backend=>backend==='chat-api'||backend==='deepseek-acc
 const {createVisitsController}=require('./visits/controller.cjs');
 const {createWorkbenchCommunity}=require('./community-friends.cjs');
 const {createRtcTransport}=require('./visits/rtc-transport.cjs');
+const {taskRecord,screenRecord,createProjectTracker,isRootWorkSession}=require('./activity-memory.cjs');
 const {pathToFileURL}=require('node:url');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -74,12 +75,13 @@ const workspaceLayout=createWorkspaceLayout(path.join(data,'workspace-layout.jso
 const paneLayout=createPaneLayout(path.join(data,'pane-layout.json'));
 const videoPlatform=createVideoPlatform(path.join(data,'video-platform.json'));
 const codexModelChoices=createCodexModelChoices(path.join(data,'codex-model-choices.json'));
-let workspaceRevision=0, codexHadActiveWork=false;
+let workspaceRevision=0, codexHadActiveWork=false, projectMemoryEpoch=0;
+const projectConsent=()=>state.mainChat?.projectActivityMemory===true?projectMemoryEpoch:null;
 const codexWorkspace=createCodexWorkspace({defaultCwd:workspace,onState:value=>{
   if(dshWindow&&!dshWindow.isDestroyed()&&isWorkbenchOrigin(dshWindow.webContents.getURL()))dshWindow.webContents.send('workbench:office-state',value);
   const active=value.status==='working'||!!value.approvals?.length;
   if(!CODEX_AVAILABLE&&active!==codexHadActiveWork){codexHadActiveWork=active;workspaceRevision++;broadcast();}
-}});
+},memoryConsent:projectConsent,onCompleted:value=>recordActivity(taskRecord({provider:'Codex',...value}))});
 const workspaceController=createWorkspaceController({layout:workspaceLayout,codex:codexWorkspace,readDsh:params=>{
   if(state.connection!=='ready')throw Error('DSH 尚未就绪');return rpc('workspace-catalog',params);
 }});
@@ -167,6 +169,7 @@ const terminalTimers=new Map();
 const busy=a=>['working','stopping'].includes(a.status);
 const screenShare=createScreenShare({WebContentsView,desktopCapturer,systemPreferences,dataDir:data,repositoryRoot:path.resolve(base,'../..'),safeStorage,
   getChat:()=>mainChatRuntime,getHost:()=>dshWindow,isChatBusy:()=>!!activeApiRequest||busy(state.actors[0]),
+  onRecord:record=>recordActivity(screenRecord(record)),
   onReply:reply=>{if(quitting)return;state.actors[0].screenReply=reply;if(reply)state.actors[0].notice=null;broadcast();},
   onOpen:async()=>{await communityController.action(dshWindow,{action:'hide'});}});
 const channelRevisions={fish:0,qqbot:0};
@@ -354,6 +357,7 @@ function applyMainChat(snapshot){
   if(quitting)return;
   const a=state.actors[0],oldBackend=a.chatBackend,previous=state.mainChat?.chat;
   if(oldBackend!==snapshot.backend)screenShare.interrupt();
+  if((state.mainChat?.projectActivityMemory===true)!==(snapshot.projectActivityMemory===true)){projectMemoryEpoch++;projectMemory.reset();}
   state.mainChat=snapshot;
   if(oldBackend!==snapshot.backend){
     if(oldBackend==='neko')state.neko.history=a.messages;
@@ -554,6 +558,14 @@ function rpc(method,params={}){return new Promise((resolve,reject)=>{
 });}
 function textContent(value){if(!value)return '';if(typeof value==='string')return value;if(Array.isArray(value))return value.map(textContent).join('');if(value.type==='text')return value.text||'';return textContent(value.content||value.message?.content||value.blocks);}
 function shortReply(text){return text.replace(/```[\s\S]*?```/g,'').replace(/[*#`]/g,'').trim().slice(0,100);}
+function recordActivity(value){
+  if(!value||quitting||!usesMainChatService(mainChatRuntime?.backend)||!mainChatRuntime.memorySystem)return;
+  if(value.source==='project'&&projectConsent()===null)return;
+  void mainChatRuntime.memorySystem.recordActivity(value).catch(()=>{
+    if(!quitting){state.mainChat={...state.mainChat,error:'活动摘要未能写入记忆'};broadcast();}
+  });
+}
+const projectMemory=createProjectTracker(recordActivity,session=>isRootWorkSession(state,session));
 function receive(message,replay=false){
   if(message?.method==='home-build'){if(!replay)void homeReady.then(ready=>ready&&ourHomeRuntime.acceptBuild(message.params));return;}
   if(message?.method==='channel-experience'){if(!replay)try{channelLife.accept(message.params);}catch{}return;}
@@ -570,6 +582,7 @@ function receive(message,replay=false){
   if(message.method==='task-meta'){syncTask(p);return;}
   if(message.method==='task-roster'&&acceptTaskRoster(state,p)){update();return;}
   if(message.method==='agent-roster'&&p.source==='dsh-subagent-catalog'&&Array.isArray(p.sessionIds)){state.catalogOrder=[...new Set(p.sessionIds.map(String))];update();return;}
+  if(!replay&&message.method==='event'&&projectConsent()!==null)projectMemory.accept(p.sessionId,p.event);
   const a=actorBySession(p.sessionId);
   if(!a){
     if(p.sessionId&&['event','status','subagent-activity','session-context'].includes(message.method)){

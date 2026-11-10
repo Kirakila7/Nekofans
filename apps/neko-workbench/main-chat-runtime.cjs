@@ -60,6 +60,7 @@ class WorkbenchMainChat {
     this.secretStore = new WorkbenchSecretStore(path.join(this.dataDir, 'secrets', 'chat-api-key.encrypted'), safeStorage);
     this.memorySecretStore = new WorkbenchSecretStore(path.join(this.dataDir, 'secrets', 'memory-api-key.encrypted'), safeStorage);
     this.memoryConfigFile = path.join(this.dataDir, 'memory-model.json');
+    this.projectActivityMemory = false;
     if (accountProvider != null && typeof accountProvider.stream !== 'function') throw new Error('工作台账号聊天接口无效');
     if (lobbyAccountProvider != null && (typeof lobbyAccountProvider.stream !== 'function' || typeof lobbyAccountProvider.status !== 'function')) throw new Error('聊天室账号聊天接口无效');
     this.memoryWorker = memoryWorker; this.accountProvider = accountProvider || null;
@@ -84,6 +85,7 @@ class WorkbenchMainChat {
       const personaFile = path.join(this.personasDir, PERSONA + '.json');
       if (!fs.existsSync(personaFile)) fs.copyFileSync(path.join(this.repositoryRoot, 'config/personas/bigfish.json'), personaFile, fs.constants.COPYFILE_EXCL);
       this.readConfig();
+      try{this.projectActivityMemory=this.readMemoryModel().projectActivityMemory===true;}catch{this.projectActivityMemory=false;}
       const { WorkbenchMemory } = await import(pathToFileURL(path.join(this.repositoryRoot, 'apps/neko-workbench/memory/controller.mjs')).href);
       this.memorySystem = new WorkbenchMemory({directory:path.join(this.dataDir,'memory'),dataDir:this.dataDir,repositoryRoot:this.repositoryRoot,
         worker:this.memoryWorker,getModel:()=>this.memoryModel(),getPersona:async()=>{
@@ -140,6 +142,7 @@ class WorkbenchMainChat {
     return clone({ backend: this.backend, settings: this.settings || null, hasKey: this.secretStore.has(),
       secureStorageAvailable: this.secureStorageAvailable ?? null, ready: !!this.opened && (this.backend !== 'deepseek-account' || !!this.accountProvider), error: this.configError || (this.backend === 'deepseek-account' && !this.accountProvider ? '工作台账号聊天尚未接入' : ''),
       memoryAvailable: usesChatService(this.backend) && !!this.opened?.memory,
+      projectActivityMemory: usesChatService(this.backend) && this.projectActivityMemory,
       memorySystem: this.memorySystem?.status(),
       voiceStatus: '未接入', chat });
   }
@@ -286,7 +289,7 @@ class WorkbenchMainChat {
   readMemoryModel() {
     let settings={useChatApi:true};
     if(fs.existsSync(this.memoryConfigFile))settings=JSON.parse(fs.readFileSync(this.memoryConfigFile,'utf8'));
-    return {...settings,hasKey:this.memorySecretStore.has(),route:settings.useChatApi&&this.backend==='deepseek-account'?'deepseek-account':'api-key'};
+    return {...settings,projectActivityMemory:settings.projectActivityMemory===true,hasKey:this.memorySecretStore.has(),route:settings.useChatApi&&this.backend==='deepseek-account'?'deepseek-account':'api-key'};
   }
   async memoryModel() {
     const config=this.readMemoryModel();
@@ -311,7 +314,7 @@ class WorkbenchMainChat {
         else if(change.key.action==='clear')await this.memorySecretStore.clear();
         config={...change.settings,useChatApi:false};
       }
-      atomicJson(this.memoryConfigFile,config);
+      atomicJson(this.memoryConfigFile,{...config,projectActivityMemory:this.projectActivityMemory});
     }catch{
       await rollback();if(previous===null)fs.rmSync(this.memoryConfigFile,{force:true});else atomicBytes(this.memoryConfigFile,previous);throw new Error('记忆模型设置未能保存');
     }
@@ -323,6 +326,16 @@ class WorkbenchMainChat {
   async memoryAction(input) {
     if (!input || typeof input !== 'object' || Object.keys(input).some(key => !['action', 'id', 'text','mode','enabled','revisionIds','priority','pinned','useChatApi','protocol','baseUrl','model','requestTimeoutMs','key'].includes(key))) throw new Error('记忆操作无效');
     if (this.closed || !usesChatService(this.backend) || !this.opened?.memory) throw new Error('记忆服务未就绪');
+    if(input.action==='project-activity-memory'){
+      if(typeof input.enabled!=='boolean')throw Error('请选择是否保存项目摘要');
+      return this.serial(async()=>{
+        if(this.closed||!usesChatService(this.backend)||!this.opened?.memory)throw Error('记忆服务未就绪');
+        const config=fs.existsSync(this.memoryConfigFile)?JSON.parse(fs.readFileSync(this.memoryConfigFile,'utf8')):{useChatApi:true};
+        atomicJson(this.memoryConfigFile,{...config,projectActivityMemory:input.enabled});
+        this.projectActivityMemory=input.enabled;this.publish();
+        return {ok:true};
+      });
+    }
     if(['configure-neko','sync'].includes(input.action)||String(input.action).startsWith('event-')){
       try{
         if(input.action==='configure-neko')await this.configureMemory(input);
