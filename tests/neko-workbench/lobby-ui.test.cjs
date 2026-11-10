@@ -64,11 +64,16 @@ function setup(t,{lobby=true,snap=snapshot(),respond,composer=true,home=false,of
 }
 const rowOf=(doc,n)=>doc.querySelector('.neko-lobby-message[data-id="'+mid(n)+'"]');
 const labelOf=(doc,n)=>rowOf(doc,n).querySelector('.neko-lobby-label').textContent;
+function openMessageMenu(doc, n) {
+ const avatar = rowOf(doc, n).querySelector('.neko-lobby-message-avatar');
+ avatar.dispatchEvent(new doc.defaultView.MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+ return doc.querySelector('.neko-lobby-message-menu');
+}
 test('频道 rail button opens the lobby in the sidebar, leaving the dock and workspace intact',{skip:DOM_SKIP},async t=>{
  const f=setup(t),{doc,calls}=f;await tick();
  const rail=doc.querySelector('.neko-workspace-rail-controls'),lobbyButton=doc.querySelector('.neko-lobby-switch');
  assert(lobbyButton,'rail button installed');assert.equal(lobbyButton.parentElement,rail);
- assert.equal(lobbyButton.previousElementSibling,doc.querySelector('.neko-community'),'placed right after the community button');
+ assert(rail.querySelector('.neko-community').compareDocumentPosition(lobbyButton) & f.w.Node.DOCUMENT_POSITION_FOLLOWING,'lobby fallback follows the community button');
  assert.equal(lobbyButton.getAttribute('aria-label'),'频道 · 公共大厅');assert.equal(lobbyButton.getAttribute('aria-expanded'),'false');
  const panel=doc.querySelector('.neko-lobby-panel');assert(panel.hidden);
  const dock=doc.querySelector('.neko-companion-dock'),draft=dock.querySelector('textarea');draft.value='私聊草稿';
@@ -107,11 +112,11 @@ test('message list: origin labels, own labels, badges by origin only, reply quot
  assert.equal(doc.querySelector('.neko-lobby-title').textContent,'公共大厅');assert.equal(doc.querySelector('.neko-lobby-topic').textContent,'随便聊聊');
  assert.equal(doc.querySelector('.neko-lobby-online').textContent,'2 人在线');
  assert.equal(labelOf(doc,1),'张三');
- assert.equal(labelOf(doc,2),'人＋AI 共同回复 · 张三与小橘');
- assert.equal(labelOf(doc,3),'AI 独立发言 · 张三的小橘');
+ assert.equal(labelOf(doc,2),'张三与小橘');
+ assert.equal(labelOf(doc,3),'张三的小橘');
  assert.equal(labelOf(doc,5),'我');
- assert.equal(labelOf(doc,6),'人＋AI 共同回复 · 我与大肥鱼');
- assert.equal(labelOf(doc,7),'AI 独立发言 · 我的大肥鱼');
+ assert.equal(labelOf(doc,6),'我与大肥鱼');
+ assert.equal(labelOf(doc,7),'我的大肥鱼');
  assert.equal(rowOf(doc,3).dataset.kind,'cat');assert.match(rowOf(doc,3).querySelector('.neko-lobby-badge').textContent,/猫猫/);
  assert.match(rowOf(doc,2).querySelector('.neko-lobby-badge').textContent,/人＋AI/);assert.equal(rowOf(doc,2).dataset.kind,'human');
  assert.equal(rowOf(doc,1).querySelector('.neko-lobby-badge'),null);
@@ -125,8 +130,11 @@ test('message list: origin labels, own labels, badges by origin only, reply quot
  assert.deepEqual(mentions,[['@我的大肥鱼','cat'],['@我','human']]);
  assert.equal(rowOf(doc,1).querySelector('.neko-lobby-text').textContent,'大家好 @我的大肥鱼 和 @我');
  assert.equal(rowOf(doc,8).querySelector('.neko-lobby-deleted').textContent,'消息已删除');assert.equal(rowOf(doc,8).querySelector('.neko-lobby-reply-to'),null);
- assert(!doc.querySelector('.neko-lobby-older').hidden,'load older is offered when hasMore');
- doc.querySelector('.neko-lobby-older').click();await tick();assert.equal(f.calls.lobby.at(-1).action,'load-older');
+ assert.equal(doc.querySelector('.neko-lobby-older'),null);
+ assert.equal(log.querySelectorAll(':scope > time').length,1,'nearby messages share one time');
+ assert(rowOf(doc,3).querySelector('.neko-lobby-bubble').title,'exact time is available on hover');
+ assert.equal(rowOf(doc,5).dataset.mine,'true');
+ assert.equal(rowOf(doc,7).dataset.kind,'cat','my cat still uses the incoming layout');
  assert.equal(doc.querySelector('[data-admin]'),null,'non-admins see no admin controls');
 });
 test('composer: maxLength 2000, Enter sends, Shift+Enter does not, @ picker turns names into tokens, reply target, failed retry',{skip:DOM_SKIP},async t=>{
@@ -135,8 +143,8 @@ test('composer: maxLength 2000, Enter sends, Shift+Enter does not, @ picker turn
  const key=(k,extra={})=>input.dispatchEvent(new w.KeyboardEvent('keydown',{key:k,bubbles:true,cancelable:true,...extra}));
  const type=v=>{input.value=v;input.setSelectionRange(v.length,v.length);input.dispatchEvent(new w.Event('input',{bubbles:true}));};
  type('第一行');key('Enter',{shiftKey:true});await tick();assert(!calls.lobby.some(r=>r.action==='send'),'Shift+Enter is a newline, not a send');
- rowOf(doc,3).querySelector('.neko-lobby-reply-to').click();
- assert(!doc.querySelector('.neko-lobby-reply').hidden);assert.equal(doc.querySelector('.neko-lobby-reply__text').textContent,'回复 AI 独立发言 · 张三的小橘');
+ openMessageMenu(doc,3).querySelector('.neko-lobby-reply-to').click();
+ assert(!doc.querySelector('.neko-lobby-reply').hidden);assert.equal(doc.querySelector('.neko-lobby-reply__text').textContent,'回复 张三的小橘');
  type('你好 @小');const picker=doc.querySelector('.neko-lobby-picker');assert(!picker.hidden);
  assert.deepEqual([...picker.children].map(n=>n.textContent),['🐾 张三的小橘']);
  key('Enter');assert(picker.hidden,'Enter picks the highlighted member');assert.equal(input.value,'你好 @张三的小橘 ');
@@ -148,6 +156,49 @@ test('composer: maxLength 2000, Enter sends, Shift+Enter does not, @ picker turn
  const failed=doc.querySelector('.neko-lobby-message--outbox');assert(failed);assert.equal(failed.dataset.outbox,'failed');
  assert.equal(failed.querySelector('.neko-lobby-failed').textContent,'发送超时，请重试。');assert.equal(failed.querySelector('.neko-lobby-text').textContent,'没发出去 @张三');
  failed.querySelector('.neko-lobby-retry').click();await tick();assert.deepEqual(calls.lobby.at(-1),{action:'send-retry',clientMessageId:'77777777-7777-4777-8777-777777777777'});
+});
+
+test('avatar mention inserts a real cat mention without adding a reply target', {skip: DOM_SKIP}, async t => {
+ const {doc,w,calls}=setup(t);await tick();doc.querySelector('.neko-lobby-switch').click();await tick();
+ const input=doc.querySelector('.neko-lobby-form textarea');
+ const menu=openMessageMenu(doc,7);
+ assert(!menu.hidden);
+ menu.querySelector('.neko-lobby-mention-to').click();
+ assert.equal(input.value,'@我的大肥鱼 ');
+ assert(menu.hidden);
+ input.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));
+ await tick();
+ assert.deepEqual(calls.lobby.find(r=>r.action==='send'),{action:'send',text:'<@c:'+MYCAT+'>',origin:'human'});
+});
+
+test('scrolling to the top loads older messages once and preserves the reading position', {skip: DOM_SKIP}, async t => {
+ let finish;
+ const f=setup(t,{respond:r=>r.action==='load-older' && new Promise(resolve=>{finish=resolve;})}),{doc,w,calls}=f;
+ await tick();doc.querySelector('.neko-lobby-switch').click();await tick();
+ const log=doc.querySelector('.neko-lobby-log'), first=rowOf(doc,1), history=doc.querySelector('.neko-lobby-history');
+ Object.defineProperty(log,'scrollHeight',{get:()=>log.children.length*40});
+ Object.defineProperty(log,'clientHeight',{value:100});
+ first.getBoundingClientRect=()=>{
+   const top=[...log.children].indexOf(first)*40-log.scrollTop;
+   return {top,bottom:top+40};
+ };
+ log.scrollTop=8;
+ const before=first.getBoundingClientRect().top;
+ log.dispatchEvent(new w.Event('scroll'));
+ log.dispatchEvent(new w.Event('scroll'));
+ assert.equal(calls.lobby.filter(r=>r.action==='load-older').length,1);
+ assert.equal(history.getAttribute('aria-pressed'),'true');
+ assert(!doc.querySelector('.neko-lobby-history-status').hidden);
+ const earlier=msg(0,human(ZS,'张三'),'human','张三','更早的消息',{created_at:1730000000000-6*60*1000});
+ const next=snapshot({messages:[earlier,...f.current.messages],hasMore:false});
+ f.push(next);finish({ok:true,state:next});await tick();
+ assert(rowOf(doc,0));
+ assert.equal(log.querySelectorAll(':scope > time').length,2);
+ assert.equal(first.getBoundingClientRect().top,before);
+ assert(doc.querySelector('.neko-lobby-history-status').hidden);
+ history.click();
+ assert.equal(history.getAttribute('aria-pressed'),'false');
+ assert.equal(log.scrollTop,log.scrollHeight);
 });
 
 test('mode bar and three status dots; unavailable participation leaves only 她不参与',{skip:DOM_SKIP},async t=>{
@@ -202,11 +253,11 @@ test('independently signed-in owners restore an available lobby without pretendi
  const f=setup(t,{snap:loggedOut(),unifiedLogin:{signIn:async()=>({ok:true,state:{status:'community',source:'lobby',flowId:15}}),cancel:async()=>({ok:true})}});await tick();f.doc.querySelector('.neko-lobby-switch').click();await tick();f.doc.querySelector('.neko-lobby-sign-in').click();await tick();f.push(snapshot());f.publishLogin({status:'partial',source:'lobby',flowId:15,lobbyAvailable:true,identityStatus:'unverified',message:'已分别登录，同账号身份尚未验证'});await tick();await tick();assert(!f.doc.querySelector('.neko-lobby-panel').hidden);assert.equal(f.calls.lobby.filter(r=>r.action==='open').length,1);
 });
 
-test('message list keeps at most 300 nodes',{skip:DOM_SKIP},async t=>{
+test('message list renders the retained history beyond the old 300-row cutoff',{skip:DOM_SKIP},async t=>{
  const many=Array.from({length:320},(_,i)=>msg(i+1,human(ZS,'张三'),'human','张三','第'+(i+1)+'条'));
  const f=setup(t,{snap:snapshot({messages:many})}),{doc}=f;await tick();doc.querySelector('.neko-lobby-switch').click();await tick();
- const rows=doc.querySelectorAll('.neko-lobby-log > .neko-lobby-message');assert.equal(rows.length,300);
- assert.equal(rows[0].dataset.id,mid(21));assert.equal(rows[299].dataset.id,mid(320),'the newest messages stay');
+ const rows=doc.querySelectorAll('.neko-lobby-log > .neko-lobby-message');assert.equal(rows.length,320);
+ assert.equal(rows[0].dataset.id,mid(1));assert.equal(rows[319].dataset.id,mid(320),'the newest messages stay');
 });
 
 test('without bridge.lobby the shell installs no lobby UI and keeps working',{skip:DOM_SKIP},async t=>{
@@ -258,12 +309,16 @@ test('admins see admin controls, members see only delete for their own human mes
  const f = setup(t, { snap: member }), {doc} = f; await tick(); doc.querySelector('.neko-lobby-switch').click(); await tick();
  assert(doc.querySelector('.neko-lobby-admin-open') === null, 'no 管理 button for members');
  assert(doc.querySelector('.neko-lobby-members').hidden === false, 'member list visible'); assert(doc.querySelector('.neko-lobby-member-more') === null, 'no member menu buttons');
- const myRow = rowOf(doc, 5), otherRow = rowOf(doc, 1);
- assert(myRow.querySelector('.neko-lobby-delete') !== null, 'my own human message has delete');
- assert(otherRow.querySelector('.neko-lobby-delete') === null, 'others\' messages have no delete for members');
+ const ownMenu = openMessageMenu(doc, 5);
+ const remove = ownMenu.querySelector('.neko-lobby-delete');
+ assert(remove, 'my own human message has delete');
+ assert.equal(ownMenu.querySelector('.neko-lobby-mention-to'),null,'self-mentions are excluded');
+ remove.click();assert.equal(remove.textContent,'确认删除');
+ remove.click();await tick();assert.deepEqual(f.calls.lobby.at(-1),{action:'admin-delete',messageId:mid(5)});
+ assert(openMessageMenu(doc, 1).querySelector('.neko-lobby-delete') === null, 'others\' messages have no delete for members');
  f.push(admin); await tick();
  assert(doc.querySelector('.neko-lobby-admin-open') !== null, 'admins see 管理 button');
- assert(rowOf(doc, 1).querySelector('.neko-lobby-delete') !== null, 'admins delete any message');
+ assert(openMessageMenu(doc, 1).querySelector('.neko-lobby-delete') !== null, 'admins delete any message');
  const zsKey = 'u:' + ZS, zsItem = () => doc.querySelector('.neko-lobby-member[data-key="' + zsKey + '"]');
  assert(!doc.querySelector('.neko-lobby-member[data-key="u:' + ME + '"] .neko-lobby-member-more'), 'no admin menu on yourself');
  zsItem().querySelector('.neko-lobby-member-more').click(); await tick();
