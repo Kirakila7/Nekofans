@@ -1,8 +1,6 @@
-# Nekofans
+# Nekofuns
 
-**给大肥鱼一个家，也给想法一张创造台。**
-
-Nekofans 是一个将桌面 AI 陪伴、多 Agent 工作流与 N.E.K.O. 社区放在一起的工作台。当前源码基于本地 **0.28.39 / build 75**，包含 PR #55 的渠道记忆与可选主动搭话，以及安装位置选择页修订。
+在 Nekofuns，你有一只·大肥鱼，平时可以和她聊天，给你们的小窝添点东西。朋友喊你去玩时，就叫上她一起出门。遇到艰难的冒险，你可以问她怎么想，也可以说：「这步你来。」
 
 这是独立社区项目，与 DeepSeek、Project N.E.K.O. 及角色所对应的模型厂商不存在官方隶属或背书关系。第三方组件和角色素材保留各自的许可与署名。
 
@@ -47,7 +45,7 @@ npm run start:neko
 
 安装器先显示安装位置选择页，可输入路径或点击“浏览”。默认 `%LOCALAPPDATA%\Programs\NEKOfuns`；安装结束可勾选运行，也可通过桌面和开始菜单快捷方式打开。
 
-项目对外名称已统一为 **Nekofans**。为兼容旧安装与存档，源码目录 `apps/neko-workbench`、内部 `NEKOfuns.exe` / `NEKOfuns.local.json`、安装身份和原有数据路径仍予保留。改名不迁移或清空已有账号、工作区与项目。
+产品对外名称为 **Nekofuns**。为兼容旧安装与存档，源码目录 `apps/neko-workbench`、内部 `NEKOfuns.exe` / `NEKOfuns.local.json`、安装身份和原有数据路径仍予保留。改名不迁移或清空已有账号、工作区与项目。
 
 Windows 构建使用 `scripts/build-neko-daily.mjs`，完整输入、官方 NSIS 校验、安装流程及隔离验收见 [Windows 安装版构建](docs/workbench/WINDOWS_INSTALLER.md)。构建需要自行准备并核验 Electron、Node、记忆环境及 DSH 运行资源；克隆源码并不等于获得完整安装包。历史验证见 [集成状态](docs/workbench/INTEGRATION_STATUS.md)。
 
