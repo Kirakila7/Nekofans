@@ -885,7 +885,14 @@ function createPetWindow(a,geometry){
 }
 function createWindows(){
   createPetWindow(state.actors.find(a=>a.id==='main'));
-  tray=new Tray(nativeImage.createEmpty());tray.setTitle('🐾');tray.setToolTip('N.E.K.O. 桌宠');
+  if(process.platform==='win32'){
+    const icon=nativeImage.createFromPath(path.join(base,'assets','icons','bigfish.ico'));
+    tray=new Tray(icon.isEmpty()?nativeImage.createFromPath(path.join(base,'assets','icons','bigfish.png')):icon);
+  }else{
+    tray=new Tray(nativeImage.createEmpty());
+    tray.setTitle('🐾');
+  }
+  tray.setToolTip('N.E.K.O. 桌宠');
   tray.on('right-click',()=>tray.popUpContextMenu(mainMenu()));tray.on('click',()=>showInput());
 }
 const yuiHomeIpc=createYuiHomeIpc({assertCaller:assertWorkbenchCaller,userDataDirectory:runtimePaths.userDataDir,
