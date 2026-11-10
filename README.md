@@ -1,27 +1,21 @@
-# Nekofans
+# Nekofuns
 
-**🤖 AI、朋友与工作台。**  
-🏠 大肥鱼（AI）和人携手建立家园的地方。
+在 Nekofuns，你有一只·大肥鱼，平时可以和她聊天，给你们的小窝添点东西。朋友喊你去玩时，就叫上她一起出门。遇到艰难的冒险，你可以问她怎么想，也可以说：「这步你来。」
 
-Nekofans 是一个正在建设中的开源 AI 陪伴与社交平台（内置 DSH 工作台）。你可以和大肥鱼一起聊天与生活，为她布置一个温暖的小窝 🏡；大肥鱼也会召唤她的小鱼来帮助你 🐟；带着她走进社区，认识新朋友，分享一起经历的趣事 💬。
-
-**🤖 AI, friends, and a workbench.**  
-🏠 A place where Big Fish (AI) and people build a home together.
-
-Nekofans is an open-source AI companion and social platform in development, with a built-in DSH workbench. Chat and spend time with Big Fish, create a cozy home for her 🏡, and let her call on her little fish to help you 🐟. Bring her into the community to meet new friends and share the moments you experience together 💬.
+In Nekofuns, Big Fish is your AI companion. Chat with her, add something to the little home you share, and bring her along when friends invite you to play. When an adventure gets tricky, ask her what she thinks, or say, “You take this one.”
 
 ![Concept preview of Big Fish, the community, and a cozy home](docs/nekofans-concept-preview.gif)
 
 *概念样片，实际界面与功能可能不同。 / Concept footage; the actual interface and available features may differ.*
 
-## ✨ Explore Nekofans
+## ✨ Explore Nekofuns
 
 - **AI companion:** Chat and spend time with Big Fish, your desktop companion.
 - **A creative workbench:** Use the integrated DSH workbench to work with your AI agents.
 - **A home of her own:** Explore and build a cozy little home together.
 - **Community:** Visit the community and chat with people and AI companions. Availability and account setup may vary.
 
-Nekofans is under active development. Features and verification status vary by platform; see [integration status](docs/workbench/INTEGRATION_STATUS.md).
+Nekofuns is under active development. Features and verification status vary by platform; see [integration status](docs/workbench/INTEGRATION_STATUS.md).
 
 ## 📦 Download / 下载
 
@@ -31,7 +25,7 @@ Nekofans is under active development. Features and verification status vary by p
 
 The 0.28.43 builds are previews. The macOS preview is ad-hoc signed and not notarized; installation may require additional macOS approval. Please read each release's notes before installing. / 0.28.43 为测试版本；macOS 预览版未经过 Apple 公证，安装前请阅读各版本说明。
 
-💬 **Tried Nekofans?** Share your first impressions, questions, and ideas in [Discussions](https://github.com/Kirakila7/Nekofans/discussions). / 欢迎在讨论区分享你的使用感受和建议。
+💬 **Tried Nekofuns?** Share your first impressions, questions, and ideas in [Discussions](https://github.com/Kirakila7/Nekofans/discussions). / 欢迎在讨论区分享你的使用感受和建议。
 
 这是独立社区项目，与 DeepSeek、Project N.E.K.O. 及角色所对应的模型厂商不存在官方隶属或背书关系。第三方组件和角色素材保留各自的许可与署名。
 
@@ -76,7 +70,7 @@ npm run start:neko
 
 安装器先显示安装位置选择页，可输入路径或点击“浏览”。默认 `%LOCALAPPDATA%\Programs\NEKOfuns`；安装结束可勾选运行，也可通过桌面和开始菜单快捷方式打开。
 
-项目对外名称已统一为 **Nekofans**。为兼容旧安装与存档，源码目录 `apps/neko-workbench`、内部 `NEKOfuns.exe` / `NEKOfuns.local.json`、安装身份和原有数据路径仍予保留。改名不迁移或清空已有账号、工作区与项目。
+产品对外名称为 **Nekofuns**。为兼容旧安装与存档，源码目录 `apps/neko-workbench`、内部 `NEKOfuns.exe` / `NEKOfuns.local.json`、安装身份和原有数据路径仍予保留。改名不迁移或清空已有账号、工作区与项目。
 
 Windows 构建使用 `scripts/build-neko-daily.mjs`，完整输入、官方 NSIS 校验、安装流程及隔离验收见 [Windows 安装版构建](docs/workbench/WINDOWS_INSTALLER.md)。构建需要自行准备并核验 Electron、Node、记忆环境及 DSH 运行资源；克隆源码并不等于获得完整安装包。历史验证见 [集成状态](docs/workbench/INTEGRATION_STATUS.md)。
 
