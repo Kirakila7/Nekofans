@@ -275,8 +275,8 @@ test('room companion follows the visible left track and restores its original fo
  for(const surface of ['community','bilibili','youtube']) {
   d.dispatchEvent(new w.CustomEvent('neko-side-surface-change',{detail:{surface}}));await tick();
   assert.equal(dock.parentElement,account.parentElement);assert(!dock.hasAttribute('data-neko-companion-expanded'));
-  assert(rail.contains(railCompanion));assert(!railCompanion.hidden);assert.equal(sprite.parentElement,railCompanion,`${surface} moves the companion to the narrow rail`);
-  assert(dock.hidden,`${surface} hides the dock but retains it`);railCompanion.click();await tick();assert.equal(actions.at(-1),'open-companion-chat',`${surface} opens the existing pet chat`);
+  assert.equal(railCompanion,null);assert(!rail.contains(sprite));assert.equal(sprite.parentElement,dock,`${surface} retains the main companion without moving it into the rail`);
+  assert(dock.hidden,`${surface} hides the dock but retains it`);
   assert.equal(input.value,'还没发送');
   d.dispatchEvent(new w.CustomEvent('neko-side-surface-change',{detail:{surface:'hidden'}}));await tick();
   assert.equal(dock.parentElement,d.body);assert(!dock.hidden);assert(dock.hasAttribute('data-neko-companion-expanded'));assert.equal(sprite.parentElement,dock,`${surface} restores the companion to the room`);assert.equal(input.value,'还没发送');

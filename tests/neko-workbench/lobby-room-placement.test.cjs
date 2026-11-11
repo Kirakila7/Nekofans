@@ -34,7 +34,7 @@ test('daily room keeps its selector and private companion while home and public 
  publicRoom.click();await tick();const openedBeforeOffice=calls.filter(r=>r.action==='open').length;d.querySelector('.neko-office-switch').click();await tick();d.querySelector('.neko-office-switch').click();await tick();assert(!preview.hidden);assert.equal(preview.dataset.roomView,'welcome');assert(!preview.querySelector('.neko-chatroom-preview__empty').hidden);assert.equal(calls.filter(r=>r.action==='open').length,openedBeforeOffice);assert.equal(privateInput.value,'私聊未发送');
 });
 
-test('public room opens the existing lobby; social surfaces move the same companion to the rail and keep its draft', {skip: !JSDOM}, async t => {
+test('public room opens the existing lobby; social surfaces preserve the main companion and draft without a rail pet', {skip: !JSDOM}, async t => {
   const dom = new JSDOM('<body><aside data-neko-side-rail><div class="neko-side-rail__space"></div><div class="neko-side-rail__theme"></div></aside><aside data-slot="sidebar"><div data-neko-seat-mount></div><div data-slot="sidebar.workspaces"></div><footer><div data-slot="settings.launcher"></div></footer></aside><main><textarea aria-label="工作草稿">工作内容</textarea></main></body>', {runScripts:'outside-only'});
   t.after(() => dom.window.close());
   const w=dom.window, d=w.document, root=d.querySelector('[data-slot="sidebar"]'), actions=[], calls=[];
@@ -68,8 +68,7 @@ test('public room opens the existing lobby; social surfaces move the same compan
   d.querySelector('.neko-room-workspace').click(); await tick(); assert.equal(d.querySelector('.neko-lobby-panel').hidden,true);
   for (const surface of ['community','bilibili']) {
     d.dispatchEvent(new w.CustomEvent('neko-side-surface-change',{detail:{surface}})); await tick();
-    const pet=d.querySelector('.neko-rail-companion');assert.equal(dock.hidden,true);assert.equal(pet.hidden,false);assert.equal(character.parentElement,pet);
-    pet.click(); await tick();assert.equal(actions.at(-1),'open-companion-chat');assert.equal(input.value,'保留的草稿');
+    assert.equal(d.querySelector('.neko-rail-companion'),null);assert.equal(dock.hidden,true);assert.equal(character.parentElement,dock);assert.equal(input.value,'保留的草稿');
     d.dispatchEvent(new w.CustomEvent('neko-side-surface-change',{detail:{surface:'hidden'}})); await tick();
     assert.equal(dock.hidden,false);assert.equal(character.parentElement,dock);assert.equal(input.value,'保留的草稿');
   }

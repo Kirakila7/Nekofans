@@ -7,12 +7,10 @@ let JSDOM;
 try { ({ JSDOM } = require(path.join(process.env.NEKO_DOM_DEPS || '/private/tmp/neko-sidebar-dom-20261026', 'node_modules/jsdom'))); } catch {}
 const tick = () => new Promise(resolve => setTimeout(resolve, 5));
 
-test('main companion moves to the highest rail position when its dock is hidden, then returns intact', {skip: !JSDOM}, async t => {
+test('hiding and restoring the sidebar preserves the main companion and draft without a rail pet', {skip: !JSDOM}, async t => {
   const dom = new JSDOM('<body><aside data-neko-side-rail><div class="neko-side-rail__theme"></div><button class="neko-side-rail__expand" hidden>展开</button></aside><div id="frame" data-sidebar-collapsed="false"><aside data-slot="sidebar"><div data-neko-seat-mount></div><div data-slot="sidebar.workspaces"></div><div data-slot="settings.launcher"></div></aside></div><main></main></body>', {runScripts:'outside-only'});
   t.after(() => dom.window.close());
   const w = dom.window, d = w.document, root = d.querySelector('[data-slot="sidebar"]'), frame = d.querySelector('#frame'), expand = d.querySelector('.neko-side-rail__expand');
-  let intersection;
-  w.IntersectionObserver = class { constructor(callback) { this.callback=callback; intersection=this; } observe(target) { this.target=target; } disconnect() {} setVisible(visible) { this.callback([{target:this.target,isIntersecting:visible}]); } };
   root.getBoundingClientRect = () => ({right:300});
   const layout = {officeMode:'dsh',activeSeatId:null,seats:[],companionHistoryOpen:false};
   const state = {workspaceRoot:'/fixture',workspaceRevision:0,companion:{ready:true,messages:[{role:'assistant',text:'fixture'}]}};
@@ -23,18 +21,16 @@ test('main companion moves to the highest rail position when its dock is hidden,
   const dock=d.querySelector('.neko-companion-dock'), rail=d.querySelector('[data-neko-side-rail]'), fallback=d.querySelector('.neko-rail-companion'), character=d.querySelector('.neko-companion-character'), input=d.querySelector('.neko-companion-form textarea');
   dock.getBoundingClientRect=()=>({left:64,right:300,top:500,bottom:620,width:236,height:120});
   w.dispatchEvent(new w.Event('resize')); await tick();
-  assert.equal(character.parentElement,dock); assert(fallback.hidden); assert.equal(rail.firstElementChild,fallback);
+  assert.equal(character.parentElement,dock); assert.equal(fallback,null); assert(!rail.contains(character));
   input.value='unsent fixture';
   frame.setAttribute('data-sidebar-collapsed','true'); expand.hidden=false; await tick();
-  assert.equal(character.parentElement,fallback); assert.equal(fallback.hidden,false); assert.equal(character.getAttribute('aria-hidden'),'true');
-  expand.addEventListener('click',()=>{frame.setAttribute('data-sidebar-collapsed','false');expand.hidden=true;});
-  fallback.click(); await tick();assert(!d.querySelector('.neko-companion-menu').hidden);
+  assert.equal(character.parentElement,dock); assert.equal(d.querySelector('.neko-rail-companion'),null);
+  frame.setAttribute('data-sidebar-collapsed','false'); expand.hidden=true; await tick();
+  character.click(); await tick(); assert(!d.querySelector('.neko-companion-menu').hidden);
   d.querySelector('.neko-companion-menu__chat').click(); await tick();
-  assert.equal(character.parentElement,dock); assert(fallback.hidden); assert.equal(character.getAttribute('aria-hidden'),null); assert.equal(input.value,'unsent fixture');
-  root.style.display='none'; await tick(); assert.equal(character.parentElement,fallback);
-  root.style.display=''; await tick(); assert.equal(character.parentElement,dock);
-  intersection.setVisible(false); await tick(); assert.equal(character.parentElement,fallback);
-  intersection.setVisible(true); await tick(); assert.equal(character.parentElement,dock);
+  assert.equal(character.parentElement,dock); assert.equal(character.getAttribute('aria-hidden'),null); assert.equal(input.value,'unsent fixture');
+  root.style.display='none'; await tick(); assert.equal(character.parentElement,dock); assert(!rail.contains(character));
+  root.style.display=''; await tick(); assert.equal(character.parentElement,dock); assert.equal(input.value,'unsent fixture');
   assert.equal(d.querySelectorAll('.neko-companion-character').length,1);
   cleanup(); assert.equal(d.querySelector('.neko-rail-companion'),null);
 });
