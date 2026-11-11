@@ -1,5 +1,9 @@
 # Local integration 0.28.41 / build 77
 
+## macOS daily build 94: keep office sessions visible during layout (2026-11-11)
+
+Office restores the native DSH session list before measuring the sidebar. Resize and scroll updates leave the list visible, preventing the entrance animation from restarting on every layout pass. Daily mode still hides the native list while its own surfaces are active.
+
 ## macOS follow-up: find work and recover invitations (2026-11-11)
 
 The compact composer opens Project Records with ⌘K on macOS or Ctrl+K on Windows. Search filters the current list by project and session title, and the arrow keys and Enter navigate it through the existing draft guard. Older sessions remain reachable through Load More.

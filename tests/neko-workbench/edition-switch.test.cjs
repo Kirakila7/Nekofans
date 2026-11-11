@@ -50,6 +50,26 @@ test('office exposes original DSH actions, minimal rail and shared chat without 
  d.querySelector('#new').click();d.querySelector('#tools').click();assert.equal(newClicks,1);assert.equal(toolClicks,1);assert.equal(store.get().officeMode,before.officeMode);assert.deepEqual(store.get().seats,before.seats);
  await choose(d,'daily');assert(d.body.hasAttribute('data-neko-chatroom-active'));assert.equal(native.value,'工作草稿');assert.equal(chat.value,'聊天草稿');assert.equal(d.querySelector('#session'),session);assert.equal(calls.filter(r=>r.action==='send'||r.action==='submit').length,0);
 });
+test('the native office session list stays visible while sidebar bounds are measured', async t => {
+ const {w,d}=fixture(t);
+ await tick();
+ const sidebar=d.querySelector('[data-slot="sidebar"]');
+ const session=d.querySelector('#session');
+ const measure=sidebar.getBoundingClientRect.bind(sidebar);
+ const officeMeasurements=[];
+ sidebar.getBoundingClientRect=()=>{
+  if(d.body.dataset.nekoWorkbenchEdition==='office') officeMeasurements.push(shown(w,session));
+  return measure();
+ };
+ await choose(d,'office');
+ w.dispatchEvent(new w.Event('resize'));
+ d.dispatchEvent(new w.Event('scroll'));
+ await tick();
+ assert(officeMeasurements.length>0);
+ assert(officeMeasurements.every(Boolean),'layout must never hide the native office session list');
+ await choose(d,'daily');
+ assert(!shown(w,session),'daily mode still hides the native session list');
+});
 test('daily three-pane video is detached for office and restored on return',async t=>{
  const {w,d,calls}=fixture(t);await tick();d.querySelector('.neko-fixed-scene-entry').click();await tick();assert(d.body.hasAttribute('data-neko-fixed-scene'));
  await choose(d,'office');assert(!d.body.hasAttribute('data-neko-fixed-scene'));assert(!d.body.hasAttribute('data-neko-flex-mode'));assert(!d.body.hasAttribute('data-neko-flex-workspace-collapsed'));assert(!d.querySelector('[data-neko-unified-coding]'));assert(calls.some(r=>r.action==='hide'));
