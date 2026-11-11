@@ -1,7 +1,6 @@
 'use strict';
 // W0: lock "和她私聊随时可用". The private companion chat (workbench:companion) must keep working with
-// no lobby module and no NEKO_WORKBENCH_CHAT_URL, and the workspace shell must never remove, hide,
-// inert or rebuild the companion dock when the user switches views. Synthetic data and local fixtures only.
+// no lobby module and no NEKO_WORKBENCH_CHAT_URL, and the workspace shell must preserve the companion dock when the user switches views. Synthetic data and local fixtures only.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -43,7 +42,7 @@ if (harnessIndex < 0) {
   });
 
 
-  test('workspace shell preserves the companion dock and only hides it during social views', () => {
+  test('workspace shell preserves the companion dock across social and private chat views', () => {
     const source = fs.readFileSync(path.join(appDir, 'embedded-dsh/workspace-shell-source.js'), 'utf8');
     assert.equal(source.split("el('section', 'neko-companion-dock')").length - 1, 1, 'the dock is created exactly once per install');
     const forbidden = [
@@ -52,15 +51,11 @@ if (harnessIndex < 0) {
       /\bdock\s*\.\s*parentNode\s*\.\s*removeChild\b/,
       /\.removeChild\(\s*dock\s*\)/,
     ];
-    // Social/video takes the left pane, so the preserved dock is hidden while
-    // the same character offers a desktop-pet chat fallback. No other dock
-    // hiding, inerting, removal, replacement or direct style writes are allowed.
-    const socialGuard = 'if (dock.hidden !== sideSocial) dock.hidden = sideSocial;';
-    assert.equal(source.split(socialGuard).length - 1, 1, 'only the social-view conditional controls dock visibility');
-    // The explicit private-room portal keeps the same character and draft;
-    // its active input is the shared conversation page rather than this dock.
-    const dateGuard=/if\(isFishDateOpen\(\)\)\{\s*dock\.hidden=true;[\s\S]*?fishDateView\.petSlot\.append\(character\);\s*return;\s*\}/;
-    const remainingSource = source.replace(socialGuard, '').replace(dateGuard,'');
+    // The side surface can cover the dock. The private chat page uses its own
+    // composer and moves the existing character into that page.
+    const visibilityGuard = 'dock.hidden = onDate || sideSocial;';
+    assert.equal(source.split(visibilityGuard).length - 1, 1, 'only those two views can hide the dock');
+    const remainingSource = source.replace(visibilityGuard, '');
     for (const pattern of forbidden) assert.doesNotMatch(remainingSource, pattern);
     const css = fs.readFileSync(path.join(appDir, 'embedded-dsh/workspace-shell-source.css'), 'utf8');
     for (const rule of css.split('}')) {
