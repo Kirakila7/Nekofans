@@ -3,7 +3,7 @@
   "version": "0.5.0",
   "private": true,
   "type": "module",
-  "description": "N.E.K.O. 工作台 product brand for the DSH Web GUI: selectable chibi avatar, hero avatar gallery, wordmark, product strip with 工作台选项, document title and favicon",
+  "description": "Nekofans product brand for the DSH Web GUI: selectable chibi avatar, hero avatar gallery, wordmark, product strip with 工作台选项, document title and favicon",
   "main": "lib/index.js",
   "exports": {
     ".": "./lib/index.js",

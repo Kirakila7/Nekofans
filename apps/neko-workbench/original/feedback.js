@@ -10,6 +10,7 @@ class PetSprite {
     this.front=0;this.gen=0;this.pending=null;this.pendingSquash=false;this.pendingMove=null;this.facing='left';
     this.assetBase='assets/original-status/';this.dragState={active:false};
     this.prevWorkTick=0;this.prevWorkState=null;this.workState=null;this.workOn=false;this.workText=null;this.workTimer=null;this.localText=null;this.localTimer=null;
+    this.bubbleScroll=id==='main'?window.PetBubbleScroll?.install(bubble):null;
     this.playIdle();
   }
   stopMove() {}
@@ -51,6 +52,7 @@ class PetSprite {
     const text=terminal&&work?this.workText:this.localText||(work?this.workText:null);
     this.bubble.classList.add('is-whisper');
     this.bubble.hidden=!text;this.bubble.classList.toggle('is-on',!!text);
+    if(this.bubbleScroll){this.bubbleScroll.render(text);return;}
     this.bubble.replaceChildren();
     if(text){const line=document.createElement('div');line.className='pet-bub-row';line.textContent=text;this.bubble.appendChild(line);}
   }

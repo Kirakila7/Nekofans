@@ -48,19 +48,22 @@ function createProjectTracker(onCompleted, allowed = () => false) {
     if(start){pending.delete(session);accept(session,start);}
     if(event.type==='turn/start'){
       if(turns.size>=500)turns.delete(turns.keys().next().value);
-      turns.set(session,{turn:String(event.id||event.seq||randomUUID()),task:'',result:''});return;
+      turns.set(session,{turn:String(event.id||event.seq||randomUUID()),task:'',result:'',human:false});return;
     }
     const turn=turns.get(session);if(!turn)return;
-    if(event.type==='user/message'&&event.data?.source?.kind==='user')turn.task=content(event.data.content).slice(0,1000);
+    if(event.type==='user/message'){
+      turn.human=event.data?.source?.kind==='user';
+      turn.task=turn.human?content(event.data.content).slice(0,1000):'';
+    }
     if(event.type==='assistant/message')turn.result=content(event.data?.message||event).slice(0,12000);
     if(event.type==='turn/end'){
       turns.delete(session);
-      if((event.data?.reason?.kind||event.stopReason)==='completed'){
+      if(turn.human&&(event.data?.reason?.kind||event.stopReason)==='completed'){
         const value=taskRecord({provider:'DSH',session,turn:turn.turn,task:turn.task,result:turn.result});
         if(value)onCompleted(value);
       }
     }
   }
-  return {accept};
+  return {accept,reset(){turns.clear();pending.clear();}};
 }
 module.exports={excerpt,taskRecord,screenRecord,createProjectTracker,isRootWorkSession};

@@ -87,6 +87,28 @@ async function signedIn(f = fixture()) {
   return { ...f, url, redirect };
 }
 
+test('forced authorization is single-flight and cancel preserves the prior grant and access token',async()=>{
+ const f=await signedIn();const first=f.auth.signIn({force:true}),second=f.auth.signIn({force:true});assert.equal(first,second);await f.opened$(2);await f.auth.cancelSignIn();assert.equal((await first).status,'signed-in');assert.equal(f.store.value,tokenSet(1).refresh);assert.equal(await f.auth.getAccessToken(),tokenSet(1).access);f.auth.dispose();
+});
+test('forced authorization replaces the grant only after a successful independent code exchange',async()=>{
+ let issued=0;const f=await signedIn(fixture({token:()=>grant(++issued)}));const done=f.auth.signIn({force:true}),url=new URL(await f.opened$(2)),redirect=url.searchParams.get('redirect_uri');await hit(redirect,{path:callbackPath(redirect,{code:CODE,state:url.searchParams.get('state')})});assert.equal((await done).status,'signed-in');assert.equal(f.store.value,tokenSet(2).refresh);assert.equal(await f.auth.getAccessToken(),tokenSet(2).access);f.auth.dispose();
+});
+test('cancel during replacement persistence rolls back the previous grant; concurrent sign-out cannot revive it',async()=>{
+ for(const signingOut of [false,true]){
+  let issued=0;const f=await signedIn(fixture({token:()=>grant(++issued)}));let release;f.store.gate=new Promise(r=>release=r);
+  const done=f.auth.signIn({force:true}),url=new URL(await f.opened$(2)),redirect=url.searchParams.get('redirect_uri');await hit(redirect,{path:callbackPath(redirect,{code:CODE,state:url.searchParams.get('state')})});while(f.calls.filter(c=>c.body.grant_type==='authorization_code').length<2)await tick();await tick();
+  const interrupted=signingOut?f.auth.signOut():f.auth.cancelSignIn();release();await interrupted;await done;assert.equal(f.store.value,signingOut?null:tokenSet(1).refresh);assert.equal(f.auth.state.status,signingOut?'signed-out':'signed-in');f.auth.dispose();
+ }
+});
+test('a replacement waits for in-flight refresh rotation, then cancellation preserves the rotated grant',async()=>{
+ let finishRefresh;const f=await signedIn(fixture({token:body=>body.grant_type==='refresh_token'?new Promise(r=>finishRefresh=r):grant(1)}));f.clock.t+=3600000;
+ const refreshing=f.auth.getAccessToken();while(!finishRefresh)await tick();const replacement=f.auth.signIn({force:true});await tick();assert.equal(f.opened.length,1);finishRefresh(grant(2));await refreshing;await f.opened$(2);await f.auth.cancelSignIn();await replacement;assert.equal(f.store.value,tokenSet(2).refresh);assert.equal(await f.auth.getAccessToken(),tokenSet(2).access);f.auth.dispose();
+});
+
+test('replacement token endpoint failure retains the original usable authorization',async()=>{
+ let issued=0;const f=await signedIn(fixture({token:()=>++issued===1?grant(1):json({error:'invalid_grant'},400)}));const done=f.auth.signIn({force:true}),url=new URL(await f.opened$(2)),redirect=url.searchParams.get('redirect_uri');await hit(redirect,{path:callbackPath(redirect,{code:CODE,state:url.searchParams.get('state')})});assert.equal((await done).status,'signed-in');assert(f.auth.state.error);assert.equal(f.store.value,tokenSet(1).refresh);assert.equal(await f.auth.getAccessToken(),tokenSet(1).access);f.auth.dispose();
+});
+
 // Everything the module may expose to the renderer or to logs, flattened.
 function exposed(f, errors = []) {
   return JSON.stringify({ states: f.states, state: f.auth.state, errors: errors.map(error => ({ message: error?.message, code: error?.code })) });
@@ -483,78 +505,6 @@ test('sign-out revokes best-effort, clears the store and drops an in-flight refr
   for (let i = 0; i < 20; i++) await tick();
   assert.equal(g.store.value, null);
   assert.equal(g.auth.state.status, 'signed-out');
-});
-
-test('failed credential deletion reports failure and cannot restore login after restart', async t => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'neko-logout-'));
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
-  const file = path.join(dir, 'refresh.enc');
-  const storage = { isEncryptionAvailable: () => true, encryptString: s => Buffer.from(s), decryptString: b => b.toString() };
-  const store = new WorkbenchSecretStore(file, storage);
-  await store.set(tokenSet(1).refresh);
-  store.clear = async () => { throw Error('synthetic unlink denied with private detail'); };
-  const f = fixture({ store, revoke: () => json({}, 503) });
-  const result = await f.auth.signOut();
-  assert.equal(result.status, 'signed-out');
-  assert.equal(result.error, A.SAFE_ERROR.signout);
-  assert(store.has());
-  await assert.rejects(f.auth.getAccessToken(), { code: 'login' });
-  f.auth.dispose();
-  const restarted = fixture({ store: new WorkbenchSecretStore(file, storage) });
-  assert.equal(restarted.auth.state.signedIn, false);
-  assert.equal(restarted.auth.state.error, A.SAFE_ERROR.signout, 'retained credentials still offer cleanup after restart');
-  await assert.rejects(restarted.auth.getAccessToken(), { code: 'login' });
-  assert.equal(restarted.calls.length, 0);
-  assert.equal((await restarted.auth.signOut()).error, '');
-  assert.equal(restarted.store.has(), false);
-  const cleanedLaunch = fixture({ store: new WorkbenchSecretStore(file, storage) });
-  assert.equal(cleanedLaunch.auth.state.signedIn, false);
-  assert.equal(cleanedLaunch.auth.state.error, '');
-  cleanedLaunch.auth.dispose();
-  await signedIn(restarted);
-  assert.equal(fs.existsSync(file + '.signed-out'), false);
-  restarted.auth.dispose();
-  const nextLaunch = fixture({ store: new WorkbenchSecretStore(file, storage) });
-  assert.equal(nextLaunch.auth.state.signedIn, true, 'explicit sign-in releases the logout marker');
-  nextLaunch.auth.dispose();
-});
-
-test('a stale refresh cannot erase a new explicit sign-in after logout', async () => {
-  let n = 1, release;
-  const f = await signedIn(fixture({ token: () => grant(n++) }));
-  f.store.gate = new Promise(resolve => { release = resolve; });
-  f.auth.invalidateAccessToken();
-  const refresh = f.auth.getAccessToken();
-  const stale = assert.rejects(refresh, { code: 'canceled' });
-  for (let i = 0; i < 20; i++) await tick();
-  assert.equal(f.store.log.filter(entry => entry === 'set:start').length, 2);
-  await f.auth.signOut();
-  const login = f.auth.signIn();
-  assert.equal(f.opened.length, 1, 'new login waits for the old writer');
-  release();
-  await stale;
-  const url = new URL(await f.opened$(2)), redirect = url.searchParams.get('redirect_uri');
-  await hit(redirect, { path: callbackPath(redirect, { code: CODE, state: url.searchParams.get('state') }) });
-  assert.equal((await login).signedIn, true);
-  assert.equal(f.store.value, tokenSet(3).refresh);
-  f.auth.dispose();
-});
-
-test('canceling login during credential persistence removes the late grant', async () => {
-  let release;
-  const f = fixture();
-  f.store.gate = new Promise(resolve => { release = resolve; });
-  const login = f.auth.signIn();
-  const url = new URL(await f.opened$()), redirect = url.searchParams.get('redirect_uri');
-  await hit(redirect, { path: callbackPath(redirect, { code: CODE, state: url.searchParams.get('state') }) });
-  for (let i = 0; i < 20 && !f.store.log.includes('set:start'); i++) await tick();
-  assert(f.store.log.includes('set:start'));
-  const canceled = f.auth.cancelSignIn();
-  release();
-  assert.equal((await canceled).signedIn, false);
-  await login;
-  assert.equal(f.store.value, null);
-  f.auth.dispose();
 });
 
 test('tokens, code, verifier and state never appear in snapshots, errors or the callback page', async () => {

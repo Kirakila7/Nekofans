@@ -1,0 +1,36 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict'),path=require('node:path'),fs=require('node:fs'),os=require('node:os');
+const {once}=require('node:events');const {request}=require('node:http');
+const {createPrivateGameRuntime}=require('../../apps/neko-workbench/private-game-runtime.cjs');
+const root=path.resolve(__dirname,'../..'),origin='https://fixture.trycloudflare.com';
+test('paired workbench processes two private requests without exposing either rule to its caller',async t=>{
+ const {createPrivateTrial}=await import('../../services/nekofans-game-hub/private-trial/server.mjs');
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'private-game-fixture-')),seen=[];
+ const safeStorage={isEncryptionAvailable:()=>true,getSelectedStorageBackend:()=> 'keychain',encryptString:s=>Buffer.from('encrypted:'+s),decryptString:b=>b.toString().slice(10)};
+ let base;
+ const fetchImpl=(url,opts={})=>new Promise((resolve,reject)=>{const req=request(base+new URL(url).pathname,{method:opts.method||'GET',headers:{...opts.headers,host:new URL(origin).host}},res=>{const chunks=[];res.on('data',c=>chunks.push(c));res.on('end',()=>resolve(new Response(Buffer.concat(chunks),{status:res.statusCode,headers:res.headers})));});req.on('error',reject);if(opts.body)req.write(opts.body);req.end();});
+ const rpc=async(method,input)=>{if(['game-account-status','game-player-account-status'].includes(method))return {status:'signed-in'};if(method==='game-account-chat'){seen.push(input.text);return {text:'{"kind":"opponent-piece-ban","piece":"n","turns":1}'};}if(method==='game-account-cancel')return {};throw Error('unexpected route');};
+ const runtime=createPrivateGameRuntime({rpc,repositoryRoot:root,dataDir:dir,safeStorage,fetchImpl});
+ const server=createPrivateTrial({publicOrigin:origin,publicKey:await runtime.publicKey()});server.listen(0,'127.0.0.1');await once(server,'listening');base=`http://127.0.0.1:${server.address().port}`;
+ t.after(async()=>{await runtime.stop();server.close();fs.rmSync(dir,{recursive:true,force:true});});
+ assert.equal((await runtime.start({url:origin})).connected,true);const created=await runtime.create();assert.equal(created.status,'created');
+ const owner=new URLSearchParams(new URL(created.ownerUrl).hash.slice(1)).get('seat'),room='/rooms/'+created.roomId;
+ async function call(p,method='GET',body,token){const response=await fetchImpl(origin+p,{method,headers:{...(token?{authorization:'Bearer '+token}:{}),...(body?{'content-type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{})});return [response.status,await response.json()];}
+ const [,guest]=await call(room+'/join','POST');
+ const [,pair]=await call(room+'/pair','POST',{},guest.token);
+ const guestDir=fs.mkdtempSync(path.join(os.tmpdir(),'private-game-guest-'));
+ const guestRuntime=createPrivateGameRuntime({rpc,repositoryRoot:root,dataDir:guestDir,safeStorage,fetchImpl});
+ t.after(async()=>{await guestRuntime.stop();fs.rmSync(guestDir,{recursive:true,force:true});});
+ const paired=await guestRuntime.pairOwnSeat({url:origin,roomId:created.roomId,code:pair.code});
+ assert.deepEqual(paired,{status:'paired',seat:1,roomId:created.roomId});
+ const guestSession=guestRuntime.getOwnSeatSession();
+ assert.equal((await guestSession.transport.readState({seat:1})).ready,false);
+ await assert.rejects(guestSession.transport.readState({seat:0}),/not authorized/);
+ await assert.rejects(guestRuntime.pairOwnSeat({url:origin,roomId:created.roomId,code:pair.code}),/配对码/);
+ const [first,second]=await Promise.all([call(room+'/rule','POST',{rule:'第一方的秘密'},owner),guestRuntime.submitOwnRule({text:'第二方的秘密'})]);
+ assert.equal(first[0],201);assert.equal(second.status,'ready');assert.equal(seen.length,2);assert(!seen[0].includes('第二方的秘密'));assert(!seen[1].includes('第一方的秘密'));
+ assert.deepEqual(await guestRuntime.getOwnRule({roomId:created.roomId,seat:1}),{roomId:created.roomId,seat:1,text:'第二方的秘密',confirmed:true});
+ assert.equal(await guestRuntime.getOwnRule({roomId:created.roomId,seat:0}),null);
+ assert.equal(await runtime.getOwnRule({roomId:created.roomId,seat:1}),null);
+ const [,view]=await call(room+'/state','GET',null,owner);assert.equal(view.ready,true);assert(!JSON.stringify(view).includes('秘密'));assert.equal((await call(room+'/actions','POST',{expectedVersion:0,action:'g1f3'},owner))[0],400);
+});

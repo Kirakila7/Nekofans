@@ -1,11 +1,14 @@
 'use strict';
 const {createYuiHomeFileStore, createYuiHomeStorage} = require('./yui-home-storage.cjs');
 const {createYuiHomeTextures} = require('./yui-home-textures.cjs');
+const {createHomePetAssets}=require('./home-pet-assets.cjs');
 
 const fields = Object.freeze({
   status: [], textures: [], 'textures-retry': [], 'retry-save': [], place: ['x','y','z','material'], remove: ['x','y','z'], clear: [],
   camera: ['azimuth','elevation','zoom'], perspective: ['mode'],
   avatar: ['position'], avatar_checkpoint: ['position'], avatar_reset: [],
+  'return-home':[],'avatar_look':['yaw','pitch'],'avatar_walk':['dx','dz'],
+  'pet-animations':[],'pet-animation':['name'],'home-task-avatar':[],'avatar_place':['x','z'],
 });
 
 function validateRequest(request) {
@@ -18,6 +21,7 @@ function validateRequest(request) {
 function createYuiHomeIpc({assertCaller, userDataDirectory, publish, createStorage = createYuiHomeStorage, createStore = createYuiHomeFileStore, textureProvider = createYuiHomeTextures()}) {
   if (typeof assertCaller !== 'function' || typeof publish !== 'function') throw new Error('家园桥接配置无效');
   let initialization;
+  const petAssets=createHomePetAssets();
   function getStorage() {
     if (!initialization) {
       initialization = Promise.resolve().then(() => createStorage({store:createStore(userDataDirectory)})).then(storage => {
@@ -27,9 +31,17 @@ function createYuiHomeIpc({assertCaller, userDataDirectory, publish, createStora
     }
     return initialization;
   }
-  return async function handle(event, request) {
+  const handle=async function handle(event, request) {
     assertCaller(event);
     validateRequest(request);
+    if(request.action==='pet-animations')return {ok:true,animations:await petAssets.manifest()};
+    if(request.action==='pet-animation')return {ok:true,animation:await petAssets.load(request.name)};
+    if(request.action==='home-task-avatar'){
+      const fs=require('node:fs/promises'),path=require('node:path');
+      const bytes=await fs.readFile(path.join(__dirname,'assets/doubao-work/working.webp'));
+      if(bytes.length>2*1024*1024)throw Error('工作形象素材过大');
+      assertCaller(event);return {ok:true,src:'data:image/webp;base64,'+bytes.toString('base64')};
+    }
     if (request.action === 'textures' || request.action === 'textures-retry') {
       if (request.action === 'textures-retry') textureProvider.clearCache();
       const result = await textureProvider.load();
@@ -40,5 +52,6 @@ function createYuiHomeIpc({assertCaller, userDataDirectory, publish, createStora
     assertCaller(event);
     return request.action === 'status' ? storage.state() : storage.command(request);
   };
+  handle.getStorage=getStorage;return handle;
 }
 module.exports = {createYuiHomeIpc};

@@ -34,12 +34,20 @@ test('task summary and completed screen observation reach durable NEKO memory an
  const recalled=await memory.recall('bigfish','构建成功',300);assert(recalled.some(item=>item.text.includes('构建成功')));
  await memory.close();memory=open();const saved=await memory.view();assert(saved.records.some(x=>x.value?.text.includes('构建成功')));assert(saved.records.some(x=>x.value?.text.includes('已完成界面')));await memory.close();
 });
-test('official free model is selected only for the isolated deployment preset',async t=>{
- const dir=fs.mkdtempSync(path.join(os.tmpdir(),'free-memory-config-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
- const old=process.env.NEKO_WORKBENCH_MEMORY_OFFICIAL_FREE;process.env.NEKO_WORKBENCH_MEMORY_OFFICIAL_FREE='1';t.after(()=>{if(old===undefined)delete process.env.NEKO_WORKBENCH_MEMORY_OFFICIAL_FREE;else process.env.NEKO_WORKBENCH_MEMORY_OFFICIAL_FREE=old});
- const worker={request:async()=>{throw Error('offline')},stop:async()=>{},close:async()=>{}};
- const runtime=new WorkbenchMainChat({dataDir:dir,repositoryRoot:root,safeStorage:{isEncryptionAvailable:()=>false},memoryWorker:worker});
- await runtime.start();const config=await runtime.memoryModel();assert.equal(config.model,'free-model');assert.equal(config.baseUrl,'https://www.lanlan.tech/text/v1');assert.equal(runtime.readMemoryModel().officialFree,true);await runtime.close();
+test('project summary preference defaults off and persists only when explicitly enabled',async t=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'project-memory-config-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+ const open=()=>new WorkbenchMainChat({dataDir:dir,repositoryRoot:root,safeStorage:{isEncryptionAvailable:()=>false},memoryWorker:{request:async()=>{throw Error('offline')},stop:async()=>{},close:async()=>{}}});
+ let runtime=open();await runtime.start();
+ assert.equal(runtime.read().projectActivityMemory,false);
+ await assert.rejects(runtime.memoryAction({action:'project-activity-memory',enabled:'true'}),/是否保存项目摘要/);
+ assert.equal(runtime.read().projectActivityMemory,false);
+ await runtime.memoryAction({action:'project-activity-memory',enabled:true});
+ assert.equal(runtime.read().projectActivityMemory,true);
+ await runtime.close();
+ runtime=open();await runtime.start();t.after(()=>runtime.close());
+ assert.equal(runtime.read().projectActivityMemory,true);
+ await runtime.memoryAction({action:'project-activity-memory',enabled:false});
+ assert.equal(runtime.read().projectActivityMemory,false);
 });
 test('DSH completed turns from distinct projects record only final text, never tool output or failures',()=>{
  const entries=[],tracker=createProjectTracker(v=>entries.push(v),()=>true);
@@ -71,7 +79,7 @@ test('screen context recalls NEKO memory only after destination consent',async t
 test('completed Codex turns yield a result without command output',async t=>{
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'codex-activity-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
  const file=path.join(dir,'server.cjs');fs.writeFileSync(file,`const rl=require('node:readline').createInterface({input:process.stdin});const out=x=>process.stdout.write(JSON.stringify(x)+'\\n');rl.on('line',l=>{const m=JSON.parse(l);if(!m.id)return;let result={};if(m.method==='thread/list')result={data:[{id:'one',name:'项目',cwd:${JSON.stringify(dir)},status:{type:'idle'},updatedAt:1}],nextCursor:null};if(m.method==='thread/resume')result={thread:{id:'one',name:'项目',cwd:${JSON.stringify(dir)},status:{type:'idle'},updatedAt:1}};if(m.method==='turn/start'){const threadId=m.params.threadId;out({method:'turn/started',params:{threadId,turn:{id:'turn-1'}}});out({method:'item/completed',params:{threadId,turnId:'turn-1',item:{id:'tool',type:'commandExecution',aggregatedOutput:'PRIVATE_TOOL_OUTPUT'}}});out({method:'item/completed',params:{threadId,turnId:'turn-1',item:{id:'reply',type:'agentMessage',text:'项目结果已交付'}}});out({method:'turn/completed',params:{threadId,turn:{id:'turn-1',status:'completed',items:[]}}});result={turn:{id:'turn-1',status:'inProgress',items:[]}};}out({id:m.id,result});});`);
- const events=[],c=createCodexWorkspace({defaultCwd:dir,resolveExecutable:()=>'/fixture',spawnProcess:(_e,_a,options)=>spawn(process.execPath,[file],options),onCompleted:value=>events.push(value),timeoutMs:2000});t.after(()=>c.dispose());
+ const events=[],c=createCodexWorkspace({defaultCwd:dir,resolveExecutable:()=>'/fixture',spawnProcess:(_e,_a,options)=>spawn(process.execPath,[file],options),onCompleted:value=>events.push(value),memoryConsent:()=>1,timeoutMs:2000});t.after(()=>c.dispose());
  await c.list();await c.send({id:'one',cwd:dir,message:'完成项目'});assert.equal(events.length,1);assert.equal(events[0].result,'项目结果已交付');assert(!JSON.stringify(events).includes('PRIVATE_TOOL_OUTPUT'));
 });
 test('main companion chat sends completed conversation into same NEKO delivery ledger',async t=>{
@@ -87,8 +95,9 @@ test('main companion chat sends completed conversation into same NEKO delivery l
 test('only verified root or task session events enter project memory',()=>{
  const root={sessionId:'root'},state={dshRoot:root,actors:[{id:'task-1',kind:'task',sessionId:'task',metadataReady:true,metadataSource:'dsh-task-session'},{id:'sub-1',kind:'subagent',sessionId:'sub',metadataReady:true,metadataSource:'dsh-subagent-catalog',parentSessionId:'task'},{id:'pending',kind:'task',sessionId:'pending',metadataReady:false,metadataSource:'dsh-task-session'}]};
  const records=[],tracker=createProjectTracker(v=>records.push(v),id=>isRootWorkSession(state,id));
- const turn=id=>{tracker.accept(id,{type:'turn/start',seq:1});tracker.accept(id,{type:'assistant/message',data:{message:{content:'safe'}}});tracker.accept(id,{type:'turn/end',data:{reason:{kind:'completed'}}});};
+ const turn=(id,kind='user')=>{tracker.accept(id,{type:'turn/start',seq:1});tracker.accept(id,{type:'user/message',data:{source:{kind},content:'request'}});tracker.accept(id,{type:'assistant/message',data:{message:{content:'safe'}}});tracker.accept(id,{type:'turn/end',data:{reason:{kind:'completed'}}});};
  for(const id of ['root','task','sub','pending','unknown'])turn(id);
+ turn('root','goal');
  assert.equal(records.length,2);
  tracker.accept('task',{type:'turn/start',seq:5});tracker.accept('task',{type:'assistant/message',data:{message:{content:'late'}}});state.actors[0].kind='subagent';state.actors[0].parentSessionId='root';tracker.accept('task',{type:'turn/end',data:{reason:{kind:'completed'}}});assert.equal(records.length,2);
 });
@@ -103,6 +112,18 @@ test('screen persistence requires fresh per-session opt-in and discards late res
  r.start(source,{});frame();jobs.shift()({text:'new session default'});await new Promise(resolve=>setImmediate(resolve));assert.equal(records.length,1);
 });
 
+
+test('resuming the same screen can save identical text after fresh consent',async t=>{
+ const saved=[],r=new ScreenObservation({intervalMs:1,onRecord:v=>saved.push(v),observe:async()=>({text:'同一个窗口仍在显示报告'})});t.after(()=>r.stop());
+ const source={id:'window:1:0',name:'screen'};
+ const image='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+X2Z8AAAAASUVORK5CYII=';
+ const frame=async(seq)=>{r.frame({generation:r.generation,seq,capturedAt:Date.now(),width:1,height:1,image});await new Promise(resolve=>setImmediate(resolve));};
+ r.start(source,{});await frame(1);assert.equal(saved.length,0);
+ r.pause();r.start(source,{},null,true);await frame(1);
+ assert.equal(saved.length,1);assert.equal(saved[0].text,'同一个窗口仍在显示报告');
+ await new Promise(resolve=>setTimeout(resolve,3));await frame(2);
+ assert.equal(saved.length,1,'same share still deduplicates repeated observations');
+});
 
 test('buffers an unclassified start until task metadata confirms a human work session',()=>{
  const state={dshRoot:{sessionId:'root'},actors:[]},records=[],tracker=createProjectTracker(v=>records.push(v),id=>isRootWorkSession(state,id));

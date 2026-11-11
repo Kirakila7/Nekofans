@@ -8,6 +8,14 @@ function fixture({status='credential-stored',stream,prepare,timeoutMs=1000,clean
 }
 test('output token budget is validated and passed to the account model',async()=>{const f=fixture();await assert.rejects(f.api.send({requestId:'companion-bad',text:'你好',maxTokens:0}),/内容无效/);await f.api.send({requestId:'companion-ok',text:'你好',maxTokens:123});assert.equal(f.calls[0].config.maxTokens,123);});
 test('login check refuses missing accounts without preparing a call',async()=>{const f=fixture({status:'signed-out'});await assert.rejects(f.api.send({requestId:'companion-a',text:'你好'}),/登录/);assert.equal(f.calls.length,0);});
+
+test('proactive account calls have their own cancellation lock and never block the main conversation',async()=>{
+ let started=false;const ctx={get:()=>({getState:async()=>({status:'credential-stored'})}),llm:{prepareCall:async config=>({config,stream:async function*(options){if(options.system==='slow'){started=true;await new Promise(r=>options.signal.addEventListener('abort',r,{once:true}));}else yield {type:'text-delta',index:0,text:'主人消息优先'};yield {type:'finish',reason:{kind:'stop'}};}})}};
+ const make=namespace=>createCompanionAccountBridge({ctx,route,namespace,createUserMessage:x=>x,createAssistantMessage:x=>x});const main=make('companion'),proactive=make('proactive');
+ const pending=proactive.send({requestId:'proactive-one',text:'观察',context:'slow',maxTokens:240});pending.catch(()=>{});while(!started)await new Promise(r=>setImmediate(r));
+ assert.deepEqual(await main.send({requestId:'companion-one',text:'你好',maxTokens:1024}),{text:'主人消息优先'});proactive.cancel({requestId:'proactive-one'});await assert.rejects(pending,/取消/);
+ await assert.rejects(proactive.send({requestId:'companion-forged',text:'x',maxTokens:240}),/内容无效/);main.dispose();proactive.dispose();
+});
 test('account status returns only bounded values',async()=>{const f=fixture();assert.deepEqual(await f.api.status(),{status:'signed-in'});f.ctx.get=()=>({getState:async()=>({status:'checking',secret:'private'})});assert.deepEqual(await f.api.status(),{status:'unavailable'});});
 test('sends one model call without agent, tool, or session and returns complete text',async()=>{const f=fixture();assert.deepEqual(await f.api.send({requestId:'companion-a',text:'你好',context:'妈妈人设'}),{text:'你好'});const {options}=f.calls[1];assert.equal(options.system,'妈妈人设');assert.equal(options.messages[0].content[0].text,'你好');assert.equal(options.sessionId,undefined);assert.equal(options.tools,undefined);assert.deepEqual(f.calls[0].config,{...route,maxTokens:1024});});
 test('history retains native user/assistant roles, drops orphan reply, and merges neighboring user turns',async()=>{const f=fixture();await f.api.send({requestId:'companion-a',text:'新问题',context:'角色设定',history:[{role:'assistant',text:'孤立回复'},{role:'user',text:'旧问题'},{role:'assistant',text:'旧回答'},{role:'user',text:'取消的问题'}]});const o=f.calls[1].options;assert.equal(o.system,'角色设定');assert.deepEqual(o.messages.map(x=>x.role),['user','assistant','user']);assert.equal(o.messages[2].content[0].text,'取消的问题\n\n新问题');assert(!JSON.stringify(o.system).includes('旧问题'));});
@@ -17,14 +25,3 @@ test('stuck model cleanup fails closed and blocks later turns',async()=>{const f
 test('incompatible host response fails closed',async()=>{const f=fixture({prepare:async()=>({})});await assert.rejects(f.api.send({requestId:'companion-a',text:'你好'}),/模型服务不可用/);});
 test('final block text replaces its prior deltas and usage after finish is allowed',async()=>{const f=fixture({stream:async function*(){yield {type:'block-start',index:0,blockType:'text'};yield {type:'text-delta',index:0,text:'你'};yield {type:'block-end',index:0,block:{type:'text',text:'你好'}};yield {type:'finish',reason:{kind:'stop'}};yield {type:'usage',usage:{}};}});assert.deepEqual(await f.api.send({requestId:'companion-a',text:'你好'}),{text:'你好'});});
 test('a stream cleanup rejection blocks later calls',async()=>{const f=fixture({stream:()=>({[Symbol.asyncIterator](){return {next:async()=>({done:false,value:{type:'tool-call'}}),return:async()=>{throw Error('private diagnostic');}};}})});await assert.rejects(f.api.send({requestId:'companion-a',text:'你好'}),/清理未确认/);await assert.rejects(f.api.send({requestId:'companion-b',text:'你好'}),/清理未确认/);});
-test('foreground conversation preempts background memory and never queues behind it',async()=>{
- let started;const f=fixture({stream:async function* (options){const text=options.messages.at(-1).content[0].text;if(text==='background'){await new Promise(resolve=>{started=resolve;options.signal.addEventListener('abort',resolve,{once:true});});return;}yield {type:'text-delta',index:0,text:'foreground'};yield {type:'finish',reason:{kind:'stop'}};}});
- const memory=f.api.send({requestId:'memory-one',text:'background',purpose:'memory'});memory.catch(()=>{});while(!started)await new Promise(r=>setImmediate(r));
- await assert.rejects(f.api.send({requestId:'memory-two',text:'other',purpose:'memory'}),/暂不可用/);
- assert.deepEqual(await f.api.send({requestId:'companion-foreground',text:'hello'}),{text:'foreground'});await assert.rejects(memory,/取消/);
-});
-test('disconnected memory call fails closed and later reconnect succeeds',async()=>{
- let online=false;const f=fixture();f.ctx.get=()=>({getState:async()=>({status:online?'credential-stored':'credential-missing'})});
- await assert.rejects(f.api.send({requestId:'memory-first',text:'synthetic',purpose:'memory'}),/登录/);online=true;
- assert.deepEqual(await f.api.send({requestId:'memory-second',text:'synthetic',purpose:'memory'}),{text:'你好'});
-});

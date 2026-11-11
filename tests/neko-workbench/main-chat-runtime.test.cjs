@@ -17,12 +17,27 @@ async function upstream(t){const requests=[];let handler=(_req,res)=>sse(res);co
   t.after(()=>new Promise(resolve=>{server.closeAllConnections();server.close(resolve);}));
   return {requests,baseUrl:`http://127.0.0.1:${server.address().port}/v1`,setHandler:fn=>{handler=fn;}};}
 const config=(baseUrl,extra={})=>({protocol:'openai-compatible',baseUrl,model:'fixture-model',requestTimeoutMs:5000,maxOutputTokens:256,key:{action:'replace',value:'fixture-secret-only'},...extra});
+test('live home context refreshes per chat turn and never changes the persona file or raw conversation history',async t=>{
+ const f=fixture(t),inputs=[];let context='家里只有地板';const provider={async *stream(input){inputs.push(input);yield {type:'delta',text:'一起布置吧'};yield {type:'complete',messageId:'home-fixture'};}};
+ const runtime=f.create({initialBackend:'deepseek-account',accountProvider:provider,environmentContext:()=>context});await runtime.start();const personaBefore=fs.readFileSync(path.join(runtime.personasDir,'bigfish.json'),'utf8');await runtime.send('我们家现在有什么？');assert(inputs[0].persona.prompt.includes('家里只有地板'));context='家里新增了一张蓝色沙发';await runtime.send('喜欢刚添的东西吗？');assert(inputs[1].persona.prompt.includes('蓝色沙发'));assert(!inputs[0].persona.prompt.includes('蓝色沙发'));assert.deepEqual((await runtime.history()).filter(x=>x.role==='user').map(x=>x.text),['我们家现在有什么？','喜欢刚添的东西吗？']);assert.equal(fs.readFileSync(path.join(runtime.personasDir,'bigfish.json'),'utf8'),personaBefore);
+});
 
 test('new workbench uses independent unconfigured chat, encrypted key projection and existing shared service',async t=>{
   const f=fixture(t),runtime=f.create();await runtime.start();const snapshot=runtime.read();assert.equal(snapshot.backend,'chat-api');assert.equal(snapshot.ready,true);assert.equal(snapshot.hasKey,false);assert.equal(snapshot.voiceStatus,'未接入');
   assert.equal(snapshot.settings.personaId,'bigfish');assert(fs.existsSync(path.join(runtime.personasDir,'bigfish.json')));assert(!JSON.stringify(snapshot).includes('fixture-secret'));
   assert.equal((await runtime.send('你好')).status,'error');assert.equal(runtime.read().chat.phase,'error');
   const history=await runtime.history();assert.equal(history.length,1);assert.equal(history[0].role,'user');assert.equal(history[0].personaId,'bigfish');
+});
+
+test('memory IPC accepts bounded priority/pin edits without confirming a candidate',async t=>{
+  const f=fixture(t),runtime=f.create();await runtime.start();
+  const value={kind:'fact',text:'合成测试记忆',visibility:'private',certainty:'candidate',evidenceRefs:['synthetic']};
+  await runtime.memorySystem.hub.add([{eventId:'ipc-priority-base',itemId:'ipc-priority-item',personaId:'bigfish',origin:'user',operation:'upsert',parents:[],occurredAt:'2026-10-28T00:00:00Z',value}]);
+  const input={action:'event-priority',id:'ipc-priority-item',revisionIds:['ipc-priority-base'],priority:90,pinned:true};
+  const result=await runtime.memoryAction(input);assert.equal(result.ok,true);
+  const row=result.replication.records.find(r=>r.itemId===input.id);assert.equal(row.value.priority,90);assert.equal(row.value.pinned,true);assert.equal(row.value.certainty,'candidate');
+  assert.equal((await runtime.memoryAction({...input,priority:200,revisionIds:row.heads.map(e=>e.eventId)})).ok,false);
+  assert.equal((await runtime.memoryAction({...input,priority:2})).ok,false);
 });
 
 test('starting DSH with unconfigured companion chat never queries the keychain; settings checks remain fail-closed',async t=>{

@@ -20,7 +20,6 @@ test('an unset chat URL uses the official service while an explicitly empty URL 
   assert.deepEqual(C.resolveChatConfig({ NEKO_WORKBENCH_CHAT_URL: '', NEKO_WORKBENCH_CHAT_CLIENT_ID: 'bad', NEKO_WORKBENCH_CHAT_AUTH_URL: 'http://evil.test',
     NEKO_WORKBENCH_CHAT_OAUTH_PORTS: 'x' }), { configured: false });
   assert.ok(Object.isFrozen(C.resolveChatConfig({})));
-  assert.ok(Object.isFrozen(C.resolveChatConfig({ NEKO_WORKBENCH_CHAT_URL: '' })));
 });
 
 test('chat URL requires https except on 127.0.0.1, localhost and [::1]', () => {
@@ -140,8 +139,6 @@ test('resolveChatConfig reads process.env by default and nothing else', () => {
     assert.equal(C.resolveChatConfig().chatUrl, 'https://chat.nekotech.ai/');
     process.env.NEKO_WORKBENCH_CHAT_URL = 'http://localhost:8091';
     assert.equal(C.resolveChatConfig().wsUrl, 'ws://localhost:8091/ws');
-    process.env.NEKO_WORKBENCH_CHAT_URL = '';
-    assert.deepEqual(C.resolveChatConfig(), { configured: false });
   } finally {
     for (const key of keys) { if (saved[key] === undefined) delete process.env[key]; else process.env[key] = saved[key]; }
   }

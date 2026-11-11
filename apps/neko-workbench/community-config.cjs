@@ -1,4 +1,5 @@
 'use strict';
+const path = require('node:path');
 
 // Existing N.E.K.O. production base (utils/social_base.py) and /feed entry
 // used by static/app/app-ui/surface-floating-controls.js.
@@ -206,7 +207,7 @@ function installCommunityNavigation(target, { communityUrl, parent, openExternal
 
 function validateCommunityRequest(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)
-      || Object.keys(value).some(key => !['action', 'bounds', 'holes', 'site', 'slot', 'requestId', 'home', 'videoUrl'].includes(key))
+      || Object.keys(value).some(key => !['action', 'bounds', 'site', 'slot', 'requestId', 'home', 'videoUrl'].includes(key))
       || !['open', 'layout', 'hide', 'reload', 'back', 'copy-video-link', 'play-official', 'open-youtube-video', 'open-youtube-shorts'].includes(value.action)
       || (value.requestId !== undefined && (!['open', 'hide'].includes(value.action) || !Number.isSafeInteger(value.requestId) || value.requestId < 1))
       || (value.site !== undefined && (value.action !== 'open' || !['community', 'bilibili', 'youtube'].includes(value.site)))
@@ -221,8 +222,7 @@ function validateCommunityRequest(value) {
           Object.hasOwn(bounds, key) && Number.isFinite(bounds[key]) && Math.abs(bounds[key]) <= 1000000)
         || bounds.width <= 0 || bounds.height <= 0) throw new Error('社区布局无效');
   }
-  if (value.holes !== undefined && (!['open','layout'].includes(value.action) || !Array.isArray(value.holes) || value.holes.length > 3 || value.holes.some(r => !r || typeof r !== 'object' || Array.isArray(r) || Object.keys(r).length !== 4 || !['x','y','width','height'].every(k => Object.hasOwn(r,k) && Number.isFinite(r[k]) && Math.abs(r[k]) <= 1000000) || r.width <= 0 || r.height <= 0))) throw new Error('社区布局无效');
-  return { action: value.action, ...(value.site ? { site: value.site } : {}), ...(value.slot ? { slot: value.slot } : {}), ...(value.videoUrl ? { videoUrl: value.videoUrl } : {}), ...(value.home === true ? { home: true } : {}), ...(value.requestId !== undefined ? { requestId: value.requestId } : {}), ...(value.bounds ? { bounds: { ...value.bounds } } : {}), ...(value.holes ? {holes:value.holes.map(r=>({...r}))} : {}) };
+  return { action: value.action, ...(value.site ? { site: value.site } : {}), ...(value.slot ? { slot: value.slot } : {}), ...(value.videoUrl ? { videoUrl: value.videoUrl } : {}), ...(value.home === true ? { home: true } : {}), ...(value.requestId !== undefined ? { requestId: value.requestId } : {}), ...(value.bounds ? { bounds: { ...value.bounds } } : {}) };
 }
 
 function communityBounds(host, bounds) {
@@ -238,8 +238,8 @@ function communityBounds(host, bounds) {
 
 const LOAD_ERROR = '社区页面未能打开，请检查网络后重试';
 const CANCEL_ERROR = '社区已隐藏或工作台页面已离开';
-function createCommunityController({ WebContentsView, BaseWindow, openExternal, copyText, env = process.env, site = 'community', youtubeAppId = YOUTUBE_APP_ID,
-  onState = () => {}, onHide = () => {}, onOverlayClosing = () => {}, onExternalError } = {}) {
+function createCommunityController({ WebContentsView, openExternal, copyText, env = process.env, site = 'community', youtubeAppId = YOUTUBE_APP_ID,
+  onState = () => {}, onHide = () => {}, onDispose = () => {}, onExternalError, adaptiveVideoViewport = false, communityLoadTimeoutMs = 15000 } = {}) {
   if (!['community', 'bilibili', 'youtube'].includes(site)) throw new Error('未知内容入口');
   const isBilibili = site === 'bilibili';
   const isYoutube = site === 'youtube';
@@ -288,38 +288,22 @@ function createCommunityController({ WebContentsView, BaseWindow, openExternal, 
   function detach(record) {
     if (!record.attached) return;
     record.attached = false;
-    if (record.nativeOverlay) { record.nativeOverlay.destroy(); record.nativeOverlay = null; }
-    else if (!record.host.isDestroyed()) record.host.contentView.removeChildView(record.view);
+    if (!record.host.isDestroyed()) record.host.contentView.removeChildView(record.view);
   }
   function place(record) {
     if (current !== record || !record.wanted || !record.loaded || record.webContents.isDestroyed()) return false;
-    let bounds = communityBounds(record.host, record.bounds);
+    if (record.suspended) { muteWhileHidden(record); detach(record); return false; }
+    const bounds = communityBounds(record.host, record.bounds);
     if (isYoutube) {
       const scale = record.host.webContents.getZoomFactor();
       record.tooSmall = bounds.width / scale < YOUTUBE_MIN_SIZE || bounds.height / scale < YOUTUBE_MIN_SIZE;
       if (record.tooSmall) { muteWhileHidden(record); detach(record); return false; }
     }
     if (!bounds.width || !bounds.height) { detach(record); return false; }
-    const holes=(record.holes||[]).map(h=>communityBounds(record.host,h)).filter(h=>h.width>0&&h.height>0&&h.x<bounds.x+bounds.width&&h.x+h.width>bounds.x&&h.y<bounds.y+bounds.height&&h.y+h.height>bounds.y);
-    if (holes.length && BaseWindow && process.platform === 'win32') {
-      try {
-        if (!record.nativeOverlay) {
-          if (record.attached) { record.host.contentView.removeChildView(record.view); record.attached=false; }
-          const {createNativeSocialWindow}=require('./native-social-window.cjs');
-          record.nativeOverlay=createNativeSocialWindow({BaseWindow,host:record.host,view:record.view,onBeforeDestroy:onOverlayClosing});
-          record.nativeOverlay.attach(); record.attached=true;
-        }
-        record.nativeOverlay.place(bounds,holes); restoreAudio(record); return true;
-      } catch {
-        if (record.nativeOverlay) { record.nativeOverlay.destroy(); record.nativeOverlay=null; record.attached=false; }
-      }
-    } else if (record.nativeOverlay) { record.nativeOverlay.destroy(); record.nativeOverlay=null; record.attached=false; }
-    // Keep the original composer reachable if shaped native windows fail.
-    const controls=holes.filter(h=>!(h.width<=48&&h.height>100));
-    if (controls.length) {
-      const bottom=Math.max(bounds.y,Math.min(...controls.map(h=>h.y),bounds.y+bounds.height)-8);
-      bounds={...bounds,height:bottom-bounds.y};
-      if (!bounds.height) { detach(record); return false; }
+    if (adaptiveVideoViewport && isBilibili && typeof record.webContents.setZoomFactor === 'function') {
+      const scale=record.host.webContents.getZoomFactor()||1;
+      const zoom=Math.max(.25,Math.min(1,bounds.width/scale/1100));
+      if(record.videoViewportZoom!==zoom){record.videoViewportZoom=zoom;record.webContents.setZoomFactor(zoom);}
     }
     record.view.setBounds(bounds);
     if (!record.attached) { record.host.contentView.addChildView(record.view); record.attached = true; }
@@ -339,6 +323,7 @@ function createCommunityController({ WebContentsView, BaseWindow, openExternal, 
       record.cleanupNavigation();
       for (const popup of record.popups) if (!popup.isDestroyed()) popup.destroy();
       if (!record.webContents.isDestroyed()) record.webContents.close({ waitForBeforeUnload: false });
+      onDispose();
     }
   }
   function unbind(notifyHidden = false) {
@@ -358,8 +343,13 @@ function createCommunityController({ WebContentsView, BaseWindow, openExternal, 
     // will reconstruct it using the same persistent community session.
     listen(host, 'close', () => dispose(true));
     listen(host, 'closed', () => unbind(true));
+    for (const event of ['hide', 'minimize']) listen(host, event, () => {
+      if (current) { current.suspended = true; muteWhileHidden(current); detach(current); }
+    });
+    for (const event of ['show', 'restore']) listen(host, event, () => {
+      if (current) { current.suspended = false; if (place(current)) state(current, 'ready'); }
+    });
     listen(host, 'resize', () => { if (current) place(current); });
-    for (const name of ['move','hide','show','minimize','restore']) listen(host,name,()=>{if(current?.nativeOverlay)place(current);});
     listen(host.webContents, 'zoom-changed', () => { if (current) place(current); });
     listen(host.webContents, 'will-navigate', () => dispose(true));
     listen(host.webContents, 'did-start-navigation', (_event, _url, isInPlace, isMainFrame) => {
@@ -370,13 +360,13 @@ function createCommunityController({ WebContentsView, BaseWindow, openExternal, 
   }
   function fail(record) {
     record.failed = true; record.loaded = false; record.backPending = false; detach(record);
-    state(record, 'error', LOAD_ERROR);
+    if (record.wanted) state(record, 'error', LOAD_ERROR);
   }
-  function create(host, bounds, requestId) {
+  function create(host, bounds, requestId, wanted = true) {
     const communityUrl = isYoutube ? YOUTUBE_SAMPLE_URL : isBilibili ? BILIBILI_URL : resolveCommunityUrl(env.NEKO_WORKBENCH_COMMUNITY_URL);
-    const view = new WebContentsView({ webPreferences: communityWebPreferences(isYoutube ? YOUTUBE_PARTITION : isBilibili ? BILIBILI_PARTITION : COMMUNITY_PARTITION) });
+    const view = new WebContentsView({ webPreferences: {...communityWebPreferences(isYoutube ? YOUTUBE_PARTITION : isBilibili ? BILIBILI_PARTITION : COMMUNITY_PARTITION),...(!isYoutube&&!isBilibili?{preload:path.join(__dirname,'community-session-preload.cjs')}:adaptiveVideoViewport?{preload:path.join(__dirname,'video-gesture-preload.cjs')}:{})} });
     const record = { host, view, webContents: view.webContents, communityUrl, bounds, requestId,
-      epoch: 0, loadId: 0, loading: null, loaded: false, failed: false, wanted: true,
+      epoch: 0, loadId: 0, loading: null, loaded: false, failed: false, wanted,
       attached: false, popups: new Set(), responseCode: 0 };
     current = record;
     const contents = record.webContents;
@@ -401,7 +391,7 @@ function createCommunityController({ WebContentsView, BaseWindow, openExternal, 
     contents.on('did-start-navigation', (_event, _url, isInPlace, isMainFrame) => {
       if (!isMainFrame || isInPlace || current !== record) return;
       record.failed = false; record.loaded = false; record.responseCode = 0;
-      if (isBilibili && record.wanted && !record.loading) state(record, 'loading');
+      if (!isYoutube && record.wanted && !record.loading) state(record, 'loading');
     });
     contents.on('did-navigate', (_event, _url, responseCode) => {
       if (current !== record) return;
@@ -433,7 +423,7 @@ function createCommunityController({ WebContentsView, BaseWindow, openExternal, 
     if (record.loading) return record.loading;
     const id = ++record.loadId;
     record.failed = false; record.loaded = false; record.responseCode = 0;
-    state(record, 'loading');
+    if (record.wanted) state(record, 'loading');
     let cancelLoad;
     const canceled = new Promise(resolve => { cancelLoad = () => resolve(false); });
     record.cancelLoad = cancelLoad;
@@ -443,16 +433,34 @@ function createCommunityController({ WebContentsView, BaseWindow, openExternal, 
       await record.webContents.loadURL(url, isYoutube ? { httpReferrer: youtubeIdentity } : undefined);
       return true;
     });
+    // The community's welcome and login UI can be used before slow media
+    // finish loading. Still wait for the main document, and bound the wait.
+    let documentReady, timeout;
+    const candidates = [navigation, canceled];
+    if (site === 'community') {
+      candidates.push(new Promise(resolve => {
+        documentReady = () => {
+          if (!record.failed && record.responseCode < 400 &&
+              classify(record.webContents.getURL(), record.communityUrl).kind === 'internal') resolve(true);
+        };
+        record.webContents.on('dom-ready', documentReady);
+        timeout = setTimeout(() => resolve(false), communityLoadTimeoutMs);
+      }));
+    }
     const loading = Promise.resolve().then(async () => {
       try {
-        if (!await Promise.race([navigation, canceled])) throw new Error(CANCEL_ERROR);
+        if (!await Promise.race(candidates)) throw new Error(CANCEL_ERROR);
         if (current !== record || record.webContents.isDestroyed() || id !== record.loadId) throw new Error(CANCEL_ERROR);
         if (record.failed || record.responseCode >= 400) throw new Error(LOAD_ERROR);
         record.loaded = true;
       } catch (error) {
         if (current !== record || id !== record.loadId) throw new Error(CANCEL_ERROR);
-        fail(record); throw new Error(LOAD_ERROR);
+        fail(record);
+        if (documentReady && !record.webContents.isDestroyed()) record.webContents.stop?.();
+        throw new Error(LOAD_ERROR);
       } finally {
+        clearTimeout(timeout);
+        if (documentReady) record.webContents.removeListener('dom-ready', documentReady);
         if (record.loading === loading) record.loading = null;
         if (record.cancelLoad === cancelLoad) record.cancelLoad = null;
       }
@@ -481,7 +489,7 @@ function createCommunityController({ WebContentsView, BaseWindow, openExternal, 
       return { ok: true };
     }
     if (request.action === 'layout') {
-      if (current) { const wasSmall = current.tooSmall; current.bounds = request.bounds; current.holes=request.holes||[]; place(current); if (isYoutube && wasSmall !== current.tooSmall && current.wanted) state(current, 'ready'); }
+      if (current) { const wasSmall = current.tooSmall; current.bounds = request.bounds; place(current); if (isYoutube && wasSmall !== current.tooSmall && current.wanted) state(current, 'ready'); }
       return { ok: true };
     }
     if (request.action === 'back') {
@@ -554,7 +562,7 @@ function createCommunityController({ WebContentsView, BaseWindow, openExternal, 
       // this on the view so a coalesced older legacy open cannot steal focus.
       record.managedBySlot = !!request.slot;
     }
-    if (request.bounds) { record.bounds = request.bounds; record.holes=request.holes||[]; }
+    if (request.bounds) record.bounds = request.bounds;
     record.wanted = true;
     const epoch = record.epoch;
     if (request.action === 'open' && request.home === true && isBilibili) {
@@ -582,24 +590,68 @@ function createCommunityController({ WebContentsView, BaseWindow, openExternal, 
     if (current !== record || !record.wanted || epoch !== record.epoch) throw new Error(CANCEL_ERROR);
     place(record); state(record, 'ready');
   }
-  return Object.freeze({ action, handoff, bindHost, dispose: () => unbind(true),
-    get isOpen() { return !!current?.wanted; }, get view() { return current?.view || null; },
-    get overlayWindow() { return current?.nativeOverlay?.window || null; } });
+  async function ensureSession(host){
+    if(isBilibili||isYoutube||host.isDestroyed()||host.webContents.isDestroyed())throw Error(CANCEL_ERROR);
+    bindHost(host);
+    const record=current||create(host,null,undefined,false);
+    if(!record.loaded)await load(record,record.communityUrl);
+    if(current!==record||record.webContents.isDestroyed()||
+       parseWebUrl(record.webContents.getURL())?.origin!==new URL(DEFAULT_COMMUNITY_URL).origin)throw Error(CANCEL_ERROR);
+    return record.webContents;
+  }
+  return Object.freeze({ action, handoff, bindHost, ensureSession, dispose: () => unbind(true),
+    get isOpen() { return !!current?.wanted; }, get view() { return current?.view || null; } });
 }
 
 // Each provider owns a single persistent view. Slot routing allows the two
 // different providers to coexist while moving a view never reloads it.
 // Calls without a slot keep the original single-active-view behaviour.
 function createSocialController(options = {}) {
+  let accountState = {status:'unknown'};
+  let friendRequestId=0;
+  let friendRead=null;
+  let friendAvatars=null, friendAvatarLoader, avatarReads=0;
+  let ticketId=0;
+  const ticketRequests=new Map();
+  function finishTicket(id,result){
+    const request=ticketRequests.get(id);
+    if(!request)return;
+    ticketRequests.delete(id);clearTimeout(request.timer);request.resolve(result);
+  }
+  function finishFriends(result){
+    if(!friendRead)return;
+    const request=friendRead;friendRead=null;
+    clearTimeout(request.timeout);request.resolve(result);
+  }
+  let loginWanted = false;
+  let communityReady = false;
+  function accountChanged(value){
+    if(friendAvatars&&(value.status!=='signed-in'||value.userId!==friendAvatars.owner)){
+      friendAvatars=null;friendAvatarLoader?.clear();
+    }
+    if(accountState.status==='signed-in'&&(value.status!=='signed-in'||value.userId!==accountState.userId))
+      for(const id of ticketRequests.keys())finishTicket(id,{status:'account-changed'});
+    accountState=value;
+    try{options.onAccountState?.({...value});}catch{}
+  }
+  function sendState(){const contents=controllers.community.view?.webContents;if(contents&&!contents.isDestroyed())contents.send('workbench:community-web-state');}
+  function sendLogin(){const contents=controllers.community.view?.webContents;if(contents&&!contents.isDestroyed()){contents.send('workbench:community-web-login');loginWanted=false;}}
   const publish = options.onState || (() => {});
   const slots = new Map(), slotVersion = new Map(), siteVersion = new Map();
   const bump = slot => { const v = (slotVersion.get(slot) || 0) + 1; slotVersion.set(slot, v); return v; };
   const bumpSite = site => { const v = (siteVersion.get(site) || 0) + 1; siteVersion.set(site, v); return v; };
   const slotOf = site => [...slots].find(([, entry]) => entry.site === site)?.[0];
   const controllers = Object.fromEntries(['community', 'bilibili', 'youtube'].map(site => [site,
-    createCommunityController({ ...options, site, onHide: site === 'community' ? options.onHide : undefined, onState: (host, value) => {
+    createCommunityController({ ...options, site, onHide: site === 'community' ? options.onHide : undefined,
+      onDispose:site==='community'?()=>{
+        communityReady=false;finishFriends({status:'unavailable'});
+        for(const id of ticketRequests.keys())finishTicket(id,{status:'unavailable'});
+        accountChanged({status:'unknown'});
+      }:undefined,onState: (host, value) => {
+      if(site==='community')communityReady=value.status==='ready';
       const slot = slotOf(site);
       publish(host, { ...value, site, ...(slot ? { slot } : {}) });
+      if(site==='community'&&value.status==='ready'){if(loginWanted)sendLogin();else sendState();}
     } })]));
   let active = 'community', generation = 0, activeRequestId, legacyVisible = false;
   async function clearSlots(host, exceptSite, version) {
@@ -643,7 +695,7 @@ function createSocialController(options = {}) {
       if (oldSlot && oldSlot !== slot) { bump(oldSlot); slots.delete(oldSlot); }
       const entry = { site: next, requestId: request.requestId };
       slots.set(slot, entry); active = next;
-      const result = await controllers[next].action(host, { action: 'open', site: next, slot, bounds: request.bounds, ...(request.holes ? {holes:request.holes} : {}),
+      const result = await controllers[next].action(host, { action: 'open', site: next, slot, bounds: request.bounds,
         ...(request.home === true ? { home: true } : {}), ...(request.requestId !== undefined ? { requestId: request.requestId } : {}) });
       if (slotVersion.get(slot) !== version || siteVersion.get(next) !== siteTicket || slots.get(slot) !== entry) throw new Error(CANCEL_ERROR);
       return result;
@@ -697,7 +749,101 @@ function createSocialController(options = {}) {
     }
     return controllers[active].action(host, request);
   }
-  return Object.freeze({ action,
+  async function readFriends(host){
+    try{
+      const contents=await controllers.community.ensureSession(host);
+      if(friendRead?.contents===contents)return friendRead.promise;
+      finishFriends({status:'unavailable'});
+      const id=++friendRequestId;
+      let resolve;
+      const promise=new Promise(done=>{resolve=done;});
+      friendRead={id,contents,promise,resolve,timeout:setTimeout(()=>finishFriends({status:'unavailable'}),14000)};
+      try{contents.send('workbench:community-web-friends',id);}catch{finishFriends({status:'unavailable'});}
+      return promise;
+    }catch{return {status:'unavailable'};}
+  }
+  function acceptFriends(event,value){
+    const request=friendRead;
+    if(!request||value?.id!==request.id||event.sender!==request.contents||
+       event.senderFrame!==request.contents.mainFrame||
+       parseWebUrl(event.senderFrame?.url)?.origin!==new URL(DEFAULT_COMMUNITY_URL).origin||
+       parseWebUrl(request.contents.getURL())?.origin!==new URL(DEFAULT_COMMUNITY_URL).origin)return false;
+    const {status}=value;
+    if(['unavailable','sign-in-required','account-changed','permission-denied'].includes(status)){
+      friendAvatars=null;friendAvatarLoader?.clear();
+      finishFriends({status});return true;
+    }
+    if(status!=='ready'||typeof value.userId!=='string'||!Array.isArray(value.friends)||value.friends.length>10000)return false;
+    if(accountState.status==='signed-in'&&accountState.userId!==value.userId){
+      finishFriends({status:'account-changed'});return true;
+    }
+    const {allowedAvatarUrl,hashHue}=require('./lobby-avatars.cjs');
+    const origin=new URL(DEFAULT_COMMUNITY_URL).origin, urls=new Map(), friends=[];
+    for(const friend of value.friends){
+      if(typeof friend?.id!=='string'||!(/^[0-9a-f-]{36}$/i.test(friend.id))||typeof friend.displayName!=='string'||!friend.displayName.trim())continue;
+      const {id}=friend,displayName=friend.displayName.trim().slice(0,100);
+      let url=null;
+      if(typeof friend.avatar==='string'&&friend.avatar.length<=1024){
+        try{
+          const raw=new URL(friend.avatar,origin);
+          if(!raw.search&&!raw.hash)url=allowedAvatarUrl(raw.href,origin);
+        }catch{/* A malformed or missing avatar uses the monogram. */}
+      }
+      if(url)urls.set(id,{url,displayName});
+      const rawHue=/^hue:(\d{1,3})$/.exec(typeof friend.avatar==='string'?friend.avatar:'');
+      const hue=rawHue&&Number(rawHue[1])<=360?Number(rawHue[1])%360:hashHue(id);
+      friends.push({id,displayName,online:friend.online===true,hue,hasAvatar:!!url});
+    }
+    if(friendAvatars&&friendAvatars.owner!==value.userId)friendAvatarLoader?.clear();
+    friendAvatars={owner:value.userId,urls};
+    finishFriends({status:'ready',friends});return true;
+  }
+  async function readFriendAvatar(id){
+    const snapshot=friendAvatars,friend=snapshot?.urls.get(id);
+    if(!friend||avatarReads>=16||accountState.status==='signed-out')return null;
+    friendAvatarLoader??=require('./lobby-avatars.cjs').createLobbyAvatars({fetchImpl:options.fetchImpl});
+    avatarReads++;
+    try{
+      const result=await friendAvatarLoader.resolve({kind:'image',url:friend.url},{seed:id,name:friend.displayName});
+      return snapshot===friendAvatars&&result.kind==='image'?result.url:null;
+    }finally{avatarReads--;}
+  }
+  async function readGameTicket(host,input){
+    try{
+      const contents=await controllers.community.ensureSession(host);
+      if(ticketRequests.size>=4)return {status:'unavailable'};
+      const id=++ticketId;
+      return await new Promise(resolve=>{
+        ticketRequests.set(id,{contents,resolve,timer:setTimeout(()=>finishTicket(id,{status:'unavailable'}),10000)});
+        try{contents.send('workbench:community-game-ticket',id,input);}catch{finishTicket(id,{status:'unavailable'});}
+      });
+    }catch{return {status:'unavailable'};}
+  }
+  function acceptGameTicket(event,value){
+    const contents=ticketRequests.get(value?.id)?.contents;
+    const origin=new URL(DEFAULT_COMMUNITY_URL).origin;
+    if(!contents||contents.isDestroyed()||event.sender!==contents||event.senderFrame!==contents.mainFrame||
+       parseWebUrl(event.senderFrame?.url)?.origin!==origin||parseWebUrl(contents.getURL())?.origin!==origin)return false;
+    if(['unavailable','sign-in-required','account-changed','forbidden'].includes(value.status)){
+      finishTicket(value.id,{status:value.status});return true;
+    }
+    if(value.status!=='ready'||typeof value.userId!=='string'||typeof value.ticket!=='string'||value.ticket.length>2040)return false;
+    if(accountState.status!=='signed-in'||accountState.userId!==value.userId){
+      finishTicket(value.id,{status:'account-changed'});return true;
+    }
+    finishTicket(value.id,{status:'ready',userId:value.userId,ticket:value.ticket});return true;
+  }
+  return Object.freeze({ action, readFriends, readFriendAvatar, acceptFriends, readGameTicket, acceptGameTicket,
+    get accountState(){return {...accountState};},
+    acceptAccountState(event,value){
+      const contents=controllers.community.view?.webContents;
+      if(!contents||contents.isDestroyed()||event.sender!==contents||event.senderFrame!==contents.mainFrame||!['signed-in','signed-out','checking','unavailable'].includes(value?.status))return false;
+      try{if(new URL(contents.getURL()).origin!=='https://community.project-neko.cn'||new URL(event.senderFrame.url).origin!=='https://community.project-neko.cn')return false;}catch{return false;}
+      if(value.status==='signed-in'&&(typeof value.userId!=='string'||!value.userId||value.userId.length>128))return false;
+      accountChanged({status:value.status,...(value.status==='signed-in'&&typeof value.name==='string'?{name:value.name.slice(0,80)}:{}),...(value.status==='signed-in'?{userId:value.userId}:{})});return true;
+    },
+    requestLogin(){loginWanted=true;if(controllers.community.isOpen&&communityReady)sendLogin();},
+    cancelLoginRequest(){loginWanted=false;const contents=controllers.community.view?.webContents;if(contents&&!contents.isDestroyed())contents.send('workbench:community-web-login-cancel');},
     async handoff(host, url) {
       if (!controllers.community.isOpen) throw new Error(CANCEL_ERROR);
       // A Bilibili operation in another slot must not invalidate the community
@@ -710,7 +856,6 @@ function createSocialController(options = {}) {
     dispose() { ++generation; for (const slot of slots.keys()) bump(slot); slots.clear(); legacyVisible = false; Object.values(controllers).forEach(controller => controller.dispose()); },
     get hasVisibleView() { return controllers.community.isOpen || controllers.bilibili.isOpen || controllers.youtube.isOpen; },
     get isOpen() { return controllers.community.isOpen; },
-    get overlayWindow() { return controllers[active].overlayWindow; },
     get view() { return controllers[active].view; } });
 }
 

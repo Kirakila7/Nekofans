@@ -97,5 +97,5 @@ test('QQ ignores stale peer, config, settings and upstream fallback routes',asyn
   const resolver=new ModelResolver({get:()=>({currentSelection:()=>({provider:'other-key',model:'other'})})},{provider:'deepseek-official',model:'deepseek-v4-flash'});
   resolver.prefs.setOverride('c2c:peer',{provider:'deepseek-official',model:'deepseek-v4-pro'});
   assert.deepEqual(resolver.getEffectiveRoute('c2c:peer'),ROUTE);assert.deepEqual(resolver.getResumeRoute('c2c:peer'),ROUTE);assert.deepEqual(resolver.resolveDefault(),ROUTE);
-  const marker=JSON.parse(fs.readFileSync(path.join(tmp,'installed-adapter.json'),'utf8'));assert.equal(marker.revision,16);
+  const marker=JSON.parse(fs.readFileSync(path.join(tmp,'installed-adapter.json'),'utf8'));assert.equal(marker.revision,17);
 });

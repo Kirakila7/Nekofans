@@ -1,0 +1,113 @@
+'use strict';
+const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),os=require('node:os');
+const {createWorkspaceLayout}=require('../../apps/neko-workbench/workspace-layout.cjs');
+const {JSDOM}=require(path.join(process.env.NEKO_DOM_DEPS||'/private/tmp/neko-sidebar-dom-20261026','node_modules/jsdom'));
+const base=path.resolve(__dirname,'../../apps/neko-workbench/embedded-dsh');
+const tick=()=>new Promise(r=>setTimeout(r,60));
+function storeFor(t){const p=fs.mkdtempSync(path.join(os.tmpdir(),'neko-edition-'));t.after(()=>fs.rmSync(p,{recursive:true,force:true}));return {file:path.join(p,'layout.json'),store:createWorkspaceLayout(path.join(p,'layout.json'))};}
+test('edition persistence migrates old profiles and leaves engine selections and seats intact',t=>{
+ const {file,store}=storeFor(t);const before=store.get();assert.equal(before.workbenchEdition,'daily');
+ store.update({workbenchEdition:'office'});assert.equal(createWorkspaceLayout(file).get().workbenchEdition,'office');
+ const {workbenchEdition,...rest}=store.get(),{workbenchEdition:old,...oldRest}=before;assert.deepEqual(rest,oldRest);
+ assert.throws(()=>store.update({workbenchEdition:'codex'}));assert.equal(store.get().workbenchEdition,'office');
+ fs.writeFileSync(file,JSON.stringify(oldRest));assert.equal(createWorkspaceLayout(file).get().workbenchEdition,'daily');
+});
+function fixture(t,{office=false,fail=false,nativeVideo=false,roomCompanion=false}={}){
+ const {store}=storeFor(t);if(office)store.update({workbenchEdition:'office'});
+ const dom=new JSDOM('<body><div id="frame" style="display:grid;grid-template-columns:260px 760px 0px"><div id="track"><aside data-slot="sidebar"><button id="new" aria-label="新建会话">新建会话</button><nav><button id="tools">插件</button></nav><div data-neko-seat-mount></div><section data-slot="sidebar.workspaces"><button id="session">现有会话</button></section><footer><div data-slot="settings.launcher"><button aria-haspopup="menu" data-collapsed="false" data-signed-out="true" aria-label="登录">登录</button></div></footer></aside></div><main class="some_centerCol_HASH_42"><div data-composer-seat><div data-composer-card><textarea id="draft">工作草稿</textarea></div></div></main><div></div></div></body>',{runScripts:'outside-only',pretendToBeVisual:true});
+ const w=dom.window,d=w.document,calls=[];const rect=(x,width,top=0,height=800)=>({left:x,right:x+width,top,bottom:top+height,width,height});
+ for(const [selector,x,width]of [['#frame',64,1020],['#track',64,260],['[data-slot="sidebar"]',64,260],['main',324,760]])d.querySelector(selector).getBoundingClientRect=()=>rect(x,width);
+ const bridge={action:async()=>({}),communityLogin:async()=>calls.push({action:'community-login'}),getState:async()=>({workspaceRoot:'/p',companion:{ready:true,messages:[]}}),companion:async r=>{calls.push(r);},community:async r=>{calls.push(r);return {ok:true};},workspace:async r=>{calls.push(r);if(r.action==='state')return store.get();if(r.action==='update'){if(fail)throw Error('fixture failure');return store.update(r.patch);}if(r.action==='codex-state')return {items:[],approvals:[]};if(r.action==='pane-layout')return {enabled:false,side:'workspace',left:null,right:'coding',ratio:.5};if(r.action==='catalog')return {sessions:[],projects:[],providers:{dsh:'ready'}};return {};}};
+ let composerEvent;bridge.nativeComposer=async r=>{calls.push({channel:'composer',...r});return {ok:true};};bridge.subscribeNativeComposer=fn=>{composerEvent=fn;return()=>{};};
+ let intersection,selection={},mainSessionId,selectionListener,defaultPreparations=0;
+ const nativeDraft={draft:'创造台保留草稿',draftRev:1,phase:'plain',attachmentIds:[],occurrences:[]},binding={sessionId:'fresh-default',session:{sessionId:'fresh-default',getSnapshot:()=>({blank:true})}};
+ const nativeShell={state:{getSnapshot:()=>nativeDraft,subscribe:()=>()=>{}},actions:{setDraft:value=>{nativeDraft.draft=value;nativeDraft.draftRev++;},persistDraft(){},submit(){calls.push({action:'submit-native'});}}};
+ if(roomCompanion){
+  w.IntersectionObserver=class{constructor(callback){this.callback=callback;intersection=this;}observe(target){this.target=target;}disconnect(){}};
+  bridge.home=async request=>{calls.push({channel:'home',...request});return {};};
+  bridge.lobby=async request=>{calls.push({channel:'lobby',...request});return {ok:true,state:{connection:'online',auth:{status:'signed-in'},me:{user_id:'fixture'},channel:{id:'public'},messages:[],members:[],participation:{mode:'off',available:false}}};};bridge.subscribeLobby=()=>()=>{};
+ }
+ if(nativeVideo){bridge.platform='win32';bridge.videoWindow=async request=>{calls.push({channel:'video',...request});return {open:request.action==='open'};};}
+ for(const file of ['native-composer-source.js','chatroom-preview-source.js','workspace-shell-source.js','side-rail-source.js','unified-layout-source.js'])w.eval(fs.readFileSync(path.join(base,file),'utf8')+(file==='native-composer-source.js'?'\nwindow.createNativeComposerAdapter=createNativeComposerAdapter;':''));
+ const stops=[];stops.push(w.installWorkbenchSideRail({window:w,document:d,bridge,openBilibiliHome:()=>{},cssText:fs.readFileSync(path.join(base,'side-rail-source.css'),'utf8')}));
+ stops.push(w.installWorkspaceShell({window:w,document:d,bridge,openCommunity:()=>{const detail={};d.dispatchEvent(new w.CustomEvent('neko-unified-open-community',{detail}));return detail.promise;},avatar:()=>'',cssText:fs.readFileSync(path.join(base,'workspace-shell-source.css'),'utf8'),getDshSelection:()=>roomCompanion?selection:{sessionId:'existing'},hasDshActiveSession:()=>roomCompanion?!!mainSessionId:true,
+  ...(roomCompanion?{mountHome:async stage=>{stage.textContent='海面上的木平台';return()=>{};},nativeComposerBindings:{getSelection:()=>selection,getMainSessionId:()=>mainSessionId,getBinding:id=>id==='fresh-default'?binding:null,getShell:()=>nativeShell,subscribeSelection:fn=>{selectionListener=fn;return()=>{};},defaultReady:()=>true,isDefaultSession:id=>id==='fresh-default',hasExplicitModelSelection:()=>true,ensureDefaultSession:async()=>{defaultPreparations++;mainSessionId='fresh-default';selection={sessionId:mainSessionId};d.querySelector('#frame').setAttribute('data-sidebar-collapsed','true');d.querySelector('[data-slot="sidebar"]').style.display='none';selectionListener?.();return {sessionId:mainSessionId};}}}:{}),
+ }));
+ stops.push(w.installUnifiedLayout({window:w,document:d,bridge,cssText:fs.readFileSync(path.join(base,'unified-layout-source.css'),'utf8')}));
+ t.after(async()=>{stops.reverse().forEach(stop=>stop());await tick();dom.window.close();});return {w,d,store,calls,emitComposer:event=>composerEvent(event),defaultPreparations:()=>defaultPreparations,nativeDraft,emitDockVisibility:visible=>intersection?.callback([{target:intersection.target,isIntersecting:visible}])};
+}
+async function choose(d,id){d.querySelector('.neko-office-switch').click();await tick();}
+test('bottom community login switches office to daily and opens the existing community owner without sending work',async t=>{
+ const f=fixture(t,{office:true});await tick();const detail={};f.d.dispatchEvent(new f.w.CustomEvent('neko-account-open-community',{detail}));assert.equal(detail.handled,true);await detail.promise;await tick();assert.equal(f.d.body.dataset.nekoWorkbenchEdition,'daily');assert(f.calls.some(r=>r.action==='community-login'));assert(f.calls.some(r=>r.action==='open'&&r.site==='community'));assert.equal(f.d.querySelector('#draft').value,'工作草稿');assert(!f.calls.some(r=>r.action==='submit'||r.action==='send'));
+});
+function shown(w,node){for(let n=node;n;n=n.parentElement)if(n.hidden||w.getComputedStyle(n).display==='none')return false;return true;}
+test('office exposes original DSH actions, minimal rail and shared chat without replacing either draft',async t=>{
+ const {w,d,store,calls}=fixture(t);await tick();const native=d.querySelector('#draft'),chat=d.querySelector('.neko-companion-form textarea'),session=d.querySelector('#session');chat.value='聊天草稿';let newClicks=0,toolClicks=0;d.querySelector('#new').onclick=()=>newClicks++;d.querySelector('#tools').onclick=()=>toolClicks++;
+ const before=store.get();await choose(d,'office');assert.equal(d.body.dataset.nekoWorkbenchEdition,'office');assert(!d.body.hasAttribute('data-neko-chatroom-active'));assert(!d.body.hasAttribute('data-neko-workspace-collapsed'));assert(!d.querySelector('[data-neko-chat-sidebar-grid]'));assert(!d.querySelector('main').hasAttribute('inert'));assert(!session.closest('[inert]'));assert(!session.closest('[data-neko-session-browser-original]'));
+ assert.equal(d.querySelector('#draft'),native);assert.equal(native.value,'工作草稿');assert.equal(chat.value,'聊天草稿');assert(d.querySelector('.neko-startup').hidden);
+ assert(shown(w,d.querySelector('.neko-companion-form')));assert(!d.querySelector('.neko-rail-companion')||d.querySelector('.neko-rail-companion').hidden);
+ const visible=[...d.querySelectorAll('[data-neko-side-rail] button')].filter(n=>shown(w,n));assert.equal(visible.length,2);assert(visible.some(n=>n.classList.contains('neko-office-switch')));assert(visible.some(n=>n.classList.contains('neko-side-rail__account')));
+ d.querySelector('#new').click();d.querySelector('#tools').click();assert.equal(newClicks,1);assert.equal(toolClicks,1);assert.equal(store.get().officeMode,before.officeMode);assert.deepEqual(store.get().seats,before.seats);
+ await choose(d,'daily');assert(d.body.hasAttribute('data-neko-chatroom-active'));assert.equal(native.value,'工作草稿');assert.equal(chat.value,'聊天草稿');assert.equal(d.querySelector('#session'),session);assert.equal(calls.filter(r=>r.action==='send'||r.action==='submit').length,0);
+});
+test('the native office session list stays visible while sidebar bounds are measured', async t => {
+ const {w,d}=fixture(t);
+ await tick();
+ const sidebar=d.querySelector('[data-slot="sidebar"]');
+ const session=d.querySelector('#session');
+ const measure=sidebar.getBoundingClientRect.bind(sidebar);
+ const officeMeasurements=[];
+ sidebar.getBoundingClientRect=()=>{
+  if(d.body.dataset.nekoWorkbenchEdition==='office') officeMeasurements.push(shown(w,session));
+  return measure();
+ };
+ await choose(d,'office');
+ w.dispatchEvent(new w.Event('resize'));
+ d.dispatchEvent(new w.Event('scroll'));
+ await tick();
+ assert(officeMeasurements.length>0);
+ assert(officeMeasurements.every(Boolean),'layout must never hide the native office session list');
+ await choose(d,'daily');
+ assert(!shown(w,session),'daily mode still hides the native session list');
+});
+test('daily three-pane video is detached for office and restored on return',async t=>{
+ const {w,d,calls}=fixture(t);await tick();d.querySelector('.neko-fixed-scene-entry').click();await tick();assert(d.body.hasAttribute('data-neko-fixed-scene'));
+ await choose(d,'office');assert(!d.body.hasAttribute('data-neko-fixed-scene'));assert(!d.body.hasAttribute('data-neko-flex-mode'));assert(!d.body.hasAttribute('data-neko-flex-workspace-collapsed'));assert(!d.querySelector('[data-neko-unified-coding]'));assert(calls.some(r=>r.action==='hide'));
+ await choose(d,'daily');await tick();assert(d.body.hasAttribute('data-neko-fixed-scene'));assert(d.body.hasAttribute('data-neko-flex-mode'));assert.equal(d.querySelector('#draft').value,'工作草稿');
+});
+test('saved office opens without daily overlays and failed switching leaves current view intact',async t=>{
+ const {d}=fixture(t,{office:true,fail:true});await tick();assert.equal(d.body.dataset.nekoWorkbenchEdition,'office');assert(d.querySelector('.neko-startup').hidden);await choose(d,'daily');assert.equal(d.body.dataset.nekoWorkbenchEdition,'office');assert.match(d.querySelector('.neko-office-switch').title,/切换未完成/);assert.equal(d.querySelector('.neko-edition-menu'),null);assert(!d.querySelector('.neko-office-switch').disabled);
+});
+test('daily keeps project work only in the floating chat and cannot expand the hidden workspace',async t=>{
+ const {w,d,calls,emitComposer}=fixture(t);await tick();const native=d.querySelector('#draft'),chat=d.querySelector('.neko-companion-form textarea');chat.value='保留聊天草稿';
+ assert(d.querySelector('.neko-room-workspace').hidden);assert(d.querySelector('.neko-room-workspace').disabled);assert(d.body.hasAttribute('data-neko-daily-compact'));assert(d.body.hasAttribute('data-neko-workspace-collapsed'));
+ for(const selector of ['.neko-custom-seats','.neko-session-browser','.neko-startup','.neko-workspace-directory','.neko-scene-projects','.neko-workspace-expand-control'])assert(!shown(w,d.querySelector(selector)),selector);
+ assert(d.querySelector('.neko-chat-sidebar-divider').hidden);assert(calls.some(r=>r.channel==='composer'&&r.action==='place'));const state=()=>calls.filter(r=>r.channel==='composer'&&r.action==='update').at(-1).state;assert.equal(state().chatOnly,true);assert.equal(state().recordsOpen,false);
+ emitComposer({type:'expand'});emitComposer({type:'files'});d.dispatchEvent(new w.Event('neko-workspace-expand'));await tick();assert(d.body.hasAttribute('data-neko-workspace-collapsed'));assert(d.body.hasAttribute('data-neko-chatroom-active'));
+ emitComposer({type:'records-toggle',open:true});await tick();assert.equal(state().recordsOpen,true);assert(d.querySelector('.neko-startup').hidden);
+ d.querySelector('.neko-fixed-scene-entry').click();await tick();assert(d.body.hasAttribute('data-neko-fixed-scene'));assert.equal(state().chatOnly,true);assert(d.querySelector('.neko-scene-projects').hidden);d.dispatchEvent(new w.Event('neko-workspace-expand'));await tick();assert(d.body.hasAttribute('data-neko-fixed-scene'));
+ await choose(d,'office');assert(!d.body.hasAttribute('data-neko-daily-compact'));assert(!d.body.hasAttribute('data-neko-workspace-collapsed'));assert(shown(w,d.querySelector('#session')));assert.equal(native.value,'工作草稿');assert.equal(chat.value,'保留聊天草稿');
+ await choose(d,'daily');assert(d.body.hasAttribute('data-neko-workspace-collapsed'));assert(d.querySelector('.neko-room-workspace').hidden);assert.equal(d.querySelector('#draft'),native);assert.equal(chat.value,'保留聊天草稿');
+});
+
+test('fresh native default input cannot rehome the daily room companion into the rail',async t=>{
+ const {w,d,calls,defaultPreparations,nativeDraft,emitDockVisibility}=fixture(t,{roomCompanion:true});await tick();await tick();
+ assert.equal(defaultPreparations(),1,'the real native adapter prepares a fresh default input: '+JSON.stringify({collapsed:d.body.hasAttribute('data-neko-workspace-collapsed'),edition:d.body.dataset.nekoWorkbenchEdition,composer:calls.filter(r=>r.channel==='composer').at(-1)}));assert.equal(calls.filter(r=>r.channel==='composer'&&r.action==='update').at(-1).state.sessionToken,'fresh-default');assert.equal(d.querySelector('#frame').dataset.sidebarCollapsed,'true');assert.equal(w.getComputedStyle(d.querySelector('[data-slot="sidebar"]')).display,'none');
+ const dock=d.querySelector('.neko-companion-dock'),character=d.querySelector('.neko-companion-character'),privateInput=d.querySelector('.neko-companion-form textarea'),railPet=d.querySelector('.neko-rail-companion');
+ dock.getBoundingClientRect=()=>({left:520,right:840,top:400,bottom:616,width:320,height:216});privateInput.value='独立私聊保留草稿';w.dispatchEvent(new w.Event('resize'));await tick();
+ assert(dock.hasAttribute('data-neko-companion-expanded'));assert.equal(character.parentElement,dock,'the daily selector owns its companion despite the hidden native sidebar');assert.equal(railPet,null);
+ d.querySelector('[aria-label="打开公共聊天室"]').click();await tick();const lobby=d.querySelector('.neko-lobby-panel'),panel=dock.querySelector('.neko-companion-chat-panel');lobby.querySelector('.neko-lobby-modebar').getBoundingClientRect=()=>({top:620,bottom:640,height:20});lobby.querySelector('.neko-lobby-form').getBoundingClientRect=()=>({top:650,bottom:756,height:106});w.dispatchEvent(new w.Event('resize'));await tick();
+ assert(dock.hasAttribute('data-neko-companion-room-lobby'));assert.equal(lobby.style.visibility,'');assert.equal(character.parentElement,dock);assert.equal(railPet,null);assert(!panel.hidden);assert.match(character.getAttribute('aria-label'),/展开或收起聊天.*方向键移动/);assert.equal(w.getComputedStyle(panel).gridRow,'1');assert.equal(w.getComputedStyle(character).gridRow,'2');
+ emitDockVisibility(false);await tick();assert.equal(character.parentElement,dock,'stale native-sidebar intersection results cannot override the room portal');assert.equal(railPet,null);
+ const misplaced=d.createElement('div');d.body.appendChild(misplaced);misplaced.appendChild(character);w.dispatchEvent(new w.Event('resize'));await tick();assert.equal(character.parentElement,dock,'a misplaced character is returned to the main dock');misplaced.remove();assert.equal(character.getAttribute('aria-hidden'),null);
+ const beforeBottom=parseFloat(d.body.style.getPropertyValue('--neko-companion-bottom'));character.dispatchEvent(new w.KeyboardEvent('keydown',{key:'ArrowUp',bubbles:true,cancelable:true}));assert.equal(parseFloat(d.body.style.getPropertyValue('--neko-companion-bottom')),beforeBottom+8);character.click();assert(panel.hidden);character.click();assert(!panel.hidden);assert(!calls.some(r=>r.channel==='home'),'the room pet toggles private chat instead of returning home');
+ d.querySelector('[aria-label="进入我的小窝"]').click();await tick();assert(lobby.hidden);assert.equal(character.parentElement,dock,'the same daily dock retains the character on return home');assert.equal(railPet,null);assert.equal(privateInput.value,'独立私聊保留草稿');assert.equal(nativeDraft.draft,'创造台保留草稿');
+ d.querySelector('.neko-community-yui').click();await tick();assert.equal(character.parentElement,dock,'the community surface keeps the main companion without a rail fallback');assert(dock.hidden);assert.equal(d.querySelector('.neko-rail-companion'),null);d.dispatchEvent(new w.CustomEvent('neko-side-surface-change',{detail:{surface:'hidden'}}));await tick();assert.equal(character.parentElement,dock);assert.equal(railPet,null);assert.equal(d.querySelectorAll('.neko-companion-character').length,1);assert(!calls.some(r=>r.action==='send'||r.action==='submit-native'));
+});
+test('daily community fills content height and work float retains its dragged position with independent video',async t=>{
+ const {w,d,calls,emitComposer}=fixture(t,{nativeVideo:true});await tick();const placement=()=>calls.filter(r=>r.channel==='composer'&&r.action==='place').at(-1).rect;const initial=placement();emitComposer({type:'move',dx:-140,dy:-200});await tick();const moved=placement();assert.equal(moved.x,initial.x-140);assert.equal(moved.y,initial.y-200);
+ d.querySelector('.neko-community-yui').click();await tick();const community=calls.find(r=>r.action==='open'&&r.site==='community'&&r.slot==='side');assert(community);assert.equal(community.bounds.x,64);assert.equal(community.bounds.width,w.innerWidth-64);assert.equal(community.bounds.y+community.bounds.height,w.innerHeight);assert.deepEqual(placement(),moved);
+ const hides=calls.filter(r=>r.action==='hide'&&r.slot==='side').length;assert(d.querySelector('.neko-fixed-scene-entry').hidden);d.dispatchEvent(new w.CustomEvent('neko-video-open',{detail:{platform:'bilibili'}}));await tick();assert(calls.some(r=>r.channel==='video'&&r.action==='open'&&r.site==='bilibili'));assert(!d.body.hasAttribute('data-neko-fixed-scene'));assert(!d.body.hasAttribute('data-neko-flex-mode'));assert.equal(calls.filter(r=>r.action==='hide'&&r.slot==='side').length,hides);
+ d.dispatchEvent(new w.CustomEvent('neko-video-open',{detail:{platform:'youtube'}}));await tick();assert(!calls.some(r=>r.channel==='video'&&r.site==='youtube'));assert.deepEqual(placement(),moved);await choose(d,'office');assert(calls.some(r=>r.channel==='video'&&r.action==='suspend'));await choose(d,'daily');assert(calls.some(r=>r.channel==='video'&&r.action==='resume'));assert.deepEqual(placement(),moved);
+ emitComposer({type:'move',dx:-4000,dy:-4000});await tick();assert(placement().x>=64);assert(placement().y>=8);assert.equal(d.querySelector('#draft').value,'工作草稿');
+});

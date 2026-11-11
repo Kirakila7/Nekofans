@@ -8,9 +8,9 @@ function fixture(t,options){
  const w=dom.window;w.eval(source+'\nwindow.createPreview=createChatroomPreview');const panel=w.createPreview(w.document,()=>'',options);w.document.body.append(panel);
  return {w,panel,home:panel.querySelector('button[aria-label*="我的小窝"]'),back:panel.querySelector('.neko-chatroom-preview__home-back'),stage:panel.querySelector('[data-neko-home-stage]'),view:panel.querySelector('.neko-chatroom-preview__home-view'),room:panel.querySelector('.neko-chatroom-preview__room-view'),status:panel.querySelector('[role=status]'),retry:panel.querySelector('.neko-chatroom-preview__home-retry')};
 }
-test('home opens in the main work area and stays mounted across return without changing drafts',{skip:!JSDOM},async t=>{
+test('home opens in the same panel and stays mounted across return without changing drafts',{skip:!JSDOM},async t=>{
  let resolveMount,calls=0,cleanups=0;const f=fixture(t,{mountHome:stage=>{calls++;assert.equal(stage,f.stage);return new Promise(resolve=>{resolveMount=resolve;});}});
- assert(f.panel.querySelector('input').disabled);assert.match(f.panel.textContent,/聊天功能尚未开放/);f.home.click();assert(!f.room.hidden,'the room list stays visible while home opens on the right');assert(!f.view.hidden);assert.match(f.panel.textContent,/工作台本地存档 · 尚未同步/);assert.match(f.status.textContent,/正在准备/);assert.equal(f.w.document.activeElement,f.back);
+ assert(f.panel.querySelector('input').disabled);assert.match(f.panel.textContent,/聊天功能尚未开放/);f.home.click();assert(f.room.hidden);assert(!f.view.hidden);assert(!f.panel.textContent.includes('Yui 的家'));assert.match(f.status.textContent,/正在准备/);assert.equal(f.w.document.activeElement,f.back);
  f.back.click();f.home.click();assert.equal(calls,1,'a pending mount is not duplicated');resolveMount(()=>{cleanups++;});await tick();assert(f.status.hidden);f.back.click();assert(!f.room.hidden);assert(f.view.hidden);assert.equal(f.w.document.activeElement,f.home);f.home.click();assert.equal(calls,1,'returning preserves the mounted home');assert.equal(f.w.document.querySelector('textarea').value,'未发送草稿');f.panel.disposeHome();assert.equal(cleanups,1);
 });
 test('unavailable or failed home mounting is visible and retryable',{skip:!JSDOM},async t=>{
@@ -19,4 +19,8 @@ test('unavailable or failed home mounting is visible and retryable',{skip:!JSDOM
 });
 test('a late mount after disposal is cleaned up',{skip:!JSDOM},async t=>{
  let resolveMount,cleanups=0;const f=fixture(t,{mountHome:()=>new Promise(resolve=>{resolveMount=resolve;})});f.home.click();f.panel.disposeHome();resolveMount(()=>{cleanups++;});await tick();assert.equal(cleanups,1);
+});
+test('each entry returns the pet home even when the room is already mounted',{skip:!JSDOM},async t=>{
+ let entries=0,mounts=0;const f=fixture(t,{mountHome:async stage=>{mounts++;stage.addEventListener('neko-home-enter',()=>entries++);}});
+ await f.panel.openHome();assert.equal(entries,1);f.panel.showRooms();await f.panel.openHome();assert.equal(entries,2);await f.panel.openHome();assert.equal(entries,3);assert.equal(mounts,1);
 });
