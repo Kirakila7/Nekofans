@@ -60,7 +60,10 @@ test('actual dedicated native community IPC authenticates the current workbench 
   const legacyAction = vm.runInNewContext(`${legacy};workbenchAction`, {});
   await assert.rejects(legacyAction('open-community'), /内嵌社区/);
   assert.match(source, /communityController\.bindHost\(dshWindow\)/);
-  assert.match(source, /quitting=true;nativeComposerController\.dispose\(\);nativeDividerController\.dispose\(\);communityController\.dispose\(\)/);
+  const quit=source.slice(source.indexOf("app.on('before-quit'"),source.indexOf('\n});',source.indexOf("app.on('before-quit'"))+4);
+  const viewOwners=['nativeComposerController','nativeDividerController','communityController'];
+  assert.deepEqual([...quit.matchAll(/(\w+)\.dispose\(\)/g)].map(match=>match[1]).filter(name=>viewOwners.includes(name)),viewOwners);
+  assert(quit.indexOf('quitting=true;')>=0&&quit.indexOf('quitting=true;')<quit.indexOf('nativeComposerController.dispose()'),'remote views are disposed after shutdown is marked');
 });
 
 test('workbench preload exposes only the named community bridge and removable status subscription', async () => {
@@ -91,16 +94,18 @@ test('workbench preload exposes only the named community bridge and removable st
 
 test('community status changes never disable a placed work composer', () => {
   const source = fs.readFileSync(path.join(base, 'main.cjs'), 'utf8');
-  const factory = between(source, 'const communityController=createSocialController(', 'communityAccount=createCommunityAccount(');
+  const factory = between(source, 'const communityController=createSocialController(', 'const videoFloatController=');
   const contents = {getURL: () => 'http://127.0.0.1:59099/', send: () => {}};
-  const host = {webContents: contents, isDestroyed: () => false}, calls = [], social = {hasVisibleView:true};
+  const host = {webContents: contents, isDestroyed: () => false}, calls = [], accountCalls=[], social = {hasVisibleView:true};
   let options;
   vm.runInNewContext(factory, {dshWindow:host, isWorkbenchOrigin:() => true, communityAccount:null,
-    createSocialController: value => {options=value;return social;}, WebContentsView: function(){}, BaseWindow: function(){},
+    createSocialController: value => {options=value;return social;}, WebContentsView: function(){},
     shell:{openExternal(){}}, clipboard:{writeText(){}}, dialog:{showErrorBox(){}},
+    unifiedNekoLogin:{communityChanged:value=>accountCalls.push(['changed',value])},publishNekoAccount:()=>accountCalls.push(['published']),
     nativeDividerController:{setEnabled(){},raise(){}},
     nativeComposerController:{setEnabled:value=>calls.push(['enabled',value]),raise:()=>calls.push(['raise'])}});
   options.onState(host,{status:'ready'});
+  const unknown={status:'unknown'};options.onAccountState(unknown);assert.deepEqual(accountCalls,[['changed',unknown],['published']],'producer lifecycle updates the unified account projection once');
   social.hasVisibleView=false;
   options.onState(host,{status:'hidden'});
   assert.deepEqual(calls,[['raise'],['raise']], 'site transitions must not override composer place/remove');
@@ -113,7 +118,7 @@ test('desktop identity IPC rejects remote and subframe callers and requires an o
   const validation = source.slice(source.indexOf('function isWorkbenchOrigin'), source.indexOf('function rolesState'));
   const route = between(source, "ipcMain.handle('workbench:community-account'", "ipcMain.handle('workbench:roles'");
   vm.runInNewContext(validation + route, { URL, dshWindow: host, dshLaunchUrl: contents.mainFrame.url,
-    ipcMain: { handle: (name, fn) => handlers.set(name, fn) }, communityController: controller,
+    ipcMain: { handle: (name, fn) => handlers.set(name, fn), on: () => {} }, communityController: controller,
     communityAccount: { action: async action => { calls.push(action); return { status: 'available' }; } } });
   const handle = handlers.get('workbench:community-account'), event = { sender: contents, senderFrame: contents.mainFrame };
   assert.equal((await handle(event, 'connect')).status, 'available');

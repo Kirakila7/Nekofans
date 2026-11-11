@@ -1,8 +1,6 @@
 'use strict';
 // W0: lock "和她私聊随时可用". The private companion chat (workbench:companion) must keep working with
-// no lobby module or an explicitly disabled channel (NEKO_WORKBENCH_CHAT_URL=''), and the workspace
-// shell must never remove, hide, inert or rebuild the companion dock when the user switches views.
-// Synthetic data and local fixtures only.
+// no lobby module and no NEKO_WORKBENCH_CHAT_URL, and the workspace shell must preserve the companion dock when the user switches views. Synthetic data and local fixtures only.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -12,10 +10,10 @@ const { execFile } = require('node:child_process');
 const { EventEmitter } = require('node:events');
 
 const appDir = path.resolve(__dirname, '../../apps/neko-workbench');
-const WORKBENCH_TITLE = 'N.E.K.O. 工作台';
+const WORKBENCH_TITLE = 'Nekofans';
 
 const SCENARIOS = Object.freeze({
-  missing: 'actual main sends private companion chat with no lobby module and an explicitly disabled channel',
+  missing: 'actual main sends private companion chat with no lobby module and no NEKO_WORKBENCH_CHAT_URL',
   unconfigured: 'workbench:companion send works while the lobby controller is not configured',
   disconnected: 'workbench:companion send works while the lobby is disconnected',
   throws: 'workbench:companion send works when lobby controller initialisation throws',
@@ -32,8 +30,10 @@ if (harnessIndex < 0) {
   for (const [scenario, title] of Object.entries(SCENARIOS)) test(title, async () => {
     const env = { ...process.env };
     for (const name of Object.keys(env)) if (name.startsWith('NEKO_WORKBENCH_CHAT_')) delete env[name];
-    // An empty override disables the production default for offline fixtures.
-    env.NEKO_WORKBENCH_CHAT_URL = FAKE_LOBBY.has(scenario) ? 'https://chat.fixture.test/' : '';
+    // An absent URL now selects the official channel default. An explicit
+    // empty override is the supported way to exercise the unconfigured case.
+    if (scenario === 'unconfigured') env.NEKO_WORKBENCH_CHAT_URL = '';
+    if (FAKE_LOBBY.has(scenario)) env.NEKO_WORKBENCH_CHAT_URL = 'https://chat.fixture.test/';
     await new Promise((resolve, reject) => execFile(process.execPath, [__filename, '--isolation-harness', scenario],
       { env, timeout: 20000, maxBuffer: 2e6, windowsHide: true }, (error, stdout, stderr) => {
         if (error) return reject(new Error(stdout + '\n' + stderr));
@@ -42,24 +42,40 @@ if (harnessIndex < 0) {
   });
 
 
-  test('workspace shell retains the companion dock; rail visibility is covered by behavioral fixtures', () => {
+  test('workspace shell preserves the companion dock across social and private chat views', () => {
     const source = fs.readFileSync(path.join(appDir, 'embedded-dsh/workspace-shell-source.js'), 'utf8');
     assert.equal(source.split("el('section', 'neko-companion-dock')").length - 1, 1, 'the dock is created exactly once per install');
     const forbidden = [
-      /\bdock\s*\.\s*(?:inert|remove|replaceWith|replaceChildren|innerHTML|outerHTML|textContent)\b/,
+      /\bdock\s*\.\s*(?:hidden|inert|remove|replaceWith|replaceChildren|innerHTML|outerHTML|textContent|style)\b/,
       /\bdock\s*\.\s*(?:setAttribute|toggleAttribute)\(\s*['"](?:hidden|inert|aria-hidden)['"]/,
       /\bdock\s*\.\s*parentNode\s*\.\s*removeChild\b/,
       /\.removeChild\(\s*dock\s*\)/,
     ];
-    for (const pattern of forbidden) assert.doesNotMatch(source, pattern);
+    // The side surface can cover the dock. The private chat page uses its own
+    // composer and moves the existing character into that page.
+    const visibilityGuard = 'dock.hidden = onDate || sideSocial;';
+    assert.equal(source.split(visibilityGuard).length - 1, 1, 'only those two views can hide the dock');
+    const remainingSource = source.replace(visibilityGuard, '');
+    for (const pattern of forbidden) assert.doesNotMatch(remainingSource, pattern);
     const css = fs.readFileSync(path.join(appDir, 'embedded-dsh/workspace-shell-source.css'), 'utf8');
     for (const rule of css.split('}')) {
       const [selectors, body = ''] = rule.split('{');
       const targetsDock = selectors.split(',').some(selector => /\.neko-companion-dock(?:\[[^\]]*\]|:[\w-]+)*\s*$/.test(selector.trim()));
-      if (targetsDock && !selectors.includes('.neko-companion-dock[hidden]')) assert.doesNotMatch(body, /display\s*:\s*none|visibility\s*:\s*hidden/, 'visible dock is not hidden by CSS: ' + selectors.trim());
+      if (targetsDock && selectors.trim() !== '.neko-companion-dock[hidden]') assert.doesNotMatch(body, /display\s*:\s*none|visibility\s*:\s*hidden/, 'only the explicit hidden state hides the dock: ' + selectors.trim());
     }
     const bundle = fs.readFileSync(path.join(appDir, 'embedded-dsh/b0-skin/packages/dsh-client-ui-white-label/lib/client.js'), 'utf8');
     assert(bundle.includes(source), 'the shipped UI bundle carries this exact shell source');
+  });
+
+  test('desktop companion chat action opens the existing pet input', async () => {
+    const vm = require('node:vm');
+    const source = fs.readFileSync(path.join(appDir, 'main.cjs'), 'utf8');
+    const start = source.indexOf('async function workbenchAction'), end = source.indexOf('function workbenchOptions', start);
+    assert(start >= 0 && end > start);
+    let opened = 0;
+    const action = vm.runInNewContext(source.slice(start, end) + ';workbenchAction', { showInput: () => opened++ });
+    const result = await action('open-companion-chat');
+    assert.equal(opened, 1); assert.equal(result.ok, true);
   });
 
   let JSDOM;
@@ -147,9 +163,10 @@ async function shellViewsCase(t, JSDOM, { lobby = false } = {}) {
   }
 
   layout = { ...layout, officeMode: 'codex' }; subscriber({ ...state, workspaceRevision: 1 }); await tick();
-  assert(!doc.querySelector('.neko-office-panel').hidden, 'fixture reached the Codex view');
-  assert(doc.querySelector('main').hasAttribute('inert'), 'only the native DSH main is inert under Codex');
-  expectIntact('Codex workspace view');
+  assert.equal(doc.querySelector('.neko-office-panel'),null,'the retired engine view is not mounted');
+  assert(!doc.querySelector('main').hasAttribute('inert'),'DSH remains available under a legacy saved engine selection');
+  assert.equal(layout.officeMode,'codex','the shell does not overwrite saved engine data');
+  expectIntact('legacy saved engine projected into the DSH workspace');
 
   doc.querySelector('.neko-community').click(); await tick();
   assert.equal(communityOpens, 1, 'fixture reached the community view');
@@ -157,7 +174,7 @@ async function shellViewsCase(t, JSDOM, { lobby = false } = {}) {
   community({ status: 'hidden' }); await tick();
   expectIntact('back from community');
 
-  doc.querySelector('.neko-workspace-settings').click(); await tick();
+  doc.dispatchEvent(new w.CustomEvent('neko-workbench-open-settings',{detail:{section:'general'}})); await tick();
   assert(!doc.querySelector('.neko-workspace-modal').hidden, 'fixture reached the settings view');
   expectIntact('settings view');
   doc.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await tick();
@@ -223,7 +240,7 @@ async function runIsolationHarness(scenario) {
   for (const name of ['dsh-llm', 'dsh-scope']) { fs.mkdirSync(path.join(modules, name, 'lib'), { recursive: true }); fs.writeFileSync(path.join(modules, name, 'lib/index.js'), ''); }
   Object.assign(process.env, { NEKO_WORKBENCH_DATA_DIR: data, NEKO_WORKBENCH_WORKSPACE: path.join(temporary, 'work'), NEKO_WORKBENCH_DSH_CLI: cli,
     NEKO_WORKBENCH_DSH_MODULES: modules, PET_OPEN_WORKBENCH: '1', PET_WORKBENCH_ONLY: '0' });
-  process.env.NEKO_WORKBENCH_CHAT_URL = FAKE_LOBBY.has(scenario) ? 'https://chat.fixture.test/' : '';
+  if (FAKE_LOBBY.has(scenario)) process.env.NEKO_WORKBENCH_CHAT_URL = 'https://chat.fixture.test/';
   const lobby = FAKE_LOBBY.has(scenario) ? fakeLobby(scenario) : null;
 
   const handlers = new Map(), windows = [], chatRequires = [];
@@ -255,7 +272,7 @@ async function runIsolationHarness(scenario) {
     static fromWebContents(wc) { return windows.find(window => window.webContents === wc); }
   }
   class Tray extends EventEmitter { setTitle() {} setToolTip() {} popUpContextMenu() {} }
-  const electron = { app, BrowserWindow: Window, ipcMain: { handle: (name, fn) => handlers.set(name, fn), on: () => {}, removeListener: () => {} },
+  const electron = { app, BrowserWindow: Window, ipcMain: { handle: (name, fn) => handlers.set(name, fn), removeHandler:name=>handlers.delete(name), on: () => {}, removeListener: () => {} },
     screen: { getPrimaryDisplay: () => ({ workArea: { x: 0, y: 0, width: 1440, height: 1000 } }) },
     shell: { openExternal: async () => {}, openPath: async () => {} }, Menu: { buildFromTemplate: template => ({ template, popup() {} }), setApplicationMenu() {} }, Tray,
     nativeImage: { createEmpty: () => ({}) }, dialog: { showErrorBox() {}, showMessageBox: async () => {}, showOpenDialog: async () => ({ canceled: true, filePaths: [] }) },
@@ -328,9 +345,13 @@ async function runIsolationHarness(scenario) {
       assert.equal((await lobbyCall({ action: 'open' })).ok, false, 'the lobby cannot open in this scenario');
     } else {
       const mode = scenario === 'independent' ? { action: 'mode-set', mode: 'independent', trigger: 'mention' } : { action: 'mode-set', mode: 'assist' };
-      assert.equal((await lobbyCall(mode)).ok, true, 'lobby mode can be set with the chat API configured');
       const opened = await lobbyCall({ action: 'open' });
       assert.equal(opened.ok, true, 'lobby open resolves');
+      if (scenario !== 'disconnected') {
+        await wait(async () => !(await lobbyCall({ action: 'state' })).state.loading, 'lobby account loaded');
+        const configured = await lobbyCall(mode);
+        assert.equal(configured.ok, true, 'lobby mode can be set after account context is loaded: '+configured.error);
+      }
       if (scenario === 'disconnected') {
         await wait(async () => (await lobbyCall({ action: 'state' })).state.connection === 'connecting', 'lobby reconnecting');
         assert.equal((await lobbyCall({ action: 'send', text: '大厅消息', origin: 'human' })).ok, false, 'lobby send fails while disconnected');

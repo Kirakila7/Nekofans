@@ -492,6 +492,13 @@ test('each inbound message reasserts the account route on an existing QQ session
   assert.equal(f.fake.selections.at(-1).model, 'deepseek-flash');
 });
 
+test('accepted QQ text emits a sourced memory observation and stale callbacks stop after pause',async t=>{
+  const f=await fixture(t,bound,{sessions:true}),entries=[];const listener=e=>entries.push(e);process.on('neko-channel-experience',listener);t.after(()=>process.off('neko-channel-experience',listener));
+  await f.wrapper.qqbotAction('start');const bot=f.fake.bots[0];await bot.handlers.message(message(bot));
+  assert.equal(entries.length,1);assert.equal(entries[0].channel,'qq');assert.match(entries[0].text,/local fixture/);assert(!JSON.stringify(entries[0]).includes('chosen-user'));assert.match(entries[0].evidenceRefs[0],/^qq-message:[a-f0-9]{64}$/);
+  await f.wrapper.qqbotAction('pause');await bot.handlers.message(message(bot));assert.equal(entries.length,1);
+});
+
 test('pause blocks later outbound chunks and updates on an already opened stream', async t => {
   const f = await fixture(t, bound, { sessions: true });
   await f.wrapper.qqbotAction('start');

@@ -1,5 +1,5 @@
 'use strict';
-const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{JSDOM}=require(path.join(process.env.NEKO_DOM_DEPS || '/private/tmp/neko-sidebar-dom-20261026','node_modules/jsdom'));
+const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),{JSDOM}=require('/private/tmp/neko-sidebar-dom-20261026/node_modules/jsdom');
 test('record selection is blocked while the draft is pending and reports resize and toggle',()=>{
  const dom=new JSDOM(fs.readFileSync(__dirname+'/../../apps/neko-workbench/native-composer.html','utf8'),{runScripts:'outside-only',url:'https://localhost'}),w=dom.window,d=w.document,events=[];let callback;
  w.nativeComposer={send:e=>events.push(e),onState:f=>{callback=f;}};

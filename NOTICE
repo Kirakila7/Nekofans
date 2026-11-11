@@ -1,0 +1,19 @@
+Nekofans
+Copyright 2026 Kirakila7 and Nekofans contributors.
+
+Project-owned code and modifications are licensed under the Apache License,
+Version 2.0. Existing upstream notices and licenses remain applicable.
+This notice does not claim ownership of third-party code or character assets.
+
+This workbench includes source and adaptations from the bigfish-pet / dsh-pet
+ecosystem and Project N.E.K.O. Third-party copyright and license notices are
+retained alongside their files. See THIRD_PARTY_NOTICES.md and
+assets/ATTRIBUTION.md for component and artwork attribution.
+
+The project was previously named NEKOfuns / neko-workbench. Its public name is
+now Nekofans. Legacy internal paths and identifiers are retained for storage
+and installation compatibility.
+
+Nekofans is an independent community project, not an official product or an
+endorsement by DeepSeek, Project N.E.K.O., OpenAI, Anthropic, Google or other
+model or character rights holders.

@@ -10,13 +10,14 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
-const { atomicBytes } = require('./main-chat-secret.cjs');
+const { writeAtomicStateFileSync } = require('./atomic-state-file.cjs');
 const { resolveChatConfig } = require('./lobby-config.cjs');
 const { createLobbyAuth, SAFE_ERROR: AUTH_ERRORS } = require('./lobby-auth.cjs');
 const { createLobbyClient, SAFE_ERROR: CLIENT_ERRORS } = require('./lobby-client.cjs');
 const { createLobbyAvatars, hueAvatar, isSnapshotAvatar } = require('./lobby-avatars.cjs');
 const { createLobbyCat, ERRORS: CAT_ERRORS, LIMITS: CAT_LIMITS } = require('./lobby-cat.cjs');
 const { createLobbyExperience } = require('./lobby-experience.cjs');
+const { connectLobbyAgentBridge } = require('./lobby-agent-bridge.cjs');
 const { resolveCommunityUrl } = require('./community-config.cjs');
 
 const MODES = Object.freeze(['off', 'assist', 'independent']);
@@ -45,9 +46,15 @@ const ERR = Object.freeze({
   assist: '共同回复只能使用你自己的猫娘',
   storage: '猫猫设置保存失败',
   failed: '大厅操作失败，请稍后重试',
+  catSync: '猫娘设置尚未同步，请重试保存',
+  accountChanged:'频道账号已变化，请重新保存设置',
+  bridgeOffline: '找不到本机 Agent 桥接。请先启动支持 Nekofans 的桥接，再点连接。',
+  bridgeActive: '外部 Agent 已连接。请先断开，再修改参与方式。',
 });
 const REASON = Object.freeze({
-  provider: '需要聊天 API',
+  provider: '请先连接主 agent 的聊天线路',
+  accountLogin: '请先登录 DeepSeek 工作台账号',
+  accountUnavailable: 'DeepSeek 工作台账号状态暂不可用，请检查工作台连接',
   cat: '先在猫猫设置里保存她',
   catsDisabled: '频道暂未开放猫娘参与',
   adminDisabled: '猫娘已被管理员停用',
@@ -86,6 +93,7 @@ const SPEC = Object.freeze({
   'send-retry': { clientMessageId: [true, isUuid, '消息 ID 无效'] },
   'send-discard': { clientMessageId: [true, isUuid, '消息 ID 无效'] },
   'load-older': {},
+  'agent-bridge-connect': {}, 'agent-bridge-disconnect': {},
   'mode-set': {
     mode: [true, oneOf(MODES), '参与方式无效'],
     trigger: [false, oneOf(TRIGGERS), '触发方式无效'],
@@ -143,7 +151,7 @@ function validateLobbyRequest(value) {
     if (out.origin === 'human_ai' && !out.assistCatId) throw requestError('共同回复需要猫娘 ID');
     if (out.origin === 'human' && out.assistCatId) throw requestError('普通消息不能带猫娘 ID');
   }
-  if ((out.action === 'admin-channel' || out.action === 'cat-save') && Object.keys(out).length === 1) throw requestError('没有要修改的设置');
+  if (out.action === 'admin-channel' && Object.keys(out).length === 1) throw requestError('没有要修改的设置');
   return out;
 }
 
@@ -174,8 +182,9 @@ function readSettings(file) {
   return base;
 }
 function writeSettings(file, settings) {
-  atomicBytes(file, Buffer.from(JSON.stringify(settings, null, 2)));
-  try { fs.chmodSync(file, 0o600); } catch { /* atomicBytes already wrote 0600 */ }
+  fs.mkdirSync(path.dirname(file),{recursive:true,mode:0o700});
+  writeAtomicStateFileSync(file,JSON.stringify(settings,null,2));
+  try { fs.chmodSync(file, 0o600); } catch { /* The exclusive temporary file already used 0600. */ }
 }
 
 // ---- snapshot projection ----
@@ -233,10 +242,10 @@ const blankCat = () => ({ mode: 'off', independentTrigger: 'mention', available:
   suggestion: null, nudge: null, usage: { today: 0, limit: CAT_LIMITS.dailyLimit } });
 
 function fallbackSnapshot(error) {
-  return { connection: 'unconfigured', auth: { status: 'unconfigured', message: ERR.unconfigured, error: '', signingIn: false, canRetrySignOut: false },
-    participation: { mode: 'off', available: false, reason: REASON.offline }, loading: false,
+  return { connection: 'unconfigured', auth: { status: 'unconfigured', message: ERR.unconfigured, error: '', signingIn: false },
+    participation: { mode: 'off', providerAvailable: false, available: false, reason: REASON.offline }, loading: false,
     me: null, channel: null, messages: [], hasMore: false, members: [], outbox: [], catSettings: settingsView(defaultSettings()),
-    cat: blankCat(), suggestion: null, nudge: null, error };
+    cat: blankCat(), agentBridge: { connected: false, error: '' }, suggestion: null, nudge: null, error };
 }
 
 /**
@@ -246,7 +255,8 @@ function fallbackSnapshot(error) {
  *  dataDir              data/lobby (cat.json, pending-experience.json); null keeps settings in memory
  *  secretStore          WorkbenchSecretStore for the refresh token (lobby-auth)
  *  openExternal(url)    system browser
- *  getChatProvider()    ChatProvider | null; non-null only for the chat-api backend with a stored key
+ *  getChatProvider()    isolated public ChatProvider | null for the selected companion route
+ *  getChatProviderState() safe backend/revision/readiness codes, no credentials or history
  *  getPersona()         {name, prompt} of the workbench role named by cat.json personaId
  *  recallMemory(q,b,s)  assist only; the result never enters the snapshot
  *  recordSharedExperience(entry)  hub write-back used by lobby-experience
@@ -272,6 +282,8 @@ function buildController(deps) {
 
   let disposed = false, scheduled = false, wantOpen = false, lastAvailable = false;
   let signingIn = false, me = null, meLoading = null, lastError = '', initError = '';
+  let catSetupError='',autoCatAttempted=false,settingsTail=Promise.resolve();
+  let externalAgent = null, bridgeAttempt = null, bridgeError = '';
   // /me 的 is_admin = 环境管理员 或 role=admin，且未封禁；记住环境管理员这一半，member.updated 时按同样规则重算。
   let meEnvAdmin = false;
   let auth = null, client = null, avatars = null, cat = null, experience = null;
@@ -291,6 +303,10 @@ function buildController(deps) {
       prompt: typeof value?.prompt === 'string' ? value.prompt : '' };
   };
   const provider = () => (disposed ? null : safeCall(() => deps.getChatProvider?.() || null, null));
+  const publicProvider = () => (disposed ? null : externalAgent || provider());
+  const providerState = () => safeCall(() => deps.getChatProviderState?.() || null, null);
+  const providerReason = () => ({'account-signed-out':REASON.accountLogin,'account-unavailable':REASON.accountUnavailable})[providerState()?.reason] || REASON.provider;
+  const providerKey = () => { const state=providerState(); return state ? `${state.backend}:${state.revision}` : ''; };
   const serverCat = () => (me?.cat && !me.cat.deleted ? me.cat : null);
   const catName = () => settings.name || serverCat()?.name || persona().name;
   const clientSnap = () => (client ? safeCall(() => client.snapshot(), null) : null);
@@ -320,7 +336,7 @@ function buildController(deps) {
   if (client) {
     try {
       cat = make.cat({
-        mode: settings.mode, trigger: settings.independentTrigger, getProvider: provider, getPersona: persona,
+        mode: settings.mode, trigger: settings.independentTrigger, getProvider: publicProvider, getPersona: persona,
         getLobby: () => lobbyContext(), catSend: frame => client.sendCat(frame),
         recallMemory: typeof deps.recallMemory === 'function' ? (q, b, s) => deps.recallMemory(q, b, s) : null,
         random, now, newId, timers, onChange: guard(() => schedulePublish()),
@@ -339,7 +355,7 @@ function buildController(deps) {
     } catch { experience = null; }
   }
   const processPending = () => { if (experience) Promise.resolve().then(() => experience?.processPending()).catch(() => {}); };
-  processPending();   // segments saved at the last quit: summarized now when chat-api is available, else kept
+  processPending();   // pending segments use the selected companion route when available
 
   // ---- derived state ----
   const healthy = () => configured && !configError && !!auth && !!client;
@@ -350,20 +366,22 @@ function buildController(deps) {
     return CLIENT_CONNECTION[status] || 'offline';
   }
   const online = () => connection() === 'online';
-  const effectiveMode = () => (provider() ? settings.mode : 'off');
+  const effectiveMode = () => externalAgent ? 'independent' : provider() ? settings.mode : 'off';
   /** Lobby AI participation; separate from private-chat availability, which it never touches. */
   function participation() {
-    if (!provider()) return { mode: 'off', available: false, reason: REASON.provider };
-    const mode = settings.mode;
+    if (!publicProvider()) return { mode: 'off', providerAvailable:false, available: false, reason: providerReason() };
+    const mode = effectiveMode();
+    const unavailable=reason=>({mode,providerAvailable:true,available:false,reason});
     const chan = clientSnap()?.channel;
-    if (!online() || !me || !chan) return { mode, available: false, reason: REASON.offline };
-    if (me.banned_at) return { mode, available: false, reason: REASON.banned };
-    if (Number.isFinite(me.muted_until) && me.muted_until > now()) return { mode, available: false, reason: REASON.muted };
+    if (!online() || !me || !chan) return unavailable(REASON.offline);
+    if (me.banned_at) return unavailable(REASON.banned);
+    if (Number.isFinite(me.muted_until) && me.muted_until > now()) return unavailable(REASON.muted);
     const own = serverCat();
-    if (!own) return { mode, available: false, reason: REASON.cat };
-    if (chan.cats_enabled === false) return { mode, available: false, reason: REASON.catsDisabled };
-    if (own.admin_disabled) return { mode, available: false, reason: REASON.adminDisabled };
-    return { mode, available: true, reason: '' };
+    if (!own) return unavailable(catSetupError||REASON.cat);
+    if (chan.cats_enabled === false) return unavailable(REASON.catsDisabled);
+    if (own.admin_disabled) return unavailable(REASON.adminDisabled);
+    if(mode==='independent'&&!own.enabled)return unavailable(catSetupError||ERR.catSync);
+    return { mode, providerAvailable:true, available: true, reason: '' };
   }
   function catView() {
     if (!cat) return blankCat();
@@ -393,8 +411,7 @@ function buildController(deps) {
     const conn = connection();
     return {
       connection: conn,
-      auth: { status: a?.status || 'unconfigured', message: a?.message || ERR.unconfigured, error: a?.error || '', signingIn,
-        canRetrySignOut: a?.status === 'signed-out' && a?.error === AUTH_ERRORS.signout },
+      auth: { status: a?.status || 'unconfigured', message: a?.message || ERR.unconfigured, error: a?.error || '', signingIn },
       participation: participation(),
       loading: conn === 'online' && !me,
       me: meView(),
@@ -406,7 +423,8 @@ function buildController(deps) {
         retryAfterMs: e.retryAfterMs, text: e.text, replyToId: e.replyToId, origin: e.origin, assistCatId: e.assistCatId })),
       catSettings: settingsView(settings),
       cat: catState, suggestion: catState.suggestion, nudge: catState.nudge,
-      error: configError || initError || lastError || snap?.error?.message || '',
+      agentBridge: { connected: !!externalAgent && !bridgeAttempt, error: bridgeError },
+      error: configError || initError || catSetupError || lastError || snap?.error?.message || '',
     };
   }
   function schedulePublish() {
@@ -418,12 +436,13 @@ function buildController(deps) {
   // ---- lobby context for lobby-cat (main process only, never published) ----
   function lobbyContext() {
     const snap = clientSnap();
-    if (!snap || snap.status !== 'online' || !me) return null;
+    if (!snap || snap.status !== 'online' || !wantOpen || !me || me.banned_at) return null;
     const names = new Map();
     for (const m of snap.members || []) names.set(m.kind === 'cat' ? m.cat_id : m.user_id, m.display_name);
     const own = serverCat();
     return { ownerId: me.user?.user_id, ownerName: me.user?.display_name || me.user?.name, catId: own?.id || null,
-      catReady: !!own && !own.admin_disabled, catName: catName(), catsEnabled: snap.channel?.cats_enabled !== false,
+      catReady: !bridgeAttempt && !!own && !own.admin_disabled && (effectiveMode()!=='independent'||own.enabled===true), catName: catName(), catsEnabled: snap.channel?.cats_enabled !== false,
+      humanMentionsOnly: !!externalAgent,
       freeAllowed: !!snap.channel?.cat_free_mode_allowed, mutedUntil: me.muted_until ?? null, note: settings.note,
       messages: snap.messages || [], names };
   }
@@ -436,7 +455,8 @@ function buildController(deps) {
     try {
       const status = authStatus();
       if (status !== 'signed-in' && me) {      // expired or revoked elsewhere
-        me = null; session += 1;
+        me = null; session += 1;autoCatAttempted=false;catSetupError='';
+        resetAgentBridge();
         if (cat) quiet(() => cat.invalidate());
         if (experience) quiet(() => experience.close());
       }
@@ -445,15 +465,19 @@ function buildController(deps) {
       const available = participation().available;
       if (lastAvailable && !available && cat) quiet(() => cat.invalidate());   // cat disabled, cats off, provider gone, muted
       lastAvailable = available;
-      if (experience) quiet(() => experience.setMode(available ? settings.mode : 'off'));
+      if (experience) quiet(() => experience.setMode(available && !externalAgent ? settings.mode : 'off'));
+      // Register the existing companion lazily in assist mode, disabled on the
+      // server. This creates no message/model call and never enables autonomy.
+      if(wantOpen&&online()&&me&&!serverCat()&&!autoCatAttempted&&!syncing&&!externalAgent&&settings.mode==='assist'&&provider()
+        &&!me.cat?.deleted&&!me.banned_at&&clientSnap()?.channel?.cats_enabled===true){
+        autoCatAttempted=true;void syncServerCat({create:true,forceDisabled:true});
+      }
     } finally { reconciling = false; }
   }
   function onAuthState() { reconcile(); schedulePublish(); }
 
-  // Opening the channel passes refresh so community profile edits (nickname and
-  // avatar) show up on the next open; a failed refresh keeps the cached profile.
-  async function ensureMe(refresh = false) {
-    if (!client || authStatus() !== 'signed-in' || (me && !refresh)) return;
+  async function ensureMe() {
+    if (me || !client || authStatus() !== 'signed-in') return;
     if (meLoading) return meLoading;
     const mine = session;
     meLoading = (async () => {
@@ -465,35 +489,44 @@ function buildController(deps) {
         if (settings.serverCatId !== id) { settings.serverCatId = id; saveSettings(); }
         void syncServerCat();
       } catch (error) {
-        if (!disposed && mine === session) {
-          meFailed = !me;
-          if (!me) lastError = safeText(error);
-        }
+        if (!disposed && mine === session) { meFailed = true; lastError = safeText(error); }
       } finally { meLoading = null; reconcile(); schedulePublish(); }
     })();
     return meLoading;
   }
 
-  /** Server cat `enabled` follows the local mode: true only in independent mode with a provider. */
-  async function syncServerCat() {
-    const own = serverCat();
-    if (!own || !client || !online()) return true;
-    const enabled = effectiveMode() === 'independent';
-    const replyMode = enabled ? settings.independentTrigger : (own.reply_mode || 'mention');
-    if (own.enabled === enabled && (!enabled || own.reply_mode === replyMode)) return true;
-    if (syncing) await syncing.catch(() => {});
-    const mine = session;
-    syncing = client.rest.putCat({ name: own.name || catName(), avatarKey: own.avatar_key, replyMode: enabled ? replyMode : 'mention', enabled });
-    try {
-      const updated = await syncing;
-      if (!disposed && mine === session && me) me.cat = updated;
-      return true;
-    } catch (error) { lastError = safeText(error); return false; }
-    finally { syncing = null; schedulePublish(); }
+  /** One service profile, one queue. Late responses cannot bind another account. */
+  async function syncServerCat({create=false,profile=false,forceDisabled=false}={}) {
+    if(!client||!online()||!me||authStatus()!=='signed-in')return !create&&!profile;
+    const mine=session,ownerId=me.user?.user_id;
+    const current=()=>!disposed&&mine===session&&me?.user?.user_id===ownerId&&authStatus()==='signed-in'&&online();
+    const previous=syncing;
+    const operation=Promise.resolve(previous).catch(()=>{}).then(async()=>{
+      if(!current())return false;
+      const own=serverCat();if(!own&&!create)return true;
+      const channel=clientSnap()?.channel;
+      const enabled=!forceDisabled&&effectiveMode()==='independent'&&!me.banned_at
+        &&!(Number.isFinite(me.muted_until)&&me.muted_until>now())&&channel?.cats_enabled!==false&&!own?.admin_disabled;
+      const name=profile?(settings.name||own?.name||persona().name):(own?.name||settings.name||persona().name);
+      const avatarKey=profile&&settings.avatarKey!=='default'?settings.avatarKey:own?.avatar_key||(settings.avatarKey!=='default'?settings.avatarKey:'bigfish');
+      const replyMode=externalAgent ? 'mention' : settings.independentTrigger;
+      if(own&&own.enabled===enabled&&own.reply_mode===replyMode&&(!profile||own.name===name&&own.avatar_key===avatarKey))return true;
+      try{
+        const updated=await client.rest.putCat({name,avatarKey,replyMode,enabled});
+        if(!current())return false;
+        if(!updated||!isUuid(updated.id)||updated.owner_user_id!==ownerId||updated.deleted)throw Error(ERR.catSync);
+        me.cat=updated;settings.serverCatId=updated.id;catSetupError='';
+        if(!saveSettings()){catSetupError=ERR.storage;return false;}
+        return true;
+      }catch(error){if(current())catSetupError=safeText(error);return false;}
+    });
+    syncing=operation;
+    try{return await operation;}
+    finally{if(syncing===operation)syncing=null;reconcile();schedulePublish();}
   }
 
   const ctxFor = message => ({ channelId: message.channel_id, ownerId: me?.user?.user_id, catId: serverCat()?.id || null,
-    mode: participation().available ? settings.mode : 'off' });
+    mode: participation().available && !externalAgent ? settings.mode : 'off' });
   function onClientEvent(type, payload) {
     if (disposed) return;
     if (type === 'message.new' && payload.message) {
@@ -511,10 +544,12 @@ function buildController(deps) {
       }
     } else if (type === 'cat.updated' && me && payload.cat && payload.cat.owner_user_id === me.user?.user_id) {
       me.cat = payload.cat.deleted ? null : payload.cat;
+      if(payload.cat.deleted){autoCatAttempted=true;quiet(()=>cat?.invalidate());}
     } else if (type === 'resync') {
       if (cat) quiet(() => cat.invalidate());      // gap beyond the resume window: everything in flight is void
     } else if (type === 'signed-out') {
-      me = null; session += 1; wantOpen = false;
+      resetAgentBridge();
+      me = null; session += 1; wantOpen = false;autoCatAttempted=false;catSetupError='';
       if (cat) quiet(() => cat.invalidate());
       if (experience) quiet(() => experience.close());
     }
@@ -527,17 +562,79 @@ function buildController(deps) {
   const fail = error => ({ ok: false, error: typeof error === 'string' ? error : safeText(error), state: snapshot() });
   const attempt = async fn => { try { await fn(); return ok(); } catch (error) { return fail(error); } };
 
-  /** Mode/trigger change: lobby-cat bumps modeEpoch (stale generations are dropped), then cat.json and the server cat follow. */
-  async function applyMode(mode, trigger) {
-    if (mode !== 'off' && !provider()) return fail(REASON.provider);
-    if (cat) {
-      try { cat.setMode(mode, trigger); } catch (error) { return fail(error); }
+  function commitSettings(changes) {
+    if(changes.mode!==undefined&&changes.mode!=='off'&&!provider())return providerReason();
+    const previous={...settings};Object.assign(settings,changes);
+    if(!saveSettings()){Object.assign(settings,previous);return ERR.storage;}
+    if(cat&&(changes.mode!==undefined||changes.independentTrigger!==undefined)&&(settings.mode==='off'||provider())){
+      try{cat.setMode(settings.mode,settings.independentTrigger);}
+      catch(error){Object.assign(settings,previous);const restored=saveSettings();quiet(()=>cat.setMode(previous.mode,previous.independentTrigger));return restored?safeText(error):ERR.storage;}
     }
-    settings.mode = mode;
-    if (trigger !== undefined) settings.independentTrigger = trigger;
-    if (!saveSettings()) return fail(ERR.storage);
+    return '';
+  }
+  function resetAgentBridge() {
+    bridgeAttempt?.abort();
+    bridgeAttempt = null;
+    bridgeError = '';
+    if (!externalAgent) return;
+    externalAgent = null;
+    quiet(() => cat?.invalidate());
+    quiet(() => cat?.setMode(effectiveMode(), settings.independentTrigger));
+  }
+  async function connectAgentBridge() {
+    if (externalAgent) return ok();
+    if (!cat) return fail(ERR.init);
+    if (!wantOpen || !online() || !me) return fail(ERR.closed);
+    if (me.banned_at) return fail(REASON.banned);
+    if (Number.isFinite(me.muted_until) && me.muted_until > now()) return fail(REASON.muted);
+    if (clientSnap()?.channel?.cats_enabled === false) return fail(REASON.catsDisabled);
+    if (serverCat()?.admin_disabled) return fail(REASON.adminDisabled);
+    const attempt = new AbortController(), ownerSession = session;
+    const current = () => !disposed && bridgeAttempt === attempt && session === ownerSession && wantOpen && online();
+    bridgeAttempt = attempt;
+    let next;
+    try {
+      next = await connectLobbyAgentBridge({ signal: attempt.signal, onStatus(ready) {
+        if (externalAgent !== next) return;
+        bridgeError = ready ? '' : '外部 Agent 暂未回复，请检查本机桥接。';
+        schedulePublish();
+      } });
+    } catch {
+      const error = current() ? ERR.bridgeOffline : ERR.closed;
+      if (bridgeAttempt === attempt) resetAgentBridge();
+      return fail(error);
+    }
+    if (!current()) {
+      if (bridgeAttempt === attempt) resetAgentBridge();
+      return fail(ERR.closed);
+    }
+    externalAgent = next;
+    quiet(() => cat.invalidate());
+    cat.setMode('independent', 'mention');
+    const synced = await syncServerCat({ create: true });
+    if (!synced || !current()) {
+      const error = catSetupError || (synced ? ERR.closed : ERR.catSync);
+      if (bridgeAttempt === attempt) resetAgentBridge();
+      if (!disposed && session === ownerSession && wantOpen && online()) await syncServerCat();
+      reconcile();
+      return fail(error);
+    }
+    bridgeAttempt = null;
     reconcile();
-    if (me && online() && !(await syncServerCat())) return fail(lastError || ERR.failed);
+    return ok();
+  }
+  /** Local mode changes commit before publishing and explicitly provision a missing server profile. */
+  async function applyMode(mode, trigger) {
+    if (externalAgent && mode !== 'off') return fail(ERR.bridgeActive);
+    if (mode === 'off') resetAgentBridge();
+    if(mode!=='off'){
+      if(!provider())return fail(providerReason());
+      if(authStatus()!=='signed-in')return fail(ERR.login);
+      if(!me||!online())return fail(me?ERR.closed:ERR.loading);
+    }
+    const error=commitSettings({mode,...(trigger!==undefined?{independentTrigger:trigger}:{})});if(error)return fail(error);
+    reconcile();
+    if (me && online() && !(await syncServerCat({create:mode!=='off'}))) return fail(catSetupError || ERR.catSync);
     return null;
   }
 
@@ -549,29 +646,24 @@ function buildController(deps) {
     try { request = validateLobbyRequest(value); } catch (error) { return fail(error.code === 'lobby_request' ? error.message : ERR.request); }
     const action = request.action;
     if (action === 'state') { reconcile(); return ok(); }
+    if(action==='mode-set'&&request.mode==='off'){const failed=await applyMode(request.mode,request.trigger);return failed||ok();}
     if (!healthy()) return fail(configError || initError || ERR.unconfigured);
 
     switch (action) {
       case 'sign-in': {
-        signingIn = true; schedulePublish();
-        try { await auth.signIn(); } finally { signingIn = false; }
-        reconcile();
-        const a = authState();
-        return a?.status === 'signed-in' ? ok() : fail(a?.error || ERR.login);
+        return signIn(false);
       }
       case 'sign-in-cancel':
         quiet(() => auth.cancelSignIn());
         signingIn = false;
         return ok();
       case 'sign-out':
-        me = null; session += 1; wantOpen = false; meFailed = false;
+        resetAgentBridge();
+        me = null; session += 1; wantOpen = false; meFailed = false;autoCatAttempted=false;catSetupError='';
         if (cat) quiet(() => cat.invalidate());
         if (experience) quiet(() => experience.close());
         quiet(() => client.reset());
-        try {
-          const result = await auth.signOut();
-          if (result?.error) return fail(result.error);
-        } catch (error) { return fail(error); }
+        try { await auth.signOut(); } catch { /* local state is cleared either way */ }
         return ok();
       default: break;
     }
@@ -585,12 +677,18 @@ function buildController(deps) {
     if (action === 'open') {
       wantOpen = true; meFailed = false;
       quiet(() => client.connect());
-      await ensureMe(true);
+      await ensureMe();
       processPending();
       return me ? ok() : fail(lastError || ERR.loading);
     }
     if (action === 'close') {
       wantOpen = false;
+      if (bridgeAttempt) {
+        resetAgentBridge();
+        // Re-read /me on re-entry if the bridge's profile update was in flight.
+        me = null;
+        session += 1;
+      }
       if (cat) quiet(() => cat.invalidate());       // leaving the lobby voids every generation in flight
       if (experience) quiet(() => experience.close());
       quiet(() => client.disconnect());
@@ -598,27 +696,11 @@ function buildController(deps) {
     }
 
     if (action === 'cat-save') {
-      const local = ['note', 'dailyLimit'], remote = request.name !== undefined || request.avatarKey !== undefined;
-      if (remote && (!me || !online())) return fail(me ? ERR.closed : ERR.loading);
-      if (request.mode !== undefined || request.independentTrigger !== undefined) {
-        const failed = await applyMode(request.mode ?? settings.mode, request.independentTrigger);
-        if (failed) return failed;
-      }
-      for (const key of local) if (request[key] !== undefined) settings[key] = request[key];
-      if (request.name !== undefined) settings.name = request.name;
-      if (request.avatarKey !== undefined) settings.avatarKey = request.avatarKey;
-      if (!saveSettings()) return fail(ERR.storage);
-      if (remote) {
-        const own = serverCat();
-        const enabled = effectiveMode() === 'independent';
-        try {
-          const saved = await client.rest.putCat({ name: settings.name || own?.name || persona().name,
-            avatarKey: settings.avatarKey || own?.avatar_key || 'default',
-            replyMode: enabled ? settings.independentTrigger : (own?.reply_mode || 'mention'), enabled });
-          if (me) me.cat = saved;
-          settings.serverCatId = saved.id; saveSettings();
-        } catch (error) { return fail(error); }
-      }
+      if(!me||!online())return fail(me?ERR.closed:ERR.loading);
+      const changes={};for(const key of ['mode','independentTrigger','note','dailyLimit','name','avatarKey'])if(request[key]!==undefined)changes[key]=request[key];
+      if (externalAgent && (changes.mode !== undefined || changes.independentTrigger !== undefined)) return fail(ERR.bridgeActive);
+      const error=commitSettings(changes);if(error)return fail(error);
+      if(!(await syncServerCat({create:true,profile:true})))return fail(catSetupError||ERR.catSync);
       reconcile();
       return ok();
     }
@@ -636,8 +718,18 @@ function buildController(deps) {
       case 'send-retry': return attempt(() => client.retry(request.clientMessageId));
       case 'send-discard': quiet(() => client.discard(request.clientMessageId)); return ok();
       case 'load-older': return attempt(() => client.loadOlder());
+      case 'agent-bridge-connect': return connectAgentBridge();
+      case 'agent-bridge-disconnect':
+        resetAgentBridge();
+        reconcile();
+        return await syncServerCat() ? ok() : fail(catSetupError || ERR.catSync);
       case 'suggest':
         if (!cat) return fail(ERR.init);
+        if (externalAgent) return fail(CAT_ERRORS.mode);
+        if (!provider()) return fail(providerReason());
+        if(settings.mode!=='assist')return fail(CAT_ERRORS.mode);
+        if(!serverCat()&&!(await syncServerCat({create:true})))return fail(catSetupError||ERR.catSync);
+        if(!participation().available)return fail(participation().reason);
         return attempt(() => cat.requestSuggestion({ targetMessageId: request.targetMessageId ?? null,
           instruction: request.instruction ?? '', draftEpoch: request.draftEpoch }));
       case 'suggest-cancel': if (cat) quiet(() => cat.cancelSuggestion()); return ok();
@@ -669,37 +761,103 @@ function buildController(deps) {
   }
 
   async function request(value) {
-    if (disposed) return { ok: false, error: ERR.disposed, state: snapshot() };
-    try { return await doRequest(value); } catch { return { ok: false, error: ERR.failed, state: safeCall(snapshot, fallbackSnapshot(ERR.failed)) }; }
-    finally { schedulePublish(); }
+    const mutation=['mode-set','cat-save','agent-bridge-connect','agent-bridge-disconnect'].includes(value?.action),requestSession=session;
+    const execute=async()=>{
+      if (disposed) return { ok: false, error: ERR.disposed, state: snapshot() };
+      if(mutation&&requestSession!==session)return fail(ERR.accountChanged);
+      try { return await doRequest(value); } catch { return { ok: false, error: ERR.failed, state: safeCall(snapshot, fallbackSnapshot(ERR.failed)) }; }
+      finally { schedulePublish(); }
+    };
+    if(mutation){const operation=settingsTail.then(execute);settingsTail=operation.catch(()=>{});return operation;}
+    return execute();
   }
 
-  /** Called by main when Chat API settings change: participation and the server cat follow. */
+  // Trusted game-sharing entry point. Capture the current account before room
+  // creation, so a sign-out or account switch cannot publish an old invitation.
+  let gameInvitationSends = 0;
+  function prepareGameInvitation() {
+    const mine = session, signedIn = healthy() && authStatus() === 'signed-in';
+    const current = () => !disposed && mine === session && authStatus() === 'signed-in';
+    return async text => {
+      if (!signedIn || !current()) return { status: 'not-sent' };
+      gameInvitationSends++;
+      try {
+        if (!online()) quiet(() => client.connect());
+        await ensureMe();
+        for (let i = 0; i < 20 && current() && me && !online(); i++) {
+          await new Promise(resolve => setTimeout(resolve, 200));
+        }
+        if (!current() || !me || !online()) return { status: 'not-sent' };
+        // The channel client queues this once and resolves only on its ack. If
+        // the ack is lost, retry through the existing outbox with the same ID.
+        try { await client.send({ text, origin: 'human' }); return { status: 'shared' }; }
+        catch { return { status: 'delivery-unknown' }; }
+      } finally {
+        if (--gameInvitationSends === 0 && !wantOpen && current()) quiet(() => client.disconnect());
+        schedulePublish();
+      }
+    };
+  }
+
+  // Trusted main-process use only. No force flag is accepted from the public
+  // lobby renderer request schema. Existing grants survive failed/canceled
+  // replacement authorization in their original encrypted owner.
+  async function signIn(force) {
+    if (!healthy()) return fail(configError || initError || ERR.unconfigured);
+    if (force) {
+      resetAgentBridge();
+      me = null; session += 1; meFailed = false;autoCatAttempted=false;catSetupError='';
+      quiet(() => cat?.invalidate()); quiet(() => experience?.close()); quiet(() => client?.reset());
+    }
+    signingIn = true; schedulePublish();
+    try { await auth.signIn({force}); } finally { signingIn = false; }
+    reconcile(); const a = authState();
+    return a?.status === 'signed-in' && (!force || !a.error) ? ok() : fail(a?.error || ERR.login);
+  }
+  async function verifyIdentity() {
+    if (disposed || !healthy() || authStatus() !== 'signed-in' || !client) return null;
+    const mine = session;
+    try {
+      // Verify /me without opening a WebSocket, changing cat settings, or
+      // projecting access/refresh credentials into the account coordinator.
+      const value = await client.rest.me();
+      if (disposed || mine !== session || authStatus() !== 'signed-in') return null;
+      return typeof value?.user?.user_id === 'string' && value.user.user_id.length <= 128
+        ? {userId:value.user.user_id} : null;
+    } catch { return null; }
+  }
+
+  /** Route changes invalidate public jobs while preserving the user's participation mode. */
   function refresh() {
     if (disposed) return;
     quiet(() => {
-      const had = lastProvider; lastProvider = !!provider();
+      const had = lastProvider, key=providerKey(); lastProvider = !!provider();
+      if (!externalAgent && key !== lastProviderKey && cat) quiet(() => cat.invalidate());
+      lastProviderKey=key;
       reconcile();
+      if(!externalAgent&&!had&&lastProvider&&cat)quiet(()=>cat.setMode(settings.mode,settings.independentTrigger));
       if(!had&&lastProvider)processPending();
       if (had !== lastProvider && me && online()) void syncServerCat();
     });
     schedulePublish();
   }
   let lastProvider = !!provider();
+  let lastProviderKey = providerKey();
 
   function dispose() {
     if (disposed) return;
     disposed = true;
+    resetAgentBridge();
     if (experience) quiet(() => experience.persistOnQuit());
     if (cat) quiet(() => cat.dispose());
     if (client) quiet(() => client.dispose());
     if (auth) quiet(() => auth.dispose());
   }
 
-  /** Called by main once the private chat has started: segments saved at the last quit get summarized when chat-api is ready. */
+  /** Called by main once the selected companion route is ready. */
   function processPendingOnStart() { if (!disposed) processPending(); }
 
-  return Object.freeze({ request, snapshot: () => safeCall(snapshot, fallbackSnapshot(ERR.failed)), refresh, processPending: processPendingOnStart, dispose });
+  return Object.freeze({ request, prepareGameInvitation, snapshot: () => safeCall(snapshot, fallbackSnapshot(ERR.failed)), reauthorize:()=>signIn(true), verifyIdentity, refresh, processPending: processPendingOnStart, dispose });
 }
 
 module.exports = { createLobbyController, validateLobbyRequest, readSettings, defaultSettings, ACTIONS, ERR, REASON, MODES, TRIGGERS };

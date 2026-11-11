@@ -27,8 +27,7 @@ test('context sharing is opt-in, names the destination and resets when it change
   await tick();
   const $ = id => window.document.getElementById(id);
   const disclosure=$('share-context').parentElement.textContent;
-  assert.match(disclosure,/已确认的旧版聊天记忆/);
-  assert.match(disclosure,/相关 N\.E\.K\.O\. 原生记忆/);
+  assert.match(disclosure,/相关 N\.E\.K\.O\. 记忆/);
   assert.match($('save-screen-memory').parentElement.textContent,/长期记忆/);
   assert.match($('save-screen-memory').parentElement.textContent,/记忆整理模型/);
   assert.equal($('save-screen-memory').checked,false);

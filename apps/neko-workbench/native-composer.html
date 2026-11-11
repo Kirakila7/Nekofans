@@ -1,1 +1,47 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self';"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="native-composer.css"><title>工作区浮动输入</title></head><body><section id="records" aria-label="项目记录" hidden><div id="records-resize" role="separator" aria-label="拖动调整项目记录大小" tabindex="0"></div><header><strong>项目记录</strong><button id="records-refresh" type="button">刷新</button></header><div id="records-status" role="status"></div><div id="records-list"></div><button id="records-more" type="button" hidden>加载更多</button></section><section id="task" aria-label="当前任务记录" hidden><header><strong>任务进度与回复</strong></header><div id="task-status" role="status"></div><div id="task-list" aria-label="工作会话消息"></div></section><form id="composer" aria-label="工作区浮动输入"><button id="records-toggle" type="button" aria-expanded="false" title="项目记录" aria-label="展开项目记录">☰</button><button id="expand" type="button" aria-label="展开工作区" title="展开工作区">↗</button><button id="files" type="button" aria-label="打开当前项目目录" title="展开工作区并打开当前项目目录" disabled>▱</button><button id="task-toggle" type="button" aria-label="查看任务进度与回复" aria-expanded="false" title="查看任务进度与回复">☷</button><span id="session-label" aria-label="当前工作会话">未选择会话</span><textarea id="message" rows="1" maxlength="30000" aria-label="工作任务" placeholder="工作区未连接" disabled></textarea><button id="copy" type="button" aria-label="选中恢复草稿以便复制" title="选中草稿以便复制" hidden>⧉</button><button id="send" type="submit" aria-label="发送工作任务" disabled>↑</button></form><div id="status" role="status" aria-live="polite" class="status" hidden></div><script src="native-composer.js"></script></body></html>
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self';">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="native-composer.css">
+  <link rel="stylesheet" href="compact-questions.css">
+  <title>创造台</title>
+</head>
+<body>
+  <button id="window-drag" type="button" aria-label="拖动创造台浮窗" title="长按任意位置拖动创造台；方向键微调，Home 复位" hidden>创造台</button>
+  <section id="model-panel" aria-label="模型与推理等级" hidden>
+    <label class="model-row" for="model-select"><span>模型</span><select id="model-select" aria-label="模型"></select></label>
+    <label class="model-row" for="reasoning-select"><span>推理等级</span><select id="reasoning-select" aria-label="推理等级"></select></label>
+    <div id="model-status" role="status" aria-live="polite" hidden></div>
+    <footer><button id="records-toggle" type="button" aria-expanded="false" aria-label="展开项目记录">项目记录</button><button id="model-refresh" type="button" aria-label="刷新模型目录">刷新模型</button></footer>
+  </section>
+  <section id="records" aria-label="项目记录" hidden><div id="records-resize" role="separator" aria-label="拖动调整项目记录大小" tabindex="0"></div><header><strong>项目记录</strong><button id="records-refresh" type="button">刷新</button><button id="records-close" type="button" aria-label="收起项目记录">×</button></header><input id="records-search" type="search" placeholder="搜索项目或会话" aria-label="搜索当前项目记录" aria-describedby="records-status" maxlength="120"><div id="records-status" role="status"></div><div id="records-list"></div><button id="records-more" type="button" hidden>加载更多</button></section>
+  <section id="project-panel" aria-label="选择工作区项目" hidden>
+    <header><strong>工作区项目</strong><button id="project-refresh" type="button" aria-label="刷新项目列表" title="刷新项目列表">刷新</button><button id="project-close" type="button" aria-label="收起项目列表" title="收起">×</button></header>
+    <div id="project-status" role="status" aria-live="polite"></div>
+    <div id="project-list" role="listbox" aria-label="工作区项目"></div>
+  </section>
+  <section id="details" aria-label="当前项目详情" hidden>
+    <header><strong id="details-name"></strong><span id="details-badge"></span></header>
+    <div id="details-path"></div>
+    <div id="details-status" role="status" aria-live="polite"></div>
+    <div id="details-content" role="log" aria-label="当前会话内容（只读）" tabindex="0"></div>
+  </section>
+  <div id="target" class="target" hidden></div>
+  <section id="question-panel" hidden></section>
+  <button id="details-toggle" type="button" aria-expanded="false" aria-controls="details" aria-label="展开当前项目详情" title="展开当前项目详情 · 按住或拖动调整高度"><svg viewBox="0 0 16 10" aria-hidden="true"><path d="M3 7.5 8 2.5l5 5"/></svg></button>
+  <form id="composer" aria-label="创造台输入">
+    <button id="model-toggle" type="button" aria-label="选择模型与推理等级" aria-expanded="false" title="模型与推理等级"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2.5"/><path d="M9.5 3v3M14.5 3v3M9.5 18v3M14.5 18v3M3 9.5h3M3 14.5h3M18 9.5h3M18 14.5h3M10 10h4v4h-4z"/></svg></button>
+    <button id="project-toggle" type="button" aria-label="选择工作区项目" aria-expanded="false" aria-controls="project-panel" title="工作区项目"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.5V18a1.5 1.5 0 0 0 1.5 1.5h14a1.5 1.5 0 0 0 1.5-1.5V9.5A1.5 1.5 0 0 0 19 8h-7l-2-2.5H5A1.5 1.5 0 0 0 3.5 7Z"/></svg></button>
+    <button id="question-toggle" type="button" aria-label="展开任务选项" title="任务选项" hidden>?</button>
+    <button id="expand" type="button" aria-label="展开工作区" title="展开工作区"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 18 18 6M6 6h12v12"/></svg></button>
+    <button id="files" type="button" aria-label="打开当前项目目录" title="展开工作区并打开当前项目目录" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 6.5h6l2 2h9v10h-17Z"/></svg></button>
+    <textarea id="message" rows="1" maxlength="30000" aria-label="创造台任务" placeholder="创造台" disabled></textarea>
+    <button id="copy" type="button" aria-label="选中恢复草稿以便复制" title="选中草稿后按 Ctrl+C 复制" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 9h11v11H9ZM4 15V4h11"/></svg></button>
+    <button id="send" type="submit" aria-label="发送工作任务" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button>
+  </form>
+  <div id="status" role="status" aria-live="polite" class="status" hidden></div>
+  <script src="hold-drag.js"></script><script src="compact-questions.js"></script><script src="native-composer.js"></script>
+</body>
+</html>

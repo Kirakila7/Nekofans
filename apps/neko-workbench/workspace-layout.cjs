@@ -2,6 +2,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
+const {historyProjectId,rootKey,projectName}=require('./dsh-project-discovery.cjs');
 const AVATARS = new Set(['yui', 'devcat', 'bigfish', 'claude', 'gemini', 'custom']);
 const DEFAULT_SEATS = [
   { id: 'seat-1', name: 'DSH', avatarId: 'bigfish', provider: 'dsh', projectRoot: null, customDataUrl: null },
@@ -13,12 +14,12 @@ function safeName(value) {
   return value.trim();
 }
 function createWorkspaceLayout(file) {
-  let value = { officeMode: 'dsh', codexEnabled:false, activeSeatId: null, companionCollapsed: false, companionHistoryOpen: false, seats: structuredClone(DEFAULT_SEATS) };
+  let value = { workbenchEdition: 'daily', officeMode: 'dsh', activeSeatId: null, companionCollapsed: false, companionHistoryOpen: false, seats: structuredClone(DEFAULT_SEATS) };
   try {
     if (fs.statSync(file).size < 5 * 1024 * 1024) {
       const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
+      if (['office', 'daily'].includes(saved.workbenchEdition)) value.workbenchEdition = saved.workbenchEdition;
       if (['dsh', 'codex'].includes(saved.officeMode)) value.officeMode = saved.officeMode;
-      value.codexEnabled = saved.codexEnabled === true;
       if (typeof saved.companionCollapsed === 'boolean') value.companionCollapsed = saved.companionCollapsed;
       if (typeof saved.companionHistoryOpen === 'boolean') value.companionHistoryOpen = saved.companionHistoryOpen;
       for (const seat of value.seats) {
@@ -43,9 +44,9 @@ function createWorkspaceLayout(file) {
   return {
     get,
     update(patch) {
-      if (!patch || typeof patch !== 'object' || Object.keys(patch).some(k => !['officeMode', 'codexEnabled', 'activeSeatId', 'companionCollapsed', 'companionHistoryOpen'].includes(k))) throw Error('工作台选项无效');
+      if (!patch || typeof patch !== 'object' || Object.keys(patch).some(k => !['workbenchEdition', 'officeMode', 'activeSeatId', 'companionCollapsed', 'companionHistoryOpen'].includes(k))) throw Error('工作台选项无效');
       const next = get();
-      if ('codexEnabled' in patch) { if (typeof patch.codexEnabled !== 'boolean') throw Error('Codex 启用选项无效'); next.codexEnabled = patch.codexEnabled; }
+      if ('workbenchEdition' in patch) { if (!['office', 'daily'].includes(patch.workbenchEdition)) throw Error('请选择办公版或日常版'); next.workbenchEdition = patch.workbenchEdition; }
       if ('officeMode' in patch) { if (!['dsh', 'codex'].includes(patch.officeMode)) throw Error('请选择 DSH 或 Codex'); next.officeMode = patch.officeMode; }
       if ('activeSeatId' in patch) { if (patch.activeSeatId !== null && !next.seats.some(s => s.id === patch.activeSeatId)) throw Error('工作入口不存在'); next.activeSeatId = patch.activeSeatId; }
       if ('companionCollapsed' in patch) { if (typeof patch.companionCollapsed !== 'boolean') throw Error('聊天显示选项无效'); next.companionCollapsed = patch.companionCollapsed; }
@@ -68,21 +69,22 @@ function createWorkspaceLayout(file) {
     },
   };
 }
-function projectGroups(rows) {
-  const groups = new Map();
+function projectGroups(rows, workspaces = []) {
+  const groups = new Map(),membership=new Map(),registered=new Set();
+  for(const workspace of workspaces){
+    const key=workspace.provider+':'+rootKey(workspace.cwd);
+    if(!groups.has(key))groups.set(key,{id:workspace.id,provider:workspace.provider,cwd:workspace.cwd,name:workspace.name,workspaceId:workspace.workspaceId,source:workspace.source,needsRegistration:workspace.needsRegistration,sessions:[]});
+    registered.add(key);
+    for(const id of workspace.sessionIds||[])membership.set(workspace.provider+':'+id,key);
+  }
   for (const row of rows) {
-    const cwd = row.cwd || '';
-    const key = cwd ? projectPathKey(cwd) : 'unassigned:' + row.provider;
-    if (!groups.has(key)) groups.set(key, { id: key, provider: row.provider, providers:[], cwd, name: cwd ? path.basename(cwd) || cwd : '未指定项目', sessions: [] });
-    if (!groups.get(key).providers.includes(row.provider)) groups.get(key).providers.push(row.provider);
+    const key = membership.get(row.provider+':'+row.id)||row.provider + ':' + (row.cwd ? rootKey(row.cwd) : '');
+    if (!groups.has(key)) groups.set(key, { id: row.provider==='dsh'&&row.cwd?historyProjectId(row.cwd):key, provider: row.provider, cwd: row.cwd || '', name: row.cwd ? projectName('',row.cwd) : '未指定项目', ...(row.provider==='dsh'?{workspaceId:null,source:'history',needsRegistration:true}:{}),sessions: [] });
     groups.get(key).sessions.push(row);
   }
-  return [...groups.values()].sort((a, b) => Math.max(...b.sessions.map(s => s.updatedAt || 0)) - Math.max(...a.sessions.map(s => s.updatedAt || 0)));
+  // Preserve authoritative registry order, then retain the original recency
+  // ordering for historical roots that have no workspace registration.
+  const recent=group=>Math.max(0,...group.sessions.map(s=>s.updatedAt||0));
+  return [...groups].filter(([key])=>registered.has(key)).map(([,group])=>group).concat([...groups].filter(([key])=>!registered.has(key)).map(([,group])=>group).sort((a,b)=>recent(b)-recent(a)));
 }
-function projectPathKey(cwd) {
-  // Windows paths can arrive from another platform's catalog. Normalize drive,
-  // slash and case only for Windows roots; POSIX roots remain case-sensitive.
-  if (/^(?:[A-Za-z]:[\\/]|\\\\)/.test(cwd)) return path.win32.normalize(cwd).replace(/[\\/]+$/,'').toLowerCase();
-  return path.posix.normalize(cwd).replace(/\/$/,'') || '/';
-}
-module.exports = { createWorkspaceLayout, projectGroups, projectPathKey, DEFAULT_SEATS };
+module.exports = { createWorkspaceLayout, projectGroups, DEFAULT_SEATS };

@@ -84,6 +84,12 @@ export class SqliteConversationStore implements ConversationStore {
     return rows.reverse().map(toMessage);
   }
 
+  async pageBefore(personaId: string, conversationId: string, beforeId: string, limit: number): Promise<ChatMessage[]> {
+    if(!Number.isInteger(limit)||limit<1||limit>200)throw new Error('Invalid page size');
+    const position=this.db.prepare('SELECT seq FROM messages WHERE persona_id = ? AND conversation_id = ? AND id = ?').get(personaId,conversationId,beforeId);
+    if(!position)throw new Error('Message is not in this conversation');
+    return this.db.prepare(`SELECT ${SELECT_COLUMNS} FROM messages WHERE persona_id = ? AND conversation_id = ? AND seq < ? ORDER BY seq DESC LIMIT ?`).all(personaId,conversationId,position.seq,limit).reverse().map(toMessage);
+  }
   async before(personaId: string, conversationId: string, beforeId: string, afterId: string | null, limit: number): Promise<ChatMessage[]> {
     if (!Number.isInteger(limit) || limit <= 0 || limit > 256) throw new Error("Invalid archive page size.");
     const position = (id: string): number => {

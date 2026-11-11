@@ -7,8 +7,6 @@
 // code, verifier, state or raw server response ever leaves this module.
 const nodeHttp = require('node:http');
 const crypto = require('node:crypto');
-const fs = require('node:fs');
-const { atomicBytes } = require('./main-chat-secret.cjs');
 
 const SCOPES = Object.freeze(['openid', 'offline', 'profile']);
 const CALLBACK_PATH = '/oauth/callback';
@@ -24,7 +22,6 @@ const CALLBACK_KEYS = new Set(['code', 'state', 'scope', 'iss', 'error', 'error_
 const SAFE_ERROR = Object.freeze({
   unconfigured: '频道服务未配置。',
   storage: '系统加密存储不可用，无法保存频道登录；请启用系统钥匙串后重试。',
-  signout: '频道凭据未能完全清除，请重试退出登录。',
   login: '请先登录频道。',
   browser: '无法打开系统浏览器完成频道登录，请重试。',
   callback: '本机登录回调无法启动，请稍后重试。',
@@ -227,13 +224,7 @@ function createLobbyAuth({ config, secretStore, openExternal, fetchImpl = global
   let signInOperation = null;  // { abort, promise }
   let refreshing = null;       // single-flight refresh promise
   let disposed = false;
-  // A non-secret logout marker survives a failed token deletion. Only a new,
-  // explicit successful sign-in may remove it; refresh must never do so.
-  const logoutFile = typeof secretStore?.file === 'string' ? `${secretStore.file}.signed-out` : null;
-  let logoutBlocked = logoutFile ? fs.existsSync(logoutFile) : false;
-  const hasStoredGrant = secretStore?.has?.() === true;
-  let state = { status: configured ? (!logoutBlocked && hasStoredGrant ? 'signed-in' : 'signed-out') : 'unconfigured',
-    error: configured && logoutBlocked && hasStoredGrant ? SAFE_ERROR.signout : '' };
+  let state = { status: configured ? (secretStore?.has?.() ? 'signed-in' : 'signed-out') : 'unconfigured', error: '' };
 
   const snapshot = () => {
     const status = state.status;
@@ -261,11 +252,7 @@ function createLobbyAuth({ config, secretStore, openExternal, fetchImpl = global
   // and for invalid_grant (the server no longer honours the grant).
   async function forget() {
     access = null;
-    logoutBlocked = true;
-    let failed = false;
-    try { if (logoutFile) atomicBytes(logoutFile, Buffer.from('signed-out\n')); } catch { failed = true; }
-    try { await secretStore?.clear?.(); } catch { failed = true; }
-    if (failed) throw failure('signout');
+    try { await secretStore?.clear?.(); } catch { /* best-effort; file removal only */ }
   }
 
   async function storedRefresh() {
@@ -281,10 +268,6 @@ function createLobbyAuth({ config, secretStore, openExternal, fetchImpl = global
   }
 
   async function signInFlow(operation) {
-    // A previous refresh may still finish its disk write after logout. Let its
-    // stale-result cleanup finish before accepting a new explicit grant.
-    if (refreshing) await refreshing.catch(() => {});
-    check(operation);
     requireStorage();
     const { verifier, challenge } = pkcePair(randomBytes);
     const stateValue = base64url(randomBytes(32));
@@ -307,10 +290,9 @@ function createLobbyAuth({ config, secretStore, openExternal, fetchImpl = global
       const tokens = validateTokenResponse(reply.value, { requireRefresh: true });
       // Store the refresh token first; only a persisted grant becomes "signed in".
       await persistRefresh(tokens.refresh);
-      if (operation.generation !== generation || operation.abort.signal.aborted) { if (!disposed) await forget(); throw failure('canceled'); }
+      operation.wroteRefresh = true;
+      if (operation.generation !== generation) { if (!disposed) await forget(); throw failure('canceled'); }
       check(operation);
-      try { if (logoutFile) fs.rmSync(logoutFile, { force: true }); } catch { throw failure('storage'); }
-      logoutBlocked = false;
       access = { token: tokens.access, expiresAt: now() + tokens.expiresIn * 1000 };
       return publish('signed-in');
     } finally { callback.close(); }
@@ -319,15 +301,47 @@ function createLobbyAuth({ config, secretStore, openExternal, fetchImpl = global
     if (disposed || operation.abort.signal.aborted || operation.generation !== generation) throw failure('canceled');
   }
 
-  function signIn() {
+  function signIn({ force = false } = {}) {
     if (disposed || !configured) return Promise.resolve(snapshot());
     if (signInOperation) return signInOperation.promise;
-    if (state.status === 'signed-in') return Promise.resolve(snapshot());
-    const operation = { abort: new AbortController(), generation, closeCallback: null };
+    if (state.status === 'signed-in' && !force) return Promise.resolve(snapshot());
+    const operation = { abort: new AbortController(), generation, closeCallback: null,
+      previousSignedIn: force && state.status === 'signed-in', previousAccess: access, wroteRefresh: false, rollback: null };
     signInOperation = operation;
-    operation.promise = signInFlow(operation).catch(error => {
+    // Freeze new refresh attempts before retaining the old grant. An in-flight
+    // refresh settles first, so rollback cannot overwrite a later rotation.
+    if (operation.previousSignedIn) publish('authorizing');
+    operation.promise = Promise.resolve().then(async () => {
+      if (operation.previousSignedIn) {
+        if (refreshing) await refreshing.catch(() => {});
+        check(operation);
+        operation.previousAccess = access;
+        let previous;
+        try { previous = await storedRefresh(); } catch (error) {
+          if (error.code !== 'login') throw error;
+          operation.previousSignedIn = false;
+        }
+        if (operation.previousSignedIn) {
+          operation.rollback = typeof secretStore.prepareRollback === 'function'
+            ? await secretStore.prepareRollback() : () => persistRefresh(previous);
+        }
+      }
+      check(operation);
+      return signInFlow(operation);
+    }).catch(async error => {
       // Superseded by sign-out or dispose: that path already published its state.
       if (disposed || operation.generation !== generation) return snapshot();
+      if (operation.previousSignedIn) {
+        if (operation.wroteRefresh && operation.rollback) {
+          try { await operation.rollback(); } catch {
+            await forget(); return publish('signed-out', SAFE_ERROR.storage);
+          }
+          if (disposed || operation.generation !== generation) { if (!disposed) await forget(); return snapshot(); }
+        }
+        access = operation.previousAccess;
+        return publish('signed-in', operation.abort.signal.aborted ? SAFE_ERROR.canceled : errorText(error));
+      }
+      if (operation.wroteRefresh) await forget();
       if (operation.abort.signal.aborted) return publish('signed-out', SAFE_ERROR.canceled);
       return publish('signed-out', errorText(error));
     }).finally(() => { if (signInOperation === operation) signInOperation = null; });
@@ -379,7 +393,6 @@ function createLobbyAuth({ config, secretStore, openExternal, fetchImpl = global
       if (state.error) publish('signed-in');
       return access.token;
     })().catch(error => {
-      if (started === generation && !disposed && error.code === 'signout') publish('signed-out', SAFE_ERROR.signout);
       // Transient failures keep the stored grant; the next call retries.
       if (started === generation && !disposed && state.status === 'signed-in'
           && ['unavailable', 'timeout', 'protocol', 'rejected'].includes(error.code)) publish('signed-in', errorText(error));
@@ -393,7 +406,7 @@ function createLobbyAuth({ config, secretStore, openExternal, fetchImpl = global
   // Returns a bearer token valid for at least REFRESH_SKEW_MS, refreshing when needed.
   async function getAccessToken({ forceRefresh = false } = {}) {
     requireConfigured();
-    if (logoutBlocked || state.status !== 'signed-in') throw failure('login');
+    if (state.status !== 'signed-in') throw failure('login');
     if (!forceRefresh && access && access.expiresAt - now() > REFRESH_SKEW_MS) return access.token;
     return refresh();
   }
@@ -405,16 +418,11 @@ function createLobbyAuth({ config, secretStore, openExternal, fetchImpl = global
     generation += 1;
     signInOperation?.abort.abort();
     signInOperation?.closeCallback?.();
-    const revoke = access?.token ? [access.token] : [];
-    const stored = (async () => {
-      try { if (secretStore?.has?.() && secretStore.available?.()) return await secretStore.get(); } catch { /* unreadable: nothing to revoke */ }
-    })();
-    let localError = '';
-    const clearing = forget();
-    if (configured) publish('signed-out');
-    try { await clearing; } catch { localError = SAFE_ERROR.signout; }
-    revoke.push(await stored);
-    const value = configured ? publish('signed-out', localError) : snapshot();
+    const revoke = [];
+    try { if (secretStore?.has?.() && secretStore.available?.()) revoke.push(await secretStore.get()); } catch { /* unreadable: nothing to revoke */ }
+    if (access?.token) revoke.push(access.token);
+    await forget();
+    const value = configured ? publish('signed-out') : snapshot();
     if (configured && !disposed) {
       await Promise.all(revoke.filter(token => typeof token === 'string' && TOKEN.test(token)).map(token =>
         postForm(fetchImpl, `${authUrl}/oauth2/revoke`, { token, client_id: clientId }, { timeout: REVOKE_TIMEOUT_MS })

@@ -7,7 +7,7 @@ test('Codex model preferences survive runtime port changes and restart without t
   const file = path.join(dir, 'profile/codex-model-choices.json'), store = createCodexModelChoices(file);
   store.set('new', { model: 'fixture-deep', effort: 'high' }); store.set('session-1', { model: null, effort: null });
   const loaded = createCodexModelChoices(file).get(); assert.deepEqual(loaded.new, { model: 'fixture-deep', effort: 'high' }); assert.deepEqual(loaded['session-1'], { model: null, effort: null });
-  loaded.new.model = 'tamper'; assert.equal(store.get().new.model, 'fixture-deep'); if (process.platform !== 'win32') assert.equal(fs.statSync(file).mode & 0o777, 0o600);
+  loaded.new.model = 'tamper'; assert.equal(store.get().new.model, 'fixture-deep'); assert.equal(fs.statSync(file).mode & 0o777, 0o600);
   assert.deepEqual(fs.readdirSync(path.dirname(file)), ['codex-model-choices.json']);
   for (const choice of [{ model: null, effort: 'high' }, { model: 'bad\nmodel', effort: null }, { model: {}, effort: null }]) assert.throws(() => store.set('new', choice));
   assert.throws(() => store.set('../config.toml', { model: null, effort: null }));

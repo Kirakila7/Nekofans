@@ -85,85 +85,29 @@ button[data-neko-account-habitat][data-signed-out="true"] .neh-launcher {
 
 button[data-neko-unified-account]:not([data-collapsed="true"]) {
   display: block !important; width: 100% !important; height: 94px !important; min-height: 94px;
-  padding: 8px 9px !important; border: 1px solid var(--nk-border, #e4e7ec);
-  border-radius: var(--nk-radius-lg, 12px); background: var(--nk-surface, #fff);
+  padding: 8px 9px !important; border: 1px solid var(--dsw-alias-border-l1, #d3dee9);
+  border-radius: 16px; background: var(--dsw-alias-bg-layer-1, #fcfdff);
 }
 button[data-neko-unified-account]:not([data-collapsed="true"]) .neh-launcher {
   display: grid; width: 100%; height: 76px;
 }
-.neh-providers { display: grid; gap: 0; align-self: center; min-width: 0; }
-.neh-provider-status { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 5px 0; font-size: var(--nk-font-sm, 12px); line-height: 18px; }
-.neh-provider-status + .neh-provider-status { border-top: 1px solid var(--nk-border, #e4e7ec); }
+.neh-providers { display: grid; gap: 10px; align-self: center; min-width: 0; }
+.neh-provider-status { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px; line-height: 18px; }
 .neh-provider-status > strong { font-weight: 600; }
-.neh-provider-login { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--nk-text-3, #8b929e); white-space: nowrap; }
+.neh-provider-login { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--dsw-alias-label-secondary, #62758a); white-space: nowrap; }
 .neh-provider-login::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-.neh-provider-login[data-connected="true"] { color: var(--nk-accent, #3f6ea8); }
+.neh-provider-login[data-connected="true"] { color: var(--dsw-alias-brand-primary, #2c66a6); }
 button[data-neko-unified-account][data-collapsed="true"] .neh-providers { display: none; }
-.neh-provider-card { display: grid; gap: 5px; margin-top: 9px; padding: 12px; border: 1px solid var(--nk-border, #e4e7ec); border-radius: var(--nk-radius-md, 8px); }
+.neh-provider-card { display: grid; gap: 5px; margin-top: 9px; padding: 12px; border: 1px solid var(--dsw-alias-border-l1, #d3dee9); border-radius: 10px; }
 .neh-provider-balance { font-size: 14px; line-height: 22px; font-weight: 600; }
-.neh-provider-source, .neh-quota-reset { display: block; font-size: 10px; line-height: 15px; color: var(--dsw-alias-label-secondary, #62758a); }
-.neh-quota-bucket { font-size: 11px; font-weight: 600; margin-top: 5px; }
-.neh-quota-window { display: grid; gap: 3px; margin: 3px 0 5px; }
-.neh-quota-title { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; line-height: 18px; }
-.neh-quota-title strong { font-weight: 600; }
-.neh-quota-progress { display: block; width: 100%; height: 5px; border: none; border-radius: 4px; accent-color: var(--nk-accent, #3f6ea8); }
-.neh-quota-note { margin: 4px 0 0; font-size: 11px; line-height: 17px; color: var(--dsw-alias-label-secondary, #62758a); }
+.neh-provider-source { display: block; font-size: 10px; line-height: 15px; color: var(--dsw-alias-label-secondary, #62758a); }
 .neh-account-refresh { padding: 4px 9px; border: 1px solid var(--dsw-alias-border-l1, #d3dee9); border-radius: 7px; background: transparent; color: inherit; font: inherit; font-size: 11px; cursor: pointer; }
 .neh-account-refresh:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary, #2c66a6); outline-offset: 2px; }
 
-/* Bottom account row: avatar + name, opens the native account menu. */
-body[data-neko-side-rail-layout] button[data-neko-unified-account] {
-  position: fixed !important;
-  left: var(--neko-sidebar-left, 64px) !important;
-  bottom: 0 !important;
-  top: auto !important;
-  width: var(--neko-sidebar-width, 280px) !important;
-  height: 48px !important;
-  min-height: 48px !important;
-  padding: 0 12px !important;
-  margin: 0 !important;
-  display: flex !important;
-  align-items: center !important;
-  gap: 8px !important;
-  border: 0 !important;
-  border-top: 1px solid var(--nk-border, #e4e7ec) !important;
-  border-radius: 0 !important;
-  background: var(--nk-surface, #fff) !important;
-  box-shadow: none !important;
-  opacity: 1 !important;
-  pointer-events: auto !important;
-  z-index: 55 !important;
-  box-sizing: border-box !important;
-  color: var(--nk-text, #1d2430) !important;
-  font: 13px/1.4 system-ui, sans-serif !important;
-  cursor: pointer !important;
-  text-align: left !important;
-}
-body[data-neko-side-rail-layout] button[data-neko-unified-account]:hover { background: var(--nk-hover, #f2f4f7) !important; }
-body[data-neko-side-rail-layout] button[data-neko-unified-account]:focus-visible { outline: 2px solid var(--nk-focus, #3f6ea8); outline-offset: -2px; }
-body[data-neko-side-rail-layout] button[data-neko-unified-account] .neh-launcher {
-  display: flex !important;
-  align-items: center !important;
-  gap: 8px !important;
-  width: 100% !important;
-  height: 100% !important;
-  grid-template-columns: none !important;
-  pointer-events: none !important;
-}
-body[data-neko-side-rail-layout] button[data-neko-unified-account] .neh-identity {
-  flex-direction: row !important;
-  align-items: center !important;
-  gap: 8px !important;
-  min-width: 0 !important;
-}
-body[data-neko-side-rail-layout] button[data-neko-unified-account] .neh-developer-avatar { width: 28px !important; height: 28px !important; order: -1 !important; }
-body[data-neko-side-rail-layout] button[data-neko-unified-account] .neh-developer-name { font-size: 13px !important; font-weight: 500 !important; color: var(--nk-text, #1d2430) !important; min-width: 0 !important; overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important; }
-body[data-neko-side-rail-layout] button[data-neko-unified-account] .neh-habitat-column,
-body[data-neko-side-rail-layout] button[data-neko-unified-account] .neh-providers { display: none !important; }
-body[data-neko-side-rail-layout] button[data-neko-unified-account] .neh-launcher::after {
-  content: '⌄';
-  margin-left: auto;
-  color: var(--nk-text-3, #8b929e);
-  font-size: 14px;
-  line-height: 1;
-}
+[data-neko-account-owned="menu-card"]{max-height:min(660px,calc(100vh - 100px));overflow:auto}.neh-provider-card [data-neko-login]{justify-self:start;margin-bottom:6px}
+.neh-workbench-settings { display:flex; align-items:center; gap:9px; width:100%; min-height:38px; padding:8px 10px; box-sizing:border-box; border:1px solid var(--dsw-alias-border-l1,#d3dee9); border-radius:9px; background:var(--dsw-alias-bg-layer-2,#edf3f8); color:inherit; font:inherit; font-size:12px; text-align:left; cursor:pointer; }
+.neh-workbench-settings::before { content:'⚙'; font-size:17px; }.neh-workbench-settings::after { content:'›'; margin-left:auto; opacity:.65; }
+.neh-workbench-settings:hover { background:var(--dsw-alias-interactive-bg-hover,#e0edf5); }.neh-workbench-settings:focus-visible { outline:2px solid var(--dsw-alias-brand-primary,#2c66a6); outline-offset:2px; }
+.neh-neko-actions { display:flex; flex-wrap:wrap; gap:6px; margin-top:3px; }.neh-neko-actions [data-neko-login] { margin-bottom:0; }
+.neh-neko-primary { background:var(--dsw-alias-bg-layer-2,#edf3f8); }.neh-neko-actions button:disabled { cursor:wait; opacity:.6; }
+.neh-neko-auth-note { margin:3px 0 0; color:var(--dsw-alias-label-secondary,#62758a); font-size:11px; line-height:17px; overflow-wrap:anywhere; }.neh-neko-auth-note[role=alert] { color:var(--dsw-alias-danger-primary,#9b472a); }

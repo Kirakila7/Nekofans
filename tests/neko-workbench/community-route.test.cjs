@@ -11,14 +11,6 @@ const { DEFAULT_COMMUNITY_URL, COMMUNITY_PARTITION, resolveCommunityUrl,
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const bounds = { x: 300, y: 80, width: 800, height: 650 };
 const desktopUA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7871.212 Safari/537.36';
-
-test('social control cutouts reject malformed input and are copied at the IPC boundary', () => {
-  const hole={x:500,y:500,width:300,height:70};
-  const request={action:'open',site:'bilibili',slot:'side',bounds,holes:[hole]};
-  const parsed=validateCommunityRequest(request); hole.x=0; assert.equal(parsed.holes[0].x,500);
-  for (const holes of [null,[{...hole,width:0}],[{...hole,x:NaN}],[{...hole,extra:1}],Array(4).fill(hole)]) assert.throws(()=>validateCommunityRequest({...request,holes}),/布局/);
-  assert.throws(()=>validateCommunityRequest({action:'hide',holes:[]}),/布局/);
-});
 function deferred() { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; }
 function fixture(env = {}, useSocial = false, extra = {}) {
   const views = [], external = [], states = [], errors = [], copied = [];
@@ -34,12 +26,14 @@ function fixture(env = {}, useSocial = false, extra = {}) {
     }
     setWindowOpenHandler(handler) { this.popup = handler; }
     setUserAgent(value) { this.userAgent = value; }
+    setZoomFactor(value) { this.zoomFactor=value; }
     getUserAgent() { return this.userAgent || (extra.rawUserAgent ?? 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) TestApp/0.1 Chrome/150.0.7871.212 Electron/43.3.0 Safari/537.36'); }
     isAudioMuted() { return !!this.muted; }
     setAudioMuted(value) { this.muted = value; (this.muteHistory ||= []).push(value); }
     isDestroyed() { return this.destroyed; }
     getURL() { return this.url; }
     focus() { this.focused = (this.focused || 0) + 1; }
+    send(...args) { (this.sent ||= []).push(args); }
     async loadURL(url, options) {
       this.loads.push(url); this.loadOptions = options; this.url = url;
       this.history.splice(++this.index); this.history.push(url);
@@ -80,6 +74,119 @@ function fixture(env = {}, useSocial = false, extra = {}) {
   return { controller, views, external, states, errors, copied, failCopy: () => { copyError = new Error('private clipboard failure'); }, MockHost, Popup, host, action, open };
 }
 
+test('floating B站 viewport adapts to compact and expanded sizes without reloading the page',async()=>{
+ const f=fixture({},false,{site:'bilibili',adaptiveVideoViewport:true});await f.open({x:10,y:56,width:460,height:264});const view=f.views[0];assert.equal(view.webContents.zoomFactor,460/1100);const loads=view.webContents.loads.length;await f.action({action:'layout',bounds:{x:10,y:56,width:940,height:560}});assert.equal(view.webContents.zoomFactor,940/1100);assert.equal(view.webContents.loads.length,loads);f.controller.dispose();
+});
+test('community login becomes visible when its document is ready even if assets are still loading', async () => {
+  const f = fixture({}, true);
+  const pending = deferred();
+  f.controller.requestLogin();
+  const opening = f.open();
+  const view = f.views[0];
+  view.webContents.behavior = () => pending.promise;
+  await tick();
+  view.webContents.emit('dom-ready');
+  await opening;
+  assert(f.host.children.has(view));
+  assert(view.webContents.sent.some(([name]) => name === 'workbench:community-web-login'));
+  pending.resolve();
+  await tick();
+  f.controller.dispose();
+});
+
+test('friends reuse the detached community session and accept replies only from its current main frame', async () => {
+  const requests=[],avatarBytes=Buffer.from('89504e470d0a1a0a','hex');
+  const f = fixture({}, true, {fetchImpl:async (url,init)=>{
+    requests.push({url,init});return new Response(avatarBytes);
+  }});
+  const list = f.controller.readFriends(f.host);
+  await tick();
+  const [view] = f.views;
+  const contents = view.webContents;
+  contents.mainFrame = {url:contents.getURL()};
+  assert.equal(view.options.webPreferences.partition, COMMUNITY_PARTITION);
+  assert.equal(f.host.children.size, 0);
+  assert.equal(f.states.length, 0);
+  const [[channel, id]] = contents.sent;
+  assert.equal(channel, 'workbench:community-web-friends');
+  const value = {id,status:'ready',userId:'test-owner',friends:[
+    {id:'22222222-2222-4222-8222-222222222222',displayName:'测试好友',online:true,avatar:'/static/avatars/22222222-2222-4222-8222-222222222222.png',untrusted:'private'},
+    {id:'33333333-3333-4333-8333-333333333333',displayName:'外部头像',avatar:'https://tracker.invalid/portrait.png'},
+  ]};
+  assert.equal(f.controller.acceptFriends({sender:contents,senderFrame:{url:contents.getURL()}},value),false);
+  assert.equal(f.controller.acceptFriends({sender:contents,senderFrame:contents.mainFrame},value),true);
+  const result=await list;
+  assert.equal(result.status,'ready');
+  assert.deepEqual(result.friends.map(({hue,...row})=>row),[
+    {id:value.friends[0].id,displayName:'测试好友',online:true,hasAvatar:true},
+    {id:value.friends[1].id,displayName:'外部头像',online:false,hasAvatar:false},
+  ]);
+  assert.equal(await f.controller.readFriendAvatar(value.friends[1].id),null);
+  assert.equal(await f.controller.readFriendAvatar(value.friends[0].id),'data:image/png;base64,'+avatarBytes.toString('base64'));
+  assert.equal(requests.length,1);
+  assert.equal(requests[0].url,new URL(value.friends[0].avatar,DEFAULT_COMMUNITY_URL).href);
+  assert.equal(requests[0].init.credentials,'omit');
+  assert.equal(requests[0].init.redirect,'error');
+  assert.equal(f.controller.acceptAccountState({sender:contents,senderFrame:contents.mainFrame},{status:'signed-out'}),true);
+  assert.equal(await f.controller.readFriendAvatar(value.friends[0].id),null);
+  await f.open();
+  assert.equal(f.views.length, 1);
+  assert(f.host.children.has(view));
+  f.controller.dispose();
+});
+
+test('game ticket IPC checks the community frame and drops replies after a community account switch',async()=>{
+ const f=fixture({},true);
+ await f.open();
+ const contents=f.views[0].webContents;
+ contents.mainFrame={url:contents.getURL()};
+ const event={sender:contents,senderFrame:contents.mainFrame};
+ assert.equal(f.controller.acceptAccountState(event,{status:'signed-in',userId:'fixture-account'}),true);
+ const request=f.controller.readGameTicket(f.host,{op:'inbox'});
+ await tick();
+ const [channel,id,body]=contents.sent.at(-1);
+ assert.equal(channel,'workbench:community-game-ticket');
+ assert.deepEqual(body,{op:'inbox'});
+ const value={id,status:'ready',userId:'fixture-account',ticket:'signed.fixture.ticket'};
+ assert.equal(f.controller.acceptGameTicket({sender:contents,senderFrame:{url:contents.getURL()}},value),false);
+ assert.equal(f.controller.acceptGameTicket(event,value),true);
+ assert.deepEqual(await request,{status:'ready',userId:value.userId,ticket:value.ticket});
+ const stale=f.controller.readGameTicket(f.host,{op:'inbox'});
+ await tick();
+ const [,nextId]=contents.sent.at(-1);
+ f.controller.acceptAccountState(event,{status:'signed-in',userId:'different-account'});
+ assert.deepEqual(await stale,{status:'account-changed'});
+ assert.equal(f.controller.acceptGameTicket(event,{...value,id:nextId}),false);
+ f.controller.dispose();
+});
+
+test('a stalled community document reports failure and can be opened again', async () => {
+  const f = fixture({}, false, {communityLoadTimeoutMs:20});
+  const pending = deferred();
+  const opening = f.open();
+  const contents = f.views[0].webContents;
+  contents.behavior = () => pending.promise;
+  contents.stop = () => pending.reject(Error('aborted'));
+  await assert.rejects(opening, /未能打开/);
+  assert.equal(f.states.at(-1).status, 'error');
+  contents.behavior = null;
+  await f.open();
+  assert.equal(f.states.at(-1).status, 'ready');
+  f.controller.dispose();
+});
+test('community status accepts only its own official top frame and login entry reuses the same web session',async()=>{
+ const publicStates=[];const f=fixture({},true,{onAccountState:value=>publicStates.push(value)});f.controller.requestLogin();await f.open();const contents=f.views[0].webContents;contents.mainFrame={url:contents.url};assert(contents.sent.some(([name])=>name==='workbench:community-web-login'));
+ assert.equal(f.controller.acceptAccountState({sender:contents,senderFrame:{}},{status:'signed-in'}),false);assert.equal(f.controller.accountState.status,'unknown');
+ assert.equal(f.controller.acceptAccountState({sender:contents,senderFrame:contents.mainFrame},{status:'signed-in',name:'missing identity'}),false);
+ assert.equal(f.controller.acceptAccountState({sender:contents,senderFrame:contents.mainFrame},{status:'signed-in',userId:'local-fixture',name:'测试喵',token:'must-not-project'}),true);assert.deepEqual(f.controller.accountState,{status:'signed-in',userId:'local-fixture',name:'测试喵'});assert(!JSON.stringify(publicStates).includes('must-not-project'));
+ f.controller.cancelLoginRequest();assert.equal(contents.sent.at(-1)[0],'workbench:community-web-login-cancel');
+ contents.url='https://auth.project-neko.cn/';assert.equal(f.controller.acceptAccountState({sender:contents,senderFrame:contents.mainFrame},{status:'signed-out'}),false);
+ contents.url='';assert.doesNotThrow(()=>assert.equal(f.controller.acceptAccountState({sender:contents,senderFrame:contents.mainFrame},{status:'checking'}),false));
+ f.controller.dispose();assert.equal(f.controller.accountState.status,'unknown');assert.equal(publicStates.at(-1).status,'unknown');
+});
+test('community login waits for ready even when Chromium reports no current loading operation',async()=>{
+ const f=fixture({},true);await f.open();const c=f.views[0].webContents;let release;c.behavior=()=>new Promise(r=>release=r);const reload=f.action({action:'reload'});await new Promise(r=>setImmediate(r));const before=c.sent?.length||0;f.controller.requestLogin();assert.equal(c.sent?.length||0,before);release();await reload;assert.equal(c.sent.length,before+1);f.controller.dispose();
+});
 test('YouTube links are sanitized into official embed URLs and invalid or credentialed URLs are rejected', () => {
   const id = 'M7lc1UVf-VE', expected = 'https://www.youtube.com/embed/'+id;
   for (const value of [
@@ -315,7 +422,8 @@ function secure(options, partition = COMMUNITY_PARTITION) {
   assert.equal(webPreferences.webSecurity, true);
   assert.equal(webPreferences.webviewTag, false);
   assert.equal(webPreferences.allowRunningInsecureContent, false);
-  assert.equal('preload' in webPreferences, false);
+  if (webPreferences.preload) { assert.equal(partition,COMMUNITY_PARTITION); assert.match(webPreferences.preload,/community-session-preload.cjs$/); }
+  else assert.equal('preload' in webPreferences, false);
 }
 
 test('community and Bilibili occupy independent slots and moving one reuses its exact view', async () => {
@@ -888,13 +996,4 @@ test('failure from a canceled hidden view cannot publish an error or reattach co
   gate.reject(Error('fixture failure')); await tick();
   assert.equal(f.states.length, stateCount + 1); assert.equal(f.states.at(-1).status, 'hidden');
   assert.equal(f.host.children.size, 0); f.controller.dispose();
-});
-
-test('without window shaping the original composer stays accessible and removing it restores full page height', async () => {
-  const f=fixture({},true); const holes=[{x:500,y:500,width:300,height:70}];
-  await f.action({action:'open',site:'bilibili',slot:'side',bounds,holes});
-  const view=f.views[0]; assert.equal(view.bounds.y+view.bounds.height,492);
-  await f.action({action:'layout',slot:'side',bounds,holes:[]});
-  assert.equal(view.bounds.y+view.bounds.height,730); assert.equal(view.webContents.loads.length,1);
-  f.controller.dispose();
 });

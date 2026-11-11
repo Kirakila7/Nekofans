@@ -1,8 +1,13 @@
 'use strict';
 // Uses the host's authenticated LLM service directly. No DSH agent, tool,
 // session, project directory, or generic session-event log is created.
-function createCompanionAccountBridge({ctx, route, createUserMessage, createAssistantMessage, timeoutMs=75000, cleanupTimeoutMs=5000}) {
+const {decodeAccountImages,accountImageContent}=require('./companion-account-images.cjs');
+const {gameNamespaces}=require('./game-account-contract.cjs');
+function createCompanionAccountBridge({ctx, route, createUserMessage, createAssistantMessage, loadImageDecoder, namespace='companion', timeoutMs=75000, cleanupTimeoutMs=5000}) {
   if (route?.provider!=='deepseek-account' || route?.model!=='deepseek-flash' || typeof createUserMessage!=='function' || typeof createAssistantMessage!=='function') throw Error('陪伴聊天账号路线无效。');
+  if (!['companion','lobby','proactive','memory',...gameNamespaces].includes(namespace)) throw Error('聊天账号用途无效。');
+  // "game-player-" is a separate channel, not a request ID in "game-".
+  const validId=new RegExp('^'+namespace+'-'+(namespace==='game'?'(?!(?:player|studio)-)':'')+'[a-zA-Z0-9_-]{1,100}$');
   let active=null, disposed=false, cleanupFailed=false, pendingCleanup=0;
   const seen=new Set();
   const cleanupError=()=>Error('陪伴聊天请求清理未确认，请重启工作台后检查。');
@@ -21,18 +26,17 @@ function createCompanionAccountBridge({ctx, route, createUserMessage, createAssi
     if(!active||active.requestId!==requestId)return {accepted:false};
     active.cancelled=true;active.abort.abort();active.reject(Error('陪伴聊天已取消。'));return {accepted:true};
   }
-  async function send({requestId,text,context='',history=[],maxTokens,purpose='chat'}={}) {
-    if(purpose!=='chat'&&purpose!=='memory')throw Error('账号请求用途无效。');
-    // A foreground user turn preempts background memory. Never queue memory behind recall.
-    if(purpose==='chat'&&active?.purpose==='memory'){const previous=active;cancel({requestId:previous.requestId});await previous.done;}
+  async function send({requestId,text,context='',history=[],images=[],maxTokens}={}) {
     if(cleanupFailed||pendingCleanup)throw cleanupError();
     if(disposed||active)throw Error('陪伴聊天暂不可用，请稍后重试。');
-    if(typeof requestId!=='string'||!(purpose==='memory'?/^memory-[a-zA-Z0-9_-]{1,100}$/:/^companion-[a-zA-Z0-9_-]{1,100}$/).test(requestId)||typeof text!=='string'||!text.trim()||text.length>(purpose==='memory'?150000:32000)||typeof context!=='string'||context.length>(purpose==='memory'?150000:64000)||!Number.isSafeInteger(maxTokens)||maxTokens<1||maxTokens>32000)throw Error('聊天内容无效。');
-    if(!Array.isArray(history)||history.length>50||history.some(x=>!x||!['user','assistant'].includes(x.role)||typeof x.text!=='string'||x.text.length>(purpose==='memory'?150000:32000))||history.reduce((sum,x)=>sum+x.text.length,0)>(purpose==='memory'?200000:64000))throw Error('聊天历史无效。');
+    if(typeof requestId!=='string'||!validId.test(requestId)||typeof text!=='string'||!text.trim()||text.length>32000||typeof context!=='string'||context.length>64000||!Number.isSafeInteger(maxTokens)||maxTokens<1||maxTokens>32000)throw Error('聊天内容无效。');
+    if(namespace==='lobby'&&(!Array.isArray(history)||history.length))throw Error('公共聊天不能附带私聊历史。');
+    if(gameNamespaces.includes(namespace)&&(!Array.isArray(history)||history.length||!Array.isArray(images)||images.length))throw Error('私密游戏请求不能附带历史或图片。');
+    if(!Array.isArray(history)||history.length>50||history.some(x=>!x||!['user','assistant'].includes(x.role)||typeof x.text!=='string'||x.text.length>32000)||history.reduce((sum,x)=>sum+x.text.length,0)>64000)throw Error('聊天历史无效。');
+    const decoded=decodeAccountImages([...history,{role:'user',text,images}],namespace),hasImages=decoded.some(m=>m.images.length);
     if(seen.has(requestId))throw Error('聊天请求已使用，请重试。');seen.add(requestId);
     let reject;const interrupted=new Promise((_,r)=>{reject=r;});interrupted.catch(()=>{});
-    let release;const done=new Promise(resolve=>{release=resolve;});
-    const state=active={requestId,purpose,abort:new AbortController(),reject,cancelled:false,done};
+    const state=active={requestId,abort:new AbortController(),reject,cancelled:false};
     let timer, iterator, pending, ended=false;
     const wait=async value=>{pending=Promise.resolve(value);try{return await Promise.race([pending,interrupted]);}finally{if(!state.abort.signal.aborted)pending=null;}};
     try {
@@ -42,14 +46,14 @@ function createCompanionAccountBridge({ctx, route, createUserMessage, createAssi
       if(typeof ctx.llm?.prepareCall!=='function')throw Error('陪伴聊天模型服务不可用。');
       const call=await wait(ctx.llm.prepareCall({...route,maxTokens},state.abort.signal));
       if(!call||typeof call.stream!=='function'||!call.config||typeof call.config!=='object')throw Error('陪伴聊天模型服务不可用。');
+      if(hasImages&&!call.inputModalities?.includes('image'))throw Error('陪伴聊天当前账号模型未开放图片能力，请刷新模型或更新工作台后重试。');
       const normalized=[];
-      for(const m of [...history,{role:'user',text}]){
+      for(const m of decoded){
         const trimmed=m.text.trim();if(!trimmed||(!normalized.length&&m.role!=='user'))continue;
-        const last=normalized.at(-1);if(last?.role===m.role)last.text+='\n\n'+trimmed;else normalized.push({role:m.role,text:trimmed});
+        const last=normalized.at(-1);if(last?.role===m.role){last.text+='\n\n'+trimmed;last.images.push(...m.images);}else normalized.push({role:m.role,text:trimmed,images:m.images});
       }
-      const messages=normalized.map(m=>m.role==='user'
-        ? createUserMessage({content:[{type:'text',text:m.text}],source:{kind:'user'}})
-        : createAssistantMessage({content:[{type:'text',text:m.text}],source:{provider:'workbench-history',model:'persisted'}}));
+      const messages=[];
+      for(const m of normalized){const content=[{type:'text',text:m.text},...await wait(accountImageContent(m.images,{ctx,signal:state.abort.signal,loadImageDecoder}))];messages.push(m.role==='user'?createUserMessage({content,source:{kind:'user'}}):createAssistantMessage({content,source:{provider:'workbench-history',model:'persisted'}}));}
       const stream=call.stream({...call.config,messages,system:context,signal:state.abort.signal});
       if(!stream||typeof stream[Symbol.asyncIterator]!=='function')throw Error('陪伴聊天回复格式异常。');
       iterator=stream[Symbol.asyncIterator]();let finish;const blocks=new Map();
@@ -78,7 +82,13 @@ function createCompanionAccountBridge({ctx, route, createUserMessage, createAssi
       }
       const result=[...blocks.values()].join('');
       if(result.length>64000)throw Error('陪伴聊天回复格式异常。');
-      if(finish!=='stop'||!result.trim())throw Error('陪伴聊天未能完成，请检查账号或重试。');
+      if(finish!=='stop'||!result.trim()){
+        if(gameNamespaces.includes(namespace)){
+          const cause=['length','max_tokens','max-tokens'].includes(finish)?'输出达到上限':!result.trim()?'模型未返回文本':'其他结束状态';
+          throw Error('陪伴聊天未能完成：'+cause);
+        }
+        throw Error('陪伴聊天未能完成，请检查账号或重试。');
+      }
       return {text:result};
     } catch(error) {
       if(state.cancelled)throw Error(error?.message==='陪伴聊天超时，请重试。'?error.message:'陪伴聊天已取消。');
@@ -97,7 +107,7 @@ function createCompanionAccountBridge({ctx, route, createUserMessage, createAssi
           if(!ok)cleanupFailed=true;
         } finally {clearTimeout(cleanupTimer);pendingCleanup--;}
       }
-      if(active===state)active=null;release();
+      if(active===state)active=null;
       if(cleanupFailed||pendingCleanup)throw cleanupError();
     }
   }
