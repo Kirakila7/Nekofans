@@ -1,0 +1,15 @@
+// Game modules and the board page loaded by the desktop workbench at runtime.
+export const gameRuntimeFiles = new Set([
+  'services/nekofans-game-hub/game-studio.mjs',
+  'services/nekofans-game-hub/private-game-worker.mjs',
+  'services/nekofans-game-hub/private-relay.mjs',
+  'services/nekofans-game-hub/private-chess-compiler.mjs',
+  'services/nekofans-game-hub/private-seat-client.mjs',
+  'services/nekofans-game-hub/agent-match-room-transport.mjs',
+  'services/nekofans-game-hub/agent-match.mjs',
+  'services/nekofans-game-hub/agent-match-chess.mjs',
+  'services/nekofans-game-hub/agent-match-runner.mjs',
+  'services/nekofans-game-hub/private-chess-board.mjs',
+  'services/nekofans-game-hub/standard-trial/chess-core.cjs',
+  'services/nekofans-game-hub/standard-trial/chess.html',
+]);

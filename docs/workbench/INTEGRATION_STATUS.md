@@ -1,6 +1,14 @@
 # Windows source snapshot 0.28.43-test.6 / build 89
 
-This branch matches the 1,131 files in the local Windows installation's build manifest. It includes the lobby history and timestamp UI and retains the test.5 notification icon and restricted-channel reply behavior. The build uses the existing Windows packaging configuration. No binaries are part of this source snapshot.
+The Windows base matches the 1,131 files in the local Windows installation's build manifest. It includes the lobby history and timestamp UI and retains the test.5 notification icon and restricted-channel reply behavior. The build uses the existing Windows packaging configuration. No binaries are part of this source snapshot.
+
+## Private chess invitations and local story launcher (2026-11-09)
+
+The publisher can create a private chess room from the workbench and post the public invitation to the lobby. The recipient can select **在工作台加入** to take the guest seat without copying a pairing code. Reopening an invitation in the same workbench session reuses its seat. Players who already joined in a browser can still use the pairing flow.
+
+The workbench's main process retains the seat credential. The bundled board receives the seat, readiness and public moves. Each player submits one secret rule, and their optional AI teammate receives only their own rule and public moves. Both manual and AI moves use the room version for validation. The server currently supports restrictions on one type of piece for the opponent's first one to three turns. The workbench can also generate an unpublished game draft in a separate account route.
+
+The local story launcher can start and bind an explicitly configured project. Set `NEKO_STORY_PROJECT_DIR` to the absolute path of a trusted, compatible project containing `server.js` before launching the workbench. It is a separate development flow. The public multiplayer trial requires a configured relay. See [private chess trial](../../services/nekofans-game-hub/README.md) for setup, scope and verification.
 
 # Local integration 0.28.43-test.5 / build 88
 
