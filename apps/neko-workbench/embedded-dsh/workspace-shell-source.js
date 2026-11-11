@@ -1501,7 +1501,23 @@ function installWorkspaceShell(options = {}) {
     if (rail && railTop.parentNode !== rail) theme?.after(railTop);
     const mount = doc.querySelector('[data-neko-seat-mount]'); if (mount && seats.parentNode !== mount) mount.appendChild(seats);
     const nativeBrowser = doc.querySelector('[data-slot="sidebar.workspaces"]');
-    if (nativeBrowser) { markNative(nativeBrowser, 'data-neko-session-browser-original'); if (sessionBrowser.parentNode !== nativeBrowser.parentNode || sessionBrowser.nextSibling !== nativeBrowser) nativeBrowser.before(sessionBrowser); }
+    if (nativeBrowser) {
+      const marker = 'data-neko-session-browser-original';
+      if (isOfficeEdition()) {
+        // Restore the native list before any layout read. Hiding it even
+        // briefly on resize can restart DSH's list entrance animation.
+        const marks = nativeMarks.get(nativeBrowser);
+        if (marks?.has(marker)) {
+          const before = marks.get(marker);
+          if (before === null) nativeBrowser.removeAttribute(marker);
+          else nativeBrowser.setAttribute(marker, before);
+          marks.delete(marker);
+        }
+      } else {
+        markNative(nativeBrowser, marker);
+        if (sessionBrowser.nextSibling !== nativeBrowser) nativeBrowser.before(sessionBrowser);
+      }
+    }
     const account = doc.querySelector('[data-slot="settings.launcher"]');
     if (account?.parentElement) markNative(account.parentElement, 'data-neko-companion-footer');
     // The native sidebar is only a narrow navigation strip inside the much
@@ -1525,11 +1541,6 @@ function installWorkspaceShell(options = {}) {
       if (roomPreview) roomPreview.hidden = true;
       if (lobby?.panel) { lobby.panel.style.visibility = 'hidden'; lobby.panel.setAttribute('inert', ''); }
       for (const node of [startup, sessionBrowser, seats, sceneProjects, directoryControl]) node.hidden = true;
-      if (nativeBrowser && nativeMarks.get(nativeBrowser)?.has('data-neko-session-browser-original')) {
-        const before = nativeMarks.get(nativeBrowser).get('data-neko-session-browser-original');
-        if (before === null) nativeBrowser.removeAttribute('data-neko-session-browser-original'); else nativeBrowser.setAttribute('data-neko-session-browser-original', before);
-        nativeMarks.get(nativeBrowser).delete('data-neko-session-browser-original');
-      }
       if (companionDrag?.room) finishCompanionDrag({ pointerId: companionDrag.pointerId, type: 'pointercancel' });
       clearRoomCompanionGeometry();
       const wasLobby=dock.hasAttribute('data-neko-companion-lobby');dock.removeAttribute('data-neko-companion-expanded'); dock.removeAttribute('data-neko-companion-lobby');dock.removeAttribute('data-neko-companion-room-lobby');if(wasLobby)setLobbyChatOpen(false);
