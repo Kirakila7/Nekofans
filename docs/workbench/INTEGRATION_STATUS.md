@@ -1,5 +1,9 @@
 # Local integration 0.28.41 / build 77
 
+## macOS daily: keep office sessions visible during layout (2026-11-11)
+
+Office restores the native DSH session list before measuring the sidebar. Resize and scroll updates keep the list visible, so repeated layout passes cannot restart its entrance animation. Daily mode continues to hide the native list while its own surfaces are active.
+
 ## macOS daily branch: game invitations and optional activity memory (2026-11-10)
 
 This macOS branch starts from the source manifest of daily build 90. It retains the daily UI, account relay and local data paths. It ports activity summaries from the upstream `macos` commit `ccf43f0` without importing its Windows-only Bilibili experiment or reverting the verified account relay.
