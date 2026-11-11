@@ -14,8 +14,8 @@ test('rail avatar reaches the native account menu after DSH changes generated CS
   const rail=d.querySelector('.neko-side-rail__account');assert.equal(rail.disabled,false);assert(native.hasAttribute('data-neko-account-habitat'));assert.equal(w.getComputedStyle(native.querySelector('._5Qcc8a_label')).display,'none');
   rail.click();await tick();assert.equal(clicks,1);assert.equal(rail.getAttribute('aria-expanded'),'true');
   const menu=d.querySelector('.neh-menu-card');assert.match(menu.textContent,/DSH/);assert.match(menu.textContent,/N\.E\.K\.O\. 账号/);assert.match(menu.textContent,/聊天室授权/);assert.match(menu.textContent,/合成社区账号/);
-  assert.doesNotMatch(menu.textContent,/codex|旧额度/i);assert.equal(menu.querySelector('[data-neko-codex-account]'),null);
-  assert.equal(d.querySelectorAll('button[role="menuitem"]').length,3,'native settings, feedback and login actions remain available');
+  assert.doesNotMatch(menu.textContent,/codex|旧额度|登录与聊天室授权会自动衔接/i);assert.equal(menu.querySelector('[data-neko-codex-account]'),null);
+  assert.equal(d.querySelectorAll('button[role="menuitem"]:not([data-neko-workbench-settings])').length,3,'native settings, feedback and login actions remain available');
   [...d.querySelectorAll('button[role="menuitem"]')].find(button=>button.textContent==='登录').textContent='退出登录';
   native.setAttribute('data-signed-out','false');await tick();assert.match(native.getAttribute('aria-label'),/已登录/);assert.match(rail.getAttribute('aria-label'),/已登录/);
   assert.doesNotMatch(d.querySelector('.neh-menu-card').textContent,/codex|旧额度/i,'sign-in refresh must not revive the removed account');

@@ -51,7 +51,7 @@ function installWorkspaceShell(options = {}) {
   const officeImage = image(avatar('bigfish'), 'neko-edition-avatar'); officeButton.append(officeImage);
   const settingsButton = button('⚙', 'neko-side-rail__button neko-workspace-settings', () => openSettings('general'));
   settingsButton.setAttribute('aria-label', '工作台设置'); settingsButton.title = '工作台设置';
-  const communityButton = button('', 'neko-side-rail__button neko-community neko-community-yui', () => { closeSettings(); lobby?.hide(); Promise.resolve(options.openCommunity?.()).catch(showError); });
+  const communityButton = button('', 'neko-side-rail__button neko-community neko-community-yui', () => { closeQQPage(); closeSettings(); lobby?.hide(); Promise.resolve(options.openCommunity?.()).catch(showError); });
   communityButton.setAttribute('aria-label','N.E.K.O. 社区');communityButton.title='N.E.K.O. 社区';
   const communitySvg=doc.createElementNS('http://www.w3.org/2000/svg','svg'),communityPath=doc.createElementNS('http://www.w3.org/2000/svg','path');communitySvg.setAttribute('viewBox','0 0 24 24');communitySvg.setAttribute('aria-hidden','true');for(const [key,value]of Object.entries({d:'M15.5 7a3.5 3.5 0 1 1-7 0 3.5 3.5 0 0 1 7 0ZM5 20v-2a5 5 0 0 1 10 0v2M18 9a3 3 0 0 1 3 3M18 15a4 4 0 0 1 3 4',fill:'none',stroke:'currentColor','stroke-width':'1.6','stroke-linecap':'round','stroke-linejoin':'round'}))communityPath.setAttribute(key,value);communitySvg.append(communityPath);communityButton.append(communitySvg);
   railTop.append(communityButton);
@@ -87,18 +87,47 @@ function installWorkspaceShell(options = {}) {
     schedule();
   }
   doc.addEventListener('neko-flex-social-geometry', onFlexSocialGeometry);
+  const qqPage = own(el('section', 'neko-qq-page'));
+  qqPage.hidden = true; qqPage.tabIndex = -1; qqPage.setAttribute('aria-label', 'QQ 会话');
+  qqPage.id = 'neko-qq-page'; qqPage.dataset.nekoQqPage = '';
+  const qqButton = button('', 'neko-side-rail__button neko-qq-entry', () => {
+    if (isOfficeEdition() || !qqPage.hidden) return;
+    hideSocial(); lobby?.hide(); closeSettings(); closeCompanionMenu();
+    if (sideSocial) doc.dispatchEvent(new win.Event('neko-side-surface-close'));
+    setRoomActive(false, {closeSocial:false});
+    roomButton?.setAttribute('aria-pressed', 'false'); workButton?.setAttribute('aria-pressed', 'false');
+    setQQPageVisible(true); qqPage.focus();
+  });
+  qqButton.title = 'QQ 会话'; qqButton.setAttribute('aria-label', 'QQ 会话');
+  qqButton.setAttribute('aria-controls', qqPage.id); qqButton.setAttribute('aria-pressed', 'false');
+  railTop.insertBefore(qqButton, communityButton); doc.body.appendChild(qqPage);
+  function setQQPageVisible(visible) {
+    if (qqPage.hidden === !visible) return;
+    qqPage.hidden = !visible;
+    qqButton.setAttribute('aria-pressed', String(visible));
+    doc.dispatchEvent(new win.Event('neko-qq-page-change'));
+    schedule();
+  }
+  function closeQQPage({restoreRoom = false} = {}) {
+    if (qqPage.hidden) return;
+    setQQPageVisible(false);
+    if (restoreRoom) { setRoomActive(roomSelection, {closeSocial:false}); qqButton.focus(); }
+  }
   const roomInert = new Set(), roomMasked = new Set();
-  const roomButton = roomPreview && button('', 'neko-side-rail__button neko-room-entry', () => { lobby?.hide(); setRoomActive(true); });
-  const workButton = roomPreview && button('', 'neko-side-rail__button neko-room-workspace', () => { lobby?.hide(); setRoomActive(false); });
+  const roomButton = roomPreview && button('', 'neko-side-rail__button neko-room-entry', () => { closeQQPage(); lobby?.hide(); setRoomActive(true); });
+  const workButton = roomPreview && button('', 'neko-side-rail__button neko-room-workspace', () => { closeQQPage(); lobby?.hide(); setRoomActive(false); });
   if (roomPreview) {
     roomPreview.hidden = true;
     for (const [control, label] of [[roomButton, '聊天室'], [workButton, '工作区']]) { control.title = label; control.setAttribute('aria-label', label); }
-    for (const [control, path] of [[roomButton, 'M4 5.5h16v11H9l-4 3v-3H4z M8 9h8 M8 12h5'], [workButton, 'M4 6h6l2 2h8v11H4z M4 6V4.5h6l2 1.5']]) {
-      const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg'), shape = doc.createElementNS('http://www.w3.org/2000/svg', 'path');
-      svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true');
-      for (const [key, value] of Object.entries({ d:path, fill:'none', stroke:'currentColor', 'stroke-width':'1.7', 'stroke-linecap':'round', 'stroke-linejoin':'round' })) shape.setAttribute(key, value);
-      svg.appendChild(shape); control.appendChild(svg);
-    }
+  }
+  for (const [control, path] of [[roomButton, 'M4 5.5h16v11H9l-4 3v-3H4z M8 9h8 M8 12h5'], [workButton, 'M4 6h6l2 2h8v11H4z M4 6V4.5h6l2 1.5'], [qqButton, 'M5 4.5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-7l-4.5 3v-3H5a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2ZM7.5 9h9m-9 3.5h5']]) {
+    if (!control) continue;
+    const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg'), shape = doc.createElementNS('http://www.w3.org/2000/svg', 'path');
+    svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true');
+    for (const [key, value] of Object.entries({ d:path, fill:'none', stroke:'currentColor', 'stroke-width':'1.7', 'stroke-linecap':'round', 'stroke-linejoin':'round' })) shape.setAttribute(key, value);
+    svg.appendChild(shape); control.appendChild(svg);
+  }
+  if (roomPreview) {
     railTop.prepend(roomButton, workButton); doc.body.appendChild(roomPreview);
     doc.body.setAttribute('data-neko-chatroom-active', '');
   }
@@ -133,6 +162,7 @@ function installWorkspaceShell(options = {}) {
   function setRoomActive(active, { closeSocial = true } = {}) {
     if (!roomPreview || disposed) return;
     if (isOfficeEdition() && active) return;
+    if (active) closeQQPage();
     if (closeSocial && sideSocial) doc.dispatchEvent(new win.Event('neko-side-surface-close'));
     if (closeSocial) { sideSocial = false; roomSelection = !!active; }
     roomActive = !!active;
@@ -149,7 +179,7 @@ function installWorkspaceShell(options = {}) {
   function sideSurfaceChanged(event) {
     const surface = event.detail?.surface;
     if (surface === 'community' || surface === 'bilibili' || surface === 'youtube') {
-      lobby?.hide();
+      closeQQPage(); lobby?.hide();
       sideSocial = true;
       setRoomActive(false, { closeSocial: false });
       roomButton?.setAttribute('aria-pressed', 'false'); workButton?.setAttribute('aria-pressed', 'false');
@@ -1087,7 +1117,8 @@ function installWorkspaceShell(options = {}) {
       const firstEdition = appliedEdition === null;
       appliedEdition = edition;
       if (isOfficeEdition()) {
-        dailyRoom = {active:roomActive, selection:roomSelection};
+        dailyRoom = {active:roomActive || !qqPage.hidden, selection:roomSelection};
+        closeQQPage();
         closeSettings(); lobby?.hide(); hideSocial(); sideSocial = false;
         setRoomActive(false, {closeSocial:false}); releaseRoomInert();
       } else if (dailyRoom) {
@@ -1305,25 +1336,16 @@ function installWorkspaceShell(options = {}) {
   doc.addEventListener('neko-workbench-open-settings',accountSettings);releases.push(()=>doc.removeEventListener('neko-workbench-open-settings',accountSettings));
   function accountLobby(event){if(disposed||!lobby)return;const detail=event.detail||{};detail.handled=true;detail.promise=(async()=>{if(isOfficeEdition()&&!await saveLayout({workbenchEdition:'daily'}))throw Error('版本切换未完成');closeSettings();hideSocial();setRoomActive(true);lobby.show({connect:detail.connect!==false});})();}
   doc.addEventListener('neko-account-open-lobby',accountLobby);releases.push(()=>doc.removeEventListener('neko-account-open-lobby',accountLobby));
-  function officeChoices() {
-    const choices = el('div', 'neko-office-choices');
-    for (const [id, name, pic] of [['dsh', 'DSH', 'bigfish']]) {
-      const b = button('', 'neko-office-choice', async () => { leaveViews(); await saveLayout({ officeMode: id }); closeSettings(); });
-      b.setAttribute('aria-pressed', String(layout?.officeMode === id)); b.append(image(avatar(pic)), el('span', '', name)); choices.appendChild(b);
-    }
-    return choices;
-  }
   function connectionSummary() { const connected = phase => ['ready', 'connected'].includes(phase) ? '已连接' : phase === 'error' ? '连接出错' : '未连接'; return 'N.E.K.O.：' + connected(state?.neko?.connection) + ' · 工作台：' + connected(state?.workbench?.connection); }
   function openSettings(kind = 'general', id) {
     if (modal.hidden) settingsReturnFocus = doc.activeElement;
     hideSocial(); modalBody.replaceChildren(); modalTitle.textContent = kind === 'seat' ? '自定义工作 agent' : '工作台设置'; modal.setAttribute('aria-label', modalTitle.textContent); modal.hidden = false;
     if(lobby?.panel){lobby.panel.style.visibility='hidden';lobby.panel.setAttribute('inert','');}
     if (kind !== 'seat') {
-      modalBody.append(el('h3', '', '右侧工作界面'), officeChoices());
       if (kind === 'general') {
         modalBody.append(el('h3', '', '头像与配色'));
         const palette = el('div', 'neko-workspace-palettes');
-        for (const [id, name] of [['yui','Yui'],['devcat','开发喵'],['bigfish','大肥鱼'],['gemini','Gemini 小猫']]) { const b = button('', '', () => bridge.setAvatar(id).catch(showError)); b.setAttribute('aria-label', '配色：' + name); b.title = name; b.appendChild(image(avatar(id))); palette.appendChild(b); }
+        for (const [id, name] of [['yui','Yui'],['devcat','开发喵'],['bigfish','大肥鱼'],['gemini','Gemini 小猫'],['claude','Claude娘']]) { const b = button('', '', () => bridge.setAvatar(id).catch(showError)); b.setAttribute('aria-label', '配色：' + name); b.title = name; b.appendChild(image(options.avatar?.(id, true))); palette.appendChild(b); }
         modalBody.appendChild(palette);
         modalBody.append(el('h3', '', '常用设置'));
         const common = el('div', 'neko-workspace-common');
@@ -1369,7 +1391,7 @@ function installWorkspaceShell(options = {}) {
     if (disposed) return;
     if (isDailyEdition()) {
       if (!doc.body.hasAttribute('data-neko-workspace-collapsed')) doc.body.setAttribute('data-neko-workspace-collapsed', '');
-      if (roomPreview && !sideSocial && !roomActive) setRoomActive(true, {closeSocial:false});
+      if (roomPreview && !sideSocial && !roomActive && qqPage.hidden) setRoomActive(true, {closeSocial:false});
     }
     // A valid selection snapshot with no session plus a visible DSH hero means
     // the native workspace was cleared. Global tool pages do not mount it.
@@ -1654,7 +1676,7 @@ function installWorkspaceShell(options = {}) {
     event.preventDefault(); event.stopImmediatePropagation();
     if (layout?.officeMode === 'codex') newOffice(); else showStartup();
   }
-  function escape(event) { if (event.key !== 'Escape') return; if (!companionMenu.hidden) { event.preventDefault(); event.stopPropagation(); closeCompanionMenu(); } else if (!modal.hidden) { event.stopPropagation(); closeSettings(); } else if ((layout?.companionHistoryOpen || historyPeek) && dock.contains(doc.activeElement)) { event.preventDefault(); historyPeek = false; saveLayout({ companionHistoryOpen: false }); historyToggle.focus(); } else if (dock.hasAttribute('data-neko-companion-lobby') && lobbyChatOpen && dock.contains(doc.activeElement)) { event.preventDefault(); event.stopPropagation(); setLobbyChatOpen(false, true); } }
+  function escape(event) { if (event.key !== 'Escape') return; if (!companionMenu.hidden) { event.preventDefault(); event.stopPropagation(); closeCompanionMenu(); } else if (!modal.hidden) { event.stopPropagation(); closeSettings(); } else if (!qqPage.hidden && qqPage.contains(doc.activeElement)) { event.preventDefault(); closeQQPage({restoreRoom:true}); } else if ((layout?.companionHistoryOpen || historyPeek) && dock.contains(doc.activeElement)) { event.preventDefault(); historyPeek = false; saveLayout({ companionHistoryOpen: false }); historyToggle.focus(); } else if (dock.hasAttribute('data-neko-companion-lobby') && lobbyChatOpen && dock.contains(doc.activeElement)) { event.preventDefault(); event.stopPropagation(); setLobbyChatOpen(false, true); } }
   const observer = new win.MutationObserver(records => { if (records.some(record => record.type !== 'attributes' || record.attributeName !== 'style' || record.target.matches?.('[data-neko-unified-coding]') || record.target === doc.body && doc.body.hasAttribute('data-neko-flex-workspace-collapsed'))) schedule(); }); observer.observe(doc.body, { childList: true, subtree: true, attributes:true, attributeFilter:['data-neko-unified-enabled', 'data-neko-unified-coding', 'data-neko-side-social-active', 'data-neko-workspace-collapsed', 'data-neko-flex-workspace-collapsed', 'data-neko-flex-coding', 'data-neko-tools', 'style'] });
   // Observe only the dock's ancestors for inline style changes: watching every
   // style mutation would also watch our own drag/position updates.
@@ -1725,6 +1747,7 @@ function installWorkspaceShell(options = {}) {
     doc.body.removeAttribute('data-neko-room-columns');
     clearRoomCompanionGeometry();
     doc.body.removeAttribute('data-neko-workspace-shell'); doc.body.removeAttribute('data-neko-office-mode'); doc.body.removeAttribute('data-neko-workbench-edition');
+    setQQPageVisible(false);
     for (const n of nodes) n.remove(); style.remove();
   };
 }

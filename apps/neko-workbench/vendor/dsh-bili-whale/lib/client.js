@@ -54,6 +54,18 @@ window.__ModuleLoader__.load({
       ".blw-cookie{display:flex;flex-direction:column;gap:8px;min-width:250px}",
       ".blw-details{margin-top:14px;border-top:1px solid var(--dsw-alias-border-l2);padding-top:12px}",
       ".blw-details>summary{cursor:pointer;font-size:13px;line-height:24px;color:var(--dsw-alias-label-secondary)}",
+      ".blw-qq-chat{display:grid;grid-template-columns:minmax(140px,27%) minmax(0,1fr);min-height:380px;height:clamp(380px,65vh,680px);border:1px solid var(--dsw-alias-border-l2);border-radius:12px;overflow:hidden;background:var(--dsw-alias-bg-layer-1)}",
+      ".blw-qq-list{padding:14px;border-right:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-2)}",
+      ".blw-qq-list h3,.blw-qq-chat h3{margin:0;font-size:14px}",
+      ".blw-qq-session{display:flex;gap:9px;align-items:center;margin-top:10px;padding:10px 8px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1);min-width:0;font-size:13px}",
+      ".blw-qq-session img{width:32px;height:32px;object-fit:contain}.blw-qq-session strong{display:block;overflow-wrap:anywhere}",
+      ".blw-qq-view{display:flex;flex-direction:column;min-width:0;min-height:0}.blw-qq-view>header{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--dsw-alias-border-l2)}",
+      ".blw-qq-messages{overflow:auto;flex:1;min-height:0;padding:14px 16px;display:flex;flex-direction:column;gap:12px}",
+      ".blw-qq-message{align-self:flex-start;max-width:min(90%,58ch);min-width:0}.blw-qq-message[data-role=user]{align-self:flex-end}.blw-qq-message[data-role=user] .blw-qq-meta{text-align:right}",
+      ".blw-qq-meta{margin-bottom:3px;font-size:11px;color:var(--dsw-alias-label-secondary)}.blw-qq-bubble{margin:0;padding:8px 11px;border-radius:10px;background:var(--dsw-alias-bg-layer-2);white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.55}",
+      ".blw-qq-message[data-role=user] .blw-qq-bubble{border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-interactive-bg-hover,var(--dsw-alias-bg-layer-2))}",
+      ".blw-qq-messages>.blw-btn{flex-shrink:0;align-self:center}.blw-qq-messages:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:-2px}",
+      "@media (max-width:520px){.blw-qq-chat{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}.blw-qq-list{padding:7px 10px;border-right:0;border-bottom:1px solid var(--dsw-alias-border-l2)}.blw-qq-list h3{display:none}.blw-qq-session{margin:0;padding:4px 6px}.blw-qq-session img{width:24px;height:24px}.blw-qq-view>header,.blw-qq-messages{padding:9px 10px}}",
     ].join("");
 
     // ── 唯一真相：字段清单（加字段只改这里 ✓）────────────────────────────
@@ -747,7 +759,7 @@ window.__ModuleLoader__.load({
           revision.current++;
           if(!alive.current)return;
           if(name==='begin'){setCompleted(false);setChallenge(next.challenge||'');setState(next);}
-          else {setChallenge('');setState(null);setCompleted(name==='confirm');}
+          else {setChallenge('');setState(null);setCompleted(name==='confirm'||name==='confirm-companion');}
           if(name!=='confirm')await refresh();
         }catch(e){revision.current++;if(alive.current)setError(e?.message==='PAIRING_SCOPE_CHANGED'?'请关闭群聊，并将私聊范围设为关闭或仅保留一个白名单账号后重试。':e?.message==='PAIRING_ALREADY_ACTIVE'?'已有配对进行中，请先取消。':e?.message==='PAIRING_NOT_CONNECTED'?'QQ 机器人尚未绑定或网关未连接，请稍后重试。':'配对未完成，请重试。');}
         finally{if(alive.current)setPending(false);}
@@ -757,11 +769,14 @@ window.__ModuleLoader__.load({
         h('h4',null,'QQ 私聊账号配对'),
         h('p',{className:'blw-hint'},'绑定机器人后，开始配对并从你的 QQ 私聊发送配对码。配对期间不会回复其他消息；确认后仅允许该 QQ 私聊，群聊保持关闭。'),
         completed?h('p',{role:'status'},'私聊配对已确认；仅允许该 QQ 私聊，群聊仍关闭。'):null,
+        state?.companion?h('div',null,h('p',{role:'status'},'已开启接续大肥鱼私聊。'),h('button',{type:'button',className:'blw-btn blw-btn2',disabled:pending,onClick:()=>void action('disconnect-companion')},'关闭接续')):null,
         state?.active? h('div',null,
           challenge?h('p',null,'向 QQ 机器人发送：',h('code',{style:{userSelect:'text',wordBreak:'break-all'}},'QQ配对 '+challenge)):
             h('p',{className:'blw-hint'},'已有配对正在进行，如未保存配对码可取消后重新开始。'),
           h('p',{role:'status'},state.matched?'已收到配对码，请确认绑定。':state.connected?'等待 QQ 消息，配对码 5 分钟内有效。':'正在连接 QQ 网关…'),
           h('button',{type:'button',className:'blw-btn',disabled:pending||!state.matched||!state.connected,onClick:()=>void action('confirm')},'确认绑定此 QQ'),
+          h('p',{className:'blw-hint'},'接续后，只有这个 QQ 私聊能使用大肥鱼的桌面聊天上下文和私有记忆，新的对话会出现在工作台。'),
+          h('button',{type:'button',className:'blw-btn',disabled:pending||!state.matched||!state.connected,onClick:()=>void action('confirm-companion')},'绑定并接续大肥鱼私聊'),
           h('button',{type:'button',className:'blw-btn blw-btn2',disabled:pending,onClick:()=>void action('cancel')},'取消配对')):
           h('button',{type:'button',className:'blw-btn blw-btn2',disabled:pending||!state,onClick:()=>void action('begin')},'开始私聊配对'),
         error?h('p',{role:'alert',className:'blw-err'},error):null);
@@ -826,9 +841,74 @@ window.__ModuleLoader__.load({
           h('button',{type:'button',className:'blw-btn blw-btn2',disabled:busy&&flight.current!=='start',onClick:()=>void invoke('pause')},'暂停 QQ 机器人')):null);
     }
 
+
+    function QQChatPage({state}) {
+      const [rows,setRows]=useState([]),[loading,setLoading]=useState(true),[error,setError]=useState(''),[hasOlder,setHasOlder]=useState(false);
+      const alive=useRef(false),inFlight=useRef(false),history=useRef([]),scroller=useRef(null),scroll=useRef(null);
+      const read=useCallback(async(beforeId,foreground=false)=>{
+        if(inFlight.current||!alive.current)return;
+        inFlight.current=true;
+        if(foreground)setLoading(true);
+        try{
+          const bridge=window.nekoWorkbench;
+          const page=await bridge.companion({action:'qq-history',...(beforeId?{beforeId}:{})});
+          if(!alive.current)return;
+          if(!Array.isArray(page))throw Error('Invalid history');
+          const current=history.current;
+          const latest=page.at(-1);
+          setError('');
+          if(beforeId||!current.length)setHasOlder(page.length===40);
+          if(!beforeId&&current.at(-1)?.id===latest?.id)return;
+          const currentIds=new Set(current.map(row=>row.id)),pageIds=new Set(page.map(row=>row.id));
+          const overlap=page.some(row=>currentIds.has(row.id));
+          const next=beforeId?[...page.filter(row=>!currentIds.has(row.id)),...current]:
+            overlap?[...current.filter(row=>!pageIds.has(row.id)),...page]:page;
+          if(!beforeId&&!overlap)setHasOlder(page.length===40);
+          if(scroller.current){
+            const {scrollHeight,scrollTop,clientHeight}=scroller.current;
+            scroll.current=beforeId?{scrollHeight,scrollTop}:(!current.length||scrollHeight-scrollTop-clientHeight<60)?'bottom':null;
+          }
+          history.current=next;setRows(next);
+        }catch{if(alive.current)setError('QQ 会话暂时无法读取，请刷新重试。');}
+        finally{inFlight.current=false;if(alive.current)setLoading(false);}
+      },[]);
+      useEffect(()=>{
+        alive.current=true;void read(undefined,true);
+        const timer=setInterval(()=>void read(),3000);
+        return()=>{alive.current=false;clearInterval(timer);};
+      },[read]);
+      React.useLayoutEffect(()=>{
+        const node=scroller.current,position=scroll.current;scroll.current=null;
+        if(!node||!position)return;
+        node.scrollTop=position==='bottom'?node.scrollHeight:position.scrollTop+node.scrollHeight-position.scrollHeight;
+      },[rows]);
+      const status=state?.connected?'QQ 已连接':simpleStatus(state);
+      return h('section',{className:'blw-qq-chat','aria-label':'QQ 会话'},
+        h('aside',{className:'blw-qq-list','aria-label':'会话列表'},h('h3',null,'会话'),
+          h('div',{className:'blw-qq-session','aria-current':'true'},
+            h('img',{src:FISH_ENTRY_AVATAR,alt:''}),h('div',null,h('strong',null,'大肥鱼'),h('span',{className:'blw-hint'},'QQ 私聊')))),
+        h('div',{className:'blw-qq-view'},h('header',null,
+          h('div',null,h('h3',null,'大肥鱼 · QQ 私聊'),h('span',{className:'blw-hint'},status)),
+          h('button',{type:'button',className:'blw-btn blw-btn2',disabled:loading,onClick:()=>void read(undefined,true)},'刷新')),
+          h('div',{className:'blw-qq-messages',ref:scroller,role:'log','aria-label':'QQ 私聊消息',tabIndex:0,'aria-busy':loading},
+            hasOlder&&rows.length?h('button',{type:'button',className:'blw-btn blw-btn2',disabled:loading,onClick:()=>void read(rows[0].id,true)},'查看更早消息'):null,
+            error?h('p',{className:'blw-err',role:'alert'},error):null,
+            !rows.length&&!error?h('p',{className:'blw-hint'},loading?'正在读取会话…':'还没有接续消息。配对后，从 QQ 给大肥鱼发一条文字。'):null,
+            rows.map(row=>h('article',{key:row.id,className:'blw-qq-message','data-role':row.role},
+              h('div',{className:'blw-qq-meta'},row.role==='user'?'我':'大肥鱼',' · ',
+                h('time',{dateTime:new Date(row.createdAt).toISOString()},new Date(row.createdAt).toLocaleString())),
+              h('p',{className:'blw-qq-bubble'},row.text))))));
+    }
+
     function FishLauncher(){
         useStyleOnce();
         const [opened,setOpened]=useState(false),[settingsTab,setSettingsTab]=useState('fish'),seen=useRef(0);
+        const [qqMount,setQQMount]=useState(null);
+        useEffect(()=>{
+          const sync=()=>setQQMount(document.querySelector('[data-neko-qq-page]:not([hidden])'));
+          document.addEventListener('neko-qq-page-change',sync);sync();
+          return()=>document.removeEventListener('neko-qq-page-change',sync);
+        },[]);
         const [snapshot,setSnapshot]=useState(null),[pending,setPending]=useState(null),[error,setError]=useState('');
         const alive=useRef(false),request=useRef(0),flight=useRef(null),suppressAuthorization=useRef(false),lastAuthorization=useRef(''),lastOverall=useRef('idle');
         const update=useCallback(next=>{
@@ -877,6 +957,7 @@ window.__ModuleLoader__.load({
         const open=()=>{if(window.nekoWorkbench?.action)window.nekoWorkbench.action('fish-settings').catch(()=>{});else setOpened(true);};
         return h(React.Fragment,null,
           h('button',{type:'button',title:'一键养鱼','aria-label':'养鱼设置',style:{display:'inline-flex',alignItems:'center',gap:8,cursor:'pointer',color:'inherit',background:'transparent',border:0,padding:'4px 10px',font:'inherit'},onClick:open},h('img',{src:FISH_ENTRY_AVATAR,alt:'',width:32,height:32,style:{objectFit:'contain',borderRadius:8}}),'养鱼'),
+          qqMount?createPortal(h(React.Fragment,null,h('h1',null,'QQ 会话'),h(QQChatPage,{state:snapshot?.qqbot})),qqMount):null,
           opened?createPortal(h('aside',{role:'region','aria-label':'连接与生活设置',style:{position:'fixed',top:16,right:12,bottom:36,width:'min(760px,calc(100vw - 24px))',boxSizing:'border-box',zIndex:60,overflow:'auto',padding:24,background:'var(--dsw-alias-bg-layer-2)',color:'var(--dsw-alias-label-primary)',borderRadius:16,boxShadow:'0 8px 40px #0003'}},
             h('header',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12,marginBottom:16}},h('strong',null,'一键养鱼'),h('button',{type:'button',onClick:()=>setOpened(false),style:{cursor:'pointer',color:'inherit',border:'1px solid var(--dsw-alias-border-l2)',background:'transparent',padding:'5px 10px',borderRadius:6}},'返回工作台')),
             h('section',{'aria-label':'统一启动与状态',className:'blw',style:{marginBottom:20}},
@@ -907,6 +988,7 @@ window.__ModuleLoader__.load({
     exports.inject = inject;
     exports.BiliWhaleSection = BiliWhaleSection;
     exports.QQBotSettings = QQBotSettings;
+    exports.QQChatPage = QQChatPage;
     exports.QQPrivatePairing = QQPrivatePairing;
     exports.FishLauncher = FishLauncher;
     exports.FIELDS = FIELDS;

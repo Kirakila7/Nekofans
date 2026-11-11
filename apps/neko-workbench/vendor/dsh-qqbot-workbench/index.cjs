@@ -6,7 +6,18 @@ const { RUNTIME, hasScope } = require('./runtime-state.cjs');
 const { qqDiagnostics } = require('./diagnostics.cjs');
 const { createPrivatePairing } = require('./private-pairing.cjs');
 const {qqExperience}=require('../../channel-experiences.cjs');
+const { createQQCompanionLink } = require('./companion-link.cjs');
+const { writeAtomicStateFileSync } = require('../../atomic-state-file.cjs');
 const privatePairing = createPrivatePairing({ readConfig: config });
+const consentPath = () => path.join(profileRoot, 'companion-continuity');
+function readCompanionConsent() {
+  if (!profileRoot) return null;
+  try { return fs.readFileSync(consentPath(), 'utf8').trim() || null; }
+  catch (error) { if (error.code === 'ENOENT') return null; throw error; }
+}
+const companion = createQQCompanionLink({ readConfig: config, readConsent: readCompanionConsent,
+  saveConsent: key => writeAtomicStateFileSync(consentPath(), key || ''),
+  notify: id => process.emit('neko-qqbot-companion', id) });
 const GUARD = Symbol.for('neko.qqbot.connection.guard');
 let context = null, entryId = null, entryContext = null, enabled = false, generation = 0;
 let pending = null, stopping = null, updateTail = Promise.resolve(), aborter = null;
@@ -71,6 +82,13 @@ function runtimeFor(revision) {
       if (enabled && revision === generation && counterKeys.includes(key)) counters[key] = Math.min(counters[key] + 1, 1000000);
     },
     experience(input){if(!enabled||revision!==generation||pairingTransition||privatePairing.status().active)return;const entry=qqExperience(input);if(entry)process.emit('neko-channel-experience',entry);},
+    companion(message) {
+      if (pairingTransition || privatePairing.status().active) return null;
+      return companion.request(message, () => enabled && revision === generation);
+    },
+    canReplyCompanion(message) {
+      return enabled && revision === generation && !pairingTransition && !privatePairing.status().active && companion.canSend(message);
+    },
     report(phase) {
       if (!enabled || revision !== generation || !Object.hasOwn(reasons, phase)) return;
       const connected = phase === 'running';
@@ -94,6 +112,7 @@ function refresh() {
     if (starting) await starting;
     if (!enabled || !entryId || revision !== generation) return;
     const owner = entryContext, value = config();
+    if (readCompanionConsent() && !companion.enabled()) companion.configure(false);
     projectConfig(value);
     await owner.loader.update(entryId, { config: value });
     await owner.loader.await();
@@ -180,6 +199,7 @@ async function start() {
   return pending;
 }
 function pause() {
+  companion.cancel();
   clearTimeout(pairingExpiry); pairingExpiry = null; privatePairing.cancel(); pairingTransition = false;
   ++generation; aborter?.abort(); enabled = false; pendingModel = false;
   publish({ phase: 'paused', reason: reasons.paused, connected: false });
@@ -243,7 +263,7 @@ exports.apply = function apply(ctx) {
     const disposePairing = scoped.webServer.register({ kind: 'exact', path: '/qqbot-workbench/private-pairing', async handler(req, res) {
       if (!trusted(req)) { res.statusCode = 403; res.end(); return; }
       const send = (status, value) => { res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' }); res.end(JSON.stringify(value)); };
-      if (req.method === 'GET') { send(200, { ...privatePairing.status(), connected: state.connected === true }); return; }
+      if (req.method === 'GET') { send(200, { ...privatePairing.status(), connected: state.connected === true, companion: companion.enabled() }); return; }
       if (req.method !== 'POST') { send(405, { ok: false }); return; }
       try {
         const requestGeneration = generation, requestEntry = entryId;
@@ -253,6 +273,10 @@ exports.apply = function apply(ctx) {
           send(409, { ok: false, code: 'PAIRING_CANCELLED' }); return;
         }
         const { action } = JSON.parse(body);
+        if (action === 'disconnect-companion') {
+          if (!profileRoot) { send(409, { ok: false }); return; }
+          companion.configure(false); send(200, { ok: true }); return;
+        }
         if (action === 'cancel') {
           pairingTransition = true; clearTimeout(pairingExpiry); pairingExpiry = null; privatePairing.cancel(); refresh();
           send(200, { ok: true }); return;
@@ -265,13 +289,17 @@ exports.apply = function apply(ctx) {
           pairingExpiry.unref?.();
           refresh(); send(200, started); return;
         }
-        if (action !== 'confirm') { send(400, { ok: false }); return; }
+        if (action !== 'confirm' && action !== 'confirm-companion') { send(400, { ok: false }); return; }
         if (!state.connected) { send(409, { ok: false, code: 'PAIRING_NOT_CONNECTED' }); return; }
         const revision = generation;
         const { updateProfileConfig } = await import(pathToFileURL(path.join(pluginDir, 'dist/setup/persist.js')).href);
         if (revision !== generation || !trusted(req)) { send(409, { ok: false, code: 'PAIRING_CANCELLED' }); return; }
         pairingTransition = true;
-        const result = privatePairing.confirm(access => updateProfileConfig({ access }, profileRoot, { info() {}, warn() {} }));
+        const result = privatePairing.confirm(access => {
+          if (readCompanionConsent()) companion.configure(false);
+          return updateProfileConfig({ access }, profileRoot, { info() {}, warn() {} });
+        });
+        if (action === 'confirm-companion') companion.configure(true);
         clearTimeout(pairingExpiry); pairingExpiry = null; refresh(); send(200, result);
       } catch (error) {
         if (pairingExpiry && !privatePairing.status().active) {
@@ -292,3 +320,5 @@ exports.apply = function apply(ctx) {
   });
 };
 exports.qqbotAction = qqbotAction;
+exports.takeCompanion = id => companion.take(id);
+exports.replyCompanion = (id, text) => companion.reply(id, text);

@@ -24,7 +24,7 @@ test('account help panel exposes contacts, requires explicit clicks and reports 
   t.after(()=>{stop();w.close();});const tick=()=>new Promise(r=>w.setTimeout(r,25));await tick();await tick();
   const panel=d.querySelector('[data-neko-feedback]');assert(panel);assert.equal(panel.open,false);assert.equal(calls.length,0);
   for(const value of ['1130382639','acekira3@gmail.com','142818715','Acekira','Nekofans'])assert(panel.textContent.includes(value));
-  assert.equal(d.querySelectorAll('[role=menuitem]').length,3,'native account controls retained');
+  assert.equal(d.querySelectorAll('[role=menuitem]:not([data-neko-workbench-settings])').length,3,'native account controls retained');
   for(const [action,target] of [['copy','qqGroup'],['copy','email'],['open','email'],['open','bilibili'],['open','github'],['open','issues']]){
     const button=panel.querySelector(`[data-feedback-target="${target}"][data-feedback-action="${action}"]`);button.click();await tick();assert.equal(button.disabled,false);assert.deepEqual(calls.at(-1),{action,target});
   }

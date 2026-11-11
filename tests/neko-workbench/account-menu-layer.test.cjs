@@ -12,9 +12,14 @@ test('account menu geometry follows open, resize, native login dialog and cleanu
  const ctx={locale:{getSnapshot:()=>({active:'zh-CN'})},remote:{account:{getState:async()=>({ok:true,value:{status:'signed-out'}}),getBalance:async()=>{throw Error('signed-out test must not read balance');}}}};
  const stop=w.installNekoAccountHabitat(ctx,{document:d,window:w,accountsBridge:bridge});t.after(()=>{stop();w.close();});await flush();
  assert.deepEqual(requests.at(-1),{rect:null});
- const menu=d.createElement('div');menu.dataset.menuMaterial='';menu.setAttribute('role','menu');menu.innerHTML='<div role="presentation"><button role="menuitem">设置</button><button role="menuitem">意见反馈</button><button role="menuitem">登录</button></div>';
+ const menu=d.createElement('div');menu.dataset.menuMaterial='';menu.setAttribute('role','menu');menu.innerHTML='<div role="presentation"><button role="menuitem" class="native-menu-item"><svg aria-hidden="true"></svg><span class="native-label">设置</span></button><button role="menuitem">意见反馈</button><button role="menuitem">登录</button></div>';
  let geometry={left:74,top:320,width:340,height:460};menu.getBoundingClientRect=()=>({...geometry});d.body.append(menu);d.querySelector('[aria-haspopup]').setAttribute('aria-expanded','true');await flush();await flush();
  assert.deepEqual(requests.at(-1),{rect:{x:74,y:320,width:340,height:460}});
+ const nativeSettings=menu.querySelector('button[role="menuitem"]'),workbenchSettings=nativeSettings.nextElementSibling;
+ assert.equal(workbenchSettings.textContent,'工作台设置');
+ assert.equal(workbenchSettings.className,nativeSettings.className);
+ assert.equal(workbenchSettings.querySelector('.native-label').textContent,'工作台设置');
+ assert(workbenchSettings.querySelector('svg'));
  const before=requests.length;resize();w.dispatchEvent(new w.Event('resize'));await flush();assert.equal(requests.length,before,'unchanged geometry is coalesced');
  geometry={...geometry,top:280,height:500};resize();assert.equal(requests.at(-1).rect.y,280);
  d.querySelector('[aria-haspopup]').setAttribute('aria-expanded','false');menu.remove();await flush();assert.deepEqual(requests.at(-1),{rect:null});

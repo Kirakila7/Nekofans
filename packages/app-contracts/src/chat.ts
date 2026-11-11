@@ -18,6 +18,7 @@ export interface ChatMessage {
   personaId: PersonaId;
   conversationId: string;
   role: "user" | "assistant";
+  source?: "qq";
   text: string;
   /** Unix epoch milliseconds. */
   createdAt: number;
