@@ -22,7 +22,7 @@ function toMessage(row: Row): ChatMessage {
     role: row["role"] as ChatMessage["role"],
     text: row["text"] as string,
     createdAt: Number(row["created_at"]),
-    ...(row["source"] === "qq" ? { source: "qq" } : {}),
+    ...(row["source"] === "qq" || row["source"] === "wechat" ? { source: row["source"] } : {}),
   };
 }
 
@@ -46,8 +46,26 @@ export class SqliteConversationStore implements ConversationStore {
   constructor(dbPath: string) {
     this.db = new DatabaseSync(dbPath);
     this.db.exec(SCHEMA_SQL);
+    const table = this.db.prepare("SELECT sql FROM sqlite_schema WHERE name = 'messages' AND type = 'table'").get();
     if (!this.db.prepare("PRAGMA table_info(messages)").all().some(column => column.name === "source")) {
-      this.db.exec("ALTER TABLE messages ADD COLUMN source TEXT CHECK (source IS NULL OR source = 'qq')");
+      this.db.exec("ALTER TABLE messages ADD COLUMN source TEXT");
+    } else if (typeof table?.sql === "string" && table.sql.includes("source IS NULL OR source = 'qq'")) {
+      // The first QQ preview had a single-channel CHECK constraint.
+      this.db.exec("BEGIN IMMEDIATE");
+      try {
+        this.db.exec(`
+          ALTER TABLE messages RENAME TO messages_qq_preview;
+          DROP INDEX IF EXISTS messages_by_conversation;
+          ${SCHEMA_SQL}
+          INSERT INTO messages (seq, ${SELECT_COLUMNS})
+            SELECT seq, ${SELECT_COLUMNS} FROM messages_qq_preview ORDER BY seq;
+          DROP TABLE messages_qq_preview;
+        `);
+        this.db.exec("COMMIT");
+      } catch (error) {
+        this.db.exec("ROLLBACK");
+        throw error;
+      }
     }
   }
 

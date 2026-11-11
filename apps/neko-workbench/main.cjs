@@ -17,7 +17,8 @@ const {createOurHomeRuntime}=require('./our-home-runtime.cjs');
 const {createCommunityAccount}=require('./community-account.cjs');
 const {createUnifiedNekoLogin}=require('./unified-neko-login.cjs');
 const {createNekoSsoWindow}=require('./neko-sso-window.cjs');
-const {WorkbenchSecretStore}=require('./main-chat-secret.cjs');
+const {WorkbenchSecretStore,atomicBytes}=require('./main-chat-secret.cjs');
+const {createWeixinClawBot}=require('./weixin-clawbot.cjs');
 const {createSubagentMotion,motionOptions}=require('./subagent-motion.cjs');
 const {createScreenShare}=require('./screen-share-controller.cjs');
 const {WorkbenchMainChat,trustedLocalCaller,PERSONA}=require('./main-chat-runtime.cjs');
@@ -253,7 +254,17 @@ async function chooseAvatar(title='上传工作台头像'){
   const side=Math.min(size.width,size.height),png=image.crop({x:Math.floor((size.width-side)/2),y:Math.floor((size.height-side)/2),width:side,height:side}).resize({width:256,height:256,quality:'best'}).toPNG();
   return 'data:image/png;base64,'+png.toString('base64');
 }
-function workbenchState(){return {avatar:workbenchAppearance.get(),workspaceRoot:workspace,workspaceRevision,companion:companionSnapshot(state),navigation:workbenchNavigation,fish:state.fish,qqbot:state.qqbot,fishQq:fishQqCoordinator.snapshot(),neko:{enabled:state.neko.enabled===true,connection:state.neko.connection,character:state.neko.character,error:String(state.neko.error||'').slice(0,300)},workbench:{connection:state.connection,error:String(state.error||'').slice(0,300)}};}
+const weixinSyncPath=path.join(data,'weixin','sync.json');
+const weixinClawBot=createWeixinClawBot({
+  secretStore:new WorkbenchSecretStore(path.join(data,'secrets','weixin-clawbot.encrypted'),safeStorage),
+  syncStore:{
+    read(){try{return JSON.parse(fs.readFileSync(weixinSyncPath,'utf8'));}catch(error){if(error.code!=='ENOENT')throw error;return null;}},
+    write(value){atomicBytes(weixinSyncPath,Buffer.from(JSON.stringify(value)));},
+  },
+  onMessage:text=>replyToChannelMessage(text,'wechat'),
+  onChange:broadcast,
+});
+function workbenchState(){return {avatar:workbenchAppearance.get(),workspaceRoot:workspace,workspaceRevision,companion:companionSnapshot(state),navigation:workbenchNavigation,fish:state.fish,qqbot:state.qqbot,fishQq:fishQqCoordinator.snapshot(),weixin:weixinClawBot.snapshot(),neko:{enabled:state.neko.enabled===true,connection:state.neko.connection,character:state.neko.character,error:String(state.neko.error||'').slice(0,300)},workbench:{connection:state.connection,error:String(state.error||'').slice(0,300)}};}
 async function openFishSettings(){screenShare.hide();workbenchNavigation={...workbenchNavigation,fishSettingsRevision:(workbenchNavigation?.fishSettingsRevision||0)+1};await openDsh();await communityController.action(dshWindow,{action:'hide'});broadcast();}
 function projectChannelState(name,value){
   const phases=['paused','checking','starting','login-required','model-login-required','scope-required','bound','connecting','running','error'];
@@ -542,23 +553,22 @@ function rpc(method,params={}){return new Promise((resolve,reject)=>{
 });}
 function textContent(value){if(!value)return '';if(typeof value==='string')return value;if(Array.isArray(value))return value.map(textContent).join('');if(value.type==='text')return value.text||'';return textContent(value.content||value.message?.content||value.blocks);}
 function shortReply(text){return text.replace(/```[\s\S]*?```/g,'').replace(/[*#`]/g,'').trim().slice(0,100);}
+async function replyToChannelMessage(text,source){
+  const runtime=mainChatRuntime,backend=runtime?.backend;
+  if(!usesMainChatService(backend))return '请在 Nekofans 启用大肥鱼的 DeepSeek 账号或聊天 API。';
+  if(activeApiRequest||busy(state.actors[0]))return '大肥鱼正在回复，等她一下。';
+  const result=await startApiPrompt(text,{waitForReply:true,source});
+  if(result.status!=='completed'||runtime!==mainChatRuntime||backend!==runtime.backend)return '这次回复未完成，请稍后再试。';
+  const reply=chatReply(result.text);
+  return reply.length<=1500?reply:reply.slice(0,1470)+'…（完整回复见工作台）';
+}
 async function continueQQChat(id){
   if(typeof id!=='string'||!/^[a-f0-9-]{36}$/i.test(id)||!child||quitting)return;
   const source=child;
   try{
     const request=await rpc('qqbot-companion-take',{id});
     if(!request||child!==source||quitting)return;
-    let text='这次回复未完成，请稍后再试。';
-    const runtime=mainChatRuntime,backend=runtime?.backend;
-    if(!usesMainChatService(backend))text='请在 Nekofans 启用大肥鱼的 DeepSeek 账号或聊天 API。';
-    else if(activeApiRequest||busy(state.actors[0]))text='大肥鱼正在回复，等她一下。';
-    else {
-      const result=await startApiPrompt(request.text,{waitForReply:true,source:'qq'});
-      if(result.status==='completed'&&runtime===mainChatRuntime&&backend===runtime.backend){
-        const reply=chatReply(result.text);
-        text=reply.length<=1500?reply:reply.slice(0,1470)+'…（完整回复见工作台）';
-      }
-    }
+    const text=await replyToChannelMessage(request.text,'qq');
     if(child===source&&!quitting)await rpc('qqbot-companion-reply',{id,text});
   }catch{
     if(child===source&&!quitting)await rpc('qqbot-companion-reply',{id,text:'大肥鱼暂时无法回复，请检查工作台连接后再试。'}).catch(()=>{});
@@ -1033,7 +1043,12 @@ ipcMain.handle('workbench:call',async(event,method,value)=>{
     if(!value||typeof value!=='object'||Array.isArray(value))throw Error('聊天请求无效');
     if(value.action==='read')return companionSnapshot(state);
     if(value.action==='history')return mainChatRuntime.history({beforeId:typeof value.beforeId==='string'?value.beforeId:undefined,limit:value.limit});
-    if(value.action==='qq-history')return mainChatRuntime.history({source:'qq',beforeId:typeof value.beforeId==='string'?value.beforeId:undefined,limit:40});
+    if(value.action==='qq-history'||value.action==='wechat-history')return mainChatRuntime.history({source:value.action==='qq-history'?'qq':'wechat',beforeId:typeof value.beforeId==='string'?value.beforeId:undefined,limit:40});
+    if(value.action==='weixin-begin')return weixinClawBot.begin();
+    if(value.action==='weixin-pin')return weixinClawBot.pin(value.code);
+    if(value.action==='weixin-cancel')return weixinClawBot.cancel();
+    if(value.action==='weixin-disconnect')return weixinClawBot.disconnect();
+    if(value.action==='weixin-resume')return weixinClawBot.resume();
     if(value.action==='media')return mainChatRuntime.readMedia(value.id);
     if(value.action==='stop'){if(usesMainChatService(mainChatRuntime?.backend))cancelMainChat();else nekoChat.close();return companionSnapshot(state);}
     if(value.action==='send'){
@@ -1147,6 +1162,7 @@ app.whenReady().then(async()=>{
   Menu.setApplicationMenu(Menu.buildFromTemplate([{label:'N.E.K.O.',submenu:[{label:'和大肥鱼说话',click:()=>showInput()},{label:'猫娘串门…',click:openVisits},{label:'主角色菜单',click:popupMainMenu},{label:'保存桌宠截图',accelerator:'CommandOrControl+Shift+S',click:capture},{label:'退出',role:'quit'}]},{label:'编辑',submenu:[{role:'undo'},{role:'redo'},{type:'separator'},{role:'cut'},{role:'copy'},{role:'paste'},{role:'selectAll'}]}]));
   createWindows();try{await startMainChat();}catch{if(!quitting)mainChatFailure();}
   if(quitting)return;
+  void weixinClawBot.initialize();
   if(communityDaily.status().enabled){try{void ensureVisitsController().initialize().catch(()=>{}).finally(()=>communityDaily.start());}catch{communityDaily.start();}}else communityDaily.start();
   channelLife.start();startEngine().catch(engineError);connectNeko();if(process.env.PET_OPEN_WORKBENCH==='1')openDsh().catch(engineError);
 });
@@ -1156,6 +1172,7 @@ app.on('before-quit',event=>{
   event.preventDefault();
   if(shutdownStarted)return;
   channelLife.dispose();
+  weixinClawBot.dispose();
   communityDaily.dispose();
   dshLoginBrowser.dispose();
   questionRelay.dispose();petQuestionController.dispose();

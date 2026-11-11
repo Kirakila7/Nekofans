@@ -1,5 +1,9 @@
 # Windows source snapshot 0.28.43-test.6 / build 89
 
+## Weixin ClawBot private chat preview
+
+Use **养鱼 → 微信 ClawBot** or **微信会话** in the daily rail to bind your own ClawBot. The desktop requests a QR from Tencent iLink and prompts for the phone PIN if requested. The credential is stored using the platform's encrypted storage. A running desktop receives only new direct text from the bound owner, routes it to the same main companion conversation used on the desktop, and returns the reply to the original ClawBot chat. History is filtered by source in the daily rail. Receipt IDs and the iLink cursor are stored locally to avoid sending a second reply after a restart. If the app stops while handling a message, send it again once the connection is available.
+
 ## QQ private chat continuation
 
 In Fish settings, the local owner can confirm a fresh QQ private pairing with **绑定并接续大肥鱼私聊**. The official QQ gateway relays new text from that one paired account into the current main companion conversation (DeepSeek workbench account or Chat API). The reply goes to the originating QQ private chat and the new turn appears on the desktop. Desktop turns are not pushed to QQ. Ordinary pairing keeps the independent QQ conversation. In daily mode, open **QQ 会话** from the left navigation to view newly tagged QQ turns in a dedicated page. Older untagged turns remain in main chat history. Closing continuation, pausing QQ, or changing the bot credentials or allowed chat scope blocks pending replies. Real account delivery has not been verified.

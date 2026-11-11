@@ -842,7 +842,43 @@ window.__ModuleLoader__.load({
     }
 
 
-    function QQChatPage({state}) {
+    function weixinStatus(state) {
+      return ({
+        starting:'正在生成二维码…', waiting:'请使用手机微信扫码',
+        scanned:'等待微信确认…', pin:'需要手机验证码', connecting:'正在连接微信…',
+        connected:'微信已连接', retrying:'正在重试', expired:'连接已过期', error:'连接未完成',
+      })[state?.phase] || '尚未连接';
+    }
+
+    function WeixinSettings({state}) {
+      const [code,setCode]=useState(''),[pending,setPending]=useState(false),[error,setError]=useState('');
+      const phase=state?.phase;
+      const pairing=['starting','waiting','scanned','pin'].includes(phase);
+      async function invoke(action, payload={}) {
+        setPending(true);setError('');
+        try { await window.nekoWorkbench.companion({action,...payload}); }
+        catch(err) { setError(err?.message||'微信操作未完成，请重试。'); }
+        finally { setPending(false); }
+      }
+      return h('section',{className:'blw blw-weixin-settings','aria-label':'微信 ClawBot 设置'},
+        h('h2',{className:'blw-title'},'微信 ClawBot'),
+        h('p',{role:'status',className:'blw-hint'},weixinStatus(state)),
+        state?.reason?h('p',{className:'blw-hint'},state.reason):null,
+        error?h('p',{role:'alert',className:'blw-err'},error):null,
+        state?.qrImage?h('img',{src:state.qrImage,alt:'微信 ClawBot 绑定二维码',width:224,height:224}):null,
+        !state?.bound&&!pairing?h('p',{className:'blw-intro'},'绑定后，你发给 ClawBot 的新文字消息会进入大肥鱼的主会话。'):null,
+        phase==='pin'?h('form',{className:'blw-actions',onSubmit:event=>{event.preventDefault();const value=code;setCode('');void invoke('weixin-pin',{code:value});}},
+          h('input',{className:'blw-input','aria-label':'手机微信验证码',autoComplete:'one-time-code',inputMode:'numeric',maxLength:12,value:code,onChange:event=>setCode(event.target.value.replace(/[^0-9]/g,''))}),
+          h('button',{type:'submit',className:'blw-btn',disabled:pending||code.length<4},'验证')):null,
+        h('div',{className:'blw-actions'},
+          !state?.bound&&!pairing?h('button',{type:'button',className:'blw-btn',disabled:pending,onClick:()=>void invoke('weixin-begin')},'生成绑定二维码'):null,
+          pairing?h('button',{type:'button',className:'blw-btn blw-btn2',onClick:()=>void invoke('weixin-cancel')},'取消绑定'):null,
+          state?.bound&&phase==='error'?h('button',{type:'button',className:'blw-btn',disabled:pending,onClick:()=>void invoke('weixin-resume')},'重新连接'):null,
+          state?.bound?h('button',{type:'button',className:'blw-btn blw-btn2',disabled:pending,onClick:()=>void invoke('weixin-disconnect')},'解除连接'):null));
+    }
+
+    function QQChatPage({state,channel='qq'}) {
+      const weixin=channel==='wechat', label=weixin?'微信':'QQ';
       const [rows,setRows]=useState([]),[loading,setLoading]=useState(true),[error,setError]=useState(''),[hasOlder,setHasOlder]=useState(false);
       const alive=useRef(false),inFlight=useRef(false),history=useRef([]),scroller=useRef(null),scroll=useRef(null);
       const read=useCallback(async(beforeId,foreground=false)=>{
@@ -851,7 +887,7 @@ window.__ModuleLoader__.load({
         if(foreground)setLoading(true);
         try{
           const bridge=window.nekoWorkbench;
-          const page=await bridge.companion({action:'qq-history',...(beforeId?{beforeId}:{})});
+          const page=await bridge.companion({action:weixin?'wechat-history':'qq-history',...(beforeId?{beforeId}:{})});
           if(!alive.current)return;
           if(!Array.isArray(page))throw Error('Invalid history');
           const current=history.current;
@@ -869,9 +905,9 @@ window.__ModuleLoader__.load({
             scroll.current=beforeId?{scrollHeight,scrollTop}:(!current.length||scrollHeight-scrollTop-clientHeight<60)?'bottom':null;
           }
           history.current=next;setRows(next);
-        }catch{if(alive.current)setError('QQ 会话暂时无法读取，请刷新重试。');}
+        }catch{if(alive.current)setError(label+'会话暂时无法读取，请刷新重试。');}
         finally{inFlight.current=false;if(alive.current)setLoading(false);}
-      },[]);
+      },[weixin,label]);
       useEffect(()=>{
         alive.current=true;void read(undefined,true);
         const timer=setInterval(()=>void read(),3000);
@@ -882,18 +918,18 @@ window.__ModuleLoader__.load({
         if(!node||!position)return;
         node.scrollTop=position==='bottom'?node.scrollHeight:position.scrollTop+node.scrollHeight-position.scrollHeight;
       },[rows]);
-      const status=state?.connected?'QQ 已连接':simpleStatus(state);
-      return h('section',{className:'blw-qq-chat','aria-label':'QQ 会话'},
+      const status=weixin?weixinStatus(state):state?.connected?'QQ 已连接':simpleStatus(state);
+      return h('section',{className:'blw-qq-chat','aria-label':label+' 会话'},
         h('aside',{className:'blw-qq-list','aria-label':'会话列表'},h('h3',null,'会话'),
           h('div',{className:'blw-qq-session','aria-current':'true'},
-            h('img',{src:FISH_ENTRY_AVATAR,alt:''}),h('div',null,h('strong',null,'大肥鱼'),h('span',{className:'blw-hint'},'QQ 私聊')))),
+            h('img',{src:FISH_ENTRY_AVATAR,alt:''}),h('div',null,h('strong',null,'大肥鱼'),h('span',{className:'blw-hint'},label+' 私聊')))),
         h('div',{className:'blw-qq-view'},h('header',null,
-          h('div',null,h('h3',null,'大肥鱼 · QQ 私聊'),h('span',{className:'blw-hint'},status)),
+          h('div',null,h('h3',null,'大肥鱼 · '+label+' 私聊'),h('span',{className:'blw-hint'},status)),
           h('button',{type:'button',className:'blw-btn blw-btn2',disabled:loading,onClick:()=>void read(undefined,true)},'刷新')),
-          h('div',{className:'blw-qq-messages',ref:scroller,role:'log','aria-label':'QQ 私聊消息',tabIndex:0,'aria-busy':loading},
+          h('div',{className:'blw-qq-messages',ref:scroller,role:'log','aria-label':label+' 私聊消息',tabIndex:0,'aria-busy':loading},
             hasOlder&&rows.length?h('button',{type:'button',className:'blw-btn blw-btn2',disabled:loading,onClick:()=>void read(rows[0].id,true)},'查看更早消息'):null,
             error?h('p',{className:'blw-err',role:'alert'},error):null,
-            !rows.length&&!error?h('p',{className:'blw-hint'},loading?'正在读取会话…':'还没有接续消息。配对后，从 QQ 给大肥鱼发一条文字。'):null,
+            !rows.length&&!error?h('p',{className:'blw-hint'},loading?'正在读取会话…':weixin?'还没有消息。绑定后，在微信里给 ClawBot 发一条文字。':'还没有接续消息。配对后，从 QQ 给大肥鱼发一条文字。'):null,
             rows.map(row=>h('article',{key:row.id,className:'blw-qq-message','data-role':row.role},
               h('div',{className:'blw-qq-meta'},row.role==='user'?'我':'大肥鱼',' · ',
                 h('time',{dateTime:new Date(row.createdAt).toISOString()},new Date(row.createdAt).toLocaleString())),
@@ -905,16 +941,17 @@ window.__ModuleLoader__.load({
         const [opened,setOpened]=useState(false),[settingsTab,setSettingsTab]=useState('fish'),seen=useRef(0);
         const [qqMount,setQQMount]=useState(null);
         useEffect(()=>{
-          const sync=()=>setQQMount(document.querySelector('[data-neko-qq-page]:not([hidden])'));
+          const sync=()=>{const node=document.querySelector('[data-neko-qq-page]:not([hidden])');setQQMount(node?{node,channel:node.dataset?.channel||'qq'}:null);};
           document.addEventListener('neko-qq-page-change',sync);sync();
           return()=>document.removeEventListener('neko-qq-page-change',sync);
         },[]);
-        const [snapshot,setSnapshot]=useState(null),[pending,setPending]=useState(null),[error,setError]=useState('');
+        const [snapshot,setSnapshot]=useState(null),[weixin,setWeixin]=useState(null),[pending,setPending]=useState(null),[error,setError]=useState('');
         const alive=useRef(false),request=useRef(0),flight=useRef(null),suppressAuthorization=useRef(false),lastAuthorization=useRef(''),lastOverall=useRef('idle');
         const update=useCallback(next=>{
           if(!alive.current)return;
           const revision=Number(next?.navigation?.fishSettingsRevision||0);
           if(revision>seen.current){seen.current=revision;setOpened(true);}
+          if(next?.weixin)setWeixin(next.weixin);
           const value=next?.fishQq;
           if(!value)return;
           setSnapshot(value);
@@ -923,7 +960,7 @@ window.__ModuleLoader__.load({
           const selection=value.selection||{fish:true,qqbot:false};
           const target=selection.fish&&['login-required','model-login-required'].includes(value.fish?.phase)?'fish':
             selection.qqbot&&['login-required','model-login-required','scope-required'].includes(value.qqbot?.phase)?'qq':'';
-          if(!suppressAuthorization.current&&value.overall!=='pausing'&&target&&lastAuthorization.current!==target)setSettingsTab(target);
+          if(!suppressAuthorization.current&&value.overall!=='pausing'&&target&&lastAuthorization.current!==target)setSettingsTab(tab=>tab==='weixin'?tab:target);
           lastAuthorization.current=target;
         },[]);
         useEffect(()=>{
@@ -957,7 +994,10 @@ window.__ModuleLoader__.load({
         const open=()=>{if(window.nekoWorkbench?.action)window.nekoWorkbench.action('fish-settings').catch(()=>{});else setOpened(true);};
         return h(React.Fragment,null,
           h('button',{type:'button',title:'一键养鱼','aria-label':'养鱼设置',style:{display:'inline-flex',alignItems:'center',gap:8,cursor:'pointer',color:'inherit',background:'transparent',border:0,padding:'4px 10px',font:'inherit'},onClick:open},h('img',{src:FISH_ENTRY_AVATAR,alt:'',width:32,height:32,style:{objectFit:'contain',borderRadius:8}}),'养鱼'),
-          qqMount?createPortal(h(React.Fragment,null,h('h1',null,'QQ 会话'),h(QQChatPage,{state:snapshot?.qqbot})),qqMount):null,
+          qqMount?createPortal(h(React.Fragment,null,
+            h('h1',null,qqMount.channel==='wechat'?'微信会话':'QQ 会话'),
+            qqMount.channel==='wechat'&&weixin?.phase!=='connected'?h(WeixinSettings,{state:weixin}):null,
+            h(QQChatPage,{key:qqMount.channel,channel:qqMount.channel,state:qqMount.channel==='wechat'?weixin:snapshot?.qqbot})),qqMount.node):null,
           opened?createPortal(h('aside',{role:'region','aria-label':'连接与生活设置',style:{position:'fixed',top:16,right:12,bottom:36,width:'min(760px,calc(100vw - 24px))',boxSizing:'border-box',zIndex:60,overflow:'auto',padding:24,background:'var(--dsw-alias-bg-layer-2)',color:'var(--dsw-alias-label-primary)',borderRadius:16,boxShadow:'0 8px 40px #0003'}},
             h('header',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12,marginBottom:16}},h('strong',null,'一键养鱼'),h('button',{type:'button',onClick:()=>setOpened(false),style:{cursor:'pointer',color:'inherit',border:'1px solid var(--dsw-alias-border-l2)',background:'transparent',padding:'5px 10px',borderRadius:6}},'返回工作台')),
             h('section',{'aria-label':'统一启动与状态',className:'blw',style:{marginBottom:20}},
@@ -969,8 +1009,10 @@ window.__ModuleLoader__.load({
               error?h('p',{role:'alert',className:'blw-err'},error):null),
             h('div',{role:'tablist','aria-label':'连接与生活设置',style:{display:'flex',gap:8,marginBottom:16}},
               h('button',{role:'tab',type:'button','aria-selected':settingsTab==='fish',onClick:()=>setSettingsTab('fish'),className:'blw-btn blw-btn2',style:{fontWeight:settingsTab==='fish'?600:400}},'B 站扫码'),
-              h('button',{role:'tab',type:'button','aria-selected':settingsTab==='qq',onClick:()=>setSettingsTab('qq'),className:'blw-btn blw-btn2',style:{fontWeight:settingsTab==='qq'?600:400}},'QQ 扫码')),
+              h('button',{role:'tab',type:'button','aria-selected':settingsTab==='qq',onClick:()=>setSettingsTab('qq'),className:'blw-btn blw-btn2',style:{fontWeight:settingsTab==='qq'?600:400}},'QQ 扫码'),
+              h('button',{role:'tab',type:'button','aria-selected':settingsTab==='weixin',onClick:()=>setSettingsTab('weixin'),className:'blw-btn blw-btn2'},'微信 ClawBot')),
             h('div',{hidden:settingsTab!=='fish'},h(BiliWhaleSection,{compact:true})),settingsTab==='qq'?h(QQBotSettings,{compact:true}):null,
+            settingsTab==='weixin'?h(WeixinSettings,{state:weixin}):null,
             h('details',{className:'blw-details','data-settings':'channels'},h('summary',null,'启动详细设置'),
               h('div',{style:{display:'flex',gap:16,flexWrap:'wrap',marginTop:8}},
                 ...[['fish','B 站养鱼'],['qqbot','QQ 机器人']].map(([key,label])=>h('label',{key,style:{display:'flex',alignItems:'center',gap:6}},
