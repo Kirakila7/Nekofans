@@ -305,3 +305,18 @@ test('QQ history mounts in the sidebar page, loads only the scoped route and sto
   page.unmount();launcher.unmount();
   assert.equal(f.timers.size,0);
 });
+
+test('WeChat has a separate rail history and a local ClawBot settings entry',async()=>{
+  const calls=[];
+  const f=fixture({companion:async request=>{calls.push(request.action);return [];}});
+  const launcher=f.mount(f.api.FishLauncher);await launcher.settle();open(launcher);
+  assert(tab(launcher,'微信 ClawBot'));
+  f.navigateQQ({dataset:{channel:'wechat'}});
+  const view=find(launcher,node=>node.type===f.api.QQChatPage);
+  assert.equal(view.props.channel,'wechat');
+  const page=f.mount(f.api.QQChatPage,{channel:'wechat',state:{phase:'connected'}});
+  await page.settle();
+  assert.equal(find(page,node=>node.props.role==='log').props['aria-label'],'微信 私聊消息');
+  assert.deepEqual(calls,['wechat-history']);
+  page.unmount();launcher.unmount();
+});

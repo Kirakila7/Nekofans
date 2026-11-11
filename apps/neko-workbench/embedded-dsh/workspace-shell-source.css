@@ -38,6 +38,7 @@ body[data-neko-workspace-shell] button[data-neko-new-session="plus"] { position:
 .neko-qq-page[hidden] { display:none; }
 .neko-qq-page h1 { margin:0; font-size:20px; line-height:1.4; }
 .neko-qq-page .blw-qq-chat { flex:1; height:auto; min-height:0; }
+.neko-qq-page:has(.blw-weixin-settings) { overflow:auto; }
 .neko-room-entry, .neko-room-workspace { font-size:21px; line-height:1; }
 .neko-room-entry[aria-pressed="true"], .neko-room-workspace[aria-pressed="true"] { background:var(--nws-hover); color:#396c9f; }
 body[data-neko-workspace-shell] [data-neko-room-masked] { visibility:hidden !important; }

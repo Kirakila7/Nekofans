@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS messages (
   role            TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
   text            TEXT NOT NULL,
   created_at      INTEGER NOT NULL,
-  source          TEXT CHECK (source IS NULL OR source = 'qq')
+  source          TEXT
 ) STRICT;
 
 CREATE INDEX IF NOT EXISTS messages_by_conversation

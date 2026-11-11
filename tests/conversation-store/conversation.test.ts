@@ -102,3 +102,26 @@ test("a legacy database opens in place and QQ pages exclude desktop messages", a
     await assert.rejects(migrated.pageBefore("bigfish","qq-view","desktop-u",40,"qq"),/not in this conversation/);
   } finally { migrated.close(); }
 });
+
+test("QQ preview migration preserves both channel histories and pagination", async () => {
+  const file = join(tempDir, "qq-preview.sqlite");
+  const preview = new DatabaseSync(file);
+  preview.exec(`
+    CREATE TABLE messages (
+      seq INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL UNIQUE,
+      persona_id TEXT NOT NULL, conversation_id TEXT NOT NULL,
+      role TEXT NOT NULL, text TEXT NOT NULL, created_at INTEGER NOT NULL,
+      source TEXT CHECK (source IS NULL OR source = 'qq')
+    ) STRICT;
+    CREATE INDEX messages_by_conversation ON messages (persona_id, conversation_id, seq);
+    INSERT INTO messages VALUES (7, 'qq-legacy', 'bigfish', 'channels', 'user', 'QQ 旧消息', 1000, 'qq');
+  `);
+  preview.close();
+  const migrated = new SqliteConversationStore(file);
+  try {
+    await migrated.append({ ...msg("wechat-new", "bigfish", "channels", "微信新消息"), source: "wechat" });
+    assert.deepEqual((await migrated.recent("bigfish", "channels", 10, "qq")).map(row => row.id), ["qq-legacy"]);
+    assert.deepEqual((await migrated.recent("bigfish", "channels", 10, "wechat")).map(row => row.id), ["wechat-new"]);
+    assert.deepEqual((await migrated.pageBefore("bigfish", "channels", "wechat-new", 10)).map(row => row.id), ["qq-legacy"]);
+  } finally { migrated.close(); }
+});

@@ -104,8 +104,12 @@ test('QQ navigation owns the daily content page and returns to the room without 
  assert(calls.some(r=>r.action==='hide'&&r.slot==='side'));
  page.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));await tick();
  assert(page.hidden);assert.equal(d.activeElement,entry);assert.equal(room.getAttribute('aria-pressed'),'true');
- entry.click();await tick();room.click();await tick();assert(page.hidden);
+ entry.click();await tick();
+ const weixin=d.querySelector('.neko-wechat-entry');weixin.click();await tick();
+ assert(!page.hidden);assert.equal(page.dataset.channel,'wechat');assert.equal(page.getAttribute('aria-label'),'微信会话');
+ assert.equal(weixin.getAttribute('aria-pressed'),'true');assert.equal(entry.getAttribute('aria-pressed'),'false');
+ room.click();await tick();assert(page.hidden);
  entry.click();await tick();await choose(d,'office');assert(page.hidden);assert(!shown(w,entry));
  assert.equal(d.querySelector('#draft').value,'工作草稿');
- assert.deepEqual(changes,[true,false,true,false,true,false]);
+ assert.deepEqual(changes,[true,false,true,true,false,true,false]);
 });

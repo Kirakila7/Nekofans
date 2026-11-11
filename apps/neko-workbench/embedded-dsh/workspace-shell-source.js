@@ -88,30 +88,40 @@ function installWorkspaceShell(options = {}) {
   }
   doc.addEventListener('neko-flex-social-geometry', onFlexSocialGeometry);
   const qqPage = own(el('section', 'neko-qq-page'));
-  qqPage.hidden = true; qqPage.tabIndex = -1; qqPage.setAttribute('aria-label', 'QQ 会话');
+  qqPage.hidden = true; qqPage.tabIndex = -1;
   qqPage.id = 'neko-qq-page'; qqPage.dataset.nekoQqPage = '';
-  const qqButton = button('', 'neko-side-rail__button neko-qq-entry', () => {
-    if (isOfficeEdition() || !qqPage.hidden) return;
-    hideSocial(); lobby?.hide(); closeSettings(); closeCompanionMenu();
-    if (sideSocial) doc.dispatchEvent(new win.Event('neko-side-surface-close'));
-    setRoomActive(false, {closeSocial:false});
-    roomButton?.setAttribute('aria-pressed', 'false'); workButton?.setAttribute('aria-pressed', 'false');
-    setQQPageVisible(true); qqPage.focus();
-  });
-  qqButton.title = 'QQ 会话'; qqButton.setAttribute('aria-label', 'QQ 会话');
-  qqButton.setAttribute('aria-controls', qqPage.id); qqButton.setAttribute('aria-pressed', 'false');
-  railTop.insertBefore(qqButton, communityButton); doc.body.appendChild(qqPage);
-  function setQQPageVisible(visible) {
-    if (qqPage.hidden === !visible) return;
-    qqPage.hidden = !visible;
-    qqButton.setAttribute('aria-pressed', String(visible));
+  const channelEntries = new Map();
+  for (const [channel,label] of [['qq','QQ 会话'],['wechat','微信会话']]) {
+    const entry = button('', 'neko-side-rail__button neko-' + (channel === 'qq' ? 'qq' : 'wechat') + '-entry', () => {
+      if (isOfficeEdition() || (!qqPage.hidden && qqPage.dataset.channel === channel)) return;
+      hideSocial(); lobby?.hide(); closeSettings(); closeCompanionMenu();
+      if (sideSocial) doc.dispatchEvent(new win.Event('neko-side-surface-close'));
+      setRoomActive(false, {closeSocial:false});
+      roomButton?.setAttribute('aria-pressed', 'false'); workButton?.setAttribute('aria-pressed', 'false');
+      setQQPageVisible(channel); qqPage.focus();
+    });
+    entry.title = label; entry.setAttribute('aria-label', label);
+    entry.setAttribute('aria-controls', qqPage.id); entry.setAttribute('aria-pressed', 'false');
+    channelEntries.set(channel,entry);
+    railTop.insertBefore(entry, communityButton);
+  }
+  doc.body.appendChild(qqPage);
+  function setQQPageVisible(channel) {
+    if (qqPage.dataset.channel === channel || (qqPage.hidden && !channel)) return;
+    qqPage.hidden = !channel;
+    if (channel) {
+      qqPage.dataset.channel = channel;
+      qqPage.setAttribute('aria-label', channelEntries.get(channel).title);
+    } else delete qqPage.dataset.channel;
+    for (const [key,entry] of channelEntries) entry.setAttribute('aria-pressed', String(key === channel));
     doc.dispatchEvent(new win.Event('neko-qq-page-change'));
     schedule();
   }
   function closeQQPage({restoreRoom = false} = {}) {
     if (qqPage.hidden) return;
-    setQQPageVisible(false);
-    if (restoreRoom) { setRoomActive(roomSelection, {closeSocial:false}); qqButton.focus(); }
+    const entry = channelEntries.get(qqPage.dataset.channel);
+    setQQPageVisible(null);
+    if (restoreRoom) { setRoomActive(roomSelection, {closeSocial:false}); entry?.focus(); }
   }
   const roomInert = new Set(), roomMasked = new Set();
   const roomButton = roomPreview && button('', 'neko-side-rail__button neko-room-entry', () => { closeQQPage(); lobby?.hide(); setRoomActive(true); });
@@ -120,7 +130,7 @@ function installWorkspaceShell(options = {}) {
     roomPreview.hidden = true;
     for (const [control, label] of [[roomButton, '聊天室'], [workButton, '工作区']]) { control.title = label; control.setAttribute('aria-label', label); }
   }
-  for (const [control, path] of [[roomButton, 'M4 5.5h16v11H9l-4 3v-3H4z M8 9h8 M8 12h5'], [workButton, 'M4 6h6l2 2h8v11H4z M4 6V4.5h6l2 1.5'], [qqButton, 'M5 4.5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-7l-4.5 3v-3H5a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2ZM7.5 9h9m-9 3.5h5']]) {
+  for (const [control, path] of [[roomButton, 'M4 5.5h16v11H9l-4 3v-3H4z M8 9h8 M8 12h5'], [workButton, 'M4 6h6l2 2h8v11H4z M4 6V4.5h6l2 1.5'], [channelEntries.get('wechat'), 'M12 10a5.5 5.5 0 1 0-6 3.9L4.5 16l3.4-1.1M21 15a5.5 5.5 0 1 0-3.1 4.8l2.8 1-.9-2.6A5.4 5.4 0 0 0 21 15ZM7 8.5h.1m3 0h.1m3.5 6h.1m3 0h.1'], [channelEntries.get('qq'), 'M5 4.5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-7l-4.5 3v-3H5a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2ZM7.5 9h9m-9 3.5h5']]) {
     if (!control) continue;
     const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg'), shape = doc.createElementNS('http://www.w3.org/2000/svg', 'path');
     svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true');
@@ -1747,7 +1757,7 @@ function installWorkspaceShell(options = {}) {
     doc.body.removeAttribute('data-neko-room-columns');
     clearRoomCompanionGeometry();
     doc.body.removeAttribute('data-neko-workspace-shell'); doc.body.removeAttribute('data-neko-office-mode'); doc.body.removeAttribute('data-neko-workbench-edition');
-    setQQPageVisible(false);
+    setQQPageVisible(null);
     for (const n of nodes) n.remove(); style.remove();
   };
 }
