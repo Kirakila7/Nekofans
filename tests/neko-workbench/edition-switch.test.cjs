@@ -91,3 +91,21 @@ test('daily community fills content height and work float retains its dragged po
  d.dispatchEvent(new w.CustomEvent('neko-video-open',{detail:{platform:'youtube'}}));await tick();assert(!calls.some(r=>r.channel==='video'&&r.site==='youtube'));assert.deepEqual(placement(),moved);await choose(d,'office');assert(calls.some(r=>r.channel==='video'&&r.action==='suspend'));await choose(d,'daily');assert(calls.some(r=>r.channel==='video'&&r.action==='resume'));assert.deepEqual(placement(),moved);
  emitComposer({type:'move',dx:-4000,dy:-4000});await tick();assert(placement().x>=64);assert(placement().y>=8);assert.equal(d.querySelector('#draft').value,'工作草稿');
 });
+
+test('QQ navigation owns the daily content page and returns to the room without changing the work draft',async t=>{
+ const {w,d,calls}=fixture(t);await tick();
+ const entry=d.querySelector('.neko-qq-entry'),page=d.querySelector('[data-neko-qq-page]'),room=d.querySelector('.neko-room-entry');
+ const changes=[];d.addEventListener('neko-qq-page-change',()=>changes.push(!page.hidden));
+ assert(entry.closest('[data-neko-side-rail]'));assert(page.hidden);
+ d.querySelector('.neko-community-yui').click();await tick();
+ entry.click();await tick();
+ assert(!page.hidden);assert.equal(entry.getAttribute('aria-pressed'),'true');assert.equal(d.activeElement,page);
+ assert.equal(room.getAttribute('aria-pressed'),'false');assert(!d.body.hasAttribute('data-neko-chatroom-active'));
+ assert(calls.some(r=>r.action==='hide'&&r.slot==='side'));
+ page.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));await tick();
+ assert(page.hidden);assert.equal(d.activeElement,entry);assert.equal(room.getAttribute('aria-pressed'),'true');
+ entry.click();await tick();room.click();await tick();assert(page.hidden);
+ entry.click();await tick();await choose(d,'office');assert(page.hidden);assert(!shown(w,entry));
+ assert.equal(d.querySelector('#draft').value,'工作草稿');
+ assert.deepEqual(changes,[true,false,true,false,true,false]);
+});

@@ -2,6 +2,7 @@ const {app,BrowserWindow,WebContentsView,ipcMain,screen,shell,Menu,Tray,nativeIm
 const {spawn} = require('node:child_process');
 const {resolveRuntimePaths,prepareRuntimeDirectories,assertDshRuntime,buildDshPatch,buildDshLaunch}=require('./runtime-config.cjs');
 const {createDshLifecycle}=require('./dsh-lifecycle.cjs');
+const {chatReply}=require('./vendor/dsh-qqbot-workbench/chat-policy.cjs');
 const {createSocialController}=require('./community-config.cjs');
 const {createNativeDividerController}=require('./native-divider-controller.cjs');
 const {createNativeComposerController}=require('./native-composer-controller.cjs');
@@ -384,7 +385,7 @@ function cancelMainChat(){
   }
   return mainChatRuntime?.cancel()||dailyCancelled;
 }
-async function startApiPrompt(text){
+async function startApiPrompt(text,{waitForReply=false,source}={}){
   channelLife.touch();
   communityDaily.interrupt();
   if(!mainChatRuntime||!state.mainChat?.ready)throw new Error(state.mainChat?.error||'聊天服务尚未就绪');
@@ -407,13 +408,15 @@ async function startApiPrompt(text){
       throw Error(accountStatus==='signed-out'?'请先登录 DeepSeek 工作台账号。':'工作台账号状态暂不可用，请检查连接。');
     }
   }
-  mainChatRuntime.send(text).then(async result=>{
+  const turn=mainChatRuntime.send(text,source);
+  turn.then(async result=>{
     if(quitting||activeApiRequest!==request)return;activeApiRequest=null;
     if(!usesMainChatService(mainChatRuntime.backend)||mainChatRuntime.opened!==request.opened)return;
     if(result.status==='cancelled'){a.chatReply=null;notice(a,'已停止回复');}
     else if(result.status==='error')notice(a,result.message);
     await refreshApiHistory();update();
   },()=>{if(!quitting&&activeApiRequest===request){activeApiRequest=null;a.active=false;a.status='error';setWork(a,null);notice(a,'聊天暂不可用，请重试');update();}});
+  if(waitForReply)return turn;
   return {requestId:request.id,backend:mainChatRuntime.backend};
 }
 function editChatSettings(){
@@ -539,7 +542,30 @@ function rpc(method,params={}){return new Promise((resolve,reject)=>{
 });}
 function textContent(value){if(!value)return '';if(typeof value==='string')return value;if(Array.isArray(value))return value.map(textContent).join('');if(value.type==='text')return value.text||'';return textContent(value.content||value.message?.content||value.blocks);}
 function shortReply(text){return text.replace(/```[\s\S]*?```/g,'').replace(/[*#`]/g,'').trim().slice(0,100);}
+async function continueQQChat(id){
+  if(typeof id!=='string'||!/^[a-f0-9-]{36}$/i.test(id)||!child||quitting)return;
+  const source=child;
+  try{
+    const request=await rpc('qqbot-companion-take',{id});
+    if(!request||child!==source||quitting)return;
+    let text='这次回复未完成，请稍后再试。';
+    const runtime=mainChatRuntime,backend=runtime?.backend;
+    if(!usesMainChatService(backend))text='请在 Nekofans 启用大肥鱼的 DeepSeek 账号或聊天 API。';
+    else if(activeApiRequest||busy(state.actors[0]))text='大肥鱼正在回复，等她一下。';
+    else {
+      const result=await startApiPrompt(request.text,{waitForReply:true,source:'qq'});
+      if(result.status==='completed'&&runtime===mainChatRuntime&&backend===runtime.backend){
+        const reply=chatReply(result.text);
+        text=reply.length<=1500?reply:reply.slice(0,1470)+'…（完整回复见工作台）';
+      }
+    }
+    if(child===source&&!quitting)await rpc('qqbot-companion-reply',{id,text});
+  }catch{
+    if(child===source&&!quitting)await rpc('qqbot-companion-reply',{id,text:'大肥鱼暂时无法回复，请检查工作台连接后再试。'}).catch(()=>{});
+  }
+}
 function receive(message,replay=false){
+  if(message?.method==='qqbot-companion-request'){if(!replay)void continueQQChat(message.params?.id);return;}
   if(message?.method==='home-build'){if(!replay)void homeReady.then(ready=>ready&&ourHomeRuntime.acceptBuild(message.params));return;}
   if(message?.method==='channel-experience'){if(!replay)try{channelLife.accept(message.params);}catch{}return;}
   if(message?.method==='event'&&message.params?.event?.type==='turn/start')channelLife.interrupt();
@@ -1007,6 +1033,7 @@ ipcMain.handle('workbench:call',async(event,method,value)=>{
     if(!value||typeof value!=='object'||Array.isArray(value))throw Error('聊天请求无效');
     if(value.action==='read')return companionSnapshot(state);
     if(value.action==='history')return mainChatRuntime.history({beforeId:typeof value.beforeId==='string'?value.beforeId:undefined,limit:value.limit});
+    if(value.action==='qq-history')return mainChatRuntime.history({source:'qq',beforeId:typeof value.beforeId==='string'?value.beforeId:undefined,limit:40});
     if(value.action==='media')return mainChatRuntime.readMedia(value.id);
     if(value.action==='stop'){if(usesMainChatService(mainChatRuntime?.backend))cancelMainChat();else nekoChat.close();return companionSnapshot(state);}
     if(value.action==='send'){

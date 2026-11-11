@@ -5,7 +5,8 @@
 // the shell is synced, without migrating any native or saved account data.
 // Claude娘 is offered and shown again only in the office edition (the shell
 // publishes body[data-neko-workbench-edition]); daily keeps 大肥鱼 in her
-// place. The Claude role/platform entry stays retired in both editions.
+// place in the role picker. The separate workbench appearance uses its own
+// selected portrait in both editions.
 function patchVisibleAvatarUi(source) {
   let code=source.replace(/\r\n/g,'\n');
   function replace(before,after,label) {
@@ -26,11 +27,15 @@ function patchVisibleAvatarUi(source) {
   replace('const AVATAR_IDS = Object.freeze(AVATARS.map((a) => a.id))',"const AVATAR_IDS = Object.freeze([...AVATARS.map((a) => a.id), 'claude'])",'legacy avatar validation');
   const selectable="const SELECTABLE_IDS = Object.freeze([...AVATAR_IDS, 'custom'])";
   replace(selectable,selectable+"\n    const NEKO_OFFICE_AVATARS = Object.freeze([...AVATARS, Object.freeze({ id: 'claude', name: 'Claude娘' })])\n    function nekoOfficeEdition() { return typeof document !== 'undefined' && document.body?.getAttribute('data-neko-workbench-edition') === 'office' }\n    function visibleAvatars() { return nekoOfficeEdition() ? NEKO_OFFICE_AVATARS : AVATARS }\n    function visibleAvatarId(id) { return id === 'claude' && !nekoOfficeEdition() ? 'bigfish' : id }",'edition-aware portraits');
-  for(const name of ['builtinSrc','avatarName']){
-    const head='function '+name+'(id) {',edition=head+"\n      if (id === 'claude' && !nekoOfficeEdition()) id = 'bigfish'";
-    migrate(head+"\n      if (id === 'claude') id = 'bigfish'",edition);
-    replace(head,edition,name+' fallback');
-  }
+  const avatarName = 'function avatarName(id) {';
+  const editionName = avatarName + "\n      if (id === 'claude' && !nekoOfficeEdition()) id = 'bigfish'";
+  migrate(avatarName + "\n      if (id === 'claude') id = 'bigfish'", editionName);
+  replace(avatarName, editionName, 'avatarName fallback');
+  const appearanceSource = "function builtinSrc(id, appearance = false) {\n      if (!appearance && id === 'claude' && !nekoOfficeEdition()) id = 'bigfish'";
+  migrate("function builtinSrc(id) {\n      if (id === 'claude') id = 'bigfish'", appearanceSource);
+  migrate("function builtinSrc(id) {\n      if (id === 'claude' && !nekoOfficeEdition()) id = 'bigfish'", appearanceSource);
+  replace('function builtinSrc(id) {', appearanceSource, 'workbench appearance image');
+  replace('return builtinSrc(builtinId)', 'return builtinSrc(builtinId, true)', 'workbench appearance portrait');
   replace("const found = AVATARS.find((a) => a.id === id)","const found = visibleAvatars().find((a) => a.id === id)",'portrait names');
   // Keep a saved Claude娘 choice; each surface maps it for the current edition.
   migrate("let builtinId = avatar.builtinId === 'claude' ? 'bigfish' : SELECTABLE_IDS.includes(avatar.builtinId) ? avatar.builtinId : DEFAULT_AVATAR","let builtinId = SELECTABLE_IDS.includes(avatar.builtinId) ? avatar.builtinId : DEFAULT_AVATAR");

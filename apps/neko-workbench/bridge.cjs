@@ -45,6 +45,8 @@ exports.apply=function(ctx){
   const loginWatch=createDshLoginWatch({getAccount:()=>ctx.get?.('deepseekAccount'),emit});
   const qqbotState=value=>emit('qqbot-care-state',value);
   process.on('neko-qqbot-state',qqbotState);
+  const qqCompanion=id=>emit('qqbot-companion-request',{id});
+  process.on('neko-qqbot-companion',qqCompanion);
   const channelExperience=value=>{const {validExperience}=require('./channel-experiences.cjs');if(validExperience(value))emit('channel-experience',value);};
   process.on('neko-channel-experience',channelExperience);
   const taskSessions=createTaskSessionTracker({emit,getAgent:id=>ctx.agents.get(id),observeSession:observePublicSession,
@@ -238,6 +240,10 @@ exports.apply=function(ctx){
       const fish=await import(require('node:url').pathToFileURL(require('node:path').join(__dirname,'vendor/dsh-bili-whale/lib/index.js')).href);
       return fish.workbenchAction(p.action);
     }
+    if(method==='qqbot-companion-take'||method==='qqbot-companion-reply'){
+      const qqbot=require('./vendor/dsh-qqbot-workbench/index.cjs');
+      return method==='qqbot-companion-take'?qqbot.takeCompanion(p.id):qqbot.replyCompanion(p.id,p.text);
+    }
     if(method==='qqbot-care'){
       if(!['status','start','pause'].includes(p.action))throw new Error('未知 QQ 机器人操作');
       const qqbot=await import(require('node:url').pathToFileURL(require('node:path').join(__dirname,'vendor/dsh-qqbot-workbench/index.cjs')).href);
@@ -273,6 +279,6 @@ exports.apply=function(ctx){
   const lines=readline.createInterface({input:process.stdin});
   lines.on('line',async line=>{let request;try{request=JSON.parse(line);const result=await dispatch(request.method,request.params||{});process.stdout.write(JSON.stringify({id:request.id,result})+'\n');}catch(error){process.stdout.write(JSON.stringify({id:request?.id,error:String(error?.message||error)})+'\n');}});
   lines.on('close',()=>{if(closing)return;closing=true;Promise.resolve().then(()=>typeof ctx.root?.dispose==='function'?ctx.root.dispose():ctx.dispose?.()).finally(()=>process.exit(0));});
-  ctx.on('dispose',()=>{closing=true;loginWatch.dispose();companionAccount.dispose();lobbyAccount.dispose();proactiveAccount.dispose();memoryAccount.dispose();process.removeListener('neko-qqbot-state',qqbotState);process.removeListener('neko-channel-experience',channelExperience);taskSessions.dispose();lines.close();});
+  ctx.on('dispose',()=>{closing=true;loginWatch.dispose();companionAccount.dispose();lobbyAccount.dispose();proactiveAccount.dispose();memoryAccount.dispose();process.removeListener('neko-qqbot-state',qqbotState);process.removeListener('neko-qqbot-companion',qqCompanion);process.removeListener('neko-channel-experience',channelExperience);taskSessions.dispose();lines.close();});
   emit('ready',{version:2});
 };

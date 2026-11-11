@@ -1,5 +1,9 @@
 # Windows source snapshot 0.28.43-test.6 / build 89
 
+## QQ private chat continuation
+
+In Fish settings, the local owner can confirm a fresh QQ private pairing with **绑定并接续大肥鱼私聊**. The official QQ gateway relays new text from that one paired account into the current main companion conversation (DeepSeek workbench account or Chat API). The reply goes to the originating QQ private chat and the new turn appears on the desktop. Desktop turns are not pushed to QQ. Ordinary pairing keeps the independent QQ conversation. In daily mode, open **QQ 会话** from the left navigation to view newly tagged QQ turns in a dedicated page. Older untagged turns remain in main chat history. Closing continuation, pausing QQ, or changing the bot credentials or allowed chat scope blocks pending replies. Real account delivery has not been verified.
+
 This branch matches the 1,131 files in the local Windows installation's build manifest. It includes the lobby history and timestamp UI and retains the test.5 notification icon and restricted-channel reply behavior. The build uses the existing Windows packaging configuration. No binaries are part of this source snapshot.
 
 # Local integration 0.28.43-test.5 / build 88

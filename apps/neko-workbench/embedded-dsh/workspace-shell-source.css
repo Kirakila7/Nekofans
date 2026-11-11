@@ -34,6 +34,10 @@ body[data-neko-workspace-shell] [data-neko-session-browser-original],
 body[data-neko-workspace-shell] .neko-hero-pick__name { display:none !important; }
 body[data-neko-workspace-shell] button[data-neko-new-session="plus"] { position:absolute !important; visibility:hidden !important; pointer-events:none !important; }
 .neko-workspace-rail-controls { display:flex; flex-direction:column; gap:10px; padding-top:14px; }
+.neko-qq-page { position:fixed; z-index:59; inset:var(--neko-titlebar-height,0px) 0 0 var(--neko-rail-width,64px); display:flex; flex-direction:column; gap:16px; padding:clamp(12px,3vw,28px); box-sizing:border-box; background:var(--dsw-alias-bg-base,#edf3f8); color:var(--dsw-alias-label-primary,#263750); outline:none; }
+.neko-qq-page[hidden] { display:none; }
+.neko-qq-page h1 { margin:0; font-size:20px; line-height:1.4; }
+.neko-qq-page .blw-qq-chat { flex:1; height:auto; min-height:0; }
 .neko-room-entry, .neko-room-workspace { font-size:21px; line-height:1; }
 .neko-room-entry[aria-pressed="true"], .neko-room-workspace[aria-pressed="true"] { background:var(--nws-hover); color:#396c9f; }
 body[data-neko-workspace-shell] [data-neko-room-masked] { visibility:hidden !important; }
@@ -190,10 +194,6 @@ body[data-neko-workbench-edition="office"] .neko-companion-dock[data-neko-office
 .neko-workspace-modal h2 { font-size:19px; letter-spacing:.02em; margin:0; }
 .neko-workspace-modal h3 { font-size:12px; letter-spacing:.04em; color:var(--nws-muted); margin:21px 0 10px; }
 .neko-workspace-modal button.neko-workspace-modal__close { display:grid; place-items:center; width:32px; height:32px; padding:0; border:0; border-radius:10px; color:var(--nws-muted); background:transparent; font-size:22px; line-height:1; }
-.neko-office-choices { display:flex; flex-wrap:wrap; gap:8px; }
-.neko-office-choice { flex:1 1 88px; min-width:0; display:grid; justify-items:center; gap:7px; padding:14px 8px !important; }
-.neko-office-choice img { width:45px; height:45px; object-fit:contain; }
-.neko-office-choice[aria-pressed="true"] { outline:2px solid #4c89ad; outline-offset:-2px; }
 .neko-workspace-palettes { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:18px; }
 .neko-workspace-palettes button { padding:4px; }
 .neko-workspace-palettes img { width:35px; height:35px; object-fit:contain; }
