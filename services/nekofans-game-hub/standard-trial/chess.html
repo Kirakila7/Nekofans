@@ -1,0 +1,1458 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<meta name="nekofans-game" content="nekofans-chess">
+<meta name="nekofans-game-version" content="0.1.0">
+<title>Nekofans 双人国际象棋 · 测试版 v0.1.0</title>
+<style>
+:root {
+  color-scheme: light;
+  --paper: #f8f1e7;
+  --paper-deep: #efe2d2;
+  --ink: #33261c;
+  --ink-soft: #6d5949;
+  --line: #e3d2bd;
+  --accent: #c45f3f;
+  --accent-soft: #f6d9cc;
+  --gold: #f0c453;
+  --light-square: #f2e2c8;
+  --dark-square: #b5825b;
+  --white-piece: #fffaf0;
+  --black-piece: #2b1d14;
+  --shadow: 0 10px 30px rgba(78, 52, 33, 0.13);
+  --radius: 18px;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+html, body { margin: 0; min-height: 100%; }
+
+body {
+  font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 12% 8%, rgba(240, 196, 83, 0.22), transparent 34%),
+    radial-gradient(circle at 88% 0%, rgba(196, 95, 63, 0.16), transparent 30%),
+    linear-gradient(160deg, #fbf5ec 0%, var(--paper) 46%, #f0e3d2 100%);
+  padding: clamp(10px, 2vw, 26px);
+}
+
+.app { max-width: 1120px; margin: 0 auto; }
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.brand { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.brand h1 { font-size: clamp(19px, 2.4vw, 27px); margin: 0; letter-spacing: 0.02em; }
+.brand .cat { font-size: 22px; }
+.version { color: var(--ink-soft); font-size: 12px; letter-spacing: 0.04em; }
+
+.badge {
+  border: 1px solid var(--line);
+  background: rgba(255, 252, 247, 0.75);
+  color: var(--ink-soft);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.badge.local { border-color: #e6c98f; color: #8a6320; background: #fdf3d9; }
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  gap: clamp(14px, 2vw, 24px);
+  align-items: start;
+}
+
+.board-card {
+  background: rgba(255, 252, 247, 0.72);
+  border: 1px solid rgba(227, 210, 189, 0.9);
+  border-radius: calc(var(--radius) + 6px);
+  box-shadow: var(--shadow);
+  padding: clamp(12px, 1.6vw, 20px);
+}
+
+.player-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 2px 4px 8px;
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+
+.player-row.bottom { padding: 8px 4px 2px; }
+
+.player-name { display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--ink); }
+.side-dot { width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(51, 38, 28, 0.45); }
+.side-dot.w { background: var(--white-piece); }
+.side-dot.b { background: var(--black-piece); }
+
+.seat-tag { font-size: 12px; border-radius: 999px; padding: 2px 9px; border: 1px solid var(--line); background: #fffaf2; }
+.seat-tag.mine { border-color: #e0b25e; background: #fdf1cf; color: #7d5a1c; }
+.seat-tag.waiting { opacity: 0.65; }
+
+.board-shell { position: relative; width: 100%; }
+
+.board {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  width: min(100%, 640px);
+  margin: 0 auto;
+  aspect-ratio: 1 / 1;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid #8d6747;
+  box-shadow: inset 0 0 0 6px rgba(58, 38, 24, 0.18), 0 12px 24px rgba(74, 47, 26, 0.18);
+  touch-action: manipulation;
+  user-select: none;
+}
+
+.square {
+  position: relative;
+  appearance: none;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: clamp(24px, 6.1vw, 52px);
+  line-height: 1;
+  transition: background-color 120ms ease, box-shadow 120ms ease;
+}
+
+.board[data-locked="true"] .square { cursor: default; }
+
+.square.light { background: var(--light-square); }
+.square.dark { background: var(--dark-square); }
+
+.square.last::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(240, 196, 83, 0.38);
+  box-shadow: inset 0 0 0 2px rgba(154, 112, 30, 0.35);
+}
+
+.square.selected { box-shadow: inset 0 0 0 4px var(--accent); }
+
+.square.target::after {
+  content: "";
+  position: absolute;
+  width: 26%;
+  height: 26%;
+  border-radius: 50%;
+  background: rgba(62, 42, 26, 0.32);
+}
+
+.square.target.capture::after {
+  width: 82%;
+  height: 82%;
+  border-radius: 50%;
+  background: transparent;
+  border: 5px solid rgba(196, 95, 63, 0.72);
+}
+
+.square.check {
+  background-image: radial-gradient(circle, rgba(196, 63, 45, 0.78), rgba(196, 63, 45, 0) 70%);
+}
+
+.square:focus-visible { outline: 3px solid #2a6fdb; outline-offset: -3px; z-index: 2; }
+
+.piece {
+  position: relative;
+  z-index: 1;
+  display: block;
+  transform: translateY(-2%);
+  filter: drop-shadow(0 2px 1px rgba(40, 24, 12, 0.35));
+}
+.piece.white { color: var(--white-piece); -webkit-text-stroke: 1.4px #3a2a1e; }
+.piece.black { color: var(--black-piece); -webkit-text-stroke: 0.6px #120c08; }
+
+.file-label, .rank-label {
+  position: absolute;
+  font-size: 9px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-weight: 700;
+  opacity: 0.48;
+  pointer-events: none;
+  letter-spacing: 0;
+}
+.file-label { right: 4px; bottom: 2px; }
+.rank-label { left: 4px; top: 2px; }
+.light .file-label, .light .rank-label { color: #6b4c30; }
+.dark .file-label, .dark .rank-label { color: #f8ebd6; }
+
+.promotion {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(43, 29, 20, 0.44);
+  border-radius: 14px;
+  z-index: 5;
+}
+
+.promotion-card {
+  background: #fffbf4;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px 16px;
+  text-align: center;
+  box-shadow: 0 14px 30px rgba(30, 18, 10, 0.28);
+  max-width: 86%;
+}
+.promotion-card p { margin: 0 0 10px; font-size: 13px; color: var(--ink-soft); }
+.promotion-choices { display: flex; gap: 8px; justify-content: center; }
+.promotion-choices button {
+  width: 54px;
+  height: 54px;
+  font-size: 32px;
+  line-height: 1;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: #fdf5e8;
+  cursor: pointer;
+}
+.promotion-choices button:hover { background: var(--accent-soft); }
+.cancel-link { margin-top: 10px; background: none; border: 0; color: var(--ink-soft); font-size: 12px; cursor: pointer; text-decoration: underline; }
+
+.result-banner {
+  margin: 10px auto 0;
+  width: min(100%, 640px);
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-weight: 700;
+  text-align: center;
+  background: linear-gradient(120deg, #fbe7b0, #f6d0a8);
+  border: 1px solid #e1b36a;
+  color: #5c3a12;
+}
+.result-banner.draw { background: linear-gradient(120deg, #e3eef1, #d9e4ea); border-color: #b7c8d2; color: #354a56; }
+
+.hint { margin: 10px 2px 0; font-size: 13px; color: var(--ink-soft); min-height: 18px; }
+
+.side { display: grid; gap: 14px; }
+
+.card {
+  background: rgba(255, 252, 247, 0.8);
+  border: 1px solid rgba(227, 210, 189, 0.9);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 14px 16px;
+}
+.card h2 { font-size: 14px; margin: 0 0 9px; letter-spacing: 0.04em; color: var(--ink); }
+.card p { margin: 0 0 8px; font-size: 13px; line-height: 1.55; }
+.small { color: var(--ink-soft); font-size: 12px !important; }
+.turn-line { font-weight: 700; font-size: 15px !important; }
+.check-line { color: #a9382a; font-weight: 700; }
+.rule-line { color: var(--ink-soft); }
+.warn { color: #8a4a1f; background: #fdf0dc; border: 1px solid #eccb9a; border-radius: 10px; padding: 8px 10px; font-size: 12px; }
+
+.moves {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  max-height: 240px;
+  overflow: auto;
+  border-radius: 10px;
+  background: #fbf4e8;
+  border: 1px solid #ecdcc6;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12.5px;
+  min-height: 54px;
+}
+.moves li { display: grid; grid-template-columns: 34px 1fr 1fr; gap: 6px; padding: 2px 0; color: var(--ink-soft); }
+.moves .num { color: #a48668; }
+.moves .mv { color: var(--ink); }
+
+.actions button {
+  font: inherit;
+  font-size: 13px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: #fff8ec;
+  color: var(--ink);
+  padding: 8px 12px;
+  cursor: pointer;
+}
+.actions button:hover { background: var(--accent-soft); }
+
+.foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+  padding: 0 4px;
+  color: var(--ink-soft);
+  font-size: 11px;
+}
+
+@media (max-width: 860px) {
+  .layout { grid-template-columns: 1fr; }
+  .board { width: 100%; }
+  .side { order: 2; }
+  .square { font-size: clamp(24px, 11vw, 54px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}
+</style>
+</head>
+<body data-game="nekofans-chess" data-version="0.1.0">
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <span class="cat" aria-hidden="true">🐾</span>
+      <h1>Nekofans 双人国际象棋</h1>
+      <span class="version">v0.1.0 · 首轮朋友联机测试</span>
+    </div>
+    <div id="modeBadge" class="badge">房间模式</div>
+  </header>
+
+  <main class="layout">
+    <section class="board-card" aria-label="棋盘区域">
+      <div class="player-row" id="topPlayerRow">
+        <span class="player-name"><span class="side-dot b" aria-hidden="true"></span><span id="topName">黑方</span></span>
+        <span class="seat-tag" id="topTag">对手</span>
+      </div>
+      <div class="board-shell">
+        <div id="board" class="board" role="grid" aria-label="国际象棋棋盘" data-locked="false"></div>
+        <div id="promotion" class="promotion" hidden>
+          <div class="promotion-card">
+            <p>选择升变棋子</p>
+            <div class="promotion-choices" id="promotionChoices"></div>
+            <button type="button" class="cancel-link" id="promotionCancel">取消</button>
+          </div>
+        </div>
+      </div>
+      <div id="resultBanner" class="result-banner" role="status" hidden></div>
+      <div class="player-row bottom" id="bottomPlayerRow">
+        <span class="player-name"><span class="side-dot w" aria-hidden="true"></span><span id="bottomName">白方</span></span>
+        <span class="seat-tag" id="bottomTag">你</span>
+      </div>
+      <p class="hint" id="hint"></p>
+    </section>
+
+    <aside class="side">
+      <section class="card" aria-label="对局状态">
+        <h2>对局状态</h2>
+        <p id="turnLine" class="turn-line">准备中…</p>
+        <p id="checkLine" class="check-line" hidden>将军！</p>
+        <ol id="moveList" class="moves" aria-label="走子记录"></ol>
+        <div class="actions"><button type="button" id="resetBtn" hidden>重新开始（仅本地预览）</button></div>
+      </section>
+
+      <section class="card" aria-label="私密规则状态">
+        <h2>私密规则</h2>
+        <p id="ruleLine" class="rule-line">读取中…</p>
+        <p class="warn">本次只执行标准国际象棋规则；秘密规则与 DeepSeek 私密执行尚未开放。</p>
+      </section>
+
+      <section class="card" aria-label="联机同步状态">
+        <h2>联机同步</h2>
+        <p id="syncLine" class="small">等待房间状态…</p>
+        <p id="seatLine" class="small"></p>
+      </section>
+    </aside>
+  </main>
+
+  <footer class="foot">
+    <span>公开行动为 UCI 坐标（例：e2e4，升变 e7e8q），每方行动不超过 128 字符。</span>
+    <span>nekofans-chess v0.1.0 · 标准规则 · 私密规则未接通</span>
+  </footer>
+</div>
+<script>
+/*
+ * Nekofans 双人国际象棋 · 规则内核（v0.1.0）
+ *
+ * 纯函数、无 DOM、无网络、无文件系统访问。浏览器构建会把本文件原样内联进
+ * nekofans-chess.html，因此这里刻意使用经典脚本 + UMD 包装：
+ *   - 浏览器内联：挂到 globalThis.NekofansChess
+ *   - node:test：通过 createRequire 加载
+ *
+ * 公开行动日志的确定性重放是本游戏“双端一致”的唯一依据：
+ * 双方都从空棋盘开始，按相同顺序重放公共行动，任何非法/越序/格式错误的
+ * 行动都被同样地忽略。规则内核不保存任何私密数据。
+ */
+(function (root, factory) {
+  const api = factory();
+  if (typeof module === 'object' && module && module.exports) module.exports = api;
+  else root.NekofansChess = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this, function () {
+  'use strict';
+
+  const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+  const FILES = 'abcdefgh';
+  const UCI_PATTERN = /^[a-h][1-8][a-h][1-8][qrbn]?$/;
+
+  // 王车易位权利位：白王翼、白后翼、黑王翼、黑后翼
+  const CASTLE_WK = 1;
+  const CASTLE_WQ = 2;
+  const CASTLE_BK = 4;
+  const CASTLE_BQ = 8;
+
+  const KNIGHT_DELTAS = [
+    [1, 2], [2, 1], [2, -1], [1, -2],
+    [-1, -2], [-2, -1], [-2, 1], [-1, 2],
+  ];
+  const BISHOP_DIRS = [[1, 1], [1, -1], [-1, 1], [-1, -1]];
+  const ROOK_DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  const KING_DIRS = [[1, 1], [1, 0], [1, -1], [0, 1], [0, -1], [-1, 1], [-1, 0], [-1, -1]];
+
+  const PIECE_NAMES = {
+    P: '兵', N: '马', B: '象', R: '车', Q: '后', K: '王',
+    p: '兵', n: '马', b: '象', r: '车', q: '后', k: '王',
+  };
+
+  function fileOf(index) { return index & 7; }
+  function rankOf(index) { return index >> 3; }
+  function squareIndex(name) {
+    if (typeof name !== 'string' || !/^[a-h][1-8]$/.test(name)) return -1;
+    return (Number(name[1]) - 1) * 8 + FILES.indexOf(name[0]);
+  }
+  function squareName(index) {
+    if (!Number.isInteger(index) || index < 0 || index > 63) return null;
+    return FILES[fileOf(index)] + String(rankOf(index) + 1);
+  }
+  function colorOf(piece) { return piece === piece.toUpperCase() ? 'w' : 'b'; }
+  function otherColor(color) { return color === 'w' ? 'b' : 'w'; }
+  function inside(file, rank) { return file >= 0 && file < 8 && rank >= 0 && rank < 8; }
+
+  function emptyBoard() { return new Array(64).fill(null); }
+
+  function createInitialState() { return parseFen(START_FEN); }
+
+  function parseFen(fen) {
+    if (typeof fen !== 'string') throw new Error('FEN must be a string');
+    const fields = fen.trim().split(/\s+/);
+    if (fields.length < 4) throw new Error('FEN must have at least 4 fields');
+    const [placement, turn, castlingText, epText, halfmoveText, fullmoveText] = fields;
+    if (turn !== 'w' && turn !== 'b') throw new Error('invalid FEN turn');
+    const board = emptyBoard();
+    let rank = 7;
+    let file = 0;
+    for (const ch of placement) {
+      if (ch === '/') { rank -= 1; file = 0; continue; }
+      if (/[1-8]/.test(ch)) { file += Number(ch); continue; }
+      if (!/[pnbrqkPNBRQK]/.test(ch)) throw new Error('invalid FEN piece');
+      if (!inside(file, rank)) throw new Error('invalid FEN placement');
+      board[rank * 8 + file] = ch;
+      file += 1;
+    }
+    let castling = 0;
+    if (castlingText.includes('K')) castling |= CASTLE_WK;
+    if (castlingText.includes('Q')) castling |= CASTLE_WQ;
+    if (castlingText.includes('k')) castling |= CASTLE_BK;
+    if (castlingText.includes('q')) castling |= CASTLE_BQ;
+    const ep = epText && epText !== '-' ? squareIndex(epText) : -1;
+    if (epText && epText !== '-' && ep < 0) throw new Error('invalid FEN en passant');
+    return {
+      board,
+      turn,
+      castling,
+      ep,
+      halfmove: Math.max(0, Number(halfmoveText) || 0),
+      fullmove: Math.max(1, Number(fullmoveText) || 1),
+      // 之前出现过的局面键（不含当前局面）；用于三次/五次重复判定。
+      history: [],
+    };
+  }
+
+  function toFen(state) {
+    const rows = [];
+    for (let rank = 7; rank >= 0; rank -= 1) {
+      let row = '';
+      let gap = 0;
+      for (let file = 0; file < 8; file += 1) {
+        const piece = state.board[rank * 8 + file];
+        if (!piece) { gap += 1; continue; }
+        if (gap) { row += String(gap); gap = 0; }
+        row += piece;
+      }
+      if (gap) row += String(gap);
+      rows.push(row);
+    }
+    let castling = '';
+    if (state.castling & CASTLE_WK) castling += 'K';
+    if (state.castling & CASTLE_WQ) castling += 'Q';
+    if (state.castling & CASTLE_BK) castling += 'k';
+    if (state.castling & CASTLE_BQ) castling += 'q';
+    return [
+      rows.join('/'),
+      state.turn,
+      castling || '-',
+      state.ep >= 0 ? squareName(state.ep) : '-',
+      String(state.halfmove),
+      String(state.fullmove),
+    ].join(' ');
+  }
+
+  function positionKey(state) {
+    return state.board.map((piece) => piece || '.').join('') +
+      '|' + state.turn + '|' + state.castling + '|' + state.ep;
+  }
+
+  function repetitionCount(state) {
+    const key = positionKey(state);
+    let count = 1;
+    for (const previous of state.history) if (previous === key) count += 1;
+    return count;
+  }
+
+  function kingSquare(board, color) {
+    const king = color === 'w' ? 'K' : 'k';
+    for (let index = 0; index < 64; index += 1) if (board[index] === king) return index;
+    return -1;
+  }
+
+  function isSquareAttacked(board, target, byColor) {
+    if (target < 0) return false;
+    const tf = fileOf(target);
+    const tr = rankOf(target);
+
+    // 兵（白兵向上攻击 rank+1，所以攻击者位于目标 rank-1）
+    const pawn = byColor === 'w' ? 'P' : 'p';
+    const pawnRank = byColor === 'w' ? tr - 1 : tr + 1;
+    if (pawnRank >= 0 && pawnRank < 8) {
+      for (const df of [-1, 1]) {
+        const file = tf + df;
+        if (file >= 0 && file < 8 && board[pawnRank * 8 + file] === pawn) return true;
+      }
+    }
+
+    // 马
+    const knight = byColor === 'w' ? 'N' : 'n';
+    for (const [df, dr] of KNIGHT_DELTAS) {
+      const file = tf + df;
+      const rank = tr + dr;
+      if (inside(file, rank) && board[rank * 8 + file] === knight) return true;
+    }
+
+    // 王
+    const king = byColor === 'w' ? 'K' : 'k';
+    for (const [df, dr] of KING_DIRS) {
+      const file = tf + df;
+      const rank = tr + dr;
+      if (inside(file, rank) && board[rank * 8 + file] === king) return true;
+    }
+
+    // 车 / 后（直线）
+    const rook = byColor === 'w' ? 'R' : 'r';
+    const queen = byColor === 'w' ? 'Q' : 'q';
+    for (const [df, dr] of ROOK_DIRS) {
+      let file = tf + df;
+      let rank = tr + dr;
+      while (inside(file, rank)) {
+        const piece = board[rank * 8 + file];
+        if (piece) {
+          if (piece === rook || piece === queen) return true;
+          break;
+        }
+        file += df;
+        rank += dr;
+      }
+    }
+
+    // 象 / 后（斜线）
+    const bishop = byColor === 'w' ? 'B' : 'b';
+    for (const [df, dr] of BISHOP_DIRS) {
+      let file = tf + df;
+      let rank = tr + dr;
+      while (inside(file, rank)) {
+        const piece = board[rank * 8 + file];
+        if (piece) {
+          if (piece === bishop || piece === queen) return true;
+          break;
+        }
+        file += df;
+        rank += dr;
+      }
+    }
+
+    return false;
+  }
+
+  function pushMove(moves, move) { moves.push(move); }
+
+  function addPawnMoves(moves, state, from, to, color, promotionRank, extra) {
+    const move = {
+      from,
+      to,
+      piece: color === 'w' ? 'P' : 'p',
+      captured: extra && extra.captured ? extra.captured : null,
+      promotion: null,
+      flags: (extra && extra.flags) || {},
+    };
+    if (rankOf(to) === promotionRank) {
+      for (const promotion of ['q', 'r', 'b', 'n']) pushMove(moves, { ...move, promotion });
+    } else {
+      pushMove(moves, move);
+    }
+  }
+
+  function pseudoMoves(state, color) {
+    const moves = [];
+    const board = state.board;
+    const direction = color === 'w' ? 1 : -1;
+    const startRank = color === 'w' ? 1 : 6;
+    const promotionRank = color === 'w' ? 7 : 0;
+
+    for (let from = 0; from < 64; from += 1) {
+      const piece = board[from];
+      if (!piece || colorOf(piece) !== color) continue;
+      const type = piece.toUpperCase();
+      const file = fileOf(from);
+      const rank = rankOf(from);
+
+      if (type === 'P') {
+        const oneRank = rank + direction;
+        const one = oneRank * 8 + file;
+        if (inside(file, oneRank) && !board[one]) {
+          addPawnMoves(moves, state, from, one, color, promotionRank);
+          const twoRank = rank + direction * 2;
+          const two = twoRank * 8 + file;
+          if (rank === startRank && !board[two]) {
+            addPawnMoves(moves, state, from, two, color, promotionRank, {
+              flags: { doublePush: true },
+            });
+          }
+        }
+        for (const df of [-1, 1]) {
+          const targetFile = file + df;
+          if (!inside(targetFile, oneRank)) continue;
+          const to = oneRank * 8 + targetFile;
+          const target = board[to];
+          if (target && colorOf(target) !== color) {
+            addPawnMoves(moves, state, from, to, color, promotionRank, { captured: target });
+          } else if (!target && to === state.ep) {
+            const captured = color === 'w' ? 'p' : 'P';
+            addPawnMoves(moves, state, from, to, color, promotionRank, {
+              captured,
+              flags: { enPassant: true },
+            });
+          }
+        }
+        continue;
+      }
+
+      if (type === 'N') {
+        for (const [df, dr] of KNIGHT_DELTAS) {
+          const targetFile = file + df;
+          const targetRank = rank + dr;
+          if (!inside(targetFile, targetRank)) continue;
+          const to = targetRank * 8 + targetFile;
+          const target = board[to];
+          if (target && colorOf(target) === color) continue;
+          pushMove(moves, { from, to, piece, captured: target || null, promotion: null, flags: {} });
+        }
+        continue;
+      }
+
+      if (type === 'B' || type === 'R' || type === 'Q') {
+        const dirs = type === 'B' ? BISHOP_DIRS : type === 'R' ? ROOK_DIRS : BISHOP_DIRS.concat(ROOK_DIRS);
+        for (const [df, dr] of dirs) {
+          let targetFile = file + df;
+          let targetRank = rank + dr;
+          while (inside(targetFile, targetRank)) {
+            const to = targetRank * 8 + targetFile;
+            const target = board[to];
+            if (target && colorOf(target) === color) break;
+            pushMove(moves, { from, to, piece, captured: target || null, promotion: null, flags: {} });
+            if (target) break;
+            targetFile += df;
+            targetRank += dr;
+          }
+        }
+        continue;
+      }
+
+      if (type === 'K') {
+        for (const [df, dr] of KING_DIRS) {
+          const targetFile = file + df;
+          const targetRank = rank + dr;
+          if (!inside(targetFile, targetRank)) continue;
+          const to = targetRank * 8 + targetFile;
+          const target = board[to];
+          if (target && colorOf(target) === color) continue;
+          pushMove(moves, { from, to, piece, captured: target || null, promotion: null, flags: {} });
+        }
+
+        const opponent = otherColor(color);
+        if (color === 'w' && from === 4) {
+          if ((state.castling & CASTLE_WK) && board[7] === 'R' && !board[5] && !board[6] &&
+              !isSquareAttacked(board, 4, opponent) && !isSquareAttacked(board, 5, opponent) &&
+              !isSquareAttacked(board, 6, opponent)) {
+            pushMove(moves, { from: 4, to: 6, piece, captured: null, promotion: null, flags: { castle: 'K' } });
+          }
+          if ((state.castling & CASTLE_WQ) && board[0] === 'R' && !board[1] && !board[2] && !board[3] &&
+              !isSquareAttacked(board, 4, opponent) && !isSquareAttacked(board, 3, opponent) &&
+              !isSquareAttacked(board, 2, opponent)) {
+            pushMove(moves, { from: 4, to: 2, piece, captured: null, promotion: null, flags: { castle: 'Q' } });
+          }
+        }
+        if (color === 'b' && from === 60) {
+          if ((state.castling & CASTLE_BK) && board[63] === 'r' && !board[61] && !board[62] &&
+              !isSquareAttacked(board, 60, opponent) && !isSquareAttacked(board, 61, opponent) &&
+              !isSquareAttacked(board, 62, opponent)) {
+            pushMove(moves, { from: 60, to: 62, piece, captured: null, promotion: null, flags: { castle: 'K' } });
+          }
+          if ((state.castling & CASTLE_BQ) && board[56] === 'r' && !board[57] && !board[58] && !board[59] &&
+              !isSquareAttacked(board, 60, opponent) && !isSquareAttacked(board, 59, opponent) &&
+              !isSquareAttacked(board, 58, opponent)) {
+            pushMove(moves, { from: 60, to: 58, piece, captured: null, promotion: null, flags: { castle: 'Q' } });
+          }
+        }
+      }
+    }
+
+    return moves;
+  }
+
+  function applyMoveRaw(state, move) {
+    const board = state.board.slice();
+    const color = state.turn;
+    const piece = board[move.from];
+    const target = board[move.to];
+    let captured = target;
+    let castling = state.castling;
+    let ep = -1;
+    let halfmove = state.halfmove + 1;
+
+    board[move.from] = null;
+    if (move.flags && move.flags.enPassant) {
+      const capturedSquare = move.to - (color === 'w' ? 8 : -8);
+      captured = board[capturedSquare];
+      board[capturedSquare] = null;
+    }
+    board[move.to] = move.promotion
+      ? (color === 'w' ? move.promotion.toUpperCase() : move.promotion)
+      : piece;
+
+    if (piece.toUpperCase() === 'P' || captured) halfmove = 0;
+    if (move.flags && move.flags.doublePush) ep = (move.from + move.to) / 2;
+
+    if (move.flags && move.flags.castle === 'K') {
+      const rookFrom = color === 'w' ? 7 : 63;
+      const rookTo = color === 'w' ? 5 : 61;
+      board[rookTo] = board[rookFrom];
+      board[rookFrom] = null;
+    } else if (move.flags && move.flags.castle === 'Q') {
+      const rookFrom = color === 'w' ? 0 : 56;
+      const rookTo = color === 'w' ? 3 : 59;
+      board[rookTo] = board[rookFrom];
+      board[rookFrom] = null;
+    }
+
+    if (piece === 'K') castling &= ~(CASTLE_WK | CASTLE_WQ);
+    if (piece === 'k') castling &= ~(CASTLE_BK | CASTLE_BQ);
+    if (move.from === 7 || move.to === 7) castling &= ~CASTLE_WK;
+    if (move.from === 0 || move.to === 0) castling &= ~CASTLE_WQ;
+    if (move.from === 63 || move.to === 63) castling &= ~CASTLE_BK;
+    if (move.from === 56 || move.to === 56) castling &= ~CASTLE_BQ;
+
+    return {
+      board,
+      turn: otherColor(color),
+      castling,
+      ep,
+      halfmove,
+      fullmove: state.fullmove + (color === 'b' ? 1 : 0),
+      history: state.history,
+    };
+  }
+
+  function applyMove(state, move) {
+    const next = applyMoveRaw(state, move);
+    next.history = state.history.concat([positionKey(state)]);
+    return next;
+  }
+
+  function legalMoves(state) {
+    const color = state.turn;
+    const opponent = otherColor(color);
+    const result = [];
+    for (const move of pseudoMoves(state, color)) {
+      const next = applyMoveRaw(state, move);
+      const king = kingSquare(next.board, color);
+      if (king < 0) continue;
+      if (!isSquareAttacked(next.board, king, opponent)) result.push(move);
+    }
+    return result;
+  }
+
+  function insufficientMaterial(board) {
+    let pieces = 0;
+    const minors = [];
+    for (let index = 0; index < 64; index += 1) {
+      const piece = board[index];
+      if (!piece) continue;
+      const type = piece.toUpperCase();
+      if (type === 'K') continue;
+      if (type === 'P' || type === 'R' || type === 'Q') return false;
+      pieces += 1;
+      minors.push({
+        color: colorOf(piece),
+        type,
+        squareColor: (fileOf(index) + rankOf(index)) % 2,
+      });
+    }
+    if (pieces === 0) return true;
+    if (pieces === 1) return true;
+    if (pieces === 2 && minors[0].type === 'B' && minors[1].type === 'B' &&
+        minors[0].color !== minors[1].color && minors[0].squareColor === minors[1].squareColor) {
+      return true;
+    }
+    return false;
+  }
+
+  function evaluate(state, precomputedMoves) {
+    const color = state.turn;
+    const opponent = otherColor(color);
+    const king = kingSquare(state.board, color);
+    const inCheck = king >= 0 && isSquareAttacked(state.board, king, opponent);
+    const moves = precomputedMoves || legalMoves(state);
+
+    if (moves.length === 0) {
+      return {
+        over: true,
+        result: inCheck ? 'checkmate' : 'stalemate',
+        winner: inCheck ? opponent : null,
+        reason: inCheck ? 'checkmate' : 'stalemate',
+        inCheck,
+        legalMoves: moves,
+        repetition: repetitionCount(state),
+      };
+    }
+
+    const repetition = repetitionCount(state);
+    let drawReason = null;
+    if (insufficientMaterial(state.board)) drawReason = 'insufficient-material';
+    else if (state.halfmove >= 150) drawReason = 'seventy-five-move';
+    else if (repetition >= 5) drawReason = 'fivefold-repetition';
+    else if (state.halfmove >= 100) drawReason = 'fifty-move';
+    else if (repetition >= 3) drawReason = 'threefold-repetition';
+
+    return {
+      over: Boolean(drawReason),
+      result: drawReason ? 'draw' : null,
+      winner: null,
+      reason: drawReason,
+      inCheck,
+      legalMoves: moves,
+      repetition,
+    };
+  }
+
+  function moveToUci(move) {
+    return squareName(move.from) + squareName(move.to) + (move.promotion || '');
+  }
+
+  function moveLabel(move) {
+    if (move.flags && move.flags.castle === 'K') return 'O-O';
+    if (move.flags && move.flags.castle === 'Q') return 'O-O-O';
+    const separator = move.captured ? 'x' : '-';
+    return squareName(move.from) + separator + squareName(move.to) +
+      (move.promotion ? '=' + move.promotion.toUpperCase() : '');
+  }
+
+  function normalizeActionEntry(raw) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+    const seat = raw.seat;
+    if (seat !== 0 && seat !== 1) return null;
+    if (typeof raw.action !== 'string') return null;
+    const action = raw.action.trim().toLowerCase();
+    if (!action || action.length > 128 || !UCI_PATTERN.test(action)) return null;
+    return { seat, action, version: Number.isInteger(raw.version) ? raw.version : null };
+  }
+
+  /**
+   * 根据完整公开行动序列确定性重放。
+   * entries: [{seat, action, version?}, ...]，seat 由房间服务端标注。
+   * 任何格式错误、越序、非法的行动都会被双方同样跳过，不改变棋盘。
+   */
+  function replayActions(entries, options) {
+    const maxActions = Math.min((options && options.maxActions) || 1000, 1000);
+    let state = createInitialState();
+    let moves = legalMoves(state);
+    let status = evaluate(state, moves);
+    const applied = [];
+    const rejected = [];
+
+    if (entries !== undefined && entries !== null && !Array.isArray(entries)) {
+      return { state, status, applied, rejected: [{ index: -1, reason: 'invalid-action-list' }] };
+    }
+    const list = Array.isArray(entries) ? entries : [];
+
+    for (let index = 0; index < list.length; index += 1) {
+      if (applied.length >= maxActions) {
+        rejected.push({ index, reason: 'action-limit' });
+        continue;
+      }
+      if (status.over) { rejected.push({ index, reason: 'game-over' }); continue; }
+      const entry = normalizeActionEntry(list[index]);
+      if (!entry) { rejected.push({ index, reason: 'malformed' }); continue; }
+      const expectedSeat = state.turn === 'w' ? 0 : 1;
+      if (entry.seat !== expectedSeat) { rejected.push({ index, reason: 'out-of-turn' }); continue; }
+      const move = moves.find((candidate) => moveToUci(candidate) === entry.action);
+      if (!move) { rejected.push({ index, reason: 'illegal-move' }); continue; }
+      const next = applyMove(state, move);
+      applied.push({
+        index,
+        seat: entry.seat,
+        action: entry.action,
+        move,
+        label: moveLabel(move),
+        ply: applied.length + 1,
+      });
+      state = next;
+      moves = legalMoves(state);
+      status = evaluate(state, moves);
+    }
+
+    return { state, status, applied, rejected };
+  }
+
+  function perft(state, depth) {
+    if (depth <= 0) return 1;
+    const moves = legalMoves(state);
+    if (depth === 1) return moves.length;
+    let total = 0;
+    for (const move of moves) {
+      total += perft(applyMoveRaw(state, move), depth - 1);
+    }
+    return total;
+  }
+
+  function describePiece(piece) {
+    if (!piece) return '';
+    return (colorOf(piece) === 'w' ? '白' : '黑') + PIECE_NAMES[piece];
+  }
+
+  return {
+    START_FEN,
+    createInitialState,
+    parseFen,
+    toFen,
+    positionKey,
+    repetitionCount,
+    squareIndex,
+    squareName,
+    fileOf,
+    rankOf,
+    kingSquare,
+    isSquareAttacked,
+    legalMoves,
+    applyMove,
+    evaluate,
+    insufficientMaterial,
+    moveToUci,
+    moveLabel,
+    replayActions,
+    perft,
+    describePiece,
+  };
+});
+</script>
+<script>
+/*
+ * Nekofans 双人国际象棋 · 浏览器界面（v0.1.0）
+ *
+ * 只使用 NekofansChess 的纯规则函数，通过 nekofans postMessage 协议与宿主
+ * 房间页同步。不读取规则文本、不写任何浏览器本地存储、不读取网页 cookie、
+ * 不加载任何外部资源。
+ */
+(function () {
+  'use strict';
+
+  const Chess = globalThis.NekofansChess;
+  const $ = (id) => document.getElementById(id);
+  if (!Chess) {
+    const board = $('board');
+    if (board) board.textContent = '规则内核加载失败，请重新载入页面。';
+    return;
+  }
+
+  const EMBEDDED = window.parent !== window;
+  const MAX_ACTIONS = 1000;
+  const PIECE_GLYPHS = { k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟' };
+  const PIECE_LABELS = { k: '王', q: '后', r: '车', b: '象', n: '马', p: '兵' };
+  const PROMOTION_ORDER = ['q', 'r', 'b', 'n'];
+  const SIDE_LABELS = { w: '白方', b: '黑方' };
+
+  const state = {
+    embedded: EMBEDDED,
+    seat: null,
+    ready: false,
+    actions: [],
+    lastActionCount: 0,
+    lastSyncAt: null,
+    receivedState: false,
+    selected: null,
+    promotion: null,
+    pending: null,
+    pendingTimer: null,
+    view: null,
+  };
+
+  function isWhite(piece) { return piece === piece.toUpperCase(); }
+  function glyphOf(piece) {
+    if (!piece) return '';
+    return PIECE_GLYPHS[piece.toLowerCase()];
+  }
+  function pieceLabel(piece) {
+    if (!piece) return '空格';
+    return (isWhite(piece) ? '白' : '黑') + PIECE_LABELS[piece.toLowerCase()];
+  }
+  function seatOfColor(color) { return color === 'w' ? 0 : 1; }
+  function sideName(seat) { return seat === 0 ? '白方' : '黑方'; }
+  function safeText(value) { return typeof value === 'string' ? value : ''; }
+
+  function sanitizeActions(raw) {
+    if (!Array.isArray(raw)) return [];
+    const actions = [];
+    for (const item of raw.slice(0, MAX_ACTIONS)) {
+      if (!item || typeof item !== 'object') { actions.push(null); continue; }
+      actions.push({
+        seat: item.seat,
+        action: safeText(item.action),
+        version: item.version,
+      });
+    }
+    return actions;
+  }
+
+  function recompute() {
+    state.view = Chess.replayActions(state.actions, { maxActions: MAX_ACTIONS });
+  }
+
+  function isMyTurn() {
+    if (!state.view) return false;
+    return state.seat === seatOfColor(state.view.state.turn);
+  }
+
+  function interactive() {
+    if (!state.view || state.view.status.over) return false;
+    if (!state.embedded) return true;
+    return Boolean(state.ready && state.seat !== null && !state.pending && isMyTurn());
+  }
+
+  function clearPending() {
+    state.pending = null;
+    if (state.pendingTimer) {
+      clearTimeout(state.pendingTimer);
+      state.pendingTimer = null;
+    }
+  }
+
+  function setPending(action) {
+    clearPending();
+    state.pending = action;
+    state.pendingTimer = setTimeout(() => {
+      if (state.pending === action) {
+        state.pending = null;
+        state.pendingTimer = null;
+        render();
+      }
+    }, 9000);
+  }
+
+  function resultText(status) {
+    if (status.result === 'checkmate') {
+      return '将死 · ' + SIDE_LABELS[status.winner] + '胜';
+    }
+    if (status.result === 'stalemate') return '和棋 · 逼和（无子可动）';
+    switch (status.reason) {
+      case 'insufficient-material': return '和棋 · 子力不足';
+      case 'fifty-move': return '和棋 · 五十回合规则';
+      case 'threefold-repetition': return '和棋 · 三次重复局面';
+      case 'seventy-five-move': return '和棋 · 七十五回合规则';
+      case 'fivefold-repetition': return '和棋 · 五次重复局面';
+      default: return '和棋';
+    }
+  }
+
+  function buildBoard() {
+    const boardEl = $('board');
+    const { state: gameState, status, applied } = state.view;
+    const lastMove = applied.length ? applied[applied.length - 1].move : null;
+    const checkSquare = status.inCheck
+      ? Chess.kingSquare(gameState.board, gameState.turn)
+      : -1;
+    const selectedMoves = state.selected === null
+      ? []
+      : status.legalMoves.filter((move) => move.from === state.selected);
+    const targets = new Map();
+    for (const move of selectedMoves) {
+      if (!targets.has(move.to)) targets.set(move.to, []);
+      targets.get(move.to).push(move);
+    }
+
+    const fragment = document.createDocumentFragment();
+    for (let rank = 7; rank >= 0; rank -= 1) {
+      for (let file = 0; file < 8; file += 1) {
+        const index = rank * 8 + file;
+        const square = Chess.squareName(index);
+        const piece = gameState.board[index];
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'square ' + ((file + rank) % 2 === 1 ? 'dark' : 'light');
+        button.dataset.square = square;
+        button.tabIndex = -1;
+        if (lastMove && (index === lastMove.from || index === lastMove.to)) button.classList.add('last');
+        if (state.selected === index) button.classList.add('selected');
+        if (targets.has(index)) {
+          button.classList.add('target');
+          if (piece || (targets.get(index)[0].flags && targets.get(index)[0].flags.enPassant)) {
+            button.classList.add('capture');
+          }
+        }
+        if (index === checkSquare) button.classList.add('check');
+
+        button.setAttribute('aria-label', square + ' ' + pieceLabel(piece));
+        if (piece) {
+          const glyph = document.createElement('span');
+          glyph.className = 'piece ' + (isWhite(piece) ? 'white' : 'black');
+          glyph.textContent = glyphOf(piece);
+          glyph.setAttribute('aria-hidden', 'true');
+          button.appendChild(glyph);
+        }
+        if (file === 0) {
+          const label = document.createElement('span');
+          label.className = 'rank-label';
+          label.textContent = String(rank + 1);
+          label.setAttribute('aria-hidden', 'true');
+          button.appendChild(label);
+        }
+        if (rank === 0) {
+          const label = document.createElement('span');
+          label.className = 'file-label';
+          label.textContent = square[0];
+          label.setAttribute('aria-hidden', 'true');
+          button.appendChild(label);
+        }
+        fragment.appendChild(button);
+      }
+    }
+    boardEl.replaceChildren(fragment);
+    boardEl.dataset.locked = interactive() ? 'false' : 'true';
+  }
+
+  function renderPromotion() {
+    const overlay = $('promotion');
+    const choices = $('promotionChoices');
+    if (!state.promotion || state.view.status.over) {
+      overlay.hidden = true;
+      choices.replaceChildren();
+      return;
+    }
+    const color = state.view.state.turn;
+    const fragment = document.createDocumentFragment();
+    for (const letter of PROMOTION_ORDER) {
+      const move = state.promotion.moves.find((candidate) => candidate.promotion === letter);
+      if (!move) continue;
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.setAttribute('aria-label', '升变为' + PIECE_LABELS[letter]);
+      const glyph = document.createElement('span');
+      glyph.className = 'piece ' + (color === 'w' ? 'white' : 'black');
+      glyph.textContent = PIECE_GLYPHS[letter];
+      glyph.setAttribute('aria-hidden', 'true');
+      button.appendChild(glyph);
+      button.addEventListener('click', () => submitMove(move));
+      fragment.appendChild(button);
+    }
+    choices.replaceChildren(fragment);
+    overlay.hidden = false;
+  }
+
+  function buildMoveList() {
+    const list = $('moveList');
+    const applied = state.view.applied;
+    const fragment = document.createDocumentFragment();
+    if (applied.length === 0) {
+      const empty = document.createElement('li');
+      empty.textContent = '尚无走子';
+      fragment.appendChild(empty);
+    } else {
+      for (let index = 0; index < applied.length; index += 2) {
+        const row = document.createElement('li');
+        const number = document.createElement('span');
+        number.className = 'num';
+        number.textContent = (index / 2 + 1) + '.';
+        const white = document.createElement('span');
+        white.className = 'mv';
+        white.textContent = applied[index] ? applied[index].label : '…';
+        const black = document.createElement('span');
+        black.className = 'mv';
+        black.textContent = applied[index + 1] ? applied[index + 1].label : '';
+        row.append(number, white, black);
+        fragment.appendChild(row);
+      }
+    }
+    list.replaceChildren(fragment);
+    list.scrollTop = list.scrollHeight;
+  }
+
+  function renderText() {
+    const { state: gameState, status, applied, rejected } = state.view;
+    const turnColor = gameState.turn;
+
+    $('modeBadge').textContent = state.embedded ? '房间模式 · 双端同步' : '本地预览 · 单机热座';
+    $('modeBadge').classList.toggle('local', !state.embedded);
+
+    const bottomTag = $('bottomTag');
+    const topTag = $('topTag');
+    if (state.embedded) {
+      if (state.seat === 0) {
+        bottomTag.textContent = '你的席位';
+        topTag.textContent = '对手';
+        bottomTag.classList.add('mine');
+        topTag.classList.remove('mine');
+      } else if (state.seat === 1) {
+        topTag.textContent = '你的席位';
+        bottomTag.textContent = '对手';
+        topTag.classList.add('mine');
+        bottomTag.classList.remove('mine');
+      } else {
+        bottomTag.textContent = '观众';
+        topTag.textContent = '观众';
+        bottomTag.classList.remove('mine');
+        topTag.classList.remove('mine');
+      }
+      bottomTag.classList.toggle('waiting', !state.ready);
+      topTag.classList.toggle('waiting', !state.ready);
+    } else {
+      topTag.textContent = '本地热座';
+      bottomTag.textContent = '本地热座';
+      topTag.classList.remove('mine', 'waiting');
+      bottomTag.classList.remove('mine', 'waiting');
+    }
+
+    if (status.over) {
+      $('turnLine').textContent = resultText(status);
+    } else if (!state.embedded) {
+      $('turnLine').textContent = SIDE_LABELS[turnColor] + '走子 · 本地热座';
+    } else if (!state.ready) {
+      $('turnLine').textContent = '等待双方就绪…';
+    } else if (isMyTurn()) {
+      $('turnLine').textContent = '轮到你走子（' + SIDE_LABELS[turnColor] + '）';
+    } else {
+      $('turnLine').textContent = '等待对手走子（' + SIDE_LABELS[turnColor] + '）';
+    }
+
+    $('checkLine').hidden = !(status.inCheck && !status.over);
+
+    const banner = $('resultBanner');
+    if (status.over) {
+      banner.textContent = resultText(status) + ' · 本局结束';
+      banner.hidden = false;
+      banner.classList.toggle('draw', status.result === 'draw');
+    } else {
+      banner.hidden = true;
+      banner.textContent = '';
+    }
+
+    if (!state.embedded) {
+      $('syncLine').textContent = '本地预览：没有房间、没有跨设备同步。';
+      $('ruleLine').textContent = '本地预览不采集规则；私密规则通道不可用。';
+    } else if (state.lastSyncAt === null) {
+      $('syncLine').textContent = '等待房间状态（收到 nekofans:state 后显示）…';
+      $('ruleLine').textContent = '等待双方提交规则占位；本局不会执行规则。';
+    } else {
+      let sync = '已应用 ' + applied.length + ' 手公开行动';
+      if (rejected.length) sync += '，忽略 ' + rejected.length + ' 条无效或越序行动';
+      if (state.pending) sync += '；已提交 ' + state.pending + '，等待房间同步…';
+      sync += ' · 最后同步 ' + state.lastSyncAt;
+      $('syncLine').textContent = sync;
+      $('ruleLine').textContent = state.ready
+        ? '本次为标准棋局，秘密规则尚未开放'
+        : '等待朋友加入；秘密规则尚未开放';
+    }
+
+    $('seatLine').textContent = state.embedded
+      ? '你的席位：' + (state.seat === null ? '未分配' : sideName(state.seat) + '（seat ' + state.seat + '）') +
+        ' · 棋盘统一白方在下，便于双方核对画面。'
+      : '本地预览：无席位、无房间服务。';
+
+    const resetButton = $('resetBtn');
+    resetButton.hidden = state.embedded;
+    resetButton.disabled = false;
+
+    const hint = $('hint');
+    if (status.over) {
+      hint.textContent = '本局已结束；双端画面由同一份公开行动序列重放得出。';
+    } else if (!state.embedded) {
+      hint.textContent = state.selected === null
+        ? '本地热座：点击当前走子方的棋子，再点击目标格。'
+        : '已选中 ' + Chess.squareName(state.selected) + '，点击高亮格落子。';
+    } else if (!state.ready) {
+      hint.textContent = '房间尚未就绪：等待朋友加入。';
+    } else if (!isMyTurn()) {
+      hint.textContent = '等待对手走子，画面会自动同步。';
+    } else {
+      hint.textContent = state.selected === null
+        ? '点击你的棋子查看合法落点。'
+        : '已选中 ' + Chess.squareName(state.selected) + '，点击高亮格落子。';
+    }
+
+  }
+
+  function render() {
+    if (!state.view) return;
+    if (state.selected !== null &&
+        !state.view.status.legalMoves.some((move) => move.from === state.selected)) {
+      state.selected = null;
+    }
+    buildBoard();
+    renderPromotion();
+    buildMoveList();
+    renderText();
+  }
+
+  function handleMoves(moves) {
+    if (moves.length > 1) {
+      state.promotion = { moves };
+      render();
+      return;
+    }
+    submitMove(moves[0]);
+  }
+
+  function submitMove(move) {
+    if (!move) return;
+    const action = Chess.moveToUci(move);
+    if (!action || action.length > 128) { render(); return; }
+    state.selected = null;
+    state.promotion = null;
+    if (state.embedded) {
+      if (!state.ready || state.seat === null) { render(); return; }
+      try {
+        window.parent.postMessage({ type: 'nekofans:action', action, expectedVersion: state.actions.length }, '*');
+      } catch (error) { /* 宿主不可达时只保留本地画面 */ }
+      setPending(action);
+    } else {
+      const seat = state.view.state.turn === 'w' ? 0 : 1;
+      state.actions = state.actions.concat([{ seat, action }]);
+      recompute();
+    }
+    render();
+  }
+
+  function onSquareClick(index) {
+    if (!state.view || state.view.status.over || state.promotion) return;
+    if (!interactive()) { render(); return; }
+    const { state: gameState, status } = state.view;
+    if (state.selected !== null) {
+      const moves = status.legalMoves.filter(
+        (move) => move.from === state.selected && move.to === index,
+      );
+      if (moves.length) { handleMoves(moves); return; }
+    }
+    const piece = gameState.board[index];
+    const pieceColor = piece ? (isWhite(piece) ? 'w' : 'b') : null;
+    if (piece && pieceColor === gameState.turn) {
+      state.selected = state.selected === index ? null : index;
+    } else {
+      state.selected = null;
+    }
+    render();
+  }
+
+  function announceReady() {
+    try {
+      window.parent.postMessage({ type: 'nekofans:ready' }, '*');
+    } catch (error) { /* 忽略不可达的宿主 */ }
+  }
+
+  function applyRoomState(data) {
+    const seat = data.seat === 0 || data.seat === 1 ? data.seat : null;
+    const ready = data.ready === true;
+    const actions = sanitizeActions(data.actions);
+    const previousCount = state.lastActionCount;
+    const hadPending = state.pending;
+    const changed = seat !== state.seat || ready !== state.ready ||
+      JSON.stringify(actions) !== JSON.stringify(state.actions);
+
+    state.seat = seat;
+    state.ready = ready;
+    state.actions = actions;
+    state.lastActionCount = actions.length;
+    state.lastSyncAt = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+    state.receivedState = true;
+    if (changed) {
+      state.selected = null;
+      state.promotion = null;
+    }
+    if (hadPending && actions.length > previousCount) clearPending();
+    if (actions.length < previousCount) clearPending();
+    recompute();
+    render();
+  }
+
+  window.addEventListener('message', (event) => {
+    if (!state.embedded) return;
+    if (event.source !== window.parent) return;
+    const data = event.data;
+    if (!data || typeof data !== 'object' || data.type !== 'nekofans:state') return;
+    applyRoomState(data);
+  });
+
+  $('board').addEventListener('click', (event) => {
+    const target = event.target.closest('.square');
+    if (!target) return;
+    const square = target.dataset.square;
+    const index = Chess.squareIndex(square);
+    if (index >= 0) onSquareClick(index);
+  });
+
+  $('promotionCancel').addEventListener('click', () => {
+    state.promotion = null;
+    render();
+  });
+
+  $('resetBtn').addEventListener('click', () => {
+    if (state.embedded) return;
+    state.actions = [];
+    state.selected = null;
+    state.promotion = null;
+    state.pending = null;
+    recompute();
+    render();
+  });
+
+  // 初始化
+  if (!state.embedded) {
+    state.ready = true;
+    state.seat = null;
+    state.lastSyncAt = null;
+  }
+  recompute();
+  render();
+  requestAnimationFrame(announceReady);
+  window.addEventListener('load', announceReady);
+  setTimeout(() => {
+    if (!state.receivedState) announceReady();
+  }, 2000);
+})();
+</script>
+</body>
+</html>

@@ -36,6 +36,11 @@ exports.apply=function(ctx){
   const lobbyAccount=createCompanionAccountBridge({...accountDeps,namespace:'lobby'});
   const proactiveAccount=createCompanionAccountBridge({...accountDeps,namespace:'proactive'});
   const memoryAccount=createCompanionAccountBridge({...accountDeps,namespace:'memory'});
+  const gameAccount=createCompanionAccountBridge({...accountDeps,namespace:'game'});
+  // Big Fish is a seat-bound teammate. The goddess/compiler has a separate
+  // stateless channel, so compiling either rule cannot occupy or cancel a move.
+  const gameStudioAccount=createCompanionAccountBridge({...accountDeps,namespace:'game-studio',timeoutMs:85000});
+  const gamePlayerAccount=createCompanionAccountBridge({...accountDeps,namespace:'game-player',timeoutMs:105000});
   const emit=(method,params)=>process.stdout.write(JSON.stringify({method,params})+'\n');
   ctx.on('tools/result',(exec,result)=>{
     const receipt=homeBuildReceipt(exec,result,{sceneFile:path.join(runtimePaths.workspaceDir,'our-home','scene.json')});
@@ -222,6 +227,15 @@ exports.apply=function(ctx){
     if(method==='memory-account-status')return memoryAccount.status();
     if(method==='memory-account-chat')return memoryAccount.send({requestId:p.requestId,text:p.text,context:p.context,history:p.history,maxTokens:p.maxTokens});
     if(method==='memory-account-cancel')return memoryAccount.cancel({requestId:p.requestId});
+    if(method==='game-account-status')return gameAccount.status();
+    if(method==='game-account-chat')return gameAccount.send({requestId:p.requestId,text:p.text,context:p.context,history:p.history,maxTokens:p.maxTokens});
+    if(method==='game-account-cancel')return gameAccount.cancel({requestId:p.requestId});
+    if(method==='game-studio-account-status')return gameStudioAccount.status();
+    if(method==='game-studio-account-chat')return gameStudioAccount.send({requestId:p.requestId,text:p.text,context:p.context,history:p.history,maxTokens:p.maxTokens});
+    if(method==='game-studio-account-cancel')return gameStudioAccount.cancel({requestId:p.requestId});
+    if(method==='game-player-account-status')return gamePlayerAccount.status();
+    if(method==='game-player-account-chat')return gamePlayerAccount.send({requestId:p.requestId,text:p.text,context:p.context,history:p.history,images:p.images,maxTokens:p.maxTokens});
+    if(method==='game-player-account-cancel')return gamePlayerAccount.cancel({requestId:p.requestId});
     if(method==='proactive-account-chat')return proactiveAccount.send({requestId:p.requestId,text:p.text,context:p.context,history:p.history,maxTokens:p.maxTokens});
     if(method==='proactive-account-cancel')return proactiveAccount.cancel({requestId:p.requestId});
     if(method==='workspace-catalog')return readDshWorkspaceCatalog(ctx,p,{readInstalledProjects:options=>projectDiscovery.list(options)});
@@ -273,6 +287,6 @@ exports.apply=function(ctx){
   const lines=readline.createInterface({input:process.stdin});
   lines.on('line',async line=>{let request;try{request=JSON.parse(line);const result=await dispatch(request.method,request.params||{});process.stdout.write(JSON.stringify({id:request.id,result})+'\n');}catch(error){process.stdout.write(JSON.stringify({id:request?.id,error:String(error?.message||error)})+'\n');}});
   lines.on('close',()=>{if(closing)return;closing=true;Promise.resolve().then(()=>typeof ctx.root?.dispose==='function'?ctx.root.dispose():ctx.dispose?.()).finally(()=>process.exit(0));});
-  ctx.on('dispose',()=>{closing=true;loginWatch.dispose();companionAccount.dispose();lobbyAccount.dispose();proactiveAccount.dispose();memoryAccount.dispose();process.removeListener('neko-qqbot-state',qqbotState);process.removeListener('neko-channel-experience',channelExperience);taskSessions.dispose();lines.close();});
+  ctx.on('dispose',()=>{closing=true;loginWatch.dispose();companionAccount.dispose();lobbyAccount.dispose();proactiveAccount.dispose();memoryAccount.dispose();gameAccount.dispose();gameStudioAccount.dispose();gamePlayerAccount.dispose();process.removeListener('neko-qqbot-state',qqbotState);process.removeListener('neko-channel-experience',channelExperience);taskSessions.dispose();lines.close();});
   emit('ready',{version:2});
 };

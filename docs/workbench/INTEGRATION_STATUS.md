@@ -1,6 +1,14 @@
 # Windows source snapshot 0.28.43-test.6 / build 89
 
-This branch matches the 1,131 files in the local Windows installation's build manifest. It includes the lobby history and timestamp UI and retains the test.5 notification icon and restricted-channel reply behavior. The build uses the existing Windows packaging configuration. No binaries are part of this source snapshot.
+The Windows base matches the 1,131 files in the local Windows installation's build manifest. It includes the lobby history and timestamp UI and retains the test.5 notification icon and restricted-channel reply behavior. The build uses the existing Windows packaging configuration. No binaries are part of this source snapshot.
+
+## Private chess invitations and local story launcher (2026-11-09)
+
+The publisher can create a private chess room from the workbench and post the public invitation to the lobby. The recipient can select **在工作台加入** to take the guest seat without copying a pairing code. Reopening an invitation in the same workbench session reuses its seat. Players who already joined in a browser can still use the pairing flow.
+
+The workbench's main process retains the seat credential. The bundled board receives the seat, readiness and public moves. Each player submits one secret rule, and their optional AI teammate receives only their own rule and public moves. Both manual and AI moves use the room version for validation. The server currently supports restrictions on one type of piece for the opponent's first one to three turns. The workbench can also generate an unpublished game draft in a separate account route.
+
+The local story launcher can start and bind an explicitly configured project. Set `NEKO_STORY_PROJECT_DIR` to the absolute path of a trusted, compatible project containing `server.js` before launching the workbench. It is a separate development flow. The public multiplayer trial requires a configured relay. See [private chess trial](../../services/nekofans-game-hub/README.md) for setup, scope and verification.
 
 # Local integration 0.28.43-test.5 / build 88
 
@@ -367,3 +375,12 @@ Run `node scripts/build-neko-daily.mjs --electron-zip <official darwin-arm64 Ele
 The download contains one app and one installer entry. Quit the old app, then run `安装日常版.command`. It replaces the same daily app path and prepares a locked memory environment under Application Support. Chat databases, persona files and encrypted account settings are not packaged or uploaded.
 
 The installer links an existing canonical checkout to the daily workbench after checking its `origin` repository. Existing sessions keep their own directories; new default work uses that linked checkout. The local link file contains only the project path and repository URL.
+# Windows 游戏制作预览 · 2026-11-12
+
+基于 Windows 合并预览 30eae51，同步 macOS 的结构化双人游戏草稿、预览和建房。办公版入口显示「创造台 · 游戏制作」。创建房间后可复制邀请给好友，或在已连接的聊天室中发送。Windows 此处使用公开房间邀请，好友收件箱仍需社区接入。
+
+游戏制作窗口顶部提供「复制 HTML 联机模板」，可以将独立游戏工坊的 SDK 接入说明交给外部 Coding Agent。内置制作继续使用工作台的双人回合制房间。
+
+创作预览的「开房并复制邀请链接」会复制公开房间链接并打开房间。聊天室将直接粘贴的受支持房间链接显示为「加入游戏」，也兼容已有邀请文案。若房间已建成但界面切换失败，界面保留可手动复制的链接，重试复用同一房间。
+
+生成、秘密规则处理和 AI 队友分别使用各自的 DeepSeek 路由。发布仅接收已校验的草稿版本，服务器必须支持创造台作品。本地模型及回环房间的 49 项验证通过，实际公网发布与社区账号验收待进行。
