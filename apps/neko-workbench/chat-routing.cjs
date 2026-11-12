@@ -10,10 +10,31 @@ function migrateChatRouting(state){
     messages:Array.isArray(state.dshRoot?.messages)?state.dshRoot.messages:[]};
   state.dshRoot.active=false;state.dshRoot.work={state:null,task:null,tick:0};state.dshRoot.workFlags={goalRound:false,closing:null};
   for(const actor of state.actors){delete actor.teamWork;delete actor.displayWork;delete actor.activeChildren;}
-  state.neko={baseUrl:'http://127.0.0.1:48911',character:'大肥鱼',...state.neko,connection:'disconnected',error:''};
-  state.neko.character||='大肥鱼';
+  state.neko={baseUrl:'http://127.0.0.1:48911',character:'',...state.neko,connection:'disconnected',error:''};
   state.neko.enabled=state.neko.enabled===true;
   state.version=7;
 }
 function actorBySession(state,id){return state.actors.find(a=>a.id!=='main'&&a.sessionId===id)||(id&&state.dshRoot?.sessionId===id?state.dshRoot:undefined);}
-module.exports={migrateChatRouting,actorBySession};
+function bindNekoCharacter(state,{baseUrl,character}){
+  const {neko}=state;
+  if(neko.baseUrl===baseUrl&&neko.character===character)return;
+  const actor=state.actors.find(a=>a.id==='main');
+  const active=actor.chatBackend==='neko';
+  const history=neko.historyByCharacter||={};
+  if(neko.character)history[JSON.stringify([neko.baseUrl,neko.character])]=active?actor.messages:(neko.history||[]);
+  neko.baseUrl=baseUrl;
+  neko.character=character;
+  neko.history=history[JSON.stringify([baseUrl,character])]||[];
+  actor.nekoCharacter=character;
+  if(active){
+    actor.messages=neko.history;
+    actor.chatReply=null;
+    actor.lastUserMessage=null;
+    actor.notice=null;
+    actor.task=null;
+    actor.currentActivity='';
+    actor.status='idle';
+    actor.active=false;
+  }
+}
+module.exports={migrateChatRouting,actorBySession,bindNekoCharacter};

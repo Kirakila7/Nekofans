@@ -1,7 +1,7 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
 const {trustedLocalCaller}=require('../../apps/neko-workbench/main-chat-runtime.cjs');
-const {migrateChatRouting,actorBySession}=require('../../apps/neko-workbench/chat-routing.cjs');
+const {migrateChatRouting,actorBySession,bindNekoCharacter}=require('../../apps/neko-workbench/chat-routing.cjs');
 const {NekoChat}=require('../../apps/neko-workbench/neko-chat.cjs');
 
 test('chat-api routing survives repeated migration without moving its history to the DSH root',()=>{
@@ -31,8 +31,70 @@ test('switching backend during character fetch aborts the request and cannot sta
   const pending=chat.connect({baseUrl:'http://127.0.0.1:48911',character:'大肥鱼'});chat.close();release();await pending;assert(signals[0].aborted);assert.equal(calls.length,1);assert.equal(sockets,0);assert.equal(chat.ping,undefined);
 });
 
-test('a native role POST already sent before cancellation cannot emit a late profile/socket result',async()=>{
-  let release,entered;const delayed=new Promise(resolve=>release=resolve),posting=new Promise(resolve=>entered=resolve);let profile=0,sockets=0;
-  const chat=new NekoChat({fetchImpl:async(url)=>url.endsWith('/catgirl')?(entered(),await delayed,{ok:true,json:async()=>({success:true,character_name:'大肥鱼'})}):{ok:true,json:async()=>({'猫娘':{}})},WebSocketImpl:class{constructor(){sockets++;}}});
-  chat.on('profile-created',()=>profile++);const pending=chat.connect({baseUrl:'http://127.0.0.1:48911',character:'大肥鱼'});await posting;chat.close();release();await pending;assert.equal(profile,0);assert.equal(sockets,0);assert.equal(chat.ping,undefined);
+test('a missing bound Bigfish never creates a character or connects to the available alternative',async()=>{
+  const calls=[];
+  const chat=new NekoChat({
+    fetchImpl:async(url,options)=>{
+      calls.push([url,options.method||'GET']);
+      return Response.json({'猫娘':{'另一只鱼':{}}});
+    },
+    WebSocketImpl:class{constructor(){assert.fail('No socket should open');}},
+  });
+  await assert.rejects(chat.connect({character:'大肥鱼'}),/没有找到已绑定/);
+  assert.deepEqual(calls,[['http://127.0.0.1:48911/api/characters','GET']]);
+});
+
+test('binding survives a saved-state round trip and keeps history by server and character',()=>{
+  const baseUrl='http://127.0.0.1:48911',otherUrl='http://127.0.0.1:48912';
+  const original={baseUrl,character:'大肥鱼'},other={baseUrl:otherUrl,character:'大肥鱼'};
+  const state={neko:{...original,enabled:true},actors:[{id:'main',chatBackend:'neko',messages:[{text:'她知道我喜欢橘子'}]}]};
+  migrateChatRouting(state);
+  bindNekoCharacter(state,other);
+  assert.deepEqual(state.actors[0].messages,[]);
+  state.actors[0].messages.push({text:'另一台服务上的会话'});
+  const reopened=JSON.parse(JSON.stringify(state));
+  migrateChatRouting(reopened);
+  assert.equal(reopened.neko.baseUrl,otherUrl);
+  assert.equal(reopened.neko.character,'大肥鱼');
+  bindNekoCharacter(reopened,original);
+  assert.deepEqual(reopened.actors[0].messages,[{text:'她知道我喜欢橘子'}]);
+  bindNekoCharacter(reopened,other);
+  assert.deepEqual(reopened.actors[0].messages,[{text:'另一台服务上的会话'}]);
+});
+
+test('selected N.E.K.O. role receives text after session startup and yields to its other window',async t=>{
+  let socket;
+  class TestSocket extends EventTarget{
+    constructor(url){
+      super();
+      socket=this;
+      this.url=url;
+      this.sent=[];
+      queueMicrotask(()=>{this.readyState=1;this.dispatchEvent(new Event('open'));});
+    }
+    send(data){this.sent.push(JSON.parse(data));}
+    close(){this.readyState=3;this.dispatchEvent(new Event('close'));}
+    receive(message){this.dispatchEvent(new MessageEvent('message',{data:JSON.stringify(message)}));}
+  }
+  const baseUrl='http://127.0.0.1:48911',character='旧角色';
+  const chat=new NekoChat({fetchImpl:async()=>Response.json({'猫娘':{'大肥鱼':{},[character]:{}}}),WebSocketImpl:TestSocket});
+  t.after(()=>chat.close());
+  const phases=[];
+  chat.on('connection',info=>phases.push(info.connection));
+  await chat.connect({baseUrl,character});
+  assert.equal(socket.url,'ws://127.0.0.1:48911/ws/'+encodeURIComponent(character));
+  const {requestId}=chat.send('你还记得橘子吗？');
+  assert.deepEqual(socket.sent.map(frame=>frame.action),['start_session']);
+  assert.equal(socket.sent[0].new_session,false);
+  socket.receive({type:'session_started',input_mode:'text'});
+  assert.equal(socket.sent[1].request_id,requestId);
+  assert.equal(socket.sent[1].data,'你还记得橘子吗？');
+  let answer;
+  chat.once('complete',result=>answer=result.text);
+  socket.receive({type:'gemini_response',text:'记得。',request_id:requestId});
+  socket.receive({type:'system',data:'turn end',request_id:requestId});
+  assert.equal(answer,'记得。');
+  socket.receive({type:'status',message:JSON.stringify({code:'CHARACTER_SWITCHING_TERMINAL'})});
+  assert.equal(socket.readyState,3);
+  assert.deepEqual(phases,['connecting','ready','reconnect-required']);
 });
