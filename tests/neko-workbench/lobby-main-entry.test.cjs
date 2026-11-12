@@ -10,7 +10,7 @@ const source = fs.readFileSync(path.resolve(__dirname, '../../apps/neko-workbenc
 const preload = fs.readFileSync(path.resolve(__dirname, '../../apps/neko-workbench/workbench-preload.cjs'), 'utf8');
 
 test('workbench lobby and game IPC require a trusted caller and delegate requests', async () => {
-  const handlers = new Map(), controllerCalls = [], readinessCalls=[], gameCalls=[];
+  const handlers = new Map(), controllerCalls = [], readinessCalls=[], gameCalls=[], clipboardWrites=[];
   const host = { webContents: { mainFrame: { url: 'http://127.0.0.1:59099/coding' }, getURL: () => 'http://127.0.0.1:59099/coding' }, isDestroyed: () => false };
   const caller = { sender: host.webContents, senderFrame: host.webContents.mainFrame };
   const validation = source.slice(source.indexOf('function isWorkbenchOrigin'), source.indexOf('function rolesState'));
@@ -25,7 +25,8 @@ test('workbench lobby and game IPC require a trusted caller and delegate request
     ${routes}
   `;
   vm.runInNewContext(injected, { URL, dshWindow: host, dshLaunchUrl: 'http://127.0.0.1:59099/', ipcMain: { handle: (name, fn) => handlers.set(name, fn) },
-    controllerCalls,readinessCalls, require(name) {
+    controllerCalls,readinessCalls,clipboard:{writeText:value=>clipboardWrites.push(value)}, require(name) {
+      if (name.startsWith('../../services/nekofans-game-hub/')) return require(name);
       assert.equal(name, './game-hub-bridge.cjs');
       return { createGameHubBridge: () => ({ share: request => { gameCalls.push(request); return { ok: true }; } }) };
     } });
@@ -55,6 +56,12 @@ test('workbench lobby and game IPC require a trusted caller and delegate request
   assert.equal(gameCalls.length, 1);
   assert.equal(gameCalls[0].title, title);
   assert.equal(gameCalls[0].roomUrl, roomUrl);
+  const inviteUrl = 'https://play.nekofans.games/?room=abcdefghijklmnopqrstuvwx';
+  await assert.rejects(gameHub(hostileCaller, { action:'private-copy-invite', inviteUrl }), /工作台/);
+  await assert.rejects(gameHub(caller, { action:'private-copy-invite', inviteUrl:inviteUrl+'#seat=private' }), /invalid room invitation/);
+  assert.deepEqual(clipboardWrites, []);
+  assert.equal((await gameHub(caller, { action:'private-copy-invite', inviteUrl })).ok, true);
+  assert.deepEqual(clipboardWrites, [inviteUrl]);
 });
 
 test('preload exposes lobby/subscribeLobby', () => {

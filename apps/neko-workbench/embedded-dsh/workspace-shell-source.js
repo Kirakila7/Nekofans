@@ -2028,7 +2028,16 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
       if (source) quote.appendChild(source.deleted ? el('span', 'neko-lobby-deleted', '消息已删除') : richText(Array.from(source.text || '').slice(0, 80).join(''), 'neko-lobby-quote__text'));
       bubble.appendChild(quote);
     }
-    bubble.appendChild(m.deleted ? el('p', 'neko-lobby-deleted', '消息已删除') : richText(m.text, 'neko-lobby-text'));
+    const invite = !m.deleted && typeof bridge.gameHub === 'function'
+      ? /^(?:来一起玩「([^\r\n]{1,80})」：)?(https:\/\/(?:[a-z0-9-]+\.trycloudflare\.com|play\.nekofans\.games)\/\?room=[A-Za-z0-9_-]{24})$/.exec((m.text || '').trim())
+      : null;
+    if (invite) {
+      const [, title, inviteUrl] = invite;
+      if (title) bubble.appendChild(el('span','neko-lobby-game-invite-title',title));
+      bubble.appendChild(button('加入游戏','neko-lobby-game-join',()=>openDialog('game-room',inviteUrl)));
+    } else {
+      bubble.appendChild(m.deleted ? el('p', 'neko-lobby-deleted', '消息已删除') : richText(m.text, 'neko-lobby-text'));
+    }
     body.appendChild(bubble);
     const pic = avatarNode(m.author);
     if (m.deleted) row.append(pic, body);
@@ -2043,8 +2052,6 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
         if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return;
         event.preventDefault(); openMessageMenu(m.id, anchor);
       });
-      const invite = /^来一起玩「[^\r\n]{1,80}」：(https:\/\/(?:[a-z0-9-]+\.trycloudflare\.com|play\.nekofans\.games)\/\?room=[A-Za-z0-9_-]{24})$/.exec(m.text || '');
-      if (invite && typeof bridge.gameHub === 'function') body.appendChild(button('在工作台加入', 'neko-lobby-game-join', () => openDialog('game-room', invite[1])));
       row.append(anchor, body);
     }
     return row;
@@ -2411,7 +2418,8 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
   function gameRoomFields(inviteUrl, notice) {
     const win=doc.defaultView;
     const state=el('p','neko-lobby-game-status','正在核对邀请并加入房间…');state.setAttribute('role','status');
-    const feedback=el('p','neko-lobby-game-status',notice);feedback.setAttribute('role','status');
+    const inviteStatus=el('p','neko-lobby-game-status',notice);inviteStatus.setAttribute('role','status');inviteStatus.hidden=!notice;
+    const feedback=el('p','neko-lobby-game-status');feedback.setAttribute('role','status');
     const controls=el('section','neko-lobby-game-room-controls');controls.hidden=true;
     const rule=el('input','neko-lobby-game-own-rule');rule.type='password';rule.autocomplete='off';rule.maxLength=80;
     const roleNote=el('p','neko-lobby-field__hint','女神只处理规则。本方主 Agent 只知道本方规则和公开棋局。');
@@ -2521,9 +2529,12 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     }
     const copyInvite=button('复制邀请链接','neko-lobby-game-copy-invite',async()=>{
       const result=await seatRequest('private-copy-invite');
-      if(!closed)feedback.textContent=result?.ok?'邀请链接已复制，可以发给好友。':'未能复制邀请，请重试。';
+      if(!closed){
+        inviteStatus.textContent=result?.ok?'邀请链接已复制，可以发给好友。':'未能复制邀请，请重试。';
+        inviteStatus.hidden=false;
+      }
     });
-    return {nodes:[state,copyInvite,controls,feedback,board],open,cleanup(){closed=true;clearTimeout(timer);win.removeEventListener('message',fromBoard);},
+    return {nodes:[state,copyInvite,inviteStatus,controls,feedback,board],open,cleanup(){closed=true;clearTimeout(timer);win.removeEventListener('message',fromBoard);},
       request:()=>view?{action:'share',title:view.game?.title||'双人国际象棋',roomUrl:inviteUrl}:'请先确认已加入房间。'};
   }
   function gameStudioFields(enterRoom) {
@@ -2551,13 +2562,29 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     const gameState=el('p','neko-lobby-game-status');gameState.setAttribute('role','status');
     let createdInvite=null;
     async function openCreatedRoom(){
-      if(!await enterRoom(createdInvite,'房间已创建。复制邀请链接给好友，或发送到聊天室。')) gameState.textContent='房间已创建，请重试打开房间。';
+      const inviteUrl=createdInvite;
+      const copied=(await callGame({action:'private-copy-invite',inviteUrl}))?.ok===true;
+      if(!publish.isConnected)return;
+      const notice=copied
+        ? '邀请链接已复制，直接粘贴到聊天室或发给好友。'
+        : '房间已创建。可在房间里重新复制邀请链接。';
+      if(!await enterRoom(inviteUrl,notice) && publish.isConnected){
+        gameState.textContent=copied
+          ? '邀请链接已复制。你可以先发给好友，再重试打开房间。'
+          : '房间已创建。点下方按钮重试复制和打开。';
+        roomLink.value=inviteUrl;
+        roomLinkField.hidden=false;
+      }
     }
     const prompt=el('textarea','neko-lobby-game-prompt');
     prompt.rows=3;prompt.maxLength=2000;prompt.setAttribute('aria-label','游戏制作要求');
     prompt.placeholder='比如：两个人争夺月球基地，轮流选择修理、探索或抢占资源。';
     const preview=el('section','neko-lobby-game-room-controls');preview.hidden=true;
     const gameName=el('h3'),description=el('p'),opening=el('p'),choices=el('ul');
+    const roomLink=el('input','neko-lobby-game-url');roomLink.type='url';roomLink.readOnly=true;
+    roomLink.setAttribute('aria-label','已创建的房间链接');
+    roomLink.addEventListener('focus',()=>roomLink.select());
+    const roomLinkField=field('房间链接',roomLink);roomLinkField.hidden=true;
     let revisionId;
     const draft=button('制作游戏','neko-lobby-game-draft',async()=>{
       if(draft.disabled)return;
@@ -2572,7 +2599,8 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
         }
         revisionId=result.revisionId;
         createdInvite=null;
-        publish.textContent='开房并邀请好友';
+        roomLinkField.hidden=true;
+        publish.textContent='开房并复制邀请链接';
         const {title,description:summary,opening:scene,choices:actions}=result.preview;
         gameName.textContent=title;description.textContent=summary;opening.textContent=scene;
         choices.replaceChildren(...actions.map(action=>el('li','',action)));
@@ -2580,7 +2608,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
         draft.textContent='修改游戏';gameState.textContent='游戏已做好，可以修改或开房邀请朋友。';
       }finally{draft.disabled=false;publish.disabled=!revisionId;}
     });
-    const publish=button('开房并邀请好友','neko-lobby-game-publish',async()=>{
+    const publish=button('开房并复制邀请链接','neko-lobby-game-publish',async()=>{
       if(publish.disabled||!revisionId)return;
       if(createdInvite){
         publish.disabled=true;
@@ -2600,12 +2628,12 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
           return;
         }
         createdInvite=result.inviteUrl;
-        publish.textContent='打开已创建的房间';
+        publish.textContent='复制邀请并打开房间';
         await openCreatedRoom();
       }finally{draft.disabled=publish.disabled=false;}
     });
     publish.disabled=true;
-    preview.append(gameName,description,opening,choices,publish);
+    preview.append(gameName,description,opening,choices,publish,roomLinkField);
     const advanced=el('details','neko-lobby-game-advanced');
     advanced.append(el('summary','','游戏服务器'),field('游戏服务器',server));
     return {nodes:[multiplayer,field('描述你想玩的游戏',prompt),draft,preview,gameState,advanced],request:()=>null};
@@ -2621,7 +2649,22 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     const publicKey=el('textarea','neko-lobby-game-public-key');publicKey.readOnly=true;publicKey.rows=3;publicKey.hidden=true;publicKey.setAttribute('aria-label','游戏配对公钥');
     const pairing=button('显示配对公钥','neko-lobby-game-pair',async()=>{const result=await callGame({action:'private-public-key'});if(result.ok){publicKey.value=result.publicKey;publicKey.hidden=false;gameState.textContent='将公钥配置到你的游戏服务器；私钥只保存在本机加密存储中。';}else gameState.textContent=result.error||'无法获取配对公钥';});
     const connect=button('连接女神的规则服务','neko-lobby-game-connect',async()=>{connect.disabled=true;try{const result=await callGame({action:'private-start',url:server.value.trim().replace(/\/$/,'')});gameState.textContent=result.connected?'女神的规则处理服务已连接。':'暂时未连接，请检查服务器配对。';}finally{connect.disabled=false;}});
-    const create=button('创建秘密规则棋局','neko-lobby-game-create',async()=>{create.disabled=true;try{const result=await callGame({action:'private-create',url:server.value.trim().replace(/\/$/,'')});if(!create.isConnected)return;if(result.ok){openDialog('game-room',result.inviteUrl);}else gameState.textContent=result.error||'创建失败，请检查连接。';}finally{create.disabled=false;}});
+    const create=button('开棋局并复制邀请链接','neko-lobby-game-create',async()=>{
+      if(create.disabled)return;
+      create.disabled=true;
+      try {
+        const result=await callGame({action:'private-create',url:server.value.trim().replace(/\/$/,'')});
+        if(!create.isConnected)return;
+        if(!result?.ok||!result.inviteUrl){
+          gameState.textContent=result?.error||'创建失败，请检查连接。';
+          return;
+        }
+        const copied=(await callGame({action:'private-copy-invite',inviteUrl:result.inviteUrl}))?.ok===true;
+        if(create.isConnected)openDialog('game-room',result.inviteUrl,null,copied
+          ? '邀请链接已复制，直接粘贴到聊天室或发给好友。'
+          : '房间已创建。可在房间里重新复制邀请链接。');
+      } finally { create.disabled=false; }
+    });
     const openRoom=button('在工作台打开棋局','neko-lobby-game-open-room',()=>openDialog('game-room',url.value.trim()));
     const pairCode=el('input','neko-lobby-game-seat-code');pairCode.setAttribute('aria-label','自己的席位配对码');pairCode.autocomplete='off';pairCode.maxLength=24;
     const pairSeat=button('关联我的席位','neko-lobby-game-seat-pair',async()=>{let invite;try{invite=new URL(url.value.trim());if(invite.hash||invite.pathname!=='/'||!/^https:\/\/(?:[a-z0-9-]+\.trycloudflare\.com|play\.nekofans\.games)$/.test(invite.origin)||!/^[A-Za-z0-9_-]{24}$/.test(invite.searchParams.get('room')||''))throw Error();}catch{gameState.textContent='请先填写自己的游戏邀请链接。';return;}pairSeat.disabled=true;try{const result=await callGame({action:'private-pair-seat',url:invite.origin,roomId:invite.searchParams.get('room'),code:pairCode.value.trim()});if(result.status==='paired'){pairCode.value='';gameState.textContent='已关联自己的'+(result.seat===0?'白方':'黑方')+'席位；决策队友尚未开始行动。';}else gameState.textContent=result.error||'配对失败，请重新生成配对码。';}finally{pairSeat.disabled=false;}});

@@ -84,6 +84,7 @@ test('game creation opens the bound room, and sending only shares the public inv
  const calls=[],inviteUrl='https://fixture.trycloudflare.com/?room=abcdefghijklmnopqrstuvwx';
  let confirmed=false;
  const f=setup(t,{gameHub:async input=>{calls.push(structuredClone(input));if(input.action==='private-create')return {ok:true,inviteUrl};
+  if(input.action==='private-copy-invite')return {ok:true};
   if(input.action==='private-open-seat')return {status:'paired',seat:0};
   if(input.action==='private-seat-board')return {status:'ready',html:'<html></html>'};
   if(input.action==='private-seat-view')return {status:'ready',seat:0,players:1,actions:[]};
@@ -91,7 +92,9 @@ test('game creation opens the bound room, and sending only shares the public inv
  await tick();doc.querySelector('.neko-lobby-switch').click();await tick();doc.querySelector('.neko-lobby-game-share').click();const d=doc.querySelector('[data-dialog="game"]');
  d.querySelector('[aria-label="游戏服务器"]').value='https://fixture.trycloudflare.com/';d.querySelector('.neko-lobby-game-create').click();await tick();
  const room=doc.querySelector('[data-dialog="game-room"]');assert(room);assert.match(room.textContent,/白方 · 等待朋友加入/);
- assert.deepEqual(calls.map(c=>c.action),['private-create','private-open-seat','private-seat-board','private-seat-view']);
+ assert.deepEqual(calls.map(c=>c.action),['private-create','private-copy-invite','private-open-seat','private-seat-board','private-seat-view']);
+ assert.equal(calls[1].inviteUrl,inviteUrl);
+ assert.match(room.textContent,/邀请链接已复制/);
  assert.equal(calls[0].url,'https://fixture.trycloudflare.com');
  assert.equal(room.querySelector('iframe').getAttribute('sandbox'),'allow-scripts');
  room.querySelector('form').dispatchEvent(new f.w.Event('submit',{bubbles:true,cancelable:true}));await tick();
@@ -105,11 +108,20 @@ test('a recognized lobby invitation joins on click, without auto joining or star
  const calls=[],url='https://fixture.trycloudflare.com/?room=abcdefghijklmnopqrstuvwx';
  const f=setup(t,{gameHub:async input=>{calls.push(structuredClone(input));return {status:'room-full'};}}),{doc}=f;
  await tick();doc.querySelector('.neko-lobby-switch').click();await tick();
- f.push(snapshot({messages:[msg(1,human(ZS,'张三'),'human','张三','来一起玩「棋局」：'+url),msg(2,human(ZS,'张三'),'human','张三','来一起玩「棋局」：'+url+'#seat=forbidden')]}));
+ const direct='https://play.nekofans.games/?room=zyxwvutsrqponmlkjihgfedc';
+ f.push(snapshot({messages:[
+  msg(1,human(ZS,'张三'),'human','张三','来一起玩「棋局」：'+url),
+  msg(2,human(ZS,'张三'),'human','张三',url+'#seat=forbidden'),
+  msg(3,human(ZS,'张三'),'human','张三',direct),
+  msg(4,human(ZS,'张三'),'human','张三',direct+'&seat=forbidden'),
+ ]}));
  await tick();
- assert.equal(doc.querySelectorAll('.neko-lobby-game-join').length,1);assert.equal(calls.length,0);
- doc.querySelector('.neko-lobby-game-join').click();await tick();
- assert.deepEqual(calls,[{action:'private-open-seat',inviteUrl:url}]);
+ const joinButtons=doc.querySelectorAll('.neko-lobby-game-join');
+ assert.equal(joinButtons.length,2);assert.equal(calls.length,0);
+ assert.equal(joinButtons[0].parentElement.textContent,'棋局加入游戏');
+ assert.equal(joinButtons[1].parentElement.textContent,'加入游戏');
+ joinButtons[1].click();await tick();
+ assert.deepEqual(calls,[{action:'private-open-seat',inviteUrl:direct}]);
  assert.match(doc.querySelector('[data-dialog="game-room"]').textContent,/房间已满/);
 });
 test('game sharing reports failure without closing and is unavailable when signed out',{skip:DOM_SKIP},async t=>{

@@ -487,3 +487,5 @@ body[data-neko-workspace-shell] .neko-chatroom-preview::before { content:''; pos
 .neko-game-multiplayer-info p { margin:4px 0 0; }
 .neko-game-copy-template { white-space:nowrap; }
 .neko-game-multiplayer-template > p { flex-basis:100%; margin:0; }
+.neko-lobby-game-invite-title { margin-inline-end:8px; }
+.neko-lobby-bubble .neko-lobby-game-join { padding:5px 10px; border:1px solid var(--nws-border); border-radius:8px; background:var(--nws-hover); color:var(--nws-text); cursor:pointer; font:inherit; }

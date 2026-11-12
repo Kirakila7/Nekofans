@@ -44,6 +44,7 @@ test('Windows office game studio previews a draft, publishes its revision and op
   if(request.action==='copy-game-template')return {ok:true};
   if(request.action==='draft-game')return {status:'draft',revisionId:'fixture-revision',preview:{title:'月球基地',description:'争夺基地',opening:'夜幕降临',choices:['修理','探索']}};
   if(request.action==='publish-game')return {ok:true,status:'created',inviteUrl};
+  if(request.action==='private-copy-invite')return {ok:true};
   if(request.action==='private-open-seat')return {status:'paired'};
   return {status:'unavailable'};
  }});
@@ -70,7 +71,12 @@ test('Windows office game studio previews a draft, publishes its revision and op
  assert.equal(entry.hidden,true);
  assert.ok(d.querySelector('[data-dialog="game-room"] .neko-lobby-game-copy-invite'));
  assert.deepEqual(calls.filter(r=>r.action==='publish-game').map(r=>r.revisionId),['fixture-revision']);
- assert.ok(calls.some(r=>r.action==='private-open-seat'&&r.inviteUrl===inviteUrl));
+ assert.deepEqual(calls.filter(r=>['private-copy-invite','private-open-seat'].includes(r.action)).map(({action,inviteUrl})=>({action,inviteUrl})),[
+  {action:'private-copy-invite',inviteUrl},
+  {action:'private-open-seat',inviteUrl},
+ ]);
+ assert.match(d.querySelector('[data-dialog="game-room"]').textContent,/邀请链接已复制/);
+ assert.equal(calls.some(r=>r.action==='share'||r.action==='send'),false);
 });
 test('bottom community login switches office to daily and opens the existing community owner without sending work',async t=>{
  const f=fixture(t,{office:true});await tick();const detail={};f.d.dispatchEvent(new f.w.CustomEvent('neko-account-open-community',{detail}));assert.equal(detail.handled,true);await detail.promise;await tick();assert.equal(f.d.body.dataset.nekoWorkbenchEdition,'daily');assert(f.calls.some(r=>r.action==='community-login'));assert(f.calls.some(r=>r.action==='open'&&r.site==='community'));assert.equal(f.d.querySelector('#draft').value,'工作草稿');assert(!f.calls.some(r=>r.action==='submit'||r.action==='send'));
