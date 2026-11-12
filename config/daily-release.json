@@ -1,6 +1,7 @@
 {
   "version": "0.28.43-test.6",
   "build": "89",
+  "windowsDshVersion": "0.2.2-rc.1",
   "appName": "N.E.K.O.工作台试用.app",
   "bundleIdentifier": "cn.neko.workbench.trial",
   "repository": "Kirakila7/Nekofans",

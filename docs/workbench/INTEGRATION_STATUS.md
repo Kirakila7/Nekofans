@@ -1,5 +1,11 @@
 # Windows source snapshot 0.28.43-test.6 / build 89
 
+Windows releases bundle the DSH version pinned by `windowsDshVersion` in `config/daily-release.json`. Supply its extracted runtime with `--dsh-resources`. Packaging reads the actual version from the DSH archive and rejects an older or mislabeled runtime. The current pin is `0.2.2-rc.1`, extracted from the signed official Windows installer. It passed session creation and round-trip recovery with synthetic data against `0.2.1-rc.3`.
+
+For a bundled Windows x64 engine, Nekofans checks the official DeepSeek Windows feed (currently the preview channel used by its bundled DSH) at startup and every six hours. The **检查 DSH 更新** action is available in the desktop pet menu and under **连接详情**. Users can view official release notes, download the engine, and restart to apply it without waiting for another Nekofans release. The verified engine is staged in a separate directory within the profile; Nekofans retains the installed engine and the previous verified version as fallbacks. The build uses 7-Zip (override with `--dsh-extractor-dir`) to extract resources without running the upstream installer.
+
+The official `0.2.2-rc.2` Windows update was checked against the feed hash and Authenticode publisher, extracted, and selected as a pending update. Both first startup and resuming a synthetic `0.2.2-rc.1` session passed with the extracted engine. The Windows update and installer tests passed (11 tests, one optional NSIS compiler fixture skipped).
+
 This branch matches the 1,131 files in the local Windows installation's build manifest. It includes the lobby history and timestamp UI and retains the test.5 notification icon and restricted-channel reply behavior. The build uses the existing Windows packaging configuration. No binaries are part of this source snapshot.
 
 # Local integration 0.28.43-test.5 / build 88

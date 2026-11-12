@@ -19,6 +19,7 @@ export async function buildWindowsDaily({root,release,args}){
   if(args.includes('--resume-package')){
     const manifest=JSON.parse(readFileSync(join(output,'application/resources/WORKBENCH_BUILD.json'),'utf8'));
     if(manifest.version!==release.version||String(manifest.build)!==String(release.build))throw Error('Staged application version changed; restage before packaging');
+    if(release.windowsDshVersion&&manifest.bundledDsh?.version!==release.windowsDshVersion)throw Error('Staged bundled DSH version changed; restage before packaging');
     if(sourceManifest&&sourceManifest.sourceCommit!==manifest.sourceCommit)throw Error('Staged source revision changed');
     const integrity=JSON.parse(readFileSync(join(output,'APPLICATION_SHA256.json'),'utf8'));
     if(inventory(join(output,'application')).length!==Object.keys(integrity).length)throw Error('Unexpected files in staged application');
@@ -26,6 +27,22 @@ export async function buildWindowsDaily({root,release,args}){
     return packageWindowsStage({root,release,args,output});
   }
   const electron=required('--electron-dir'),node=required('--node-dir');
+  const dshResources=value('--dsh-resources')?resolve(value('--dsh-resources')):null;
+  if(release.windowsDshVersion&&!dshResources)throw Error('Windows release requires --dsh-resources for DSH '+release.windowsDshVersion);
+  let bundledDsh=null;
+  let dshExtractor=null;
+  if(dshResources){
+    for(const name of ['app.asar','app.asar.unpacked','runtime/primary-runtime','runtime/office-skills'])if(!existsSync(join(dshResources,name)))throw Error('Incomplete bundled DSH: '+name);
+    const inspect='process.stdout.write(require(process.argv[1]).readWindowsDshVersion(process.argv[2]))';
+    const version=run(join(electron,'electron.exe'),['-e',inspect,join(root,'apps/neko-workbench/windows-dsh-runtime.cjs'),dshResources],
+      {env:{...process.env,ELECTRON_RUN_AS_NODE:'1'}}).trim();
+    for(const expected of [release.windowsDshVersion,value('--dsh-version')]){
+      if(expected&&version!==expected)throw Error('Bundled DSH is '+version+' but the build requires '+expected);
+    }
+    bundledDsh={version};
+    dshExtractor=resolve(value('--dsh-extractor-dir')||join(process.env.ProgramFiles||'C:/Program Files','7-Zip'));
+    for(const file of ['7z.exe','7z.dll','License.txt'])if(!existsSync(join(dshExtractor,file)))throw Error('DSH updater requires 7-Zip. Pass --dsh-extractor-dir with 7z.exe, 7z.dll and License.txt');
+  }
   if(existsSync(output))throw Error('Refusing to overwrite existing output');
   for(const file of [join(electron,'electron.exe'),join(node,'node.exe')])if(!existsSync(file))throw Error('Missing runtime: '+file);
   for(const input of [root,sourceRoot,electron,node]){const rel=relative(input,output);if(!isAbsolute(rel)&&rel!=='..'&&!rel.startsWith('..\\'))throw Error('Output must be outside input trees');}
@@ -57,17 +74,18 @@ export async function buildWindowsDaily({root,release,args}){
   for(const [flag,name] of [['--memory-runtime','memory-runtime'],['--memory-python-libs','memory-python-libs']]){
     const source=value(flag);if(source)cpSync(resolve(source),join(dir,name),{recursive:true,filter:src=>!src.split(/[\\/]/).some(p=>['__pycache__','.git'].includes(p))&&!/\.(?:pyc|log)$/i.test(src)});
   }
-  const dshResources=value('--dsh-resources')?resolve(value('--dsh-resources')):null;
   if(dshResources){
-    for(const name of ['app.asar','app.asar.unpacked','runtime/primary-runtime','runtime/office-skills'])if(!existsSync(join(dshResources,name)))throw Error('Incomplete bundled DSH: '+name);
     const dshTarget=join(dir,'resources/dsh');mkdirSync(dshTarget,{recursive:true});
     for(const name of ['app.asar','app.asar.unpacked','runtime'])cpSync(join(dshResources,name),join(dshTarget,name),{recursive:true,filter:src=>!src.split(/[\\/]/).some(p=>['.git','__pycache__'].includes(p))&&!/\.(?:log|dmp|dpapi|sqlite)$/i.test(src)});
-    writeFileSync(join(dshTarget,'RUNTIME_ORIGIN.json'),JSON.stringify({product:'DeepSeek Harness',version:value('--dsh-version')||'unknown',archiveSha256:sha(join(dshTarget,'app.asar')),bundledSupport:['app.asar.unpacked','runtime/primary-runtime','runtime/office-skills']},null,2)+'\n');
+    bundledDsh.archiveSha256=sha(join(dshTarget,'app.asar'));
+    writeFileSync(join(dshTarget,'RUNTIME_ORIGIN.json'),JSON.stringify({product:'DeepSeek Harness',...bundledDsh,bundledSupport:['app.asar.unpacked','runtime/primary-runtime','runtime/office-skills']},null,2)+'\n');
+    const tools=join(dir,'resources/dsh-update-tools');mkdirSync(tools,{recursive:true});
+    for(const file of ['7z.exe','7z.dll','License.txt'])cpSync(join(dshExtractor,file),join(tools,file));
   }
   const destination=join(dir,'resources/workbench'),tracked=sourceManifest?.files||run('git',['ls-files','-z'],{cwd:root}).split('\0').filter(Boolean);
   const files=tracked.filter(p=>p.startsWith('apps/neko-workbench/')||p.startsWith('packages/')||p.startsWith('config/')||p.startsWith('services/neko-memory/'));
   // Include the new bootstrap even before its first commit.
-  const packagingFiles=['apps/neko-workbench/windows-bootstrap.cjs','apps/neko-workbench/windows-dsh-runtime.cjs'];
+  const packagingFiles=['apps/neko-workbench/windows-bootstrap.cjs','apps/neko-workbench/windows-dsh-runtime.cjs','apps/neko-workbench/windows-dsh-update.cjs'];
   files.push(...packagingFiles);
   // New local UI modules must ship even before their first source commit.
   for(const name of ['video-float-controller.cjs','video-float-preload.cjs','video-float.html','video-float.css','video-float.js']){
@@ -86,7 +104,7 @@ export async function buildWindowsDaily({root,release,args}){
   if(dshResources)local.bundledDshOnly=true;
   if(Object.keys(local).length)writeFileSync(join(dir,'NEKOfuns.local.json'),JSON.stringify(local,null,2)+'\n');
   const commit=sourceManifest?.sourceCommit||run('git',['rev-parse','HEAD'],{cwd:root}).trim();
-  const manifest={version:release.version,build:release.build,platform:'win32-x64',sourceCommit:commit,sourceVariant:sourceManifest?.variant||'local',sourcePullRequest:sourceManifest?.pullRequest||null,packagingAdditions:packagingFiles,bundledDsh:dshResources?{version:value('--dsh-version')||'unknown',archiveSha256:sha(join(dir,'resources/dsh/app.asar'))}:null,bundledNpm,localChanges:run('git',['status','--porcelain'],{cwd:root}).trim().split('\n').filter(Boolean),builtAt:new Date().toISOString(),electronSha256:sha(join(dir,'NEKOfuns.exe')),nodeSha256:sha(join(dir,'node/node.exe')),files:hashes};
+  const manifest={version:release.version,build:release.build,platform:'win32-x64',sourceCommit:commit,sourceVariant:sourceManifest?.variant||'local',sourcePullRequest:sourceManifest?.pullRequest||null,packagingAdditions:packagingFiles,bundledDsh,bundledNpm,localChanges:run('git',['status','--porcelain'],{cwd:root}).trim().split('\n').filter(Boolean),builtAt:new Date().toISOString(),electronSha256:sha(join(dir,'NEKOfuns.exe')),nodeSha256:sha(join(dir,'node/node.exe')),files:hashes};
   writeFileSync(join(dir,'resources/WORKBENCH_BUILD.json'),JSON.stringify(manifest,null,2)+'\n');
   // Inventory the entire shipped application, including cached official runtimes.
   const integrity={};for(const file of inventory(dir)){
