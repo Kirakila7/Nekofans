@@ -41,6 +41,7 @@ async function choose(d,id){d.querySelector('.neko-office-switch').click();await
 test('Windows office game studio previews a draft, publishes its revision and opens the room',async t=>{
  const inviteUrl='https://play.nekofans.games/?room=abcdefghijklmnopqrstuvwx';
  const {d,calls}=fixture(t,{office:true,roomCompanion:true,gameHub:request=>{
+  if(request.action==='copy-game-template')return {ok:true};
   if(request.action==='draft-game')return {status:'draft',revisionId:'fixture-revision',preview:{title:'月球基地',description:'争夺基地',opening:'夜幕降临',choices:['修理','探索']}};
   if(request.action==='publish-game')return {ok:true,status:'created',inviteUrl};
   if(request.action==='private-open-seat')return {status:'paired'};
@@ -52,6 +53,11 @@ test('Windows office game studio previews a draft, publishes its revision and op
  entry.click();
  const dialog=d.querySelector('[data-dialog="game-studio"]');
  assert.ok(dialog);
+ assert.match(dialog.textContent,/内置作品自动支持双人回合制/);
+ dialog.querySelector('.neko-game-copy-template').click();
+ await tick();
+ assert.ok(calls.some(request=>request.action==='copy-game-template'));
+ assert.match(dialog.textContent,/模板已复制/);
  dialog.querySelector('textarea').value='两个人争夺月球基地';
  dialog.querySelector('.neko-lobby-game-draft').click();
  await tick();

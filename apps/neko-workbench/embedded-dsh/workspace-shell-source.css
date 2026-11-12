@@ -481,3 +481,9 @@ body[data-neko-workspace-shell] .neko-chatroom-preview::before { content:''; pos
 
 .neko-lobby-dialog[data-dialog="game-studio"] { position:fixed; z-index:2147482500; color:var(--nws-text); -webkit-app-region:no-drag; }
 .neko-lobby-dialog[data-dialog="game-studio"] .neko-lobby-dialog__card { width:min(540px,94%); }
+.neko-game-multiplayer-template { display:flex; align-items:center; flex-wrap:wrap; gap:8px 12px; padding:12px; border:1px solid var(--nws-border); border-radius:12px; background:var(--nws-hover); }
+.neko-game-multiplayer-info { flex:1 1 230px; }
+.neko-game-multiplayer-info strong { font-size:13px; }
+.neko-game-multiplayer-info p { margin:4px 0 0; }
+.neko-game-copy-template { white-space:nowrap; }
+.neko-game-multiplayer-template > p { flex-basis:100%; margin:0; }

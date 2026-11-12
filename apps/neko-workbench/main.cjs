@@ -925,6 +925,11 @@ ipcMain.handle('workbench:game-hub',async(event,request)=>{
   const gameCatalog=require('../../services/nekofans-game-hub/game-catalog.cjs');
   const bridge=createGameHubBridge({lobbyController});
   if(request?.action==='share')return bridge.share({title:request.title,roomUrl:request.roomUrl});
+  if(request?.action==='copy-game-template'){
+    const template=await fs.promises.readFile(path.join(base,'docs','game-multiplayer-template.md'),'utf8');
+    clipboard.writeText(template);
+    return {ok:true};
+  }
   if(request?.action==='private-copy-invite'){
     clipboard.writeText(require('../../services/nekofans-game-hub/private-game-origin.cjs').parsePrivateRoomInvite(request.inviteUrl).inviteUrl);
     return {ok:true};

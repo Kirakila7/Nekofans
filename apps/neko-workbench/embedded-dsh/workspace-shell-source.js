@@ -2527,6 +2527,25 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
       request:()=>view?{action:'share',title:view.game?.title||'双人国际象棋',roomUrl:inviteUrl}:'请先确认已加入房间。'};
   }
   function gameStudioFields(enterRoom) {
+    const multiplayer=el('section','neko-game-multiplayer-template');
+    const multiplayerInfo=el('div','neko-game-multiplayer-info');
+    multiplayerInfo.append(
+      el('strong','','内置作品自动支持双人回合制'),
+      el('p','neko-lobby-field__hint','用其他 Coding Agent 做游戏？复制模板，让它添加联机模式，再到独立游戏工坊发布 HTML。')
+    );
+    const templateStatus=el('p','neko-lobby-field__hint');
+    templateStatus.setAttribute('role','status');
+    templateStatus.hidden=true;
+    const copyTemplate=button('复制 HTML 联机模板','neko-game-copy-template',async()=>{
+      if(copyTemplate.disabled)return;
+      copyTemplate.disabled=true;
+      try {
+        const result=await callGame({action:'copy-game-template'});
+        templateStatus.textContent=result.ok?'模板已复制，可以粘贴给 Coding Agent。':'复制失败，请重试。';
+        templateStatus.hidden=false;
+      } finally { copyTemplate.disabled=false; }
+    });
+    multiplayer.append(multiplayerInfo,copyTemplate,templateStatus);
     const server=el('input','neko-lobby-game-server');
     server.type='url'; server.value='https://play.nekofans.games';
     const gameState=el('p','neko-lobby-game-status');gameState.setAttribute('role','status');
@@ -2587,10 +2606,9 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     });
     publish.disabled=true;
     preview.append(gameName,description,opening,choices,publish);
-    preview.append(gameName,description,opening,choices,publish);
     const advanced=el('details','neko-lobby-game-advanced');
     advanced.append(el('summary','','游戏服务器'),field('游戏服务器',server));
-    return {nodes:[field('描述你想玩的游戏',prompt),draft,preview,gameState,advanced],request:()=>null};
+    return {nodes:[multiplayer,field('描述你想玩的游戏',prompt),draft,preview,gameState,advanced],request:()=>null};
   }
   function gameFields() {
     const title = el('input', 'neko-lobby-game-title'); title.maxLength = 80; title.setAttribute('aria-label', '游戏名称'); title.placeholder = '例如：双人国际象棋';
