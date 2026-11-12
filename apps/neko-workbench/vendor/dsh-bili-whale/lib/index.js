@@ -1,7 +1,14 @@
 import { createFishControl } from '../../../fish-care.cjs'
 import { accountRoute } from '../../../account-route.cjs'
+import { startRoleConnector } from './role-connector.cjs'
 let workbenchController
+let workbenchRole
 export async function workbenchAction(action){if(!workbenchController)throw Error('养鱼服务尚未就绪');return workbenchController.action(action)}
+export async function workbenchRoleAction(action, payload) {
+  if (!workbenchRole) throw Error('B 站养鱼插件尚未就绪。')
+  return workbenchRole(action, payload)
+}
+import { createHash } from 'node:crypto'
 import { AuthError, createCredentialStore, parseManualCookie } from './credentials.js'
 import { QrAuth, verifyAccount } from './auth.js'
 import { guardedFetch as fetch, RISK_DEFAULTS } from '../tools/lib/traffic.mjs'
@@ -162,7 +169,7 @@ export default {
   // ⚠️ 2026-10-18 踩的坑：这里以前**写了两个 inject 键** ✗ —— 对象字面量后者覆盖前者 →
   //   `sessionController` 没被注入 → 生物钟每 60 秒静默 `return`（不报错、也不干活 ✗）
   //   一个数组写全 ✓
-  inject: ['sessionController', 'webServer', 'connection'],
+  inject: ['sessionController', 'sessionQuery', 'webServer', 'connection'],
   apply(ctx) {
 
 /** 回环快速通道：Host 是 127.0.0.1/localhost/[::1] 时直接算可信。
@@ -531,6 +538,38 @@ function isTrustedReq(req) {
       notify:value=>{try{process.stdout.write(JSON.stringify({method:'fish-care-state',params:value})+'\n')}catch{}}
     })
     workbenchController=fishControl
+    const roleId = 'dsh-bili-whale:' + createHash('sha256')
+      .update(JSON.stringify([process.env.DSH_HOME || '', path.resolve(DSH_HOME), path.resolve(HOME)]))
+      .digest('hex')
+    const roleAction = async (action, payload = {}) => {
+      if (action === 'discover') {
+        const name = String(readConfig().persona?.name || 'B 站养鱼角色').slice(0, 80)
+        const running = fishControl.snapshot().phase === 'running' && !!sched
+        let sessionId = 'bili-whale'
+        try {
+          const saved = JSON.parse(fs.readFileSync(path.join(DSH_HOME, 'whale-session.json'), 'utf8'))
+          if (typeof saved.id === 'string' && saved.id) sessionId = saved.id
+        } catch (error) {
+          if (error.code !== 'ENOENT') throw Error('养鱼会话配置无法读取，请在原工作台检查。')
+        }
+        const sessions = await ctx.get('sessionQuery')?.listSessions()
+        const exists = Array.isArray(sessions) && sessions.some(row => row?.header?.id === sessionId)
+        return { id: roleId, name, running, exists }
+      }
+      if (action !== 'send' || payload.id !== roleId) throw Error('原 DSH 角色未匹配，请检查绑定。')
+      if (!sched || fishControl.snapshot().phase !== 'running') throw Error('请先在原工作台启动 B 站养鱼。')
+      if (typeof payload.text !== 'string' || !payload.text.trim() || payload.text.length > 8000) throw Error('请输入 1–8000 字的消息。')
+      return sched.chatRole(payload.text)
+    }
+    workbenchRole = roleAction
+    let connectorClosed = false
+    let closeRoleConnector
+    if (!process.env.NEKO_WORKBENCH_DATA_DIR) {
+      void startRoleConnector({ directory: DSH_HOME, action: roleAction }).then(close => {
+        if (connectorClosed) close()
+        else closeRoleConnector = close
+      }).catch(() => console.warn('[bili-whale] Nekofans 角色连接器未启动，请检查 DSH 配置目录。'))
+    }
     route('exact','/dsh-bili/api/read-once',async(req,res)=>{
       if(!isTrustedReq(req)){json(res,403,{ok:false});return}
       if(req.method==='GET'){json(res,200,{ok:true,state:sched?.readingStatus()??{phase:'idle',requestId:null}});return}
@@ -562,6 +601,9 @@ function isTrustedReq(req) {
     ctx.effect(() => () => {
       accountWatch.abort()
       fishControl?.dispose();if(workbenchController===fishControl)workbenchController=null
+      if(workbenchRole===roleAction)workbenchRole=null
+      connectorClosed = true
+      closeRoleConnector?.()
       try { sched?.stop() } catch {}
       for (const d of disposers) { try { d() } catch {} }
     })

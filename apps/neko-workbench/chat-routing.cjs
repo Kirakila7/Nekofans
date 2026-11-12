@@ -1,7 +1,7 @@
 // The desktop host is a NEKO companion. The DSH root stays in the embedded DSH UI.
 function migrateChatRouting(state){
   const main=state.actors.find(a=>a.id==='main');
-  if(!['neko','chat-api','deepseek-account'].includes(main.chatBackend)){
+  if(!['neko','chat-api','deepseek-account','dsh-role'].includes(main.chatBackend)){
     state.dshRoot={...main,id:'dsh-root',name:'DSH 主会话',present:false};
     const index=state.actors.indexOf(main);
     state.actors[index]={id:'main',name:main.name||'大肥鱼',chatBackend:state.neko?.enabled===true?'neko':'chat-api',sessionId:null,status:'idle',present:true,messages:[],work:{state:null,task:null,tick:0},workFlags:{goalRound:false,closing:null}};

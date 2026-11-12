@@ -7,7 +7,7 @@ const {createMemoryAccountRelay}=require('./memory-account-relay.cjs');
 const {createCompanionMedia,splitMessage}=require('./companion-media.cjs');
 
 const PERSONA = 'bigfish';
-const BACKENDS = new Set(['chat-api', 'neko', 'deepseek-account']);
+const BACKENDS = new Set(['chat-api', 'neko', 'deepseek-account', 'dsh-role']);
 const usesChatService = backend => backend === 'chat-api' || backend === 'deepseek-account';
 const unavailableAccountProvider = Object.freeze({ async *stream() { throw new Error('工作台账号聊天尚未接入'); } });
 const clone = value => structuredClone(value);

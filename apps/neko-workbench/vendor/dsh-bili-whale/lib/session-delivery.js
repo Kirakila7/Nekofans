@@ -23,7 +23,7 @@ export function createSessionDelivery({controller,dshHome,cwd,sessionId,config,p
     try {fs.writeFileSync(tmp,JSON.stringify(next));fs.renameSync(tmp,file)} finally {fs.rmSync(tmp,{force:true})}
   }
   return {
-    send(request,signal,{retainUntilAck=false,beforePrompt}={}) {
+    send(request,signal,{retainUntilAck=false,beforePrompt,requireExisting=false}={}) {
       const job=tail.then(async()=>{
         signal?.throwIfAborted()
         const cfg=config(),days=Number(cfg.sessionRotateDays??0),once=cfg.personaOncePerSession===true
@@ -38,9 +38,10 @@ export function createSessionDelivery({controller,dshHome,cwd,sessionId,config,p
           try {
             // create() only reuses blank sessions. Resume an existing session
             // first so a restart cannot mint an unrelated empty conversation.
-            const found=rotating?null:await controller.resolveAgent(next.id)
+            const found=rotating&&!requireExisting?null:await controller.resolveAgent(rotating?state.id:next.id)
             if(found?.error&&found.error.code!=='session/not-found')throw Error('session unavailable')
             if(!rotating&&!found?.agent&&found?.error?.code!=='session/not-found')throw Error('invalid session result')
+            if(requireExisting&&!found?.agent)throw Error('original session is unavailable')
             if(rotating||found?.error?.code==='session/not-found'){
               const created=await controller.create({sessionId:next.id,cwd})
               if(typeof created?.sessionId!=='string'||!created.sessionId)throw Error('invalid session identity')

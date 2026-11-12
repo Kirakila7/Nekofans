@@ -1,4 +1,5 @@
 import { createSessionDelivery } from './session-delivery.js'
+import { createRoleChat } from './role-chat.js'
 import { mentionSummaryLines } from './mention-summary.js'
 import { trafficGuard } from '../tools/lib/traffic.mjs'
 import { pollDelay } from '../tools/lib/poll-policy.mjs'
@@ -254,14 +255,18 @@ export function startScheduler(ctx, opts) {
   let reading = { phase: 'idle', requestId: null }
   let readingScope=null
   let scopeRequestId=null, scopeTurn=null, currentTurn=null
+  let sessionTurnActive=false
   function releaseReadingScope(expectedRequestId) {
     if(expectedRequestId && scopeRequestId!==expectedRequestId)return
     const scope=readingScope;readingScope=null;scopeRequestId=null;scopeTurn=null
     void scope?.dispose?.()
   }
-  async function restrictReading(id,requestId,files,readOnlyFiles=[]) {
+  async function restrictReading(id,requestId,files,readOnlyFiles=[],allowHostExecutor=false) {
     if(readingScope)throw Error('养鱼只读任务仍在执行，请等待当前任务结束')
-    const scope=await createReadingScope(ctx.get('agents')?.get(id),{cwd,files,readOnlyFiles})
+    const agent=ctx.get('agents')?.get(id)
+    const scope=allowHostExecutor&&!process.env.NEKO_WORKBENCH_DSH_MODULES
+      ?await createListeningScope(agent,{cwd,files,isWriteAllowed:()=>false})
+      :await createReadingScope(agent,{cwd,files,readOnlyFiles})
     if(stopped){await scope.dispose?.();lifecycle.signal.throwIfAborted()}
     readingScope=scope;scopeRequestId=requestId;scopeTurn=null
   }
@@ -281,7 +286,8 @@ export function startScheduler(ctx, opts) {
   }
   const offReading = typeof ctx.on==='function' ? ctx.on('session/event',(session,event)=>{
     if(stopped||session?.header?.id!==activeSessionId)return
-    if(event.type==='turn/start')currentTurn=event.data?.turn
+    if(event.type==='turn/start'){currentTurn=event.data?.turn;sessionTurnActive=true}
+    if(event.type==='turn/end'&&event.data?.turn===currentTurn)sessionTurnActive=false
     if(event.type==='user/message'&&scopeRequestId&&event.data?.source?.rpcId===scopeRequestId)scopeTurn=currentTurn
     // A queued prompt can be waiting behind another turn. Only the turn that
     // actually consumed this RPC may release its file restrictions or finish
@@ -439,7 +445,26 @@ export function startScheduler(ctx, opts) {
 
 
   const personaLine = () => '' // Added at delivery time, after session selection.
-  const delivery = createSessionDelivery({controller:ctx.sessionController,dshHome,cwd,sessionId,route:opts.route,config:readCfgNow,persona:personaBlock,isBusy:sheIsBusy,log,onSession:id=>{ if(activeSessionId!==id) { activeSessionId=id; sessionFileCache=null } }})
+  const delivery = createSessionDelivery({controller:ctx.sessionController,dshHome,cwd,sessionId,route:opts.route,config:readCfgNow,persona:personaBlock,isBusy:sheIsBusy,log,onSession:id=>{ if(activeSessionId!==id) { activeSessionId=id; sessionFileCache=null; currentTurn=null; sessionTurnActive=false } }})
+  const chatRole = createRoleChat({
+    subscribe: handler => ctx.on('session/event', handler),
+    signal: lifecycle.signal,
+    async deliver(request, signal, onSession) {
+      try {
+        await delivery.send(request, signal, {
+          requireExisting: true,
+          beforePrompt: async id => {
+            if(sessionTurnActive)throw Error('原 DSH 会话正在运行，请稍后再发。')
+            await restrictReading(id, request.requestId, [path.join(dshHome,'whale-diary.md'),path.join(dshHome,'whale-diary-private.md')], [], true)
+            onSession(id)
+          },
+        })
+      } catch (error) {
+        releaseReadingScope(request.requestId)
+        throw error
+      }
+    },
+  })
 
   // The listener prompts contain untrusted platform content. Guard the real
   // agent's tools for every listener turn, even when writes are currently
@@ -810,6 +835,7 @@ export function startScheduler(ctx, opts) {
     tick,
     readOnce,
     readingStatus,
+    chatRole,
     listenTick,
     dmTick,
     liveTick,

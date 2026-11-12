@@ -278,13 +278,19 @@ if(view==='chat-settings'){
     const preview=window.PetContext.preview(a);for(const field of inspector.querySelectorAll('dd'))field.textContent=preview[field.dataset.field];
     input.setAttribute('aria-label','给'+a.name+'发消息');
     const mainChatService=a.id==='main'&&['chat-api','deepseek-account'].includes(a.chatBackend);
+    const dshRole=a.id==='main'&&a.chatBackend==='dsh-role';
     input.title=a.id==='main'?(a.chatBackend==='deepseek-account'?'DeepSeek 账号聊天 · 大肥鱼':a.chatBackend==='chat-api'?'独立聊天 API · 大肥鱼':'N.E.K.O. · '+(state.neko.character||'等待连接')):a.name+(a.task?'\n任务：'+a.task:'');
-    input.maxLength=mainChatService?8000:30000;
+    if(dshRole)input.title='DSH · '+(state.dshRole?.name||'等待角色连接');
+    input.maxLength=mainChatService||dshRole?8000:30000;
     stopReply.hidden=!(mainChatService&&busy(a));form.classList.toggle('can-stop',!stopReply.hidden);
     input.readOnly=a.id!=='main'&&a.mode!=='continuable';
     const shortName=Array.from(a.name).slice(0,12).join('')+(Array.from(a.name).length>12?'…':'');
     input.placeholder=a.id==='main'?(busy(a)?'正在回复，可点右侧停止':a.chatBackend==='deepseek-account'?'和大肥鱼聊聊，回车发送':a.chatBackend==='chat-api'?(state.mainChat?.hasKey&&state.mainChat?.settings?.model?'和大肥鱼聊聊，回车发送':'右键 → 聊天 API 设置'):state.neko.connection==='ready'?'和'+state.neko.character+'说点什么，回车发送':'N.E.K.O. 未连接，右键设置'):input.readOnly?'只读子任务，在 DSH 查看':busy(a)?((a.work?.task||a.task)?.slice(0,25)||'正在做，稍等一下…'):shortName+'：发消息，回车发送';
-    if(a.id==='main'&&(mainChatService||a.screenReply)){
+    if(dshRole){
+      const ready=state.dshRole?.directory?state.externalDshRoleReady===true:state.fish?.phase==='running';
+      input.placeholder=busy(a)?'角色正在回复…':ready?'和'+state.dshRole?.name+'说点什么，回车发送':'请在原工作台启动 B 站养鱼';
+    }
+    if(a.id==='main'&&(mainChatService||dshRole||a.screenReply)){
       hideInspector();bubble.tabIndex=0;bubble.title='最近回复，可滚动查看全文';apiReplyPresenter.render(a);
     }else if(a.kind==='task'){
       apiReplyPresenter.reset();bubble.tabIndex=0;bubble.title='子会话聊天消息';feedback.showLocal(inputVisible?window.PetChatPresentation.taskChatText(a):'',{persistent:inputVisible});

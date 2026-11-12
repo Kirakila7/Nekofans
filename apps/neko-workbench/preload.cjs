@@ -1,6 +1,6 @@
 const { contextBridge, ipcRenderer } = require('electron');
 const methods=new Set(['state','neko-settings','neko-list-characters','rename','settings','menu','move','move-end','motion-input','pass-through','memory','prompt','open-task','open-workbench',
-  'chat-settings-read','chat-settings-save','chat-use-deepseek-account','chat-open-neko-settings','chat-open-memory','chat-memory-read','chat-history','chat-memory-action','chat-cancel','question-reveal']);
+  'chat-settings-read','chat-settings-save','chat-use-deepseek-account','chat-dsh-role','chat-open-neko-settings','chat-open-memory','chat-memory-read','chat-history','chat-memory-action','chat-cancel','question-reveal']);
 contextBridge.exposeInMainWorld('pet', Object.freeze({
   call: (method, params={}) => methods.has(method)?ipcRenderer.invoke('pet:call',method,params):Promise.reject(new Error('未知桌宠操作')),
   onInput: callback => { const f=()=>callback(); ipcRenderer.on('pet:input',f); return ()=>ipcRenderer.removeListener('pet:input',f); },
