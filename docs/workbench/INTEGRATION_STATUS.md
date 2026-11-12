@@ -375,3 +375,8 @@ Run `node scripts/build-neko-daily.mjs --electron-zip <official darwin-arm64 Ele
 The download contains one app and one installer entry. Quit the old app, then run `安装日常版.command`. It replaces the same daily app path and prepares a locked memory environment under Application Support. Chat databases, persona files and encrypted account settings are not packaged or uploaded.
 
 The installer links an existing canonical checkout to the daily workbench after checking its `origin` repository. Existing sessions keep their own directories; new default work uses that linked checkout. The local link file contains only the project path and repository URL.
+# Windows 游戏制作预览 · 2026-11-12
+
+基于 Windows 合并预览 30eae51，同步 macOS 的结构化双人游戏草稿、预览和建房。办公版入口显示「创造台 · 游戏制作」。创建房间后可复制邀请给好友，或在已连接的聊天室中发送。Windows 此处使用公开房间邀请，好友收件箱仍需社区接入。
+
+生成、秘密规则处理和 AI 队友分别使用各自的 DeepSeek 路由。发布仅接收已校验的草稿版本，服务器必须支持创造台作品。本地模型及回环房间的 49 项验证通过，实际公网发布与社区账号验收待进行。

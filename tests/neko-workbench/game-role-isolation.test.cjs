@@ -13,6 +13,7 @@ test('role and purpose bindings reject crossed teammate/goddess contexts before 
  const calls=[];const rpc=async(method,args)=>{calls.push({method,args});return {text:'ok'}};
  const teammate=createCompanionAccountProvider(rpc,{namespace:'game-player'});
  const goddess=createCompanionAccountProvider(rpc,{namespace:'game'});
+ const studio=createCompanionAccountProvider(rpc,{namespace:'game-studio'});
  for(const [provider,value] of [
   [goddess,input('bigfish','private-game-turn')],
   [teammate,input('private-game-rule-compiler','private-game-turn')],
@@ -20,15 +21,17 @@ test('role and purpose bindings reject crossed teammate/goddess contexts before 
   [teammate,input('bigfish','private-game-rules')],
   [goddess,input('game-studio','private-game-rules')],
   [goddess,input('private-game-rule-compiler','private-game-draft')],
+  [goddess,input('game-studio','private-game-draft')],
+  [studio,input('private-game-rule-compiler','private-game-rules')],
   [teammate,input('bigfish','private-game-turn',{memories:[{text:'creator secret'}]})],
   [teammate,input('bigfish','private-game-turn',{memoryContext:{text:'creator secret'}})],
   [teammate,input('bigfish','private-game-turn',{messages:[{personaId:'another',conversationId:'private-game-turn',role:'user',text:'wrong owner'}]})],
  ])await assert.rejects(consume(provider,value),/Private game context/);
  assert.equal(calls.length,0);
  await consume(teammate,input('bigfish','private-game-turn'));
- await consume(goddess,input('game-studio','private-game-draft'));
+ await consume(studio,input('game-studio','private-game-draft'));
  await consume(goddess,input('private-game-rule-compiler','private-game-rules'));
- assert.deepEqual(calls.map(c=>c.method),['game-player-account-chat','game-account-chat','game-account-chat']);
+ assert.deepEqual(calls.map(c=>c.method),['game-player-account-chat','game-studio-account-chat','game-account-chat']);
  assert(calls.every(c=>c.args.history.length===0));
 });
 

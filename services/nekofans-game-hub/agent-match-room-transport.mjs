@@ -1,3 +1,5 @@
+import catalog from './game-catalog.cjs';
+
 // A private, trusted-host transport for the existing seat-authenticated room
 // API. Caller acquires/retains its seat tokens and decides which server to use;
 // this module neither creates rooms nor discovers credentials. Never expose
@@ -50,8 +52,9 @@ function createTransport({ origin, roomId, credentials, fetchImpl = fetch } = {}
     const actions=value.actions.map(({seat:player,action:move,version})=>({seat:player,action:move,version}));
     const view={ready:value.ready,decisionRequired:value.decisionRequired===true,actions};
     if(!includeRoomStatus)return view;
-    if(actions.some(({seat:player,action:move,version},index)=>![0,1].includes(player)||typeof move!=='string'||!/^[a-h][1-8][a-h][1-8][qrbn]?$/.test(move)||version!==index+1))throw Error('invalid public chess action');
-    return {...view,players:value.players===2?2:1,executorOnline:value.executorOnline===true,
+    const gameId=value.gameId ?? catalog.DEFAULT_GAME;
+    if(!catalog.getGame(gameId)||actions.some(({seat:player,action:move,version},index)=>![0,1].includes(player)||!catalog.acceptsAction(gameId,move)||version!==index+1))throw Error('invalid public game action');
+    return {...view,gameId,...(value.finished===true?{finished:true}:{}),players:value.players===2?2:1,executorOnline:value.executorOnline===true,
       ownRuleStatus:['empty','processing','ready'].includes(value.ownRuleStatus)?value.ownRuleStatus:'empty',
       opponentReady:value.opponentReady===true};
   }

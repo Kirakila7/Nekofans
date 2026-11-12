@@ -126,6 +126,7 @@ communityAccount=createCommunityAccount({getBaseUrl:()=>state.neko.baseUrl,
 // Public lobby (频道). Optional and contained: a missing module, bad config or any lobby failure leaves a
 // no-op controller, so workbench:companion and the private chat never depend on it.
 const lobbyOffline=Object.freeze({request:async()=>({ok:false,error:'频道暂不可用',state:null}),snapshot:()=>null,refresh(){},processPending(){},dispose(){}});
+let privateGameRuntime=null;
 function createLobby(){
   try{
     const {createLobbyController}=require('./lobby-controller.cjs'),{providerGetter,readWorkbenchPersona}=require('./lobby-cat.cjs');
@@ -138,7 +139,7 @@ function createLobby(){
       getPersona:id=>{const runtime=chatApi();return runtime&&id===PERSONA?readWorkbenchPersona(path.join(runtime.personasDir,PERSONA+'.json')):null;},
       recallMemory:async(query,budget,signal)=>{const memory=chatApi()?.lobbyMemory();return memory?memory.recall(query,budget,signal):[];},
       recordSharedExperience:async entry=>{const memory=chatApi()?.lobbyMemory();if(!memory)throw new Error('大厅记忆仅在主聊天模式可用');return memory.recordSharedExperience(entry);},
-      onState:value=>{if(dshWindow&&!dshWindow.isDestroyed()&&isWorkbenchOrigin(dshWindow.webContents.getURL()))dshWindow.webContents.send('workbench:lobby-state',value);unifiedNekoLogin?.lobbyChanged();publishNekoAccount();}});
+      onState:value=>{if(value.me?.user_id||value.auth?.status==='signed-out')privateGameRuntime?.seatOwnerChanged(value.me?.user_id??null);if(dshWindow&&!dshWindow.isDestroyed()&&isWorkbenchOrigin(dshWindow.webContents.getURL()))dshWindow.webContents.send('workbench:lobby-state',value);unifiedNekoLogin?.lobbyChanged();publishNekoAccount();}});
   }catch{return lobbyOffline;}
 }
 const lobbyController=createLobby();
@@ -911,9 +912,9 @@ ipcMain.handle('workbench:lobby',async(event,request)=>{
   if(['state','open','cat-save','mode-set','suggest'].includes(request?.action))await mainChatRuntime?.refreshLobbyAccount({force:request.action!=='state'});
   return lobbyController.request(request);
 });
-let privateGameRuntime=null,privateGameStudio=null,privatePrototypeRelay=null,storyPrototypeLauncher=null;
+let privateGameStudio=null,privatePrototypeRelay=null,storyPrototypeLauncher=null;
 function ownGamePersona(){const runtime=mainChatRuntime;if(!runtime||runtime.closed||!usesMainChatService(runtime.backend))return null;const persona=require('./lobby-cat.cjs').readWorkbenchPersona(path.join(runtime.personasDir,PERSONA+'.json'));return {id:PERSONA,...persona};}
-function gameRuntime(){return privateGameRuntime??=require('./private-game-runtime.cjs').createPrivateGameRuntime({rpc,repositoryRoot:path.resolve(base,'../..'),dataDir:data,safeStorage,getOwnPersona:async()=>ownGamePersona()});}
+function gameRuntime(){return privateGameRuntime??=require('./private-game-runtime.cjs').createPrivateGameRuntime({rpc,repositoryRoot:path.resolve(base,'../..'),dataDir:data,safeStorage,getOwnPersona:async()=>ownGamePersona(),getSeatOwner:async()=>lobbyController.snapshot()?.me?.user_id ?? null});}
 // Trusted-main-process-only local prototype bridge. The renderer receives only
 // an ephemeral start command; it never receives the account persona or rules.
 function prototypeRelay(){return privatePrototypeRelay??=require('./prototype-model-relay.cjs').createPrototypeModelRelay({rpc,getOwnPersona:async()=>ownGamePersona()});}
@@ -921,8 +922,13 @@ function storyPrototype(){return storyPrototypeLauncher??=require('./story-proto
 ipcMain.handle('workbench:game-hub',async(event,request)=>{
   assertWorkbenchCaller(event);
   const {createGameHubBridge}=require('./game-hub-bridge.cjs');
+  const gameCatalog=require('../../services/nekofans-game-hub/game-catalog.cjs');
   const bridge=createGameHubBridge({lobbyController});
   if(request?.action==='share')return bridge.share({title:request.title,roomUrl:request.roomUrl});
+  if(request?.action==='private-copy-invite'){
+    clipboard.writeText(require('../../services/nekofans-game-hub/private-game-origin.cjs').parsePrivateRoomInvite(request.inviteUrl).inviteUrl);
+    return {ok:true};
+  }
   if(request?.action==='private-status')return {ok:true,...gameRuntime().status()};
   if(request?.action==='private-public-key')return {ok:true,publicKey:await gameRuntime().publicKey()};
   if(request?.action==='private-start')return {ok:true,...await gameRuntime().start({url:request.url})};
@@ -935,7 +941,7 @@ ipcMain.handle('workbench:game-hub',async(event,request)=>{
   if(request?.action==='private-seat-view')return {ok:true,...await gameRuntime().readSeatView({inviteUrl:request.inviteUrl})};
   if(request?.action==='private-seat-board')return {ok:true,...await gameRuntime().boardHtml({inviteUrl:request.inviteUrl})};
   if(request?.action==='private-seat-move')return {ok:true,...await gameRuntime().playMove({inviteUrl:request.inviteUrl,action:request.move,expectedVersion:request.expectedVersion})};
-  if(request?.action==='private-submit-own-rule')return {ok:true,...await gameRuntime().submitOwnRule({inviteUrl:request.inviteUrl,text:request.text})};
+  if(request?.action==='private-submit-own-rule')return {ok:true,...await gameRuntime().submitOwnRule({inviteUrl:request.inviteUrl,text:request.text,preset:request.preset})};
   if(request?.action==='private-agent-start')return {ok:true,...await gameRuntime().startAgent({inviteUrl:request.inviteUrl})};
   if(request?.action==='private-agent-stop')return {ok:true,...gameRuntime().stopAgent({inviteUrl:request.inviteUrl})};
   if(request?.action==='private-agent-status')return {ok:true,...gameRuntime().agentStatus()};
@@ -951,8 +957,14 @@ ipcMain.handle('workbench:game-hub',async(event,request)=>{
     const room=await gameRuntime().create({url:request.url});
     return {ok:room.status==='created',status:room.status,inviteUrl:room.inviteUrl};
   }
+  if(request?.action==='publish-game'){
+    const revision=typeof request.revisionId==='string'&&privateGameStudio?.inspect(request.revisionId);
+    if(!revision)return {ok:false,status:'not-found'};
+    const room=await gameRuntime().create({url:request.url,gameId:gameCatalog.STUDIO_GAME,definition:revision.game});
+    return {ok:room.status==='created',status:room.status,inviteUrl:room.inviteUrl};
+  }
   if(request?.action==='draft-game'){
-    if(!privateGameStudio){const {createGameStudio}=await import(pathToFileURL(path.join(base,'../../services/nekofans-game-hub/game-studio.mjs')).href);privateGameStudio=createGameStudio({provider:createCompanionAccountProvider(rpc,{namespace:'game'})});}
+    if(!privateGameStudio){const {createGameStudio}=await import(pathToFileURL(path.join(base,'../../services/nekofans-game-hub/game-studio.mjs')).href);privateGameStudio=createGameStudio({provider:createCompanionAccountProvider(rpc,{namespace:'game-studio'})});}
     return privateGameStudio.propose({prompt:request.prompt,revisionId:request.revisionId});
   }
   throw Error('未知游戏房间操作');

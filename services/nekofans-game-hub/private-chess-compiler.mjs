@@ -20,14 +20,14 @@ export function parseRuleProposal(text) {
 // One isolated stateless call per side. The provider must be the workbench's
 // dedicated game account route; neither opponent rule nor ordinary chat history
 // is included. Only fixed status codes cross this boundary, never model text.
-export async function compilePrivateRule({ provider, rule, signal } = {}) {
+export async function compilePrivateRule({ provider, rule, signal, timeoutMs = 30000 } = {}) {
   if (!provider || typeof provider.stream !== 'function') return { status: 'unavailable' };
   if (typeof rule !== 'string' || !rule.trim() || [...rule.trim()].length > 80 || /[\u0000-\u001f\u007f]/.test(rule)) return { status: 'invalid' };
   const controller = new AbortController();
   const cancel = () => controller.abort();
   if (signal?.aborted) return { status: 'unavailable' };
   signal?.addEventListener('abort', cancel, { once: true });
-  const timer = setTimeout(cancel, 30000);
+  const timer = setTimeout(cancel, timeoutMs);
   let iterator;
   const abortable = p => new Promise((resolve, reject) => {
     const done = () => reject(Error('cancelled'));

@@ -8,16 +8,26 @@ import {compilePrivateRule} from './private-chess-compiler.mjs';
 
 test('DeepSeek authoring route creates and revises immutable, unpublished drafts',async()=>{
  const requests=[];
- const provider=createCompanionAccountProvider(async(method,input)=>{requests.push({method,input});return {text:requests.length===1?'<!doctype html><html>first</html>':'<!doctype html><html>second</html>'};},{namespace:'game'});
+ const game=title=>({title,description:'轮流过桥',nodes:[
+  {text:'先行方选路',seat:0,choices:[{label:'走桥',next:1}]},
+  {text:'后行方选路线',seat:1,choices:[{label:'跟上',next:2}]},
+  {text:'双方都到达',winner:'draw'},
+ ]});
+ const provider=createCompanionAccountProvider(async(method,input)=>{
+  requests.push({method,input});
+  return {text:JSON.stringify(game(requests.length===1?'月球旧桥':'月球蓝桥'))};
+ },{namespace:'game-studio'});
  const studio=createGameStudio({provider});
- const first=await studio.propose({prompt:'制作双人国际象棋'});
- assert.equal(first.status,'draft');assert.equal(first.requiresIsolation,true);assert(!('html' in first));
+ const first=await studio.propose({prompt:'做一个双人月球过桥游戏'});
+ assert.equal(first.status,'draft');assert.equal(first.preview.title,'月球旧桥');assert(!('game' in first));
  const second=await studio.propose({prompt:'改成蓝色',revisionId:first.revisionId});
  assert.equal(second.status,'draft');assert.notEqual(second.digest,first.digest);
- assert.match(studio.inspect(first.revisionId).html,/first/);assert.match(studio.inspect(second.revisionId).html,/second/);
+ const copy=studio.inspect(first.revisionId);copy.game.nodes[0].choices[0].next=2;
+ assert.equal(studio.inspect(first.revisionId).game.nodes[0].choices[0].next,1);
+ assert.equal(studio.inspect(second.revisionId).game.title,'月球蓝桥');
  assert.equal(studio.inspect(second.revisionId).parent,first.revisionId);
- assert.equal(requests[0].method,'game-account-chat');assert.deepEqual(requests[0].input.history,[]);
- assert.match(requests[1].input.text,/first/);assert(!JSON.stringify(requests).includes('other-player-secret'));
+ assert.equal(requests[0].method,'game-studio-account-chat');assert.deepEqual(requests[0].input.history,[]);
+ assert.equal(JSON.parse(requests[1].input.text).previousDraft.title,'月球旧桥');
  assert.deepEqual(await studio.propose({prompt:'修改',revisionId:'missing'}),{status:'not-found'});
 });
 
@@ -32,7 +42,7 @@ test('dedicated game account bridge receives no other seat, conversation history
 });
 
 test('invalid model responses and unsolicited chat histories are rejected',async()=>{
- const provider=createCompanionAccountProvider(async()=>({text:'not html'}),{namespace:'game'});
+ const provider=createCompanionAccountProvider(async()=>({text:'not html'}),{namespace:'game-studio'});
  assert.deepEqual(await createGameStudio({provider}).propose({prompt:'做游戏'}),{status:'invalid-proposal'});
  const ac=new AbortController();
  await assert.rejects(async()=>{for await(const e of provider.stream({persona:{id:'x'},signal:ac.signal,messages:[{role:'user',text:'one',conversationId:'private-game-rules'},{role:'user',text:'two',conversationId:'private-game-rules'}]}))void e;},/Private game context/);
