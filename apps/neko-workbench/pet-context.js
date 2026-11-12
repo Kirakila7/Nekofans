@@ -34,6 +34,7 @@
   }
   function preview(actor){
     const last=actor.lastUserMessage?.text||actor.messages?.findLast(m=>m.role==='user')?.text||'';
+    if(actor.chatBackend==='dsh-role')return {task:'DSH 角色聊天',work:actor.active?'正在聊天':'陪你聊天',lastUser:oneLine(last)||'还没有发过消息'};
     if(['neko','chat-api','deepseek-account'].includes(actor.chatBackend))return {task:actor.chatBackend==='deepseek-account'?'DeepSeek 账号聊天 · 大肥鱼':actor.chatBackend==='chat-api'?'独立聊天 · 大肥鱼':'N.E.K.O. · '+(actor.nekoCharacter||'等待连接'),work:actor.active?'正在聊天':actor.status==='error'?'聊天遇到问题':'陪你聊天',lastUser:oneLine(last)||'还没有给她发过消息'};
     const title=/^你是(?:「大肥鱼工作小队」| DSH 子代理)/u.test(actor.title||'')?'':actor.title;
     const task=oneLine(actor.dshName||title||actor.task||cleanPrompt(last))||'等待任务';

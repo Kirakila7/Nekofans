@@ -233,6 +233,10 @@ exports.apply=function(ctx){
       else homeAgent=await ctx.agents.create({sessionId,meta:{cwd,agentPreset:'standard',title:'共建我们的家'},agentOptions:options,setup});
       return {sessionId:homeAgent.agent.id};
     }
+    if(method==='fish-role-discover'||method==='fish-role-chat'){
+      const fish=await import(require('node:url').pathToFileURL(require('node:path').join(__dirname,'vendor/dsh-bili-whale/lib/index.js')).href);
+      return fish.workbenchRoleAction(method==='fish-role-discover'?'discover':'send',{id:p.id,text:p.text});
+    }
     if(method==='fish-care'){
       if(!['status','start','pause'].includes(p.action))throw new Error('未知养鱼操作');
       const fish=await import(require('node:url').pathToFileURL(require('node:path').join(__dirname,'vendor/dsh-bili-whale/lib/index.js')).href);

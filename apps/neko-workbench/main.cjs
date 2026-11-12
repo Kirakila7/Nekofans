@@ -41,6 +41,7 @@ const petAppearance=require('./pet-appearance.js');
 const {importAppearanceImage}=require('./pet-appearance-import.cjs');
 const {decodeAnimationPoster}=require('./pet-image-decoder.cjs');
 const {prepareFishCare}=require('./fish-care.cjs');
+const {externalRoleRequest}=require('./vendor/dsh-bili-whale/lib/role-connector.cjs');
 const {createChannelLife}=require('./channel-life.cjs');
 const {createCommunityDaily}=require('./community-daily.cjs');
 const {createCoordinator}=require('./fish-qq-coordinator.cjs');
@@ -103,6 +104,7 @@ state.actors=state.actors.filter(a=>a.id==='main'||a.sessionId).map(a=>{
 migrateChatRouting(state);
 state.connection='starting';state.error='';
 state.fish={enabled:false,phase:'paused',reason:'已暂停'};
+state.externalDshRoleReady=false;
 state.qqbot={enabled:false,phase:'paused',reason:'QQ 机器人已暂停。',bound:false,connected:false,scopeConfigured:false};
 let memoryWindow,settingsWindow,nekoSettingsWindow,chatSettingsWindow,chatMemoryWindow,nekoWindow,dshWindow,dshLaunchUrl,tray,child,childLifecycle,quitting=false,rpcId=0,startPromise,stderr='',rosterTimer,nekoRetry,mainChatRuntime,activeApiRequest,workbenchNavigation=null,questionRelay,petQuestionController;
 const localWindows=new WeakMap();
@@ -349,7 +351,9 @@ function applyMainChat(snapshot){
   state.mainChat=snapshot;
   if(oldBackend!==snapshot.backend){
     if(oldBackend==='neko')state.neko.history=a.messages;
-    a.messages=snapshot.backend==='neko'?(state.neko.history||[]):[];
+    if(oldBackend==='dsh-role')activeDshRoleRequest=null;
+    a.messages=snapshot.backend==='neko'?(state.neko.history||[]):
+      snapshot.backend==='dsh-role'?(state.dshRole?.histories?.[state.dshRole.id]||[]):[];
     a.chatReply=null;a.lastUserMessage=null;a.status='idle';a.active=false;setWork(a,null);
   }
   a.chatBackend=snapshot.backend;a.sessionId=null;
@@ -363,8 +367,61 @@ function applyMainChat(snapshot){
     if(activeApiRequest&&typeof chat.reply==='string')a.chatReply={id:activeApiRequest.id,text:chat.reply,streaming:aBusy};
     if(chat.lastUserMessage)acceptHuman(a,{text:chat.lastUserMessage,time:Date.now()});
     if(chat.phase==='error'&&(previous?.phase!=='error'||previous?.errorMessage!==chat.errorMessage))notice(a,chat.errorMessage||'聊天暂不可用');
-  }else state.neko.enabled=true;
+  }else if(snapshot.backend==='neko')state.neko.enabled=true;
+  else{
+    state.neko.enabled=false;
+    clearTimeout(nekoRetry);
+    nekoConnectionAttempt=null;
+    nekoChat.close();
+    state.neko.connection='disabled';
+    state.neko.error='';
+  }
   update();
+}
+let activeDshRoleRequest;
+let externalDshRoleChecking=false;
+let externalDshCandidate=null;
+async function refreshExternalDshRole(){
+  const role=state.dshRole;
+  if(quitting||externalDshRoleChecking||mainChatRuntime?.backend!=='dsh-role'||!role?.directory)return;
+  externalDshRoleChecking=true;
+  try{
+    const remote=await externalRoleRequest(role.directory,'discover').catch(()=>null);
+    if(quitting||state.dshRole!==role||mainChatRuntime?.backend!=='dsh-role')return;
+    const ready=remote?.id===role.id&&remote.exists===true&&remote.running===true;
+    if(state.externalDshRoleReady!==ready){state.externalDshRoleReady=ready;broadcast();}
+  }finally{externalDshRoleChecking=false;}
+}
+const externalDshPoll=setInterval(refreshExternalDshRole,8000);
+externalDshPoll.unref();
+function startDshRolePrompt(text){
+  const role=state.dshRole,a=state.actors[0];
+  const ready=role?.directory?state.externalDshRoleReady:state.connection==='ready'&&state.fish.phase==='running';
+  if(!role?.id||!ready)throw Error('请先在原工作台启动已绑定的 B 站养鱼。');
+  if(activeDshRoleRequest||busy(a))throw Error('角色正在回复，请稍等。');
+  if(!text.trim()||text.length>8000)throw Error('请输入 1–8000 字的消息。');
+  const request={id:randomUUID(),roleId:role.id};
+  activeDshRoleRequest=request;
+  const history=role.histories[role.id]??=[];
+  history.push({id:request.id,role:'user',text,time:Date.now()});
+  a.messages=history;
+  a.chatReply=null;a.notice=null;a.active=true;a.status='working';a.currentActivity='正在与 '+role.name+' 聊天';
+  acceptHuman(a,{text,time:Date.now()});setWork(a,'thinking',null);update();
+  const delivery=role.directory?externalRoleRequest(role.directory,'send',{id:role.id,text}):rpc('fish-role-chat',{id:role.id,text});
+  delivery.then(result=>{
+    if(typeof result?.text!=='string'||!result.text.trim())throw Error('原 DSH 会话没有返回文本回复。');
+    history.push({id:request.id+'-reply',role:'assistant',text:result.text,time:Date.now()});
+    if(activeDshRoleRequest===request)a.chatReply={id:request.id+'-reply',text:result.text,streaming:false};
+  }).catch(error=>{
+    if(activeDshRoleRequest===request)notice(a,error.message);
+  }).finally(()=>{
+    if(quitting)return;
+    if(activeDshRoleRequest===request){
+      activeDshRoleRequest=null;a.active=false;a.status='idle';a.currentActivity='';setWork(a,null);
+    }
+    update();
+  });
+  return {requestId:request.id,backend:'dsh-role'};
 }
 async function refreshApiHistory(){
   const runtime=mainChatRuntime;if(!runtime||!usesMainChatService(runtime.backend))return;
@@ -1029,14 +1086,23 @@ ipcMain.handle('workbench:call',async(event,method,value)=>{
   if(method==='companion'){
     if(!value||typeof value!=='object'||Array.isArray(value))throw Error('聊天请求无效');
     if(value.action==='read')return companionSnapshot(state);
-    if(value.action==='history')return mainChatRuntime.history({beforeId:typeof value.beforeId==='string'?value.beforeId:undefined,limit:value.limit});
+    if(value.action==='history'){
+      if(mainChatRuntime?.backend==='dsh-role'){
+        const messages=state.actors[0].messages;
+        const before=typeof value.beforeId==='string'?messages.findIndex(message=>message.id===value.beforeId):messages.length;
+        const limit=Math.max(1,Math.min(200,Number(value.limit)||40));
+        return before<0?[]:messages.slice(Math.max(0,before-limit),before).map(message=>({...message,createdAt:message.time}));
+      }
+      return mainChatRuntime.history({beforeId:typeof value.beforeId==='string'?value.beforeId:undefined,limit:value.limit});
+    }
     if(value.action==='media')return mainChatRuntime.readMedia(value.id);
-    if(value.action==='stop'){if(usesMainChatService(mainChatRuntime?.backend))cancelMainChat();else nekoChat.close();return companionSnapshot(state);}
+    if(value.action==='stop'){if(mainChatRuntime?.backend==='dsh-role')throw Error('请在原 DSH 会话停止当前回复。');if(usesMainChatService(mainChatRuntime?.backend))cancelMainChat();else nekoChat.close();return companionSnapshot(state);}
     if(value.action==='send'){
       let text=String(value.text||'').trim();
       if(value.attachments?.length){if(!usesMainChatService(mainChatRuntime?.backend))throw Error('当前聊天线路暂不支持附加图片');if(activeApiRequest||busy(state.actors[0]))throw Error('我还在回复，等我一下。');text=mainChatRuntime.prepareMedia(text,value.attachments);}
       if(!text||text.length>8000)throw Error('请输入 1–8000 字的消息');
       const a=state.actors[0];
+      if(mainChatRuntime?.backend==='dsh-role')return startDshRolePrompt(text);
       if(usesMainChatService(mainChatRuntime?.backend))return startApiPrompt(text);
       if(!state.neko.enabled)throw Error('请先设置主 agent 的聊天连接');
       if(busy(a))throw Error('主 agent 正在回复');
@@ -1078,6 +1144,36 @@ ipcMain.handle('pet:call',async(event,method,p={})=>{
   if(method==='chat-settings-read'){if(sender!==chatSettingsWindow)throw new Error('请从聊天设置操作');return mainChatRuntime?.read({checkSecureStorage:true})||state.mainChat;}
   if(method==='chat-open-neko-settings'){if(sender!==chatSettingsWindow)throw new Error('请从聊天设置操作');editNekoSettings();return true;}
   if(method==='chat-open-memory'){if(sender!==chatSettingsWindow)throw new Error('请从聊天设置操作');editChatMemory();return true;}
+  if(method==='chat-dsh-role'){
+    if(sender!==chatSettingsWindow||!mainChatRuntime)throw Error('请从聊天设置操作。');
+    if(p.external===true&&p.id===undefined){
+      externalDshCandidate=null;
+      const selection=await dialog.showOpenDialog(sender,{title:'选择原 DSH 的养鱼配置目录',properties:['openDirectory']});
+      if(selection.canceled||!selection.filePaths[0])return null;
+      const directory=selection.filePaths[0];
+      const remote=await externalRoleRequest(directory,'discover');
+      if(!remote?.exists)throw Error('这个 DSH 配置里没有找到已有的养鱼会话。');
+      externalDshCandidate={directory,id:remote.id};
+      return {id:remote.id,name:remote.name,running:remote.running===true};
+    }
+    const candidate=p.external===true?externalDshCandidate:null;
+    if(p.external===true&&(!candidate||p.id!==candidate.id))throw Error('请重新选择原 DSH 配置。');
+    if(!candidate&&state.connection!=='ready')throw Error('工作台尚未连接。');
+    const role=candidate?await externalRoleRequest(candidate.directory,'discover'):await rpc('fish-role-discover');
+    if(!role?.exists)throw Error('当前 DSH 工作台里没有找到已有的养鱼会话。');
+    if(p.id===undefined)return {id:role.id,name:role.name,running:role.running===true};
+    if(p.id!==role.id)throw Error('当前 DSH 配置已切换，请重新查找角色。');
+    if(activeDshRoleRequest)throw Error('角色正在回复，请稍等。');
+    const previous=state.dshRole;
+    state.dshRole={id:role.id,name:role.name,histories:previous?.histories||{},...(candidate?{directory:candidate.directory}:{})};
+    try{await mainChatRuntime.selectBackend('dsh-role');}
+    catch(error){state.dshRole=previous;throw error;}
+    state.actors[0].messages=state.dshRole.histories[role.id]||[];
+    externalDshCandidate=null;
+    state.externalDshRoleReady=!!candidate&&role.running===true;
+    update();
+    return {id:role.id,name:role.name,running:role.running===true};
+  }
   if(method==='chat-use-deepseek-account'){
     if(sender!==chatSettingsWindow||!mainChatRuntime)throw new Error('请从聊天设置操作');
     screenShare.interrupt();cancelMainChat();
@@ -1132,6 +1228,7 @@ ipcMain.handle('pet:call',async(event,method,p={})=>{
     if(!a||p.id!==a.id||!text||text.length>30000)throw new Error('请输入消息。');
     if(a.id==='main'){
       screenShare.interrupt();
+      if(mainChatRuntime?.backend==='dsh-role')return startDshRolePrompt(text);
       if(usesMainChatService(mainChatRuntime?.backend))return startApiPrompt(text);
       if(!state.neko.enabled)throw new Error('请从右键菜单打开聊天 API 设置。');
       if(busy(a))throw new Error('我还在回复，等我一下。');
