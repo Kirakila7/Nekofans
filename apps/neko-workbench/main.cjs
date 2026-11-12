@@ -36,7 +36,7 @@ const readline = require('node:readline');
 const originalWork = require('./original/work-status.cjs');
 const {normalizeLimit,orderedHelpers,displayName,nickname,actorKind,desktopHomeId,orderedDesktopPets,orderedTaskPets,selectDesktopPets,nextDesktopRefreshAt,beginReturnHome,expireReturnHomes}=require('./pet-roster.cjs');
 const {readOriginalSize,petLayout,petPlacement}=require('./pet-layout.cjs');
-const {migrateChatRouting,actorBySession:findDshActor}=require('./chat-routing.cjs');
+const {migrateChatRouting,actorBySession:findDshActor,bindNekoCharacter}=require('./chat-routing.cjs');
 const petAppearance=require('./pet-appearance.js');
 const {importAppearanceImage}=require('./pet-appearance-import.cjs');
 const {decodeAnimationPoster}=require('./pet-image-decoder.cjs');
@@ -107,6 +107,7 @@ state.qqbot={enabled:false,phase:'paused',reason:'QQ 机器人已暂停。',boun
 let memoryWindow,settingsWindow,nekoSettingsWindow,chatSettingsWindow,chatMemoryWindow,nekoWindow,dshWindow,dshLaunchUrl,tray,child,childLifecycle,quitting=false,rpcId=0,startPromise,stderr='',rosterTimer,nekoRetry,mainChatRuntime,activeApiRequest,workbenchNavigation=null,questionRelay,petQuestionController;
 const localWindows=new WeakMap();
 const nekoChat=new NekoChat();
+let nekoConnectionAttempt;
 let communityAccount,unifiedNekoLogin;
 function publishNekoAccount(){if(dshWindow&&!dshWindow.isDestroyed()&&isWorkbenchOrigin(dshWindow.webContents.getURL()))dshWindow.webContents.send('workbench:neko-account-state',nekoAccountSnapshot());}
 const nekoSsoWindow=createNekoSsoWindow({BrowserWindow,getParent:()=>dshWindow,openExternal:url=>shell.openExternal(url),onCancel:()=>unifiedNekoLogin?.cancel()});
@@ -313,7 +314,13 @@ async function workbenchAction(name){
     case 'neko-settings':editChatSettings();break;
     case 'open-neko':await openNeko();break;
     case 'task-notes':editMemory();break;
-    case 'connect-neko':if(!mainChatRuntime)throw new Error('聊天服务尚未就绪');await mainChatRuntime.selectBackend('neko');activeApiRequest=null;state.neko.enabled=true;await connectNeko();if(state.neko.connection!=='ready')throw new Error(state.neko.error||'N.E.K.O. 服务尚未连接');break;
+    case 'connect-neko':
+      if(!state.neko.character){editNekoSettings();break;}
+      if(!mainChatRuntime)throw new Error('聊天服务尚未就绪');
+      await mainChatRuntime.selectBackend('neko');activeApiRequest=null;state.neko.enabled=true;
+      await connectNeko();
+      if(state.neko.connection!=='ready')throw new Error(state.neko.error||'N.E.K.O. 服务尚未连接');
+      break;
     case 'connection-status':showConnectionStatus();break;
     case 'reconnect-workbench':restart();break;
     default:throw new Error('未知工作台选项');
@@ -349,7 +356,7 @@ function applyMainChat(snapshot){
   if(usesMainChatService(snapshot.backend)){
     state.neko.enabled=false;clearTimeout(nekoRetry);
     // Invalidate pending character fetches even before a WebSocket exists.
-    nekoChat.close();state.neko.connection='disabled';state.neko.error='';
+    nekoConnectionAttempt=null;nekoChat.close();state.neko.connection='disabled';state.neko.error='';
     const chat=snapshot.chat,aBusy=['connecting','replying'].includes(chat.phase);
     a.active=aBusy;a.status=aBusy?'working':chat.phase==='error'?'error':'idle';a.currentActivity=aBusy?'正在聊天':'';
     setWork(a,aBusy?'thinking':null);
@@ -694,7 +701,7 @@ function editSettings(){
 }
 function editNekoSettings(){
   if(nekoSettingsWindow&&!nekoSettingsWindow.isDestroyed()){nekoSettingsWindow.show();nekoSettingsWindow.focus();return;}
-  nekoSettingsWindow=new BrowserWindow({...options(),width:390,height:285,resizable:false,title:'N.E.K.O. 聊天',backgroundColor:'#f1f8fe',minimizable:false,fullscreenable:false});
+  nekoSettingsWindow=new BrowserWindow({...options(),width:420,height:345,resizable:false,title:'接回 N.E.K.O. 角色',backgroundColor:'#f1f8fe',minimizable:false,fullscreenable:false});
   loadLocalFile(nekoSettingsWindow,{view:'neko-settings'});
   nekoSettingsWindow.webContents.on('did-finish-load',()=>{broadcast();nekoSettingsWindow.show();});
   nekoSettingsWindow.webContents.setWindowOpenHandler(()=>({action:'deny'}));
@@ -706,10 +713,26 @@ async function openNeko(){
   nekoWindow.webContents.on('will-navigate',(event,url)=>{try{if(new URL(url).origin!==localBase(state.neko.baseUrl))event.preventDefault();}catch{event.preventDefault();}});
   await nekoWindow.loadURL(localBase(state.neko.baseUrl)+'/chat');
 }
-async function connectNeko(){clearTimeout(nekoRetry);if(!state.neko.enabled||mainChatRuntime?.backend!=='neko'){state.neko.connection='disabled';state.neko.error='';update();return;}try{await nekoChat.connect(state.neko);}catch{}finally{if(!quitting&&state.neko.enabled&&mainChatRuntime?.backend==='neko'&&state.neko.connection!=='ready')nekoRetry=setTimeout(connectNeko,10000);}}
-nekoChat.on('connection',info=>{if(quitting||mainChatRuntime?.backend!=='neko')return;Object.assign(state.neko,info);if(info.connection==='disconnected'&&state.neko.enabled){clearTimeout(nekoRetry);nekoRetry=setTimeout(connectNeko,10000);}update();});
-nekoChat.on('characters',({names,character})=>{if(quitting||mainChatRuntime?.backend!=='neko')return;state.neko.characters=names;state.neko.character=character;state.actors[0].nekoCharacter=character;update();});
-nekoChat.on('profile-created',info=>{if(quitting||mainChatRuntime?.backend!=='neko')return;state.neko.profileCreated={...info,at:new Date().toISOString()};update();});
+function connectNeko(){
+  clearTimeout(nekoRetry);
+  if(quitting)return;
+  const {enabled,baseUrl,character}=state.neko;
+  if(!enabled||mainChatRuntime?.backend!=='neko'||!character){
+    state.neko.connection='disabled';
+    state.neko.error=enabled&&!character?'请在聊天设置中选择已有 N.E.K.O. 角色。':'';
+    update();
+    return;
+  }
+  const key=JSON.stringify([baseUrl,character]);
+  if(nekoConnectionAttempt?.key===key)return nekoConnectionAttempt.promise;
+  const attempt={key};
+  nekoConnectionAttempt=attempt;
+  attempt.promise=nekoChat.connect({baseUrl,character}).catch(()=>{}).finally(()=>{
+    if(nekoConnectionAttempt===attempt)nekoConnectionAttempt=null;
+  });
+  return attempt.promise;
+}
+nekoChat.on('connection',info=>{if(quitting||mainChatRuntime?.backend!=='neko')return;Object.assign(state.neko,info);clearTimeout(nekoRetry);if(info.connection==='disconnected'&&state.neko.enabled)nekoRetry=setTimeout(connectNeko,10000);update();});
 nekoChat.on('start',()=>{if(quitting||mainChatRuntime?.backend!=='neko')return;const a=state.actors[0];a.active=true;a.status='working';a.currentActivity='正在聊天';setWork(a,'thinking',null);update();});
 nekoChat.on('reply',({requestId,text})=>{
   if(quitting||mainChatRuntime?.backend!=='neko')return;
@@ -1017,6 +1040,7 @@ ipcMain.handle('workbench:call',async(event,method,value)=>{
       if(usesMainChatService(mainChatRuntime?.backend))return startApiPrompt(text);
       if(!state.neko.enabled)throw Error('请先设置主 agent 的聊天连接');
       if(busy(a))throw Error('主 agent 正在回复');
+      if(state.neko.connection==='reconnect-required')throw Error(state.neko.error);
       if(state.neko.connection!=='ready')await connectNeko();
       if(state.neko.connection!=='ready')throw Error('主 agent 聊天尚未连接，请检查设置');
       const result=nekoChat.send(text,{environmentContext:ourHomeRuntime.context()});a.messages.push({role:'user',text,time:Date.now(),requestId:result.requestId});acceptHuman(a,{text,time:Date.now()});update();return result;
@@ -1072,10 +1096,26 @@ ipcMain.handle('pet:call',async(event,method,p={})=>{
     try{return await memoryViewer.action(p);}catch{throw new Error('记忆操作未完成，请刷新后重试');}
   }
   if(method==='chat-cancel'){if(senderId!=='main'||!usesMainChatService(mainChatRuntime?.backend))throw new Error('请从主角色聊天操作');return cancelMainChat();}
+  if(method==='neko-list-characters'){
+    if(sender!==nekoSettingsWindow)throw new Error('请从 N.E.K.O. 聊天设置操作。');
+    const baseUrl=localBase(p.baseUrl);
+    return {baseUrl,names:await nekoChat.listCharacters(baseUrl)};
+  }
   if(method==='neko-settings'){
     if(sender!==nekoSettingsWindow)throw new Error('请从主角色右键菜单打开聊天设置。');
-    const baseUrl=localBase(p.baseUrl),character=String(p.character||'').trim();if(character.length>80||!mainChatRuntime)throw new Error('聊天设置尚未就绪');
-    await mainChatRuntime.selectBackend('neko');activeApiRequest=null;state.neko.enabled=true;state.neko.baseUrl=baseUrl;state.neko.character=character;await connectNeko();
+    if(!mainChatRuntime)throw new Error('聊天设置尚未就绪');
+    const baseUrl=localBase(p.baseUrl),character=typeof p.character==='string'?p.character:'';
+    if(!character||!(await nekoChat.listCharacters(baseUrl)).includes(character))throw new Error('请刷新列表并选择已有的 N.E.K.O. 角色。');
+    await mainChatRuntime.selectBackend('neko');
+    activeApiRequest=null;
+    state.neko.enabled=true;
+    if(state.neko.baseUrl!==baseUrl||state.neko.character!==character){
+      nekoConnectionAttempt=null;
+      nekoChat.close();
+      bindNekoCharacter(state,{baseUrl,character});
+      setWork(state.actors[0],null);
+    }
+    await connectNeko();
     if(state.neko.connection!=='ready')throw new Error(state.neko.error||'N.E.K.O. 连接失败');return true;
   }
   if(method==='rename'){const a=state.actors.find(a=>a.id===renameId);if(!a||a.id==='main')throw new Error('请从子代理右键菜单修改名字。');a.nickname=nickname(p.name);a.name=displayName(a);update();setTimeout(()=>{if(!sender.isDestroyed())sender.close();},100);return true;}
@@ -1095,6 +1135,7 @@ ipcMain.handle('pet:call',async(event,method,p={})=>{
       if(usesMainChatService(mainChatRuntime?.backend))return startApiPrompt(text);
       if(!state.neko.enabled)throw new Error('请从右键菜单打开聊天 API 设置。');
       if(busy(a))throw new Error('我还在回复，等我一下。');
+      if(state.neko.connection==='reconnect-required')throw Error(state.neko.error);
       if(state.neko.connection!=='ready')await connectNeko();
       if(state.neko.connection!=='ready')throw new Error(state.neko.error||'N.E.K.O. 未连接');
       const result=nekoChat.send(text,{environmentContext:ourHomeRuntime.context()});a.messages.push({role:'user',text,time:Date.now(),requestId:result.requestId});acceptHuman(a,{text,time:Date.now()});a.task='与 '+state.neko.character+' 聊天';update();return result;

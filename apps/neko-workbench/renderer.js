@@ -40,15 +40,73 @@ if(view==='chat-settings'){
 }else if(view==='chat-memory'){
   document.title='鱼的记忆';window.addEventListener('unload',window.WorkbenchChatUI.mountMemory(host,window.pet),{once:true});
 }else if(view==='neko-settings'){
-  document.title='N.E.K.O. 聊天';
-  host.innerHTML='<form class="settings-form neko-settings"><label for="neko-url">N.E.K.O. 服务地址</label><input id="neko-url" type="url" required placeholder="http://127.0.0.1:48911"><label for="neko-character">聊天角色</label><input id="neko-character" type="text" list="neko-characters" placeholder="默认使用独立大肥鱼角色"><datalist id="neko-characters"></datalist><p>沿用 N.E.K.O. 的角色与记忆，使用现有单行聊天框。</p><button type="submit">连接</button><span role="status"></span></form>';
-  let loaded=false;const url=document.getElementById('neko-url'),character=document.getElementById('neko-character'),message=host.querySelector('[role=status]');
-  function renderSettings(next){state=next;if(!loaded){url.value=state.neko.baseUrl;character.value=state.neko.character||'';loaded=true;}
-    const list=document.getElementById('neko-characters');list.replaceChildren(...(state.neko.characters||[]).map(name=>{const item=document.createElement('option');item.value=name;return item;}));
-    message.textContent=state.neko.connection==='ready'?'已连接 '+state.neko.character:state.neko.connection==='connecting'?'连接中…':state.neko.error||'请先启动 N.E.K.O.';
+  document.title='接回 N.E.K.O. 角色';
+  host.innerHTML=`<form class="settings-form neko-settings">
+    <label for="neko-url">本机 N.E.K.O. 地址</label>
+    <div class="neko-address"><input id="neko-url" type="url" required placeholder="http://127.0.0.1:48911"><button type="button" class="neko-refresh">查找角色</button></div>
+    <label for="neko-character">已有角色</label>
+    <select id="neko-character" required disabled><option value="">请选择角色</option></select>
+    <p>使用这个角色在 N.E.K.O. 中的设定与记忆。</p>
+    <button type="submit" disabled>绑定并连接</button>
+    <p class="neko-lookup" role="status"></p>
+    <p class="neko-connection" aria-live="polite"></p>
+  </form>`;
+  const form=host.querySelector('form'),url=form.querySelector('#neko-url'),character=form.querySelector('#neko-character');
+  const refresh=form.querySelector('.neko-refresh'),bind=form.querySelector('[type=submit]');
+  const lookup=form.querySelector('.neko-lookup'),connection=form.querySelector('.neko-connection');
+  let loaded=false,lookupId=0,searching=false,binding=false;
+  function syncControls(){
+    refresh.disabled=searching||binding;
+    character.disabled=binding||character.options.length<2;
+    bind.disabled=binding||!character.value;
+  }
+  async function findCharacters(){
+    if(binding||!url.reportValidity())return;
+    const request=++lookupId,previous=character.value,address=url.value;
+    character.replaceChildren(new Option('请选择角色',''));
+    searching=true;
+    lookup.textContent='正在查找角色…';
+    syncControls();
+    try{
+      const result=await window.pet.call('neko-list-characters',{baseUrl:address});
+      if(request!==lookupId)return;
+      character.append(...result.names.map(name=>new Option(name,name)));
+      const saved=result.baseUrl===state.neko.baseUrl?state.neko.character:'';
+      character.value=[previous,saved].find(name=>result.names.includes(name))||(result.names.length===1?result.names[0]:'');
+      lookup.textContent=result.names.length?'':'请先在 N.E.K.O. 中设置一个角色。';
+    }catch(error){
+      if(request===lookupId)lookup.textContent=error.message;
+    }finally{
+      if(request===lookupId){searching=false;syncControls();}
+    }
+  }
+  function renderSettings(next){
+    state=next;
+    if(!loaded){loaded=true;url.value=state.neko.baseUrl;void findCharacters();}
+    const {character:name,connection:phase,error,enabled}=state.neko;
+    connection.textContent=!name?'':phase==='ready'?'已连接 '+name:phase==='connecting'?'正在连接 '+name+'…':'已绑定 '+name+(enabled&&error?' · '+error:'');
   }
   window.pet.onState(renderSettings);window.pet.call('state').then(renderSettings);
-  host.querySelector('form').onsubmit=event=>{event.preventDefault();void submitting(event.currentTarget,async()=>{try{await window.pet.call('neko-settings',{baseUrl:url.value,character:character.value});}catch(error){message.textContent=error.message;}});};
+  refresh.onclick=findCharacters;
+  url.oninput=()=>{
+    lookupId++;
+    searching=false;
+    character.replaceChildren(new Option('请选择角色',''));
+    lookup.textContent='';
+    syncControls();
+  };
+  character.onchange=syncControls;
+  form.onsubmit=async event=>{
+    event.preventDefault();
+    if(bind.disabled)return;
+    binding=true;
+    url.disabled=true;
+    lookup.textContent='';
+    syncControls();
+    try{await window.pet.call('neko-settings',{baseUrl:url.value,character:character.value});}
+    catch(error){lookup.textContent=error.message;}
+    finally{binding=false;url.disabled=false;syncControls();}
+  };
 }else if(view==='rename'){
   document.title='修改名字';
   host.innerHTML='<form class="settings-form rename-form"><label for="pet-name">给她起个名字</label><input id="pet-name" type="text" maxlength="48" autocomplete="off" spellcheck="false"><p>留空就跟随 DSH 的名字。</p><button type="submit">保存</button><span role="status"></span></form>';
