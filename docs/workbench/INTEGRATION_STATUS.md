@@ -1,5 +1,11 @@
 # Local integration 0.28.43 / build 79
 
+## Regression fixture and harness fixes (2026-11-13)
+
+Branch `codex/regression-fixes-20261113» keeps product behavior unchanged and repairs the regression harness: jsdom/react devDependencies plus automatic `NEKO_DOM_DEPS» injection in the test runners; POSIX fix for the Windows build output guard (`scripts/build-neko-windows.mjs»); refreshed stale fixtures (retired claude avatar fallback, Codex→DSH naming, workbench bridge API allowlist, memory window title, v2 baseline hashes); repaired the main-chat-entry ipcMain stub and screen-share source slicing; Windows-only desktop smoke now skips explicitly on other platforms; new `npm run test:regression» compares the full run against `tests/regression-baseline.json».
+
+Full suite after fixes: 1617 tests, 1602 passed, 0 failed, 15 skipped. The eight previously failing cases were regression-harness drift rather than product defects: the retired Codex office panel and floating-record defaults were retargeted to retirement-contract assertions, the task/menu fixture was updated to the current appearance and pet menus, the retired claude role seat and the moved pet workbench options entry were aligned with the live UI, and the frame-aware compact pet-window invariants replaced a stale uniform gutter expectation. `tests/regression-baseline.json» is now empty so `npm run test:regression» fails on any new failure. `npm run check:neko» is fully green (263/263 syntax plus all smoke modules). Electron 44.7 desktop smoke remains 22/22 + agent 9/9 + shutdown 2/2 on the documented Windows baseline; the Windows-only entry no longer false-fails on macOS.
+
 ## PR #66 daily integration (2026-11-04)
 
 PR #66 is merged on the remote default branch at 01d7926. This daily build combines that image/GIF and single-character fix with the existing home-value ledger and icon controls from 0.28.42. The generated client is regenerated from the merged canonical sources; private account routing, independent chats, drafts, sessions and project memory are retained. Only synthetic data is used for acceptance, including the real installed DSH/Sharp attachment path. PR #58 remains draft and unmerged.

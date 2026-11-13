@@ -1,0 +1,4 @@
+{
+  "note": "Full suite is green as of 2026-11-13: 1617 tests, 1602 passed, 0 failed, 15 skipped. Add newly discovered platform-specific failures here with --update, and keep only failures that reproduce on the stated environment.",
+  "knownFailures": []
+}

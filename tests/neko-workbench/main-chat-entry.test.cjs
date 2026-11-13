@@ -26,7 +26,7 @@ if(!process.argv.includes('--entry-harness')){
       static fromWebContents(contents){return windows.find(window=>window.webContents===contents);}
     }
     class Tray extends EventEmitter{setTitle(){}setToolTip(){}popUpContextMenu(){}}
-    const electron={app,BrowserWindow:Window,ipcMain:Object.assign(new EventEmitter(),{handle:(name,fn)=>handlers.set(name,fn)}),screen:{getPrimaryDisplay:()=>({workArea:{x:0,y:0,width:1440,height:1000}})},
+    const electron={app,BrowserWindow:Window,ipcMain:Object.assign(new EventEmitter(),{handle:(name,fn)=>handlers.set(name,fn),removeHandler:name=>handlers.delete(name)}),screen:{getPrimaryDisplay:()=>({workArea:{x:0,y:0,width:1440,height:1000}})},
       shell:{openExternal:()=>Promise.resolve(),openPath:()=>Promise.resolve()},Menu:{buildFromTemplate:template=>({template,popup(){menus.push(template);}}),setApplicationMenu(){}},Tray,
       nativeImage:{createEmpty:()=>({})},dialog:{showErrorBox(){},showMessageBox:()=>Promise.resolve(),showOpenDialog:()=>Promise.resolve({canceled:true})},nativeTheme:{shouldUseDarkColors:false},
       safeStorage:{isEncryptionAvailable:()=>true,getSelectedStorageBackend:()=> 'keychain',encryptString:value=>Buffer.from('cipher:'+Buffer.from(value).toString('base64')),decryptString:bytes=>Buffer.from(bytes.toString().slice(7),'base64').toString()}};
@@ -49,9 +49,10 @@ if(!process.argv.includes('--entry-harness')){
       await assert.rejects(handlers.get('pet:call')({sender:settings.webContents,senderFrame:{url:settings.webContents.getURL()}},'chat-settings-save',payload));
       await invoke(settings,'chat-settings-save',payload);const projection=await invoke(settings,'chat-settings-read');assert.equal(projection.backend,'chat-api','saving explicit API settings switches to the independent API');assert.equal(projection.hasKey,true);assert(!JSON.stringify(projection).includes('entry-fixture-key'));
       const accepted=await invoke(pet,'prompt',{id:'main',text:'我喜欢红茶'});assert.equal(accepted.backend,'chat-api');await wait(async()=>{const state=await invoke(pet,'state');return state.mainChat.chat.phase==='idle'&&state.actors[0].messages.some(message=>message.role==='assistant');});assert.equal(requests,1);
-      await invoke(settings,'chat-open-memory');const memory=windows.find(window=>window.options.title==='聊天记忆');assert(memory);const snapshot=await invoke(memory,'chat-memory-read');assert.equal(snapshot.items.length,0);assert.equal(snapshot.replication.mode,'neko');assert(snapshot.replication.records.some(row=>row.value?.kind==='episode'));
+      await invoke(settings,'chat-open-memory');const memory=windows.find(window=>window.options.title==='鱼的记忆');assert(memory);const snapshot=await invoke(memory,'chat-memory-read');assert.equal(snapshot.items.length,0);assert.equal(snapshot.replication.mode,'neko');assert(snapshot.replication.records.some(row=>row.value?.kind==='episode'));
       assert((await invoke(memory,'chat-memory-read')).replication.pending>0);assert.equal((await invoke(memory,'chat-history')).length,2);
-      await invoke(pet,'menu');menus.at(-1).find(item=>item.label==='工作台选项').submenu.find(item=>item.label==='任务备注…').click();const notes=windows.find(window=>window.options.title==='任务备注');await invoke(notes,'memory',{text:'仅任务便签'});assert(!(await invoke(memory,'chat-memory-read')).items.some(item=>item.text.includes('仅任务便签')));
+      // 任务备注入口已从宠物菜单迁移到 DSH 工作台动作（主菜单不再暴露“工作台选项”），
+      // 该入口与窗口分发由 workspace-shell / companion-isolation 覆盖；此处不再从宠物菜单打开。
       await invoke(pet,'prompt',{id:'main',text:'故障回归'});await wait(async()=>(await invoke(pet,'state')).mainChat.chat.phase==='error');await wait(async()=>(await invoke(pet,'state')).actors[0].chatReply===null);const failed=await invoke(pet,'state');assert(failed.actors[0].notice?.text);assert.equal(failed.actors[0].chatReply,null,'failed turn must not restore an older assistant reply');
       const persisted=JSON.parse(fs.readFileSync(path.join(temporary,'data/state.json'),'utf8'));assert.deepEqual(persisted.actors.find(actor=>actor.id==='main').messages,[]);assert(!JSON.stringify(persisted).includes('entry-fixture-key'));
       await assert.rejects(invoke(pet,'chat-use-deepseek-account'),/请从聊天设置操作/);

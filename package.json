@@ -19,11 +19,15 @@
     "test:dsh": "node tests/desktop/dsh-host-smoke.mjs",
     "check:distribution": "node scripts/check-distribution.mjs",
     "build:portable": "node scripts/build-portable.mjs",
-    "test:portable": "node tests/desktop/portable-smoke.mjs"
+    "test:portable": "node tests/desktop/portable-smoke.mjs",
+    "test:regression": "node scripts/test-regression.mjs"
   },
   "devDependencies": {
     "electron": "44.7.0",
+    "jsdom": "^26.1.0",
     "pe-library": "2.0.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "resedit": "3.1.0"
   },
   "productName": "Nekofans",

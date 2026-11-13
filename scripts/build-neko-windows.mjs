@@ -1,7 +1,7 @@
 import {cpSync,existsSync,mkdirSync,readFileSync,writeFileSync,renameSync,readdirSync,statSync,openSync,readSync,writeSync,closeSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
-import {dirname,join,resolve,relative,isAbsolute} from 'node:path';
+import {dirname,join,resolve,relative,isAbsolute,sep} from 'node:path';
 import {packageWindowsInstaller} from './windows-installer.mjs';
 
 const run=(command,args,options={})=>{const r=spawnSync(command,args,{encoding:'utf8',windowsHide:true,maxBuffer:8*1024*1024,...options});if(r.status!==0)throw Error(r.stderr||r.stdout||r.error?.message||'Build command failed');return r.stdout;};
@@ -28,7 +28,7 @@ export async function buildWindowsDaily({root,release,args}){
   const electron=required('--electron-dir'),node=required('--node-dir');
   if(existsSync(output))throw Error('Refusing to overwrite existing output');
   for(const file of [join(electron,'electron.exe'),join(node,'node.exe')])if(!existsSync(file))throw Error('Missing runtime: '+file);
-  for(const input of [root,sourceRoot,electron,node]){const rel=relative(input,output);if(!isAbsolute(rel)&&rel!=='..'&&!rel.startsWith('..\\'))throw Error('Output must be outside input trees');}
+  for(const input of [root,sourceRoot,electron,node]){const rel=relative(input,output);if(!isAbsolute(rel)&&rel!=='..'&&!rel.startsWith('..'+sep))throw Error('Output must be outside input trees');}
   const dir=join(output,'application');mkdirSync(dir,{recursive:true});
   cpSync(electron,dir,{recursive:true,filter:src=>!src.endsWith('default_app.asar')&&!/\.(?:log|dmp|dpapi|sqlite)$/i.test(src)});
   renameSync(join(dir,'electron.exe'),join(dir,'NEKOfuns.exe'));

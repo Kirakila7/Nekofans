@@ -28,8 +28,8 @@ function harness(){
 }
 (async()=>{
  const h=harness();assert.equal(h.attrs.get('data-neko-avatar-theme'),'yui');assert.equal(h.nodes.length,1);
- h.push({avatar:{builtinId:'claude'}});assert.equal(h.attrs.get('data-neko-avatar-theme'),'claude');assert(h.nodes[0].textContent.includes(api.PALETTES.claude.light.base));
- h.resolve({avatar:{builtinId:'bigfish'}});await Promise.resolve();await Promise.resolve();assert.equal(h.attrs.get('data-neko-avatar-theme'),'claude','stale initial read must not replace a newer push');
+ h.push({avatar:{builtinId:'claude'}});assert.equal(h.attrs.get('data-neko-avatar-theme'),'bigfish','retired claude avatar falls back to bigfish');assert(h.nodes[0].textContent.includes(api.PALETTES.bigfish.light.base));
+ h.resolve({avatar:{builtinId:'bigfish'}});await Promise.resolve();await Promise.resolve();assert.equal(h.attrs.get('data-neko-avatar-theme'),'bigfish','stale initial read must not replace a newer push');
  h.push({avatar:{builtinId:'custom',customDataUrl:'https://example.invalid/avatar.png'}});assert.equal(h.attrs.get('data-neko-avatar-theme'),'custom');assert(h.nodes[0].textContent.includes(api.customPalette().light.base));
  h.cleanup();h.cleanup();assert.equal(h.disposals,1);assert.equal(h.nodes.length,0);assert.equal(h.attrs.get('data-neko-avatar-theme'),'before');
  h.push({avatar:{builtinId:'gemini'}});assert.equal(h.nodes.length,0);

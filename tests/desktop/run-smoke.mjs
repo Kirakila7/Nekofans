@@ -8,6 +8,11 @@ const directory = dirname(fileURLToPath(import.meta.url));
 const root = resolve(directory, "../..");
 const executable = process.env.NEKO_FISH_ELECTRON || resolve(root, "../_sandbox/f01-dsh-desktop/src/apps/desktop/node_modules/electron/dist/electron.exe");
 const temporaryRoot = resolve(tmpdir());
+// tests/desktop exercises the Windows desktop entry (DPAPI key store).
+if (process.platform !== "win32" && process.env.NEKO_FISH_SMOKE_ALLOW_NON_WINDOWS !== "1") {
+  console.log("DESKTOP_SMOKE_SKIP: tests/desktop targets the Windows desktop entry (DPAPI). Set NEKO_FISH_SMOKE_ALLOW_NON_WINDOWS=1 to force the macOS diagnostic path.");
+  process.exit(0);
+}
 const profile = mkdtempSync(join(temporaryRoot, "neko-fish-desktop-smoke-"));
 const environment = { ...process.env, NEKO_FISH_SMOKE_PROFILE: profile };
 delete environment.ELECTRON_RUN_AS_NODE;
