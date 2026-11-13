@@ -1,13 +1,4 @@
 {
-  "note": "Known pre-existing failures for the full npm test run. Regenerate with: node scripts/test-regression.mjs --update. All entries reproduce on the pre-merge daily baseline a44aa5d; they are stale fixtures or open UI decisions, not regressions introduced by the current branch.",
-  "knownFailures": [
-    "a missing model blocks explicit sends, retains the draft, and native default remains an explicit recovery choice",
-    "actual main projects three real tiers, keeps background tasks, opens exact task and promotes late child identity",
-    "actual workbench main registers trusted IPC for settings, one chat/store path, memory and clean quit",
-    "community and B站 share an accessible action row before the three role seats",
-    "compact appearance windows fit their native frame and name gutter at all three scales",
-    "host publishes paged catalog and opens a session via native seat selection",
-    "model and effort selection reaches send, stays with its thread, and a second message continues the created conversation",
-    "send failures preserve the message and visible error while active tasks lock model controls"
-  ]
+  "note": "Full suite is green as of 2026-11-13: 1617 tests, 1602 passed, 0 failed, 15 skipped. Add newly discovered platform-specific failures here with --update, and keep only failures that reproduce on the stated environment.",
+  "knownFailures": []
 }
