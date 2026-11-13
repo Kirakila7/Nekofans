@@ -39,9 +39,20 @@ test('compact appearance windows fit their native frame and name gutter at all t
   const actors=[{id:'main',appearanceId:A.CLAUDE,appearanceScale:.65},{id:'task-x',kind:'task',appearanceId:A.GEMINI,appearanceScale:.8},{id:'subagent-x',appearanceId:A.CAT}];
   const layouts=actors.map(actor=>{
     const kind=A.kind(actor),options=A.layoutOptions(state,actor),layout=petLayout(kind,mainWidth(462),options),legacy=petLayout(kind,mainWidth(462));
-    const frameHeight=layout.stageWidth*9/16*options.scale;
+    const frameHeight=layout.stageWidth*9/16*options.scale,frameWidth=frameHeight*options.aspect;
+    // Compact windows hug the native frame (IMPLEMENTATION_v0.18.md: "窗口按所选尺寸及画面
+    // 比例收紧，并为三字标签保留侧边余量，底部仅留 6 像素"): the stage keeps its 16:9
+    // height times the appearance scale, the frame stays centred with 8px side padding,
+    // and the 3-char name tag is anchored at 50% + characterWidth*.32 with a 48px max
+    // width (.pet-tier in style.css). A 16:9 frame is already wider than that anchor, so
+    // the old uniform 60px gutter no longer describes the layout; square and 192:208
+    // frames keep the wider side reservation. The invariant is frame + name tag inside.
+    const nameTagHalfWidth=frameWidth*.32+48;
     assert(layout.width<legacy.width);assert(layout.height<legacy.height);
-    assert(layout.width>=frameHeight*options.aspect+60);assert(layout.height>=76+frameHeight+6);
+    assert(layout.width>=frameWidth+16,`${actor.id}: compact frame keeps 8px side padding`);
+    assert(layout.width>=nameTagHalfWidth*2,`${actor.id}: upper-right 3-char name tag stays inside`);
+    assert(layout.width>=(options.aspect===16/9?255:200),`${actor.id}: interactive minimum width`);
+    assert(layout.height>=76+frameHeight+6,`${actor.id}: head slot + frame + 6px bottom`);
     return layout;
   });
   const bounds=packPetLayouts({area:{x:0,y:0,width:800,height:600},layouts});
