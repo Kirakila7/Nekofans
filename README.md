@@ -1,5 +1,12 @@
 # Nekofuns
 
+**开源的 AI 伴侣社交平台与工作台 · Open-source AI companion social platform & workbench**
+
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![Latest release](https://img.shields.io/github/v/release/Kirakila7/Nekofans?include_prereleases&label=release)](https://github.com/Kirakila7/Nekofans/releases)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-lightgrey)](https://github.com/Kirakila7/Nekofans/releases)
+[![Stars](https://img.shields.io/github/stars/Kirakila7/Nekofans?style=flat)](https://github.com/Kirakila7/Nekofans/stargazers)
+
 在 Nekofuns，你有一只大肥鱼，平时可以和她聊天，给你们的小窝添点东西。🏡 朋友喊你去玩时，就叫上她一起出门。🧭 遇到艰难的冒险，你可以问她怎么想，也可以说：「这步你来。」
 
 In Nekofuns, Big Fish is your AI companion. Chat with her and add something to the little home you share. 🏡 Bring her along when friends invite you to play. 🧭 When an adventure gets tricky, ask her what she thinks, or say, “You take this one.”
@@ -7,6 +14,8 @@ In Nekofuns, Big Fish is your AI companion. Chat with her and add something to t
 ![Concept preview of Big Fish, the community, and a cozy home](docs/nekofans-concept-preview.gif)
 
 *概念样片，实际界面与功能可能不同。 / Concept footage; the actual interface and available features may differ.*
+
+**Nekofuns**（GitHub 仓库名 `Nekofans`）是一个开源的 **AI 伴侣社交平台与工作台**：桌面陪伴、多 Agent 工作流与社区大厅都在同一款应用里。**Nekofuns** (repository name: `Nekofans`) is an open-source **AI companion social platform and workbench** — desktop companionship, a multi-agent workbench, and a community lobby in one app.
 
 ## ✨ Explore Nekofuns
 
