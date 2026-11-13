@@ -84,7 +84,7 @@ test('native keyboard button opens the coding pane and leaves role/session state
   store.dispose();
 });
 
-test('community and B站 share an accessible action row before the three role seats', () => {
+test('community and B站 share an accessible action row before the role seats', () => {
   const api = bundle();
   const roles = { get: () => ({ preview: true, state: { roles: api.ROLE_DEFAULTS }, pending: {}, notice: null }), subscribe: () => () => {} };
   const tree = api.RoleSeats({ store: roles, tools: null });
@@ -101,7 +101,8 @@ test('community and B站 share an accessible action row before the three role se
   assert.equal(bili.children[0].props['aria-hidden'], 'true');
   assert.equal(bili.children[0].props.focusable, 'false');
   const group = tree.children.find(node => node?.props?.className === 'neko-roles');
-  assert.deepEqual(Array.from(group.children.slice(0, 3), node => node.props.role.id), ['yui', 'bigfish', 'claude']);
+  assert.deepEqual(Array.from(group.children.slice(0, 2), node => node.props.role.id), ['yui', 'bigfish'], 'the retired claude seat is no longer rendered');
+  assert.equal(group.children.length, 3, 'two active seats plus the list notice');
   const entry = api.CommunityEntry({ snap: { preview: false, bridgeReady: true, pending: {} }, store: {} });
   assert.equal(entry.children[0].props['aria-hidden'], 'true');
   assert.equal(entry.children[0].props.focusable, 'false');
