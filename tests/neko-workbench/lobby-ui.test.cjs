@@ -68,7 +68,7 @@ test('频道 rail button opens the lobby in the sidebar, leaving the dock and wo
  const f=setup(t),{doc,calls}=f;await tick();
  const rail=doc.querySelector('.neko-workspace-rail-controls'),lobbyButton=doc.querySelector('.neko-lobby-switch');
  assert(lobbyButton,'rail button installed');assert.equal(lobbyButton.parentElement,rail);
- assert.equal(lobbyButton.previousElementSibling,doc.querySelector('.neko-community'),'placed right after the community button');
+ assert.equal(lobbyButton.previousElementSibling,doc.querySelector('.neko-memory'),'placed after the memory button in the rail');
  assert.equal(lobbyButton.getAttribute('aria-label'),'频道 · 公共大厅');assert.equal(lobbyButton.getAttribute('aria-expanded'),'false');
  const panel=doc.querySelector('.neko-lobby-panel');assert(panel.hidden);
  const dock=doc.querySelector('.neko-companion-dock'),draft=dock.querySelector('textarea');draft.value='私聊草稿';

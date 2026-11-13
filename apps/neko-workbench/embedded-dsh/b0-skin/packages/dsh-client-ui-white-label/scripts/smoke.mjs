@@ -83,16 +83,16 @@ assert.ok(Object.isFrozen(exports.PRODUCT_BRAND))
 
 // --- avatars ----------------------------------------------------------------
 
-const IDS = ['yui', 'devcat', 'bigfish', 'claude', 'gemini']
+const IDS = ['yui', 'devcat', 'bigfish', 'gemini']
 assert.deepEqual([...exports.AVATARS.map((a) => a.id)], IDS)
-assert.deepEqual([...exports.AVATARS.map((a) => a.name)], ['YUi', '开发喵', '大肥鱼', 'Claude娘', 'Gemini小猫'])
+assert.deepEqual([...exports.AVATARS.map((a) => a.name)], ['YUi', '开发喵', '大肥鱼', 'Gemini小猫'])
 assert.deepEqual([...exports.ACTION_NAMES], ['screen-share', 'neko-settings', 'open-neko', 'task-notes', 'connect-neko', 'connection-status', 'reconnect-workbench', 'open-community', 'open-bilibili'])
 for (const id of IDS) assert.match(exports.PLACEHOLDERS[id], /^data:image\/svg\+xml,/, `placeholder ${id}`)
 const art = exports.AVATAR_ART
 const embedded = Object.keys(art)
-assert.ok(embedded.length === 0 || embedded.length === 5, 'all five avatars embedded or none')
+assert.ok(embedded.length === 0 || embedded.length === 5, 'all daily avatars plus the office-only claude raster, or none')
 for (const id of embedded) {
-  assert.ok(IDS.includes(id))
+  assert.ok(IDS.includes(id) || id === 'claude', 'office-only claude art stays out of the daily avatar list')
   assert.match(art[id], /^data:image\/(webp|png);base64,/, `${id} uses an embedded raster`)
   const bytes = Buffer.from(art[id].split(',')[1], 'base64')
   assert.ok(bytes.length > 0 && bytes.length <= 200 * 1024, `${id} within 200 KB`)
@@ -112,7 +112,7 @@ const codeOnly = code
   .replace(/\/\*[\s\S]*?\*\//g, '')
   .replace(/\/\/.*$/gm, '')
   .replaceAll('@bigfish/dsh-client-ui-white-label', '')
-  .replace(/^.*(id: 'bigfish'|bigfish: \{|bigfish: 'data:|'yui', 'devcat', 'bigfish'|const LIVE_ROLE = 'bigfish').*$/gm, '')
+  .replace(/^.*(id: 'bigfish'|bigfish: \{|bigfish: 'data:|'yui', 'devcat', 'bigfish'|const LIVE_ROLE = 'bigfish'|function visibleAvatarId\(|!nekoOfficeEdition\(\)\) id = 'bigfish').*$/gm, '')
 assert.ok(!/大肥鱼|bigfish|whale|鲸/i.test(codeOnly), 'no bigfish identity outside approved avatar, role and account labels')
 assert.ok(!/大肥鱼|whale|鲸/.test(JSON.stringify(exports.PRODUCT_BRAND) + exports.faviconSvg()))
 
@@ -232,7 +232,7 @@ function fakeBridge() {
     getState: async () => { calls.push(['getState']); return state },
     setAvatar: async (id) => {
       calls.push(['setAvatar', id])
-      if (id === 'claude') throw new Error('disk full')
+      if (id === 'yui') throw new Error('disk full')
       state = { ...state, avatar: { ...state.avatar, builtinId: id } }
       return state
     },
@@ -257,7 +257,7 @@ assert.equal(store.get().state.avatar.builtinId, 'gemini')
 assert.equal(store.get().pending.avatar, null)
 await store.setAvatar('evil')
 assert.ok(!bridge.calls.some((c) => c[1] === 'evil'), 'unknown ids never reach the bridge')
-await store.setAvatar('claude')
+await store.setAvatar('yui')
 assert.equal(store.get().state.avatar.builtinId, 'gemini', 'failed switch keeps the previous avatar')
 assert.equal(store.get().notice.scope, 'avatar')
 assert.match(store.get().notice.text, /disk full/)

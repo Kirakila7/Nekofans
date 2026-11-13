@@ -52,11 +52,15 @@ Windows 构建使用 `scripts/build-neko-daily.mjs`，完整输入、官方 NSIS
 ## 开发与测试
 
 ```powershell
+npm ci
 npm run check:neko
 npm run test:neko
+npm test
+npm run test:regression
+npm run test:desktop   # 仅 Windows 桌面入口；其他平台显式跳过
 ```
 
-部分 DOM 测试需要可用的 jsdom，真实 Electron 和安装器验收需要平台运行环境并显式启用。测试使用临时资料和合成服务，不自动登录真实账号或发送付费模型请求。提交前阅读 [贡献说明](CONTRIBUTING.md) 和 [AGENTS.md](AGENTS.md)。
+DOM 测试使用的 jsdom/react 已列入 devDependencies，测试脚本会自动把 `NEKO_DOM_DEPS» 指向本仓库 `node_modules»，不再需要手工准备 `/private/tmp/...» 依赖目录。`npm run test:regression» 会在全量套件后与 `tests/regression-baseline.json» 的已知失败集合比对，只有新增失败才以非 0 退出；已知失败可用 `npm run test:regression -- --update» 刷新。`test:desktop» 针对 Windows 桌面入口（DPAPI），在 macOS/Linux 默认显式跳过；设置 `NEKO_FISH_SMOKE_ALLOW_NON_WINDOWS=1» 可强制运行 macOS 诊断路径。真实 Electron 和安装器验收需要平台运行环境并显式启用。测试使用临时资料和合成服务，不自动登录真实账号或发送付费模型请求。提交前阅读 [贡献说明](CONTRIBUTING.md) 和 [AGENTS.md](AGENTS.md)。
 
 当前聚合检查仍有旧角色列表和聊天隔离夹具的已有失败；本次核心 255 项回归通过。具体结果、基础版本复现和未验收范围见 [源码公开状态](docs/workbench/OPEN_SOURCE_STATUS.md)，请勿将本版本视为全部检查通过的稳定发布。
 

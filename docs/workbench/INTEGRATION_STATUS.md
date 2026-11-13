@@ -1,5 +1,11 @@
 # Local integration 0.28.43 / build 79
 
+## Regression fixture and harness fixes (2026-11-13)
+
+Branch `codex/regression-fixes-20261113» keeps product behavior unchanged and repairs the regression harness: jsdom/react devDependencies plus automatic `NEKO_DOM_DEPS» injection in the test runners; POSIX fix for the Windows build output guard (`scripts/build-neko-windows.mjs»); refreshed stale fixtures (retired claude avatar fallback, Codex→DSH naming, workbench bridge API allowlist, memory window title, v2 baseline hashes); repaired the main-chat-entry ipcMain stub and screen-share source slicing; Windows-only desktop smoke now skips explicitly on other platforms; new `npm run test:regression» compares the full run against `tests/regression-baseline.json».
+
+Full suite after fixes: 1618 tests, 1595 passed, 8 known pre-existing failures, 15 skipped. The 8 remaining failures reproduce identically on the pre-merge daily baseline `a44aa5d» (stale Codex picker and three-seat fixtures, task/menu fixture, floating-record project list) and are tracked in the baseline instead of being silently skipped. `npm run check:neko» is fully green (263/263 syntax plus all smoke modules). Electron 44.7 desktop smoke remains 22/22 + agent 9/9 + shutdown 2/2 on the documented Windows baseline; the Windows-only entry no longer false-fails on macOS.
+
 ## PR #66 daily integration (2026-11-04)
 
 PR #66 is merged on the remote default branch at 01d7926. This daily build combines that image/GIF and single-character fix with the existing home-value ledger and icon controls from 0.28.42. The generated client is regenerated from the merged canonical sources; private account routing, independent chats, drafts, sessions and project memory are retained. Only synthetic data is used for acceptance, including the real installed DSH/Sharp attachment path. PR #58 remains draft and unmerged.
