@@ -1,5 +1,9 @@
 # Local integration 0.28.41 / build 77
 
+## macOS daily build verification (2026-11-14)
+
+Packaged daily workbench artifact `N.E.K.O.工作台试用.app` for `darwin-arm64` using `scripts/build-neko-daily.mjs` against commit `2a8b7c19c142791f1ff90f0030d04b1048cb9405`. Staged on local APFS filesystem to preserve Mach-O signatures and avoid ExFAT AppleDouble (`._*`) metadata collisions. The payload contains 1,152 tracked files and verified strict codesign (`codesign --verify --deep --strict`). Portable archive generated at `dist/daily-build-20261114.zip`.
+
 ## Standalone game workshop room preview (2026-11-14)
 
 The [game workshop](../../services/nekofans-game-workshop/README.md) includes the project list, shareable two-player rooms, host project switching before start, and per-seat teammate selection. Its local preview uses simulated accounts and can discover local Ollama models. The HTML SDK exposes observations and legal actions to the host. Six local regression tests and an isolated two-browser fixture verified handoff and take-back. Real account access, public deployment and desktop Agent handoff are pending.
