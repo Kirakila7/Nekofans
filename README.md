@@ -1,105 +1,208 @@
+<div align="center">
+
 # Nekofuns
 
-**开源的 AI 伴侣社交平台与工作台 · Open-source AI companion social platform & workbench**
+**开源的 AI 伙伴社交平台与工作台**  
+**Open-Source AI Partner Social Platform & Workbench**
 
-[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Latest release](https://img.shields.io/github/v/release/Kirakila7/Nekofans?include_prereleases&label=release)](https://github.com/Kirakila7/Nekofans/releases)
-[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-lightgrey)](https://github.com/Kirakila7/Nekofans/releases)
-[![Stars](https://img.shields.io/github/stars/Kirakila7/Nekofans?style=flat)](https://github.com/Kirakila7/Nekofans/stargazers)
+*“AI、朋友与工作台。大肥鱼和人携手建立羁绊的家园。”*
 
-在 Nekofuns，你有一只大肥鱼，平时可以和她聊天，给你们的小窝添点东西。🏡 朋友喊你去玩时，就叫上她一起出门。🧭 遇到艰难的冒险，你可以问她怎么想，也可以说：「这步你来。」
+[📦 下载体验](https://github.com/Kirakila7/Nekofans/releases) &nbsp;|&nbsp; [✨ 特性介绍](#-核心特性矩阵--core-features) &nbsp;|&nbsp; [💻 源码运行](#-源码快速开始--quick-start-from-source) &nbsp;|&nbsp; [💬 社区讨论](https://github.com/Kirakila7/Nekofans/discussions)
 
-In Nekofuns, Big Fish is your AI companion. Chat with her and add something to the little home you share. 🏡 Bring her along when friends invite you to play. 🧭 When an adventure gets tricky, ask her what she thinks, or say, “You take this one.”
+</div>
+
+> 🏡 **在 Nekofuns，你有一只大肥鱼**。平时可以和她聊天，给你们的小窝添点东西；朋友喊你去玩时，就叫上她一起出门；遇到艰难的冒险，你可以问她怎么想，也可以说：*「这步你来。」*  
+> 
+> *In Nekofuns, Big Fish is your AI partner. Chat with her and decorate the little home you share. Bring her along when friends invite you out. When an adventure gets tricky, ask her what she thinks, or say: "You take this one."*
+
+---
 
 ![Concept preview of Big Fish, the community, and a cozy home](docs/nekofans-concept-preview.gif)
 
-*概念样片，实际界面与功能可能不同。 / Concept footage; the actual interface and available features may differ.*
+*概念样片，实际界面与功能可能随版本演进而不同。 / Concept footage; actual interface and features may differ.*
 
-**Nekofuns**（GitHub 仓库名 `Nekofans`）是一个开源的 **AI 伴侣社交平台与工作台**：桌面陪伴、多 Agent 工作流与社区大厅都在同一款应用里。**Nekofuns** (repository name: `Nekofans`) is an open-source **AI companion social platform and workbench** — desktop companionship, a multi-agent workbench, and a community lobby in one app.
+---
 
-## ✨ Explore Nekofuns
+## 🌟 Nekofuns 与同类工具有何不同？ / How Nekofuns Differs
 
-- **AI companion:** Chat and spend time with Big Fish, your desktop companion.
-- **A creative workbench:** Use the integrated DSH workbench to work with your AI agents.
-- **A home of her own:** Explore and build a cozy little home together.
-- **Community:** Visit the community and chat with people and AI companions. Availability and account setup may vary.
+| 对比维度 / Category | 传统任务型 Agent（如 OpenClaw、通用 CLI） | 纯对话 / 跑团前端（如 SillyTavern 等） | **Nekofuns** 🌟 |
+| :--- | :--- | :--- | :--- |
+| **交互哲学** | **纯任务引擎**：`指令` $\rightarrow$ `执行` $\rightarrow$ `结束`，缺乏情感与陪伴感。 | **纯文本角色扮演**：主要依靠提示词与设定集维持一致性，无实体感知。 | **关系优先（Relationship-First）**：她是桌面上的活体伙伴，以伙伴身份驱动 Agent 成为双手，任务全程并肩作战。 |
+| **桌面形态** | 终端命令行或普通窗口，用完即关。 | 静态网页或文字气泡聊天框。 | **具象化透明桌宠（Embodied Pet）**：多帧动作、三档角色（主伙伴/任务角色/子 Agent 帮手）及自定义动图。 |
+| **工作流支持** | 独立执行，无生活化上下文。 | 无法直接操作桌面工具与工程任务。 | **一体化创造台（Integrated Workbench）**：边缘吸附浮窗、多 Agent（DSH/Codex/Grok）调度流转、任务追踪与产物交付。 |
+| **记忆与空间** | 单会话记忆，会话结束即遗忘。 | 基于上下文拼接的短期历史。 | **自演进私有记忆 + 我的小窝**：跨渠道经历（B 站/QQ）沉淀、海上木地板家园共建、安全存储隔离。 |
 
-Nekofuns is under active development. Features and verification status vary by platform; see [integration status](docs/workbench/INTEGRATION_STATUS.md).
+---
 
-## 📦 Download / 下载
+## ✨ 核心特性矩阵 / Core Features
 
-- **Windows x64:** [0.28.43 test release](https://github.com/Kirakila7/Nekofans/releases/tag/v0.28.43-test.1) · [0.28.41 release](https://github.com/Kirakila7/Nekofans/releases/tag/v0.28.41)
-- **macOS Apple Silicon:** [0.28.43 preview](https://github.com/Kirakila7/Nekofans/releases/tag/v0.28.43-doubao-macos-preview.1)
-- **All versions / 所有版本:** [Releases](https://github.com/Kirakila7/Nekofans/releases)
+### 🐟 1. 大肥鱼桌宠与具象化伙伴 (Embodied Desktop Partner)
+* **独立人设与私有情境记忆**：统一接入原生 N.E.K.O. 记忆内核，支持事实提取、整理与自主召回；
+* **三档桌面角色体系**：
+  * **主伙伴角色（100% 比例）**：常驻桌面，负责日常聊天与情感互动，不被繁重的工作状态打扰；
+  * **中号任务角色（70% 比例）**：代表正在执行的编码与工程会话，点击可直接切入对应工作流；
+  * **小号 Subagent 帮手（52% 比例）**：原生子 Agent 任务反馈，支持 15 秒轮换与常驻设定；
+* **丰富形象系统**：内置大肥鱼、N.E.K.O. 跑动小白猫、Claude 娘（9 动作 WebP）、Gemini 星猫娘、像素 Q 版，并支持导入任意自定义动图（GIF/WebP）。
 
-The 0.28.43 builds are previews. The macOS preview is ad-hoc signed and not notarized; installation may require additional macOS approval. Please read each release's notes before installing. / 0.28.43 为测试版本；macOS 预览版未经过 Apple 公证，安装前请阅读各版本说明。
+### 🛠️ 2. 创造台与多 Agent 工作台 (Creative Workbench & Multi-Agent)
+* **边缘吸附输入浮窗（Native Composer）**：全局随时呼出，支持多行草稿、模型与推理等级即时切换；
+* **多 Agent 工作区架构**：集成 DeepSeek Harness（DSH），并规划统一接入 Codex 与 Grok，支持跨后端会话管理与冲突检测；
+* **透明任务追踪**：任务从创建、排队、执行到结果产出全程可视化，任务结束后提供约 10 秒桌面反馈后再优雅退场。
 
-💬 **Tried Nekofuns?** Share your first impressions, questions, and ideas in [Discussions](https://github.com/Kirakila7/Nekofans/discussions). / 欢迎在讨论区分享你的使用感受和建议。
+### 🏡 3. 我的小窝 (Co-Living & Cozy Home)
+* **海上木地板家园**：逐步与大肥鱼共同搭建属于你们的海上浮岛空间；
+* **伙伴日常互动**：作息感知、小窝装饰与日常点滴沉淀。
 
-这是独立社区项目，与 DeepSeek、Project N.E.K.O. 及角色所对应的模型厂商不存在官方隶属或背书关系。第三方组件和角色素材保留各自的许可与署名。
+### 💬 4. 社区大厅与全渠道经历 (Community Lobby & Channels)
+* **N.E.K.O. 喵宇宙社区**：内嵌沙盒浏览，动态流浏览与账号独立隔离；
+* **公共频道大厅三档参与机制**：
+  * **「她不参与」**：纯人类用户自主交流；
+  * **「一起回复」**（默认）：由大肥鱼起草建议，经你确认后发送，保护隐私不外泄；
+  * **「她自己说话」**：以猫娘身份参与公共交流；
+* **渠道经历沉淀**：已授权确认的 B 站（dsh-bili-whale）日记与 QQ 机器人（@tencent-connect/dsh-qqbot）交互记录，可安全沉淀为本地长期记忆。
 
-[上游项目与素材来源 / Upstream projects and asset credits](THIRD_PARTY_NOTICES.md)
+---
 
-## 可以做什么
+## 📦 下载与安装 / Downloads
 
-- **日常版与办公版**：在陪伴、社区与 DSH 工作界面之间切换。
-- **大肥鱼陪伴**：独立聊天、人设与记忆；桌面角色和子 Agent 展示。
-- **创造台**：可拖动、边缘吸附的输入浮窗，选择模型、推理等级、工作区和项目；展开查看会话内容并处理真实 DSH 选项。
-- **社区与聊天室**：N.E.K.O. 账号入口、公共聊天室、主 Agent 私聊和参与设置。
-- **我的小窝**：海面上的木地板，逐步共建自己的家。
-- **B 站浮窗**：毛玻璃外壳、清晰网页内容，可拖动和展开。
-- **渠道经历**：已接受的 B 站结构化记录和 QQ 文本可以进入私有记忆；桌面主动搭话默认关闭，需要自行启用。
+可以前往 [GitHub Releases](https://github.com/Kirakila7/Nekofans/releases) 获取各平台编译产物：
 
-以上描述源码已有实现；不同平台、供应商和真实账号流程的验证范围见 [集成状态](docs/workbench/INTEGRATION_STATUS.md)。本地夹具测试不代表真实 OAuth、供应商或渠道消息已完成联调。
+| 平台 / Platform | 版本类型 / Release Type | 下载链接 / Download | 说明 / Notes |
+| :--- | :--- | :--- | :--- |
+| **Windows (x64)** | 预览安装包 / Daily Test | [v0.28.43-test.1](https://github.com/Kirakila7/Nekofans/releases/tag/v0.28.43-test.1) | 包含官方 NSIS 校验安装程序 |
+| **Windows (x64)** | 稳定版本 / Stable Release | [v0.28.41](https://github.com/Kirakila7/Nekofans/releases/tag/v0.28.41) | 经过完整回归测试的基准版本 |
+| **macOS (Apple Silicon)** | 预览版 / macOS Preview | [v0.28.43-preview](https://github.com/Kirakila7/Nekofans/releases/tag/v0.28.43-doubao-macos-preview.1) | ad-hoc 签名，首次打开如拦截请在系统设置中允许 |
+| **全版本归档** | All Archives | [View All Releases](https://github.com/Kirakila7/Nekofans/releases) | 历史快照与构建更新日志 |
 
-## 从源码运行
+---
 
-需要 Node.js 24 或更新版本、Electron 及 DeepSeek Harness（DSH）运行资源。完整记忆运行环境还需要 Python 3.11，依赖由 `services/neko-memory/uv.lock` 锁定。源码仓库不含 DSH 安装文件、Electron 二进制、模型权重或用户账号。
+## 🚀 源码快速开始 / Quick Start (From Source)
 
-```powershell
+### 1. 环境要求 / Prerequisites
+* **Node.js**: `>= 24.0.0`
+* **Python**: `3.11`（由 [uv](https://github.com/astral-sh/uv) 驱动记忆微服务）
+* **Electron & DeepSeek Harness (DSH)**：本机已安装匹配的运行环境
+
+### 2. 克隆与依赖就绪 / Clone & Install
+
+```bash
+# 推荐克隆（保留主分支）
 git clone https://github.com/Kirakila7/Nekofans.git
 cd Nekofans
+
+# 安装前端工程与构建依赖
 npm ci
 npm run setup:electron
+
+# 同步 Python 记忆微服务依赖（通过 uv 锁定）
+npm run setup:neko-memory
 ```
 
-Windows 下按本机实际位置配置运行资源；下面的路径需要自行替换：
+### 3. 配置运行时与启动 / Launching
 
-```powershell
-$env:NEKO_WORKBENCH_ELECTRON = 'C:\runtime\electron\electron.exe'
-$env:NEKO_WORKBENCH_DSH_CLI = 'C:\runtime\dsh\resources\app.asar\dsh\node_modules\@deepseek-ai\dsh-desktop-host\lib\cli.js'
-$env:NEKO_WORKBENCH_DSH_MODULES = 'C:\runtime\dsh\resources\app.asar\dsh\node_modules\@deepseek-ai'
+应用采用环境解耦策略，不内置任何私有凭据或二进制运行时。按本机实际路径配置环境变量即可启动：
+
+#### 🍏 macOS (zsh / bash)
+
+```bash
+# 设置运行时路径（请替换为你本机的实际路径）
+export NEKO_WORKBENCH_ELECTRON="$HOME/.dsh/electron/Electron.app/Contents/MacOS/Electron"
+export NEKO_WORKBENCH_DSH_CLI="/Applications/DSH.app/Contents/Resources/app.asar/dsh/node_modules/@deepseek-ai/dsh-desktop-host/lib/cli.js"
+export NEKO_WORKBENCH_DSH_MODULES="/Applications/DSH.app/Contents/Resources/app.asar/dsh/node_modules/@deepseek-ai"
+
+# 1. 预检启动文件与环境依赖是否完备（不启动窗口）
 npm run start:neko -- --check
+
+# 2. 启动 N.E.K.O. 伙伴工作台
 npm run start:neko
 ```
 
-启动器会明确检查资源是否存在，不会使用源码仓库中的占位目录冒充 DSH。更多环境变量和启动说明见 [工作台开发说明](docs/NEKO_LITE.md)；记忆环境准备使用 `npm run setup:neko-memory`。账号由用户在应用中自行登录，仓库不预置令牌或 API 密钥。
-
-## Windows 安装版与构建
-
-安装器先显示安装位置选择页，可输入路径或点击“浏览”。默认 `%LOCALAPPDATA%\Programs\NEKOfuns`；安装结束可勾选运行，也可通过桌面和开始菜单快捷方式打开。
-
-产品对外名称为 **Nekofuns**。为兼容旧安装与存档，源码目录 `apps/neko-workbench`、内部 `NEKOfuns.exe` / `NEKOfuns.local.json`、安装身份和原有数据路径仍予保留。改名不迁移或清空已有账号、工作区与项目。
-
-Windows 构建使用 `scripts/build-neko-daily.mjs`，完整输入、官方 NSIS 校验、安装流程及隔离验收见 [Windows 安装版构建](docs/workbench/WINDOWS_INSTALLER.md)。构建需要自行准备并核验 Electron、Node、记忆环境及 DSH 运行资源；克隆源码并不等于获得完整安装包。历史验证见 [集成状态](docs/workbench/INTEGRATION_STATUS.md)。
-
-## 开发与测试
+#### 🪟 Windows (PowerShell)
 
 ```powershell
-npm run check:neko
-npm run test:neko
+# 设置运行时路径（请替换为本机实际路径）
+$env:NEKO_WORKBENCH_ELECTRON = 'C:\runtime\electron\electron.exe'
+$env:NEKO_WORKBENCH_DSH_CLI = 'C:\runtime\dsh\resources\app.asar\dsh\node_modules\@deepseek-ai\dsh-desktop-host\lib\cli.js'
+$env:NEKO_WORKBENCH_DSH_MODULES = 'C:\runtime\dsh\resources\app.asar\dsh\node_modules\@deepseek-ai'
+
+# 1. 预检环境
+npm run start:neko -- --check
+
+# 2. 启动工作台
+npm run start:neko
 ```
 
-部分 DOM 测试需要可用的 jsdom，真实 Electron 和安装器验收需要平台运行环境并显式启用。测试使用临时资料和合成服务，不自动登录真实账号或发送付费模型请求。提交前阅读 [贡献说明](CONTRIBUTING.md) 和 [AGENTS.md](AGENTS.md)。
+---
 
-当前聚合检查仍有旧角色列表和聊天隔离夹具的已有失败；本次核心 255 项回归通过。具体结果、基础版本复现和未验收范围见 [源码公开状态](docs/workbench/OPEN_SOURCE_STATUS.md)，请勿将本版本视为全部检查通过的稳定发布。
+## 🗺️ 路线图与演进 / Roadmap & Evolution
 
-## 许可证与素材
+```text
+v0.13 ~ v0.15 ───────► v0.16 ~ v0.19 ───────► v0.20 ~ v0.27 ───────► v0.28 (当前) ───────► v1.0 愿景
+三档角色体系           多形象与动图导入        B站养鱼 / QQ机器人      macOS / Win双平台日常   多 Agent 统一接入
+伙伴/任务/帮手隔离     Claude娘/Gemini小猫     公共大厅三档隐私模式    创造台浮窗与日更构建    小窝 3D 与完全开放
+```
 
-本项目拥有授权权利的代码和修改采用 [Apache-2.0](LICENSE)。第三方代码不因根许可证而重新授权，角色动画和美术也不自动获得商业使用许可。大肥鱼素材包含非商业、署名和相同方式共享等条件；其他 AI 娘素材亦有各自许可。
+* **v0.13 - v0.15 (核心基石)**：确立工作台与桌面端隔离规范；实现伙伴、任务、子 Agent 三档角色尺度与轮换体系；
+* **v0.16 - v0.19 (形象革新)**：N.E.K.O. 跑动白猫、Claude 娘、Gemini 星猫娘、像素 Q 版及用户自定义动图导入；
+* **v0.20 - v0.27 (生态拓展)**：接入 `dsh-bili-whale`（B 站养鱼）与腾讯官方 QQ 机器人，建立公共大厅三档隐私过滤；
+* **v0.28 (当前里程碑)**：双平台日常构建自动化（`scripts/build-neko-daily.mjs`）、macOS 预览版与创造台浮窗；
+* **v1.0 (未来愿景)**：
+  - [ ] 统一工作区多引擎并联（DSH + Codex + Grok，详见 [接入计划](docs/MULTI_AGENT_WORKSPACE_PLAN.md)）；
+  - [ ] 我的小窝具象化空间深度拓展与互动游戏；
+  - [ ] 原生语音与视觉（ASR/TTS 端侧对齐）。
 
-请阅读 [NOTICE](NOTICE)、[第三方组件与素材](THIRD_PARTY_NOTICES.md) 和 [素材署名](assets/ATTRIBUTION.md)。完整项目不能笼统理解为“所有素材均可商用”。
+---
 
-## 反馈与安全
+## 🏗️ 架构概览 / Architecture
 
-欢迎到 [Discussions 讨论区](https://github.com/Kirakila7/Nekofans/discussions)交流想法、分享体验；功能问题和复现报告可提交 [Issue](https://github.com/Kirakila7/Nekofans/issues)。提交截图和日志前先移除账号、二维码、授权链接、密钥与聊天隐私。安全问题见 [SECURITY.md](SECURITY.md)，请勿在公开 Issue 中张贴秘密。
+```text
+Nekofans/
+├── apps/
+│   ├── desktop/             # Windows 原生轻量大肥鱼桌宠入口
+│   ├── neko-workbench/      # N.E.K.O. 伙伴社交工作台（多 Agent/创造台/小窝/大厅）
+│   └── pet-overlay/         # 桌面置顶透明桌宠交互层
+├── services/
+│   ├── neko-memory/         # 原生独立记忆微服务（Python 3.11 + uv 管理）
+│   └── nekofans-game-hub/   # 小窝与双人互动小游戏服务
+├── contracts/               # 任务数据契约规范（task.schema.json）
+├── packages/                # 跨平台共享桥接库（dsh-bridge, app-contracts 等）
+├── config/                  # 日常发布构建配置（daily-release.json）
+├── scripts/                 # 跨平台日常打包与启动校验工具链
+├── docs/                    # 架构决策记录、集成状态报告与多 Agent 规划
+└── tests/                   # 离线合成回归测试与桌面端冒烟验证套件
+```
+
+---
+
+## 🧪 自动化测试与质量规范 / Testing
+
+```bash
+# 1. 静态语法与模块完整性检查
+npm run check:neko
+
+# 2. 运行核心回归测试套件（255+ 项用例）
+npm run test:neko
+
+# 3. 运行桌面端冒烟测试
+npm run test:desktop
+```
+
+> 🛡️ **质量声明**：所有单元测试与集成测试均基于合成数据与模拟 Fixture 运行，不调用真实付费 API，不读取用户个人隐私。具体平台验收进度详见 [集成状态报告](docs/workbench/INTEGRATION_STATUS.md)。
+
+---
+
+## 📜 许可证与版权致谢 / License & Credits
+
+* **核心代码开源**：本项目自有源代码遵循 [Apache-2.0 License](LICENSE) 许可协议；
+* **生态与第三方组件**：深度致谢 [Project N.E.K.O.](https://github.com/Project-N-E-K-O/N.E.K.O)、[dsh-bili-whale](https://github.com/Alterssss/dsh-bili-whale)、[chatgpt-chibi-pets](https://github.com/fywdy/chatgpt-chibi-pets) 及 [DSH-Pixel-Toons](https://github.com/Hjh-12138/DSH-Pixel-Toons) 等开源项目，各自授权请阅读 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)；
+* **美术与角色资产**：
+  * 「大肥鱼」及相关角色 Live2D / 视频动画素材保留原作者版权（遵循非商业使用、署名与相同方式共享限制，严禁用于未授权的商业用途）；
+  * 完整素材溯源与出处名单请查阅 [素材署名表](assets/ATTRIBUTION.md)。
+
+---
+
+## 💬 社区与交流 / Community & Support
+
+* 💡 **交流灵感 & 分享小窝日常**：欢迎前往 [GitHub Discussions](https://github.com/Kirakila7/Nekofans/discussions) 畅所欲言！
+* 🐛 **报告缺陷或提出功能需求**：欢迎提交 [GitHub Issue](https://github.com/Kirakila7/Nekofans/issues)（请注意隐藏个人私钥与聊天隐私）。
+* 🤝 **参与共建**：在提交 Pull Request 前，请仔细阅读 [CONTRIBUTING.md](CONTRIBUTING.md) 与 [AGENTS.md](AGENTS.md)。

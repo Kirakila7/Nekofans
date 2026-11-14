@@ -60,3 +60,9 @@ credentials.yml
 **/raw-private/
 **/BUILD_RECEIPT.json
 **/APPLICATION_SHA256.json
+
+# macOS metadata & AppleDouble files
+.DS_Store
+._*
+**/._*
+
