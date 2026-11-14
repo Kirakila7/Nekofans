@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>蘑菇岛 · 双人跳跳</title>
+<style>
+  :root{color-scheme:light;font-family:"Microsoft YaHei",system-ui,sans-serif;color:#182747;background:#fcf6e7}
+  *{box-sizing:border-box}body{margin:0;padding:clamp(12px,3vw,25px)}main{max-width:1000px;margin:auto}
+  header{display:flex;align-items:flex-end;justify-content:space-between;gap:8px 18px;flex-wrap:wrap;margin-bottom:12px}
+  h1{font-size:clamp(19px,4vw,32px);line-height:1.2;margin:0;color:#283d60}header p{margin:6px 0 0;font-size:13px;line-height:1.5}
+  .score{font-size:13px;font-weight:bold;background:#ffe9ad;border:1px solid #e8c873;border-radius:9px;padding:7px 10px;white-space:nowrap}
+  .scene{border:3px solid #31466e;border-radius:12px;overflow:hidden;background:#a9dded;box-shadow:0 4px 0 #d8ccb7}
+  canvas{width:100%;height:auto;display:block;image-rendering:pixelated}
+  .players{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 0}.player{display:flex;align-items:center;gap:6px;min-width:0;border:1px solid #e0d8c5;background:#fffaf0;border-radius:8px;padding:4px 8px;font-size:12px;overflow-wrap:anywhere}
+  .player::before{content:"";flex:none;width:9px;height:9px;border-radius:50%;background:#cf4c45}.player+.player::before{background:#237e99}
+  .player[data-online="false"]::before{background:#7b7e88}.player[data-local="true"]{border-color:#31466e}
+  .status{margin:12px 0;min-height:1.5em;font-size:14px;font-weight:650;line-height:1.5}.status[data-error="true"]{color:#9d302c}
+  .controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.controls button{font:inherit;font-size:13px;font-weight:650;color:#fff;background:#31466e;border:0;border-radius:8px;min-height:44px;padding:8px 12px;cursor:pointer;touch-action:manipulation}
+  .controls button[data-action="jump"]{background:#a63c31}.controls button:focus-visible{outline:3px solid #d97f28;outline-offset:2px}.controls button:disabled{opacity:.52;cursor:default}
+  .hint{font-size:12px;line-height:1.5;margin:10px 0 0;color:#495873}
+  @media(max-width:430px){.controls button{flex:1;min-width:calc(50% - 8px)}header p{font-size:12px}}
+</style>
+<main>
+  <header>
+    <div><h1>蘑菇岛 · 双人跳跳</h1><p>踩亮开关搭桥，收齐金币，两个人一起到终点。</p></div>
+    <div class="score" id="coins">金币 0 / 7</div>
+  </header>
+  <div class="scene"><canvas id="stage" width="864" height="294" role="img" aria-label="双人像素跳跃关卡"></canvas></div>
+  <div class="players" aria-label="房间玩家"><span class="player" id="player-0">红帽</span><span class="player" id="player-1">蓝帽</span></div>
+  <p id="status" class="status" role="status">正在连接游戏房间…</p>
+  <div class="controls" aria-label="游戏操作">
+    <button type="button" data-action="jump" data-dir="-1" disabled>↖ 左跳</button>
+    <button type="button" data-action="step" data-dir="-1" disabled>← 左走</button>
+    <button type="button" data-action="step" data-dir="1" disabled>右走 →</button>
+    <button type="button" data-action="jump" data-dir="1" disabled>右跳 ↗</button>
+    <button type="button" id="restart" hidden disabled>再来一局</button>
+  </div>
+  <p class="hint">方向键走路，按住 Shift 再按方向键可跳过缺口。手机可以直接点按钮。</p>
+</main>
+<script>
+'use strict';
+const tile = 32;
+const floor = [222,222,222,222,222,0,0,222,222,222,222,222,0,0,0,222,190,190,190,0,222,222,222,222,222,222,222];
+const coinTiles = [2,5,8,11,16,19,23];
+const switchTile = 10;
+const flagTile = 25;
+const initialState = { positions:[0,1], coins:[], bridge:false, finished:false, restart:[false,false] };
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+const status = document.getElementById('status');
+const stage = document.getElementById('stage');
+const canvas = stage.getContext('2d');
+const movement = [...document.querySelectorAll('[data-action]')];
+const restart = document.getElementById('restart');
+let previousState = initialState;
+let previousContext = null;
+let animationFrame;
+
+function groundAt(x, bridge) {
+  if (bridge && x >= 12 && x <= 14) return 222;
+  return floor[x] || 0;
+}
+
+function destination(state, player, action) {
+  const from = state.positions[player];
+  const dir = action.dir;
+  const height = groundAt(from, state.bridge);
+  if (action.type === 'step') {
+    const next = from + dir;
+    const ground = groundAt(next, state.bridge);
+    return ground && ground >= height ? next : from;
+  }
+  for (let stride = 3; stride > 0; stride--) {
+    const next = from + stride * dir;
+    if (groundAt(next, state.bridge)) return next;
+  }
+  return from;
+}
+
+function reduce(state, action, {player}) {
+  if ((player !== 0 && player !== 1) || !action || typeof action !== 'object') return state;
+  if (state.finished) {
+    if (action.type !== 'restart' || state.restart[player]) return state;
+    const votes = state.restart.slice();
+    votes[player] = true;
+    return votes.every(Boolean) ? initialState : { ...state, restart:votes };
+  }
+  if (!['step','jump'].includes(action.type) || ![-1,1].includes(action.dir)) return state;
+  const from = state.positions[player];
+  const to = destination(state, player, action);
+  if (from === to) return state;
+  const positions = state.positions.slice();
+  positions[player] = to;
+  const coins = coinTiles.filter(x => state.coins.includes(x) || (x >= Math.min(from,to) && x <= Math.max(from,to)));
+  const bridge = state.bridge || to === switchTile;
+  const finished = coins.length === coinTiles.length && positions.every(x => x >= flagTile);
+  return { ...state, positions, coins, bridge, finished };
+}
+
+function rect(x,y,w,h,color) {
+  canvas.fillStyle = color;
+  canvas.fillRect(Math.round(x),Math.round(y),w,h);
+}
+
+function hill(x,y,w,h,color) {
+  for (let i = 0; i < 5; i++) rect(x+i*9,y-i*h/5,w-i*18,h/5+1,color);
+}
+
+function background() {
+  const sky = canvas.createLinearGradient(0,0,0,237);
+  sky.addColorStop(0,'#81c6ea');
+  sky.addColorStop(1,'#e1f1ef');
+  rect(0,0,864,294,sky);
+  rect(705,24,50,50,'#ffe3a0');
+  rect(698,34,64,30,'#ffe3a0');
+  for (const [x,y] of [[47,42],[227,70],[468,36],[774,92]]) {
+    rect(x+16,y,48,8,'#f8fcf4');rect(x,y+8,91,12,'#f8fcf4');rect(x+8,y+20,75,8,'#edf7f5');
+  }
+  for (const [x,y,w,h] of [[-52,198,209,69],[127,187,204,82],[344,201,212,63],[510,177,192,94],[707,204,206,69]]) hill(x,y,w,h,'#9bc7b0');
+  for (const [x,y,w,h] of [[25,221,169,52],[254,227,180,47],[451,227,157,51],[677,221,169,53]]) hill(x,y,w,h,'#75ae8e');
+  rect(0,254,864,40,'#437fa5');rect(0,254,864,4,'#ace1e6');rect(0,271,864,23,'#39749a');
+  for (let i = 0; i < 21; i++) rect(i*43+5,262+(i%3)*8,15+i%4,2,'#78bfd0');
+}
+
+function mushroom(x,y,color) {
+  rect(x-3,y-9,6,9,'#f7e0b9');rect(x-10,y-14,20,8,color);rect(x-6,y-18,12,4,color);
+  rect(x-4,y-14,3,3,'#fff8dd');rect(x+4,y-11,3,3,'#fff8dd');
+}
+
+function ground(state) {
+  for (let x = 0; x < floor.length; x++) {
+    const y = groundAt(x,state.bridge);
+    if (!y) continue;
+    const px = x*tile;
+    if (!floor[x]) {
+      rect(px,y,tile,12,'#c8994f');rect(px,y,tile,4,'#f7d28b');rect(px+2,y+10,tile-4,3,'#896544');
+      continue;
+    }
+    rect(px,y,tile,294-y,'#a76649');rect(px,y,tile,6,'#66a052');rect(px,y+6,tile,5,'#416e43');
+    for (let offset = 17; y+offset < 290; offset += 14) {
+      rect(px+2+(offset%4)*3,y+offset,19,3,'#be7c51');rect(px+22,y+offset+5,5,3,'#87543f');
+    }
+  }
+  for (const [x,color] of [[3,'#d5684e'],[7,'#ed9457'],[17,'#d5684e'],[22,'#ed9457']]) mushroom(x*tile+25,groundAt(x,state.bridge),color);
+  const switchX = switchTile*tile+6;
+  rect(switchX,215,20,7,'#554d63');rect(switchX+3,211,14,5,state.bridge?'#aee065':'#ef9c51');
+  const flagX = flagTile*tile+22;
+  rect(flagX,153,4,69,'#f9f1ce');rect(flagX-1,150,6,6,'#eab951');
+  rect(flagX-29,159,29,15,state.finished?'#efbf4f':'#335477');rect(flagX-22,174,22,5,state.finished?'#efbf4f':'#335477');
+  rect(flagX-19,163,5,7,'#fff3d5');rect(flagX-20,164,7,5,'#fff3d5');
+  for (const x of coinTiles) {
+    if (state.coins.includes(x)) continue;
+    const cx = x*tile+16, y = (floor[x] || 204)-31;
+    rect(cx-6,y+2,12,12,'#ac7331');rect(cx-4,y,8,16,'#ac7331');rect(cx-4,y+2,8,12,'#ffcb52');rect(cx-2,y+3,2,9,'#fff0a2');
+  }
+}
+
+function character(x,y,player,local) {
+  const hat = player === 0 ? '#cf4c45' : '#237e99';
+  const outline = '#2d3355';
+  if (local) { rect(x-3,y-41,6,3,'#283d60');rect(x-1,y-38,2,3,'#283d60'); }
+  rect(x-9,y-30,16,6,outline);rect(x-12,y-24,26,5,outline);rect(x-7,y-20,16,9,'#f8ca95');
+  rect(x-8,y-28,14,6,hat);rect(x-10,y-23,22,3,hat);rect(x-4,y-27,5,2,'#fff3d5');
+  rect(x+4,y-18,2,4,outline);rect(x-8,y-11,17,8,hat);rect(x-4,y-12,9,9,outline);rect(x-2,y-8,5,3,'#efbf4f');
+  rect(x-9,y-4,8,4,outline);rect(x+2,y-4,9,4,outline);
+}
+
+function draw(state, ctx, before = state, progress = 1) {
+  background();
+  ground(state);
+  const together = state.positions[0] === state.positions[1];
+  state.positions.forEach((position, player) => {
+    const from = before.positions[player];
+    const moving = from !== position;
+    const start = groundAt(from,before.bridge), end = groundAt(position,state.bridge);
+    const arc = moving && (Math.abs(from-position) > 1 || end < start) ? 34*Math.sin(Math.PI*progress) : 0;
+    const x = (from+(position-from)*progress)*tile+16+(together ? (player===0?-7:7) : 0);
+    character(x,start+(end-start)*progress-arc,player,ctx?.player === player);
+  });
+}
+
+function render(state, ctx) {
+  const before = previousState;
+  const showMovement = !reducedMotion.matches && previousContext && ctx.version === previousContext.version+1 && !before.finished && before.positions.some((p,i)=>p!==state.positions[i]);
+  cancelAnimationFrame(animationFrame);
+  if (showMovement) {
+    const start = performance.now();
+    const animate = now => {
+      const progress = Math.min(1,Math.max(0,(now-start)/190));
+      draw(state,ctx,before,progress);
+      if (progress < 1) animationFrame = requestAnimationFrame(animate);
+    };
+    animationFrame = requestAnimationFrame(animate);
+  } else draw(state,ctx);
+  previousState = state;
+  previousContext = ctx;
+  document.getElementById('coins').textContent = '金币 '+state.coins.length+' / '+coinTiles.length;
+  for (let player = 0; player < 2; player++) {
+    const label = document.getElementById('player-'+player);
+    label.textContent = (player === 0 ? '红帽' : '蓝帽')+' · '+(ctx.players[player]?.name || '等待入座')+(player === ctx.player ? '（你）' : '');
+    label.dataset.online = Boolean(ctx.online?.[player]);
+    label.dataset.local = player === ctx.player;
+  }
+  status.dataset.error = false;
+  if (!ctx.connected) status.textContent = '连接中断，正在恢复进度…';
+  else if (!ctx.ready) status.textContent = '等待另一位玩家加入。';
+  else if (state.finished) status.textContent = state.restart[ctx.player] ? '已同意重开，等待队友。' : '一起通关了！';
+  else if (!ctx.online?.[1-ctx.player]) status.textContent = '队友暂时离线，等她回来再继续。';
+  else if (!state.bridge) status.textContent = '前方有缺口，跳过去踩亮橙色开关。';
+  else if (state.coins.length < coinTiles.length) status.textContent = '桥已铺好。沿路收齐金币，再一起到旗子下。';
+  else status.textContent = '金币收齐了。红帽和蓝帽都到旗子下就通关。';
+  const ready = ctx.isMyTurn && ctx.online?.[1-ctx.player] && !ctx.agentActive;
+  for (const button of movement) button.disabled = !ready || state.finished;
+  restart.hidden = !state.finished;
+  restart.disabled = !ready || state.restart[ctx.player];
+}
+
+function showError(message) {
+  status.dataset.error = true;
+  status.textContent = message;
+}
+
+function move(type,dir) {
+  const ctx = previousContext;
+  if (!ctx?.isMyTurn || !ctx.online?.[1-ctx.player] || previousState.finished) return;
+  const action = {type,dir};
+  if (destination(previousState,ctx.player,action) === previousState.positions[ctx.player]) {
+    showError(type === 'step' ? '前面是缺口或高台，试试跳跃。' : '这边没有能落脚的地方。');
+    return;
+  }
+  room.submit(action);
+}
+
+draw(initialState);
+const room = NekofansGame.connect({
+  initialState, reducer:reduce, onChange:render, onError:showError,
+  agent: {
+    observe(state, ctx) {
+      return { player:ctx.player, positions:state.positions, coins:state.coins, coinTiles,
+        platforms:floor, bridge:state.bridge, switchTile, flagTile, finished:state.finished };
+    },
+    legalActions(state, ctx) {
+      if (state.finished || !ctx.online?.[1-ctx.player]) return [];
+      const choices = [];
+      for (const type of ['step','jump']) {
+        for (const dir of [-1,1]) {
+          const action = {type,dir};
+          const to = destination(state,ctx.player,action);
+          if (to === state.positions[ctx.player]) continue;
+          choices.push({ action, label:(dir < 0 ? '向左' : '向右')+(type === 'step' ? '走' : '跳')+'到第 '+to+' 格' });
+        }
+      }
+      return choices;
+    }
+  }
+});
+for (const button of movement) button.addEventListener('click',()=>move(button.dataset.action,Number(button.dataset.dir)));
+restart.addEventListener('click',()=>room.submit({type:'restart'}));
+document.addEventListener('keydown',event => {
+  if (event.repeat || event.altKey || event.ctrlKey || event.metaKey || !['ArrowLeft','ArrowRight'].includes(event.key)) return;
+  event.preventDefault();
+  move(event.shiftKey ? 'jump' : 'step',event.key === 'ArrowLeft' ? -1 : 1);
+});
+</script>
+</html>

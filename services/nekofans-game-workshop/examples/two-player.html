@@ -1,0 +1,23 @@
+<html lang="zh-CN"><head><style>
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 40% 0%,#f6f8ff,#e2eaf4);font-family:"Segoe UI","Microsoft YaHei",sans-serif;color:#53718c;min-height:100vh;display:flex;align-items:center;justify-content:center}.game{width:min(83vw,390px);padding:25px 0;text-align:center}.eyebrow{font-size:9px;letter-spacing:3px;color:#9aacc0}h1{font-size:25px;font-weight:500;margin:20px 0 12px}.subtitle{font-size:11px;color:#9aacbf;margin-bottom:30px}.board{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding:15px;background:#f6f9fc;border:1px solid #d6e1ee;border-radius:22px;box-shadow:0 20px 50px #8098bb20}.cell{aspect-ratio:1;border:0;border-radius:13px;background:#e7eef6;color:#7d9bb5;font-size:clamp(30px,8vw,55px);cursor:pointer;transition:.2s}.cell:hover:enabled{background:#dce7f2;transform:translateY(-2px)}.cell:disabled{cursor:default}.cell.other{color:#ac9bbd;background:#eee9f3}.cell.win{background:#daeae1;color:#729d89}.status{font-size:13px;margin:25px 0 10px;min-height:22px}.note{font-size:9px;color:#a8b6c5}.symbol{font-size:18px;vertical-align:-2px;color:#7e9eb8}button:focus-visible{outline:3px solid #9db5ca;outline-offset:2px}
+</style></head><body><div class="game"><div class="eyebrow">TWO PLAYERS. ONE LITTLE SKY.</div><h1>一起落一颗星</h1><p class="subtitle">把三颗属于你的星，连成一条线。</p><div class="board" id="board"></div><p class="status" id="status">等待朋友入座…</p><p class="note" id="note">✧ 与 ◯，各有一片小天空。</p></div><script>
+const board=document.getElementById('board');let latest,context;
+const wins=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+const room=NekofansGame.connect({
+ initialState:{cells:Array(9).fill(null),winner:null,line:[],draw:false},
+ reducer(state,action,ctx){
+  if(action.type!=='place'||!Number.isInteger(action.index)||action.index<0||action.index>8||state.winner!==null||state.draw||state.cells[action.index]!==null)return state;
+  state.cells[action.index]=ctx.player;
+  const line=wins.find(row=>row.every(index=>state.cells[index]===ctx.player));
+  if(line){state.winner=ctx.player;state.line=line;}else state.draw=state.cells.every(cell=>cell!==null);
+  return state;
+ },
+ onChange(state,ctx){
+  latest=state;context=ctx;const fragment=document.createDocumentFragment();
+  for(let i=0;i<9;i++){const button=document.createElement('button');button.className='cell'+(state.cells[i]===1?' other':'')+(state.line.includes(i)?' win':'');button.textContent=state.cells[i]===null?'':state.cells[i]===0?'✧':'◯';button.setAttribute('aria-label','第'+(i+1)+'格');button.disabled=!ctx.isMyTurn||state.winner!==null||state.draw||state.cells[i]!==null;button.onclick=()=>room.submit({type:'place',index:i});fragment.append(button);}
+  board.replaceChildren(fragment);
+  document.getElementById('status').textContent=state.winner!==null?(state.winner===ctx.player?'你连起了一片星空！':'朋友连起了一片星空！'):state.draw?'平局 · 今晚的星空属于我们':!ctx.connected?'连接恢复中…':!ctx.ready?'等另一位朋友入座…':ctx.isMyTurn?'轮到你，落下一颗星':'朋友正在挑选一颗星';
+  document.getElementById('note').textContent='你是 '+(ctx.player===0?'✧':'◯')+' · 两个人的落子会实时同步';
+ },onError(message){document.getElementById('status').textContent=message;}
+});
+</script></body></html>
