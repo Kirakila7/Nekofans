@@ -1,5 +1,9 @@
 # Local integration 0.28.41 / build 77
 
+## Standalone game workshop room preview (2026-11-14)
+
+The [game workshop](../../services/nekofans-game-workshop/README.md) includes the project list, shareable two-player rooms, host project switching before start, and per-seat teammate selection. Its local preview uses simulated accounts and can discover local Ollama models. The HTML SDK exposes observations and legal actions to the host. Six local regression tests and an isolated two-browser fixture verified handoff and take-back. Real account access, public deployment and desktop Agent handoff are pending.
+
 ## Private chess invitations and local story launcher (2026-11-09)
 
 The publisher can create a private chess room from the workbench and post the public invitation to the lobby. The recipient can select **在工作台加入** to take the guest seat without copying a pairing code. Reopening an invitation in the same workbench session reuses its seat. Players who already joined in a browser can still use the pairing flow.

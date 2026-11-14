@@ -1,0 +1,10 @@
+<html lang="zh-CN"><head><style>
+body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 40% 5%,#edf4f7,#cedee9);font-family:"Segoe UI","Microsoft YaHei",sans-serif;color:#5a7b91;display:grid;place-items:center}.wrap{text-align:center;width:min(85vw,450px)}h1{font-size:26px;font-weight:500}.hint{font-size:12px;color:#829daf;line-height:1.8}.sky{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;padding:25px;margin:25px 0;border:1px solid #d5e2eb;background:#eef5f985;border-radius:22px}button{aspect-ratio:1;border:0;border-radius:15px;background:#e3edf3;font-size:35px;color:#afc4d0;cursor:pointer}button.lit{background:#fff2c9;color:#caa55a;box-shadow:0 0 25px #fff2c9aa}button:disabled{cursor:default}.count{font-size:14px}.tiny{font-size:10px;color:#90a6b8}
+</style></head><body><div class="wrap"><p class="tiny">A SMALL SKY WE BUILD TOGETHER</p><h1>一起点亮这片海</h1><p class="hint">不必轮流，你和朋友都可以点亮星星。<br>每一盏灯，都会出现在对方的世界。</p><div class="sky" id="sky"></div><div class="count" id="count">等待入座…</div><p class="tiny" id="presence"></p></div><script>
+const room=NekofansGame.connect({
+ initialState:{lights:Array(12).fill(false)},
+ reducer(state,action,ctx){if(action.type==='toggle'&&Number.isInteger(action.index)&&action.index>=0&&action.index<12)state.lights[action.index]=!state.lights[action.index];return state;},
+ onChange(state,ctx){const fragment=document.createDocumentFragment();state.lights.forEach((lit,i)=>{const button=document.createElement('button');button.textContent=lit?'✦':'✧';button.className=lit?'lit':'';button.disabled=!ctx.isMyTurn;button.setAttribute('aria-label','星星'+(i+1));button.onclick=()=>room.submit({type:'toggle',index:i});fragment.append(button);});document.getElementById('sky').replaceChildren(fragment);const n=state.lights.filter(Boolean).length;document.getElementById('count').textContent=!ctx.ready?'等待朋友一起来点灯':n===12?'我们的海，全都亮了。':'已经一起点亮 '+n+' / 12 颗星';document.getElementById('presence').textContent='共同操作模式 · 同一片星空';},
+ onError(message){document.getElementById('count').textContent=message;}
+});
+</script></body></html>
