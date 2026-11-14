@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#0c1524">
+  <title>Nekofans · 游戏工坊</title>
+  <link rel="stylesheet" href="/project-lobby.css">
+  <script type="module" src="/platform.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Nekofans 游戏工坊"><span class="logo" aria-hidden="true">✦</span>Nekofans</a>
+    <nav aria-label="游戏工坊"><a id="projects-nav" href="/#projects">项目</a><a id="rooms-nav" href="/#rooms">房间</a><a id="publish-nav" href="/#publish" hidden>发布</a></nav>
+    <div class="header-status" role="status" hidden><span id="status"></span></div>
+  </header>
+
+  <main id="home" class="lobby-main">
+    <section id="projects" aria-labelledby="projects-title">
+      <div class="page-heading">
+        <h1 id="projects-title">项目</h1>
+        <button id="demo" class="secondary" hidden>加载井字棋示例</button>
+      </div>
+      <div id="project-list" class="project-grid"></div>
+      <p id="project-empty" class="quiet">正在加载项目…</p>
+    </section>
+
+    <section id="rooms" aria-labelledby="rooms-title" hidden>
+      <div class="page-heading"><h1 id="rooms-title">房间</h1><a class="secondary" href="/#projects">建房</a></div>
+      <form id="join-form" class="panel join-form"><input id="join-code" aria-label="邀请链接或房间号" placeholder="邀请链接或房间号" required maxlength="320" autocomplete="off" spellcheck="false"><button class="primary" type="submit">加入房间</button></form>
+    </section>
+
+    <section class="publish panel" id="publish" hidden>
+      <div class="section-title"><h1>发布项目</h1><button id="copy-prompt" class="secondary">复制联机模板</button></div>
+      <form id="publish-form">
+        <div class="upload-box"><input id="html-file" type="file" accept=".html,.htm,text/html" required><label for="html-file"><span class="upload-icon" aria-hidden="true">↥</span><strong id="file-name">选择 HTML</strong><small>最大 512 KB</small></label></div>
+        <div class="publish-fields">
+          <label>项目名称<input id="game-title" maxlength="60" required></label>
+          <label>联机方式<select id="game-mode"><option value="turns">轮流操作</option><option value="shared">共同操作</option></select></label>
+          <label>服主发布凭证<input id="publish-key" type="password" autocomplete="off" required></label>
+          <button class="primary" id="publish-button">发布</button>
+        </div>
+      </form>
+      <div id="published" hidden><a id="published-link"></a><div><button id="copy-game" class="secondary">复制链接</button><a id="open-game" class="primary">打开项目</a></div></div>
+    </section>
+  </main>
+
+  <main id="play" class="lobby-main" hidden>
+    <div class="page-heading">
+      <h1 id="play-title">正在打开…</h1>
+      <a class="secondary" href="/#projects">返回</a>
+    </div>
+    <section class="game-shell" id="game-shell" aria-labelledby="play-title">
+      <div id="game-placeholder" class="lobby-project">
+        <div class="project-cover" id="room-art" aria-hidden="true"><span></span></div>
+      </div>
+      <iframe id="game-frame" title="双人游戏" sandbox="allow-scripts" referrerpolicy="no-referrer" hidden></iframe>
+    </section>
+    <section class="room-panel room-dock" id="entry-panel" aria-labelledby="entry-title">
+      <div><h2 id="entry-title">建房</h2><p id="entry-copy" role="status" hidden></p></div>
+      <div class="entry-actions">
+        <label><input id="player-name" aria-label="昵称" maxlength="24" placeholder="访客昵称"></label>
+        <button class="primary" id="enter-room">访客建房</button>
+      </div>
+    </section>
+    <section class="room-panel room-dock" id="room-panel" aria-label="房间操作" hidden>
+      <div class="dock-project">
+        <h2 id="room-project-name"></h2>
+        <label id="room-project-control" hidden><select id="room-project-select" aria-label="房间项目"></select></label>
+        <span id="room-project-meta"></span>
+      </div>
+      <div class="dock-members">
+        <div class="room-panel-heading"><h2 id="room-title">成员</h2><span id="room-count" class="room-count"></span></div>
+        <div id="players"></div>
+      </div>
+      <div class="dock-controls">
+        <p id="room-start-hint" class="quiet" role="status"></p>
+        <div class="room-actions">
+          <button class="secondary" id="copy-invite">复制房间链接</button>
+          <button class="secondary" id="agent-settings" type="button" aria-controls="agent-options" aria-expanded="false" hidden>队友设置</button>
+          <button class="secondary" id="game-agent" type="button" aria-pressed="false" hidden>大肥鱼接手</button>
+          <button class="primary" id="start-game" hidden disabled>开始游戏</button>
+          <a id="new-room" class="secondary" hidden>新开一局</a>
+        </div>
+      </div>
+      <div id="agent-options" class="agent-options panel" aria-label="队友设置" hidden>
+        <label>队友<select id="agent-teammate" aria-label="队友"></select></label>
+        <label>模型<select id="agent-model" aria-label="模型"></select></label>
+        <button class="secondary" id="agent-refresh" type="button">刷新模型</button>
+        <p id="agent-model-status" class="quiet" role="status"></p>
+      </div>
+    </section>
+  </main>
+  <div id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

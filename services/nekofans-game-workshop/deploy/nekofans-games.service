@@ -1,0 +1,23 @@
+[Unit]
+Description=Nekofans HTML multiplayer game service
+After=network.target
+
+[Service]
+User=nekofans-games
+Group=nekofans-games
+WorkingDirectory=/opt/nekofans-games
+EnvironmentFile=/etc/nekofans-games.env
+ExecStart=/opt/nekofans-games-node/bin/node /opt/nekofans-games/server/index.mjs
+Restart=on-failure
+RestartSec=3
+StateDirectory=nekofans-games
+StateDirectoryMode=0700
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/nekofans-games
+MemoryMax=768M
+
+[Install]
+WantedBy=multi-user.target
