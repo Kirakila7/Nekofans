@@ -1,5 +1,9 @@
 # Local integration 0.28.41 / build 77
 
+## Mind games site integration and 《开源与抹除》 showcase (2026-11-15)
+
+Integrated the Nekofans.Game mind-games showcase (`sites/nekofans-mindgames`), presenting the debut mind-game prototype 《开源与抹除》 and original secret rules by A.kira. Includes responsive catalog navigation, bookmarking, secret rule copy, D1 migration schema, and original playable demo assets (`rules.mp4`, `host.mp4`, `workbench.mp4`, `duel-concept.webp`).
+
 ## macOS daily build verification (2026-11-14)
 
 Packaged daily workbench artifact `N.E.K.O.工作台试用.app` for `darwin-arm64` using `scripts/build-neko-daily.mjs` against commit `2a8b7c19c142791f1ff90f0030d04b1048cb9405`. Staged on local APFS filesystem to preserve Mach-O signatures and avoid ExFAT AppleDouble (`._*`) metadata collisions. The payload contains 1,152 tracked files and verified strict codesign (`codesign --verify --deep --strict`). Portable archive generated at `dist/daily-build-20261114.zip`.
