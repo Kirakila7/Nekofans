@@ -1,12 +1,13 @@
 # Local integration 0.28.41 / build 77
 
-## Private chess compiler: Open Source and Erasure rule templates (2026-11-15)
+## Private chess compiler & engine: playable Open Source rule & safe Erasure placeholder (2026-11-15)
 
-Extended `services/nekofans-game-hub/private-chess-compiler.mjs` to support 《开源与抹除》 rule templates in addition to opponent piece bans:
-- `shared-piece-pool` (开源·共享走法池): captures and removed pieces contribute to the shared move pool, verified by `getCapturedPiecePool(state)`.
-- `true-name-erasure` (抹除·真名契约): structured rule template aligned with the goddess true-name referee protocol.
-
-Updated `parseRuleProposal`, `compilePrivateRule` prompt, `classifyPrivatePosition`, and `permitsPrivateMove`. Added unit tests covering proposal parsing, captured pool calculation, and move validation (all 34 hub tests passing).
+Implemented real playable borrowed moves for the 《开源与抹除》 rule set in both the chess core and private compiler:
+- `shared-piece-pool` (开源·共享走法池): pieces that are captured or leave the board enter the shared piece pool (`getCapturedPiecePool(state)`). Friendly pieces can borrow movement patterns from the pool (`computeBorrowedMoves(state, pool)`), appended directly to `legalMoves` in `services/nekofans-game-hub/standard-trial/chess-core.cjs` and validated in `permitsPrivateMove` and `chess.replayActions`. Tested with full gameplay sequences (e.g. pawn borrowing captured knight jumps to resolve check and continuing through subsequent moves).
+- `true-name-erasure` (抹除·真名契约): placeholder returns `unsupported` in `parseRuleProposal` and `compilePrivateRule` to avoid misleading players before the referee story protocol and interactive name guessing are implemented.
+- `private-trial/index.html`: updated notice and input placeholder to list both supported rules (opponent piece ban and shared piece pool).
+- `sites/nekofans-mindgames`: catalog updated to reflect playable stage for open-source borrowed moves and self-contained `scripts/` directory added to source control.
+- All 34 game hub tests and 2 mindgames tests pass without skips or regressions.
 
 ## Mind games site integration and 《开源与抹除》 showcase (2026-11-15)
 

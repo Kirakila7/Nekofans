@@ -20,17 +20,17 @@ test('the private model call is stateless and its response is reduced to bounded
   assert.deepEqual(await compilePrivateRule({provider:{async *stream(){yield {type:'delta',text:'私密内容'};yield {type:'complete'};}},rule:'测试'}),{status:'unavailable'});
 });
 
-test('compiler recognizes shared-piece-pool (开源) and true-name-erasure (抹除) proposals', async () => {
+test('compiler recognizes shared-piece-pool (开源) and rejects true-name-erasure as unsupported placeholder', async () => {
   assert.deepEqual(parseRuleProposal('{"kind":"shared-piece-pool","piece":"all"}'), {kind:'shared-piece-pool',piece:'all'});
   assert.deepEqual(parseRuleProposal('{"kind":"shared-piece-pool","piece":"n"}'), {kind:'shared-piece-pool',piece:'n'});
   assert.deepEqual(parseRuleProposal('{"kind":"shared-piece-pool"}'), {kind:'shared-piece-pool',piece:'all'});
   assert.equal(parseRuleProposal('{"kind":"shared-piece-pool","piece":"k"}'), null);
   assert.equal(parseRuleProposal('{"kind":"shared-piece-pool","extra":"leak"}'), null);
 
-  assert.deepEqual(parseRuleProposal('{"kind":"true-name-erasure","target":"all"}'), {kind:'true-name-erasure',target:'all'});
-  assert.deepEqual(parseRuleProposal('{"kind":"true-name-erasure","target":"q"}'), {kind:'true-name-erasure',target:'q'});
-  assert.deepEqual(parseRuleProposal('{"kind":"true-name-erasure"}'), {kind:'true-name-erasure',target:'all'});
-  assert.equal(parseRuleProposal('{"kind":"true-name-erasure","target":"x"}'), null);
+  // Unimplemented true-name-erasure safely returns unsupported to avoid misleading players
+  assert.deepEqual(parseRuleProposal('{"kind":"true-name-erasure","target":"all"}'), {kind:'unsupported'});
+  assert.deepEqual(parseRuleProposal('{"kind":"true-name-erasure","target":"q"}'), {kind:'unsupported'});
+  assert.deepEqual(parseRuleProposal('{"kind":"true-name-erasure"}'), {kind:'unsupported'});
 
   const providerOpen = { async *stream() { yield {type:'delta', text:'{"kind":"shared-piece-pool","piece":"all"}'}; yield {type:'complete'}; } };
   const resOpen = await compilePrivateRule({provider:providerOpen, rule:'开源：棋子退场后普通走法进入共享池'});
@@ -38,7 +38,7 @@ test('compiler recognizes shared-piece-pool (开源) and true-name-erasure (抹�
 
   const providerErase = { async *stream() { yield {type:'delta', text:'{"kind":"true-name-erasure","target":"all"}'}; yield {type:'complete'}; } };
   const resErase = await compilePrivateRule({provider:providerErase, rule:'抹除：认对真名方可抹除棋子'});
-  assert.deepEqual(resErase, {status:'compiled', effect:{kind:'true-name-erasure',target:'all'}});
+  assert.deepEqual(resErase, {status:'unsupported'});
 });
 
 test('getCapturedPiecePool accurately identifies pieces that have left the board', () => {
@@ -79,14 +79,52 @@ test('a secret restriction is applied by the server only to the opponent and exp
   assert.equal(permitsPrivateMove({actions:[],seat:1,action:'g8f6',effects}),false);
 });
 
-test('shared-piece-pool permits legal moves and classifies positions as normal', () => {
-  const effects=[{kind:'shared-piece-pool',piece:'all'}, null];
-  const actions=[{seat:0,action:'e2e4'}];
-  assert.equal(permitsPrivateMove({actions,seat:1,action:'e7e5',effects}), true);
+test('shared-piece-pool generates playable borrowed moves and permits them in real games', () => {
+  const effectsOpen = [{ kind: 'shared-piece-pool', piece: 'all' }, null];
+  const effectsNone = [null, null];
+
+  // 1. Initial position: no captures yet, standard legal move e7e5 allowed
+  const openAction = [{ seat: 0, action: 'e2e4' }];
+  assert.equal(permitsPrivateMove({ actions: openAction, seat: 1, action: 'e7e5', effects: effectsOpen }), true);
+
+  // 2. Play game up to knight capture:
+  // 1. e4 d5 2. Nc3 dxe4 3. Nxe4 Nd7 4. Nf3 Ngf6 5. Nxf6
+  // A knight and pawn have been captured!
+  const captureActions = [
+    { seat: 0, action: 'e2e4' },
+    { seat: 1, action: 'd7d5' },
+    { seat: 0, action: 'b1c3' },
+    { seat: 1, action: 'd5e4' },
+    { seat: 0, action: 'c3e4' },
+    { seat: 1, action: 'b8d7' },
+    { seat: 0, action: 'g1f3' },
+    { seat: 1, action: 'g8f6' },
+    { seat: 0, action: 'e4f6' },
+  ];
+  const replay = chess.replayActions(captureActions);
+  assert.equal(replay.rejected.length, 0);
+  assert.deepEqual(getCapturedPiecePool(replay.state), ['n', 'p']);
+  assert.equal(replay.status.inCheck, true);
+
+  // Black pawn at h7 cannot move to f6 under standard chess
+  const stdLegal = chess.legalMoves(replay.state).map(chess.moveToUci);
+  assert.equal(stdLegal.includes('h7f6'), false);
+
+  // With shared-piece-pool: pawn borrows knight jump to resolve check by capturing f6
+  assert.equal(permitsPrivateMove({ actions: captureActions, seat: 1, action: 'h7f6', effects: effectsOpen }), true);
+
+  // Without shared-piece-pool: borrowed move is illegal and rejected
+  assert.equal(permitsPrivateMove({ actions: captureActions, seat: 1, action: 'h7f6', effects: effectsNone }), false);
+
+  // Illegal jump off-board or landing on own piece is rejected even with pool
+  assert.equal(permitsPrivateMove({ actions: captureActions, seat: 1, action: 'a7f6', effects: effectsOpen }), false);
+
+  // 3. Sequential continuation: play the borrowed move and verify next turn proceeds cleanly
+  const gameWithBorrowed = [...captureActions, { seat: 1, action: 'h7f6' }];
+  assert.equal(permitsPrivateMove({ actions: gameWithBorrowed, seat: 0, action: 'd2d4', effects: effectsOpen }), true);
 
   const state = chess.createInitialState();
-  assert.equal(classifyPrivatePosition({state, turnsPlayed:0, effect:{kind:'shared-piece-pool',piece:'all'}}), 'normal');
-  assert.equal(classifyPrivatePosition({state, turnsPlayed:0, effect:{kind:'true-name-erasure',target:'all'}}), 'normal');
+  assert.equal(classifyPrivatePosition({ state, turnsPlayed: 0, effect: { kind: 'shared-piece-pool', piece: 'all' } }), 'normal');
 });
 
 test('if a restriction would forbid every legal move, pause without disclosing or overriding it',()=>{

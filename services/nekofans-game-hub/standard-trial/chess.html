@@ -786,7 +786,156 @@ body {
     return next;
   }
 
-  function legalMoves(state) {
+  function getCapturedPiecePool(state) {
+    if (!state || !Array.isArray(state.board)) return [];
+    const current = {};
+    for (const sq of state.board) {
+      if (sq) {
+        const type = sq.toLowerCase();
+        current[type] = (current[type] || 0) + 1;
+      }
+    }
+    const initial = { p: 8, n: 2, b: 2, r: 2, q: 1 };
+    const pool = [];
+    for (const [type, count] of Object.entries(initial)) {
+      if ((current[type] || 0) < count * 2) {
+        pool.push(type);
+      }
+    }
+    return pool.sort();
+  }
+
+  function computeBorrowedMoves(state, pool) {
+    if (!state || !Array.isArray(state.board) || !Array.isArray(pool) || pool.length === 0) return [];
+    const color = state.turn;
+    const opponent = otherColor(color);
+    const board = state.board;
+    const candidates = [];
+    const promotionRank = color === 'w' ? 7 : 0;
+    const poolSet = new Set(pool.map((p) => typeof p === 'string' ? p.toLowerCase() : ''));
+
+    for (let from = 0; from < 64; from += 1) {
+      const piece = board[from];
+      if (!piece || colorOf(piece) !== color) continue;
+      const type = piece.toLowerCase();
+      const file = fileOf(from);
+      const rank = rankOf(from);
+
+      if (poolSet.has('n') && type !== 'n') {
+        for (const [df, dr] of KNIGHT_DELTAS) {
+          const targetFile = file + df;
+          const targetRank = rank + dr;
+          if (!inside(targetFile, targetRank)) continue;
+          const to = targetRank * 8 + targetFile;
+          const target = board[to];
+          if (target && colorOf(target) === color) continue;
+          if (type === 'p' && rankOf(to) === promotionRank) {
+            for (const promotion of ['q', 'r', 'b', 'n']) {
+              pushMove(candidates, { from, to, piece, captured: target || null, promotion, flags: { borrowed: 'n' } });
+            }
+          } else {
+            pushMove(candidates, { from, to, piece, captured: target || null, promotion: null, flags: { borrowed: 'n' } });
+          }
+        }
+      }
+
+      if (poolSet.has('b') && type !== 'b' && type !== 'q') {
+        for (const [df, dr] of BISHOP_DIRS) {
+          let targetFile = file + df;
+          let targetRank = rank + dr;
+          while (inside(targetFile, targetRank)) {
+            const to = targetRank * 8 + targetFile;
+            const target = board[to];
+            if (target && colorOf(target) === color) break;
+            if (type === 'p' && rankOf(to) === promotionRank) {
+              for (const promotion of ['q', 'r', 'b', 'n']) {
+                pushMove(candidates, { from, to, piece, captured: target || null, promotion, flags: { borrowed: 'b' } });
+              }
+            } else {
+              pushMove(candidates, { from, to, piece, captured: target || null, promotion: null, flags: { borrowed: 'b' } });
+            }
+            if (target) break;
+            targetFile += df;
+            targetRank += dr;
+          }
+        }
+      }
+
+      if (poolSet.has('r') && type !== 'r' && type !== 'q') {
+        for (const [df, dr] of ROOK_DIRS) {
+          let targetFile = file + df;
+          let targetRank = rank + dr;
+          while (inside(targetFile, targetRank)) {
+            const to = targetRank * 8 + targetFile;
+            const target = board[to];
+            if (target && colorOf(target) === color) break;
+            if (type === 'p' && rankOf(to) === promotionRank) {
+              for (const promotion of ['q', 'r', 'b', 'n']) {
+                pushMove(candidates, { from, to, piece, captured: target || null, promotion, flags: { borrowed: 'r' } });
+              }
+            } else {
+              pushMove(candidates, { from, to, piece, captured: target || null, promotion: null, flags: { borrowed: 'r' } });
+            }
+            if (target) break;
+            targetFile += df;
+            targetRank += dr;
+          }
+        }
+      }
+
+      if (poolSet.has('q') && type !== 'q') {
+        const dirs = BISHOP_DIRS.concat(ROOK_DIRS);
+        for (const [df, dr] of dirs) {
+          let targetFile = file + df;
+          let targetRank = rank + dr;
+          while (inside(targetFile, targetRank)) {
+            const to = targetRank * 8 + targetFile;
+            const target = board[to];
+            if (target && colorOf(target) === color) break;
+            if (type === 'p' && rankOf(to) === promotionRank) {
+              for (const promotion of ['q', 'r', 'b', 'n']) {
+                pushMove(candidates, { from, to, piece, captured: target || null, promotion, flags: { borrowed: 'q' } });
+              }
+            } else {
+              pushMove(candidates, { from, to, piece, captured: target || null, promotion: null, flags: { borrowed: 'q' } });
+            }
+            if (target) break;
+            targetFile += df;
+            targetRank += dr;
+          }
+        }
+      }
+
+      if (poolSet.has('p') && type !== 'p') {
+        const direction = color === 'w' ? 1 : -1;
+        const oneRank = rank + direction;
+        if (inside(file, oneRank) && !board[oneRank * 8 + file]) {
+          const to = oneRank * 8 + file;
+          pushMove(candidates, { from, to, piece, captured: null, promotion: null, flags: { borrowed: 'p' } });
+        }
+        for (const df of [-1, 1]) {
+          const targetFile = file + df;
+          if (!inside(targetFile, oneRank)) continue;
+          const to = oneRank * 8 + targetFile;
+          const target = board[to];
+          if (target && colorOf(target) !== color) {
+            pushMove(candidates, { from, to, piece, captured: target, promotion: null, flags: { borrowed: 'p' } });
+          }
+        }
+      }
+    }
+
+    const valid = [];
+    for (const move of candidates) {
+      const next = applyMoveRaw(state, move);
+      const king = kingSquare(next.board, color);
+      if (king < 0) continue;
+      if (!isSquareAttacked(next.board, king, opponent)) valid.push(move);
+    }
+    return valid;
+  }
+
+  function legalMoves(state, options) {
     const color = state.turn;
     const opponent = otherColor(color);
     const result = [];
@@ -795,6 +944,23 @@ body {
       const king = kingSquare(next.board, color);
       if (king < 0) continue;
       if (!isSquareAttacked(next.board, king, opponent)) result.push(move);
+    }
+    if (options && (options.sharedPiecePool || options.pool)) {
+      let pool = Array.isArray(options.pool) ? options.pool : getCapturedPiecePool(state);
+      if (options.poolPiece && options.poolPiece !== 'all') {
+        pool = pool.filter((p) => p === options.poolPiece);
+      }
+      if (pool.length > 0) {
+        const borrowed = computeBorrowedMoves(state, pool);
+        const seen = new Set(result.map((m) => moveToUci(m)));
+        for (const m of borrowed) {
+          const uci = moveToUci(m);
+          if (!seen.has(uci)) {
+            result.push(m);
+            seen.add(uci);
+          }
+        }
+      }
     }
     return result;
   }
@@ -892,7 +1058,7 @@ body {
   function replayActions(entries, options) {
     const maxActions = Math.min((options && options.maxActions) || 1000, 1000);
     let state = createInitialState();
-    let moves = legalMoves(state);
+    let moves = legalMoves(state, options);
     let status = evaluate(state, moves);
     const applied = [];
     const rejected = [];
@@ -912,7 +1078,14 @@ body {
       if (!entry) { rejected.push({ index, reason: 'malformed' }); continue; }
       const expectedSeat = state.turn === 'w' ? 0 : 1;
       if (entry.seat !== expectedSeat) { rejected.push({ index, reason: 'out-of-turn' }); continue; }
-      const move = moves.find((candidate) => moveToUci(candidate) === entry.action);
+      let move = moves.find((candidate) => moveToUci(candidate) === entry.action);
+      if (!move) {
+        const pool = getCapturedPiecePool(state);
+        if (pool.length > 0) {
+          const borrowed = computeBorrowedMoves(state, pool);
+          move = borrowed.find((candidate) => moveToUci(candidate) === entry.action);
+        }
+      }
       if (!move) { rejected.push({ index, reason: 'illegal-move' }); continue; }
       const next = applyMove(state, move);
       applied.push({
@@ -924,7 +1097,7 @@ body {
         ply: applied.length + 1,
       });
       state = next;
-      moves = legalMoves(state);
+      moves = legalMoves(state, options);
       status = evaluate(state, moves);
     }
 
@@ -961,6 +1134,8 @@ body {
     kingSquare,
     isSquareAttacked,
     legalMoves,
+    getCapturedPiecePool,
+    computeBorrowedMoves,
     applyMove,
     evaluate,
     insufficientMaterial,

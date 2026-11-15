@@ -1,9 +1,9 @@
 <!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Nekofans · 秘密规则棋局</title><style>
 body{font:16px system-ui;margin:1.5rem auto;max-width:980px;padding:0 1rem;color:#293850;background:#f2f6fc}section{background:white;border:1px solid #d9e3f0;border-radius:16px;padding:1rem;margin:1rem 0}button,input{font:inherit;padding:.6rem;border:1px solid #cbd7e8;border-radius:8px}button{background:#dbe8fb;cursor:pointer}input{box-sizing:border-box;width:100%;margin:.4rem 0}iframe{box-sizing:border-box;width:100%;height:1050px;border:1px solid #cbd7e8;border-radius:12px}[hidden]{display:none!important}.notice{color:#7b4a13;background:#fff4dd;padding:.7rem;border-radius:10px}#error{color:#a62929}
-</style></head><body><h1>🐟 Nekofans · 秘密规则棋局</h1><p class="notice">实验版：先双方加入，每方可提交一条秘密规则。暂支持“对手前 1～3 回合不能动某种棋子”。效果可能在对局中被对手推测；服务器、DeepSeek 与 Cloudflare 会处理规则。房间最长保留 6 小时。</p>
+</style></head><body><h1>🐟 Nekofans · 秘密规则棋局</h1><p class="notice">实验版：先双方加入，每方可提交一条秘密规则。已支持：1. 对手前 1～3 回合不能动某种棋子；2. 开源共享池（棋子离场后走法进公共池，任意己方棋子可借用走子）。效果可能在对局中被对手推测；服务器、DeepSeek 与 Cloudflare 会处理规则。房间最长保留 6 小时。</p>
 <section id="room"><p id="seat"></p><label>邀请朋友的链接<input id="invite" readonly></label><button id="join" hidden>加入对局</button><p id="status" role="status"></p><p id="error" role="alert"></p></section>
 <section id="pairArea" hidden><button id="issuePair">关联我的工作台</button><p>配对码仅供自己的工作台使用，60 秒有效且只能用一次。不要发给对方或聊天室。</p><output id="pairCode" aria-live="polite"></output></section>
-<section id="ruleArea" hidden><label>你的秘密规则<input id="rule" maxlength="80" placeholder="例如：对手第一回合不能动马"></label><button id="sendRule">提交给 DeepSeek</button><p id="ruleStatus"></p></section>
+<section id="ruleArea" hidden><label>你的秘密规则<input id="rule" maxlength="80" placeholder="例如：对手第一回合不能动马，或：开启开源共享池"></label><button id="sendRule">提交给 DeepSeek</button><p id="ruleStatus"></p></section>
 <section id="game" hidden><iframe id="frame" sandbox="allow-scripts" title="国际象棋棋盘"></iframe></section>
 <script>
 const $=id=>document.getElementById(id),state={id:new URL(location.href).searchParams.get('room'),token:null,version:0,view:null,loading:false,submitting:false};
