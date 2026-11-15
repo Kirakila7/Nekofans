@@ -111,8 +111,10 @@ class NativeMemoryGateway:
                     raise ValueError("explicit restore required")
             known[e["eventId"]] = e
         with self.db:
-            for e in batch:
-                self.db.execute("INSERT OR IGNORE INTO events(id,body,applied) VALUES(?,?,?)", (e["eventId"], canonical(e), int(applied)))
+            # executemany keeps OR IGNORE and the (id,body,applied) order while
+            # issuing a single statement for the whole batch.
+            self.db.executemany("INSERT OR IGNORE INTO events(id,body,applied) VALUES(?,?,?)",
+                                [(e["eventId"], canonical(e), int(applied)) for e in batch])
 
     async def native_facts(self):
         return await self.runtime.fact_store.aload_facts_strict(self.name, include_archive=True)
@@ -233,8 +235,9 @@ class NativeMemoryGateway:
             with self.db:
                 self.db.execute("UPDATE events SET applied=1 WHERE json_extract(body,'$.itemId')=?", (item,))
 
-    def blocked_native(self):
-        state = records(self.events())
+    def blocked_native(self, state=None):
+        if state is None:
+            state = records(self.events())
         blocked,stale,active = set(),set(),set()
         for item, event, fid, kind in self.db.execute("SELECT item,event,native_id,kind FROM projections"):
             row = state.get(item)
@@ -258,7 +261,12 @@ class NativeMemoryGateway:
     async def observe(self):
         facts = await self.native_facts()
         reflections = await self.runtime.reflection_engine.aload_reflections(self.name, include_archived=True)
-        blocked = self.blocked_native()
+        # Compute the ledger state once and reuse it for both blocked_native and
+        # every loop iteration instead of reloading the whole events table per
+        # entry. Each native entry's item is derived from its own fid, so the
+        # snapshot stays correct even though append() inserts during the loop.
+        state = records(self.events())
+        blocked = self.blocked_native(state)
         for kind, entries in (("fact", facts), ("reflection", reflections)):
             for entry in entries:
                 fid, text = entry.get("id"), entry.get("text")
@@ -275,7 +283,7 @@ class NativeMemoryGateway:
                 if suppressed and not old:
                     continue
                 item = old["item"] if old else "neko:" + kind + ":" + fid
-                current = records(self.events()).get(item)
+                current = state.get(item)
                 if current and current["deleted"]:
                     continue  # A restored native backup is not permission to restore memory.
                 parents = [old["event"]] if old else []
@@ -307,11 +315,19 @@ class NativeMemoryGateway:
         async with self.lock:
             await self.repair()
             await self.observe()
-            events=self.events()
-            if not isinstance(cursor,str) or not cursor.isascii() or not cursor.isdecimal() or int(cursor)>len(events):
+            if not isinstance(cursor,str) or not cursor.isascii() or not cursor.isdecimal():
                 raise ValueError("invalid cursor")
-            end=min(int(cursor)+128,len(events))
-            return dict(events=events[int(cursor):end],nextCursor=str(end),hasMore=end<len(events))
+            offset=int(cursor)
+            total=self.db.execute("SELECT COUNT(*) FROM events").fetchone()[0]
+            if offset>total:
+                raise ValueError("invalid cursor")
+            # cursor is the offset into the seq-ordered event list (not an id).
+            # Push the page down to SQL; COUNT supplies the same end/hasMore as
+            # the previous full slice, keeping the return shape identical.
+            rows=self.db.execute("SELECT body FROM events ORDER BY seq LIMIT 128 OFFSET ?",(offset,)).fetchall()
+            events=[json.loads(row[0]) for row in rows]
+            end=offset+len(events)
+            return dict(events=events,nextCursor=str(end),hasMore=end<total)
 
     async def recall(self, query, budget):
         if not isinstance(query,str) or len(query)>8000 or isinstance(budget,bool) or not isinstance(budget,int) or not 1<=budget<=16000:
@@ -323,7 +339,7 @@ class NativeMemoryGateway:
             result=await query_memory(self.name,QueryMemoryRequest(query=query))
             if not isinstance(result,dict) or not isinstance(result.get("results"),list):
                 raise RuntimeError("native recall unavailable")
-            state=records(self.events());blocked=self.blocked_native();values=[];used=0
+            state=records(self.events());blocked=self.blocked_native(state);values=[];used=0
             preferences = {}
             for item, revision, fid, kind in self.db.execute("SELECT item,event,native_id,kind FROM projections"):
                 row = state.get(item)

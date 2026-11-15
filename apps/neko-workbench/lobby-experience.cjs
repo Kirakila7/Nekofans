@@ -206,11 +206,24 @@ function createLobbyExperience(deps) {
       if (!fs.existsSync(deps.file)) return 0;
       if (!deps.getProvider?.() || !deps.getMemory?.()) return 0;   // keep until the selected companion route is ready
       let written = 0;const completed=new Set();
-      for (const segment of segments) {
-        const result=await processSegment(segment);
-        if(result==='done'){written++;completed.add(segment.id);}
-        else if(result==='discard')completed.add(segment.id);
-        if(disposed)break;
+      // Bounded pool (no external dependency): at most 4 segments in flight.
+      // Promise.allSettled keeps one segment's failure from aborting its peers.
+      let cursor=0;const results=new Array(segments.length);
+      async function worker(){
+        while(cursor<segments.length){
+          if(disposed)break;                 // disposed 判断：不再领取新任务
+          const index=cursor++,segment=segments[index];
+          try{results[index]=await processSegment(segment);}
+          catch{results[index]='retry';}    // 单个失败不影响同批其它 segment，保留待重试
+        }
+      }
+      const poolSize=Math.min(4,segments.length);
+      await Promise.allSettled(Array.from({length:poolSize},()=>worker()));
+      for(let i=0;i<results.length;i++){
+        const result=results[i];
+        if(result===undefined)continue;    // disposed 前未领取的 slot
+        if(result==='done'){written++;completed.add(segments[i].id);}
+        else if(result==='discard')completed.add(segments[i].id);
       }
       if (!disposed) writePending(readPending().filter(segment=>!completed.has(segment.id)));
       return written;

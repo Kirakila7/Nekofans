@@ -10,6 +10,8 @@ export interface SseEvent {
 export async function* readSse(body: ReadableStream<Uint8Array>, signal: AbortSignal): AsyncGenerator<SseEvent> {
   const reader = body.getReader();
   const decoder = new TextDecoder("utf-8");
+  // Local per-stream regex; lastIndex is reset explicitly before each exec.
+  const lineEnd = /\r\n|\r|\n/g;
   let buffer = "";
   let event: string | null = null;
   let data: string[] = [];
@@ -22,10 +24,16 @@ export async function* readSse(body: ReadableStream<Uint8Array>, signal: AbortSi
       const { value, done } = await reader.read();
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
-      let nl: number;
-      while ((nl = buffer.search(/\r\n|\r|\n/)) >= 0) {
-        const line = buffer.slice(0, nl);
-        buffer = buffer.slice(nl + (buffer.startsWith("\r\n", nl) ? 2 : 1));
+      // Walk the buffer with an offset cursor; slice off the unconsumed tail only
+      // once per chunk instead of copying the whole buffer on every line.
+      let offset = 0;
+      while (true) {
+        lineEnd.lastIndex = offset;
+        const match = lineEnd.exec(buffer);
+        if (!match) break;
+        const nl = match.index;
+        const line = buffer.slice(offset, nl);
+        offset = nl + match[0].length;
         if (line === "") {
           if (data.length > 0) yield { event, data: data.join("\n") };
           event = null;
@@ -40,6 +48,7 @@ export async function* readSse(body: ReadableStream<Uint8Array>, signal: AbortSi
         if (field === "data") data.push(rest);
         else if (field === "event") event = rest;
       }
+      if (offset > 0) buffer = buffer.slice(offset);
     }
     // A stream that ends without a trailing blank line still delivers its last event.
     if (data.length > 0) yield { event, data: data.join("\n") };

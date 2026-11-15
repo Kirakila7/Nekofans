@@ -17,6 +17,9 @@ const runtime=value('--electron-zip'),output=value('--output');
 if(!runtime||!output)throw Error('Usage: node scripts/build-neko-daily.mjs --electron-zip <official cached runtime.zip> --output <new staging directory>');
 if(process.platform!=='darwin'||process.arch!=='arm64')throw Error('The current daily build targets darwin-arm64.');
 const stage=resolve(output);if(existsSync(stage))throw Error('Refusing to overwrite an existing release directory.');mkdirSync(stage,{recursive:true});
+const expectedSha256=release.electronZipSha256||process.env.NEKO_ELECTRON_ZIP_SHA256;
+if(expectedSha256){const actual=createHash('sha256').update(readFileSync(resolve(runtime))).digest('hex');if(actual!==String(expectedSha256).toLowerCase())throw Error('Electron runtime archive sha256 mismatch: expected '+expectedSha256+' but got '+actual);}
+else console.warn('[build-neko-daily] WARNING: no electronZipSha256 baseline; skipping runtime archive verification. Add "electronZipSha256" to config/daily-release.json or set NEKO_ELECTRON_ZIP_SHA256 to the official archive sha256 before release builds.');
 run('/usr/bin/ditto',['-x','-k',resolve(runtime),stage]);
 const app=join(stage,release.appName);renameSync(join(stage,'Electron.app'),app);
 const resources=join(app,'Contents/Resources'),destination=join(resources,'workbench');mkdirSync(destination,{recursive:true});

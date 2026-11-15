@@ -105,10 +105,22 @@ export class SqliteConversationStore implements ConversationStore {
 
   async byIds(personaId: string, conversationId: string, ids: readonly string[]): Promise<ChatMessage[]> {
     if (ids.length > 256) throw new Error("Too many message identities.");
-    const statement = this.db.prepare(`SELECT ${SELECT_COLUMNS} FROM messages WHERE persona_id = ? AND conversation_id = ? AND id = ?`);
+    if (ids.length === 0) return [];
+    // One parameterised IN query instead of one SELECT per id; placeholders are
+    // generated from a fixed literal, never from user data.
+    const placeholders = ids.map(() => "?").join(",");
+    const rows = this.db
+      .prepare(`SELECT ${SELECT_COLUMNS} FROM messages WHERE persona_id = ? AND conversation_id = ? AND id IN (${placeholders})`)
+      .all(personaId, conversationId, ...ids);
+    const byId = new Map<string, ChatMessage>();
+    for (const r of rows) {
+      const message = toMessage(r);
+      if (!byId.has(message.id)) byId.set(message.id, message);
+    }
+    // Restore the original id order, keep duplicates, and skip missing rows.
     return ids.flatMap((id) => {
-      const row = statement.get(personaId, conversationId, id);
-      return row ? [toMessage(row)] : [];
+      const message = byId.get(id);
+      return message ? [message] : [];
     });
   }
 

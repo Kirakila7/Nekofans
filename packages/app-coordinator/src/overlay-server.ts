@@ -74,6 +74,27 @@ export async function startOverlayServer(opts: OverlayServerOptions = {}): Promi
   }
 
   const server: Server = createServer((req, res) => {
+    // DNS-rebinding guard: only the exact loopback listener authority may be used.
+    const addr = server.address();
+    if (addr === null || typeof addr === "string") {
+      res.writeHead(403).end();
+      return;
+    }
+    const host = `127.0.0.1:${addr.port}`;
+    if (req.headers.host !== host) {
+      res.writeHead(403).end();
+      return;
+    }
+    const origin = req.headers.origin;
+    if (origin !== undefined && origin !== `http://${host}`) {
+      res.writeHead(403).end();
+      return;
+    }
+    const fetchSite = req.headers["sec-fetch-site"];
+    if (fetchSite !== undefined && fetchSite !== "none" && fetchSite !== "same-origin") {
+      res.writeHead(403).end();
+      return;
+    }
     if (req.method !== "GET" && req.method !== "HEAD") {
       res.writeHead(405).end();
       return;

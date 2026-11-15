@@ -45,6 +45,9 @@ export const DEFAULT_MAX_HISTORY = 500;
 export class JsonFileOverlayStore implements OverlayStore {
   readonly path: string;
   private readonly maxHistory: number;
+  private readonly debounceMs = 200;
+  private timer: ReturnType<typeof setTimeout> | undefined;
+  private pending: OverlayPersisted | null = null;
 
   constructor(path: string, opts: JsonFileOverlayStoreOptions = {}) {
     this.path = path;
@@ -69,6 +72,8 @@ export class JsonFileOverlayStore implements OverlayStore {
     return normalize(parsed);
   }
 
+  /** Immediate, atomic synchronous write (temp file + rename, maxHistory trim).
+   *  Kept as the unchanged durability primitive, also used by flush(). */
   save(state: OverlayPersisted): void {
     const trimmed: OverlayPersisted = {
       history: state.history.slice(-this.maxHistory),
@@ -79,6 +84,31 @@ export class JsonFileOverlayStore implements OverlayStore {
     const tmp = `${this.path}.tmp`;
     writeFileSync(tmp, JSON.stringify(trimmed, null, 1), "utf8");
     renameSync(tmp, this.path);
+  }
+
+  /** Coalesces rapid saves: only the latest state within the debounce window is
+   *  written, so a burst of history appends becomes one disk write instead of N.
+   *  The write itself stays synchronous + atomic (see the review downgrade note). */
+  saveDebounced(state: OverlayPersisted): void {
+    this.pending = state;
+    if (this.timer !== undefined) clearTimeout(this.timer);
+    this.timer = setTimeout(() => {
+      this.timer = undefined;
+      const next = this.pending;
+      this.pending = null;
+      if (next !== null) this.save(next);
+    }, this.debounceMs);
+  }
+
+  /** Persist any coalesced state immediately (e.g. on dispose) so a synchronous
+   *  reload after shutdown still sees the final state. */
+  flush(): void {
+    if (this.timer !== undefined) { clearTimeout(this.timer); this.timer = undefined; }
+    if (this.pending !== null) {
+      const next = this.pending;
+      this.pending = null;
+      this.save(next);
+    }
   }
 }
 

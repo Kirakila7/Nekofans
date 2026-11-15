@@ -47,7 +47,7 @@ sys.path.insert(0, str(HERE / "vendor"))
 sys.path.insert(0, str(HERE))
 
 import uvicorn  # noqa: E402
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect  # noqa: E402
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect  # noqa: E402
 
 from main_logic.asr_client._infra import (  # noqa: E402
     AsrSessionConfig,
@@ -82,9 +82,27 @@ CLOUD_PROVIDERS = {
 
 PROVIDER = os.getenv("NEKO_ASR_PROVIDER", "faster_whisper").strip().lower()
 PCM_MAX_FRAME_BYTES = 16_000 * 2 * 2  # 2 s per audio frame
+MAX_AUDIO_B64_CHARS = 90_000          # base64 of PCM_MAX_FRAME_BYTES (~85,336) + slack
+MAX_UTTERANCE_ID_CHARS = 120
+MAX_ACTIVE_UTTERANCES = 64
 
 app = FastAPI(title="neko-asr")
 _server: uvicorn.Server | None = None
+_EXTRA_ORIGINS = {o.strip() for o in os.getenv("NEKO_ASR_ALLOWED_ORIGINS", "").split(",") if o.strip()}
+
+
+def _origin_allowed(origin: str | None) -> bool:
+    """Block other web pages in a local browser from driving the sidecar.
+
+    Kept in sync with services/neko-tts/server.py. Non-browser clients send no
+    Origin header and are allowed; a cross-site browser page always sends one.
+    """
+    if not origin or origin in ("null", "file://") or origin in _EXTRA_ORIGINS:
+        return True
+    from urllib.parse import urlsplit
+
+    parts = urlsplit(origin)
+    return parts.scheme in ("http", "https") and parts.hostname in ("127.0.0.1", "localhost", "::1")
 
 
 @app.get("/health")
@@ -100,7 +118,9 @@ async def health() -> dict:
 
 
 @app.post("/shutdown")
-async def shutdown() -> dict:
+async def shutdown(request: Request) -> dict:
+    if not _origin_allowed(request.headers.get("origin")):
+        raise HTTPException(status_code=403, detail="origin not allowed")
     if _server is not None:
         _server.should_exit = True
     return {"status": "shutting_down"}
@@ -122,7 +142,24 @@ class _Session:
         self.has_audio: set[int] = set()
         self.committed: set[int] = set()
         self.finalized: set[int] = set()
+        self.finished: dict[int, str] = {}  # finalized worker ids, reclaimed on the next start
         self.send_lock = asyncio.Lock()
+
+    def _finish(self, worker_id: int, utterance_id: str) -> None:
+        """Mark a finalized utterance. Live maps are kept until the next start
+        so duplicate finals and late partials still resolve, but has_audio is
+        released immediately and the entry is queued for bounded reclamation."""
+        self.has_audio.discard(worker_id)
+        self.finished[worker_id] = utterance_id
+
+    def _reclaim(self) -> None:
+        for worker_id, utterance_id in self.finished.items():
+            self.worker_ids.pop(utterance_id, None)
+            self.utterances.pop(worker_id, None)
+            self.committed.discard(worker_id)
+            self.finalized.discard(worker_id)
+            self.has_audio.discard(worker_id)
+        self.finished.clear()
 
     async def send(self, payload: dict) -> None:
         async with self.send_lock:
@@ -154,8 +191,15 @@ class _Session:
                 await self.error(None, "ASR_PROTOCOL_ERROR", "utterance_id is required")
                 continue
             if kind == "start":
+                self._reclaim()
                 if utterance_id in self.worker_ids:
                     await self.error(utterance_id, "ASR_PROTOCOL_ERROR", "utterance_id already started")
+                    continue
+                if len(utterance_id) > MAX_UTTERANCE_ID_CHARS:
+                    await self.error(utterance_id, "ASR_PROTOCOL_ERROR", "utterance_id too long")
+                    continue
+                if len(self.worker_ids) >= MAX_ACTIVE_UTTERANCES:
+                    await self.error(utterance_id, "ASR_PROTOCOL_ERROR", "too many active utterances")
                     continue
                 worker_id = self.next_worker_id
                 self.next_worker_id += 1
@@ -170,8 +214,15 @@ class _Session:
                 # Late audio or a repeated stop after commit is ignored.
                 continue
             if kind == "audio":
+                data = msg.get("data", "")
+                if not isinstance(data, str):
+                    await self.error(utterance_id, "ASR_PROTOCOL_ERROR", "audio data must be a string")
+                    continue
+                if len(data) > MAX_AUDIO_B64_CHARS:
+                    await self.error(utterance_id, "ASR_PROTOCOL_ERROR", "audio frame too large")
+                    continue
                 try:
-                    pcm = base64.b64decode(str(msg.get("data", "")), validate=True)
+                    pcm = base64.b64decode(data, validate=True)
                 except (binascii.Error, ValueError):
                     await self.error(utterance_id, "ASR_PROTOCOL_ERROR", "audio data is not base64")
                     continue
@@ -185,6 +236,7 @@ class _Session:
                 if worker_id not in self.has_audio:
                     self.finalized.add(worker_id)
                     await self.send({"kind": "empty", "utterance_id": utterance_id})
+                    self._finish(worker_id, utterance_id)
                     continue
                 await self.requests.put(self.request("commit", worker_id))
             else:
@@ -209,14 +261,23 @@ class _Session:
                     await self.send({"kind": "final", "utterance_id": utterance_id, "text": text})
                 else:
                     await self.send({"kind": "empty", "utterance_id": utterance_id})
+                self._finish(event.utterance_id, utterance_id)  # type: ignore[arg-type]
             elif event.kind == "error":
                 await self.error(utterance_id, event.error_code or "ASR_WORKER_ERROR", event.error_message)
+                # A worker error is terminal for that utterance. Without this,
+                # worker_ids never shrinks and after MAX_ACTIVE_UTTERANCES
+                # errors every new start on this connection is rejected.
+                if event.utterance_id is not None and utterance_id is not None:
+                    self._finish(event.utterance_id, utterance_id)
             elif event.kind == "closed":
                 return
 
 
 @app.websocket("/ws")
 async def ws_endpoint(websocket: WebSocket) -> None:
+    if not _origin_allowed(websocket.headers.get("origin")):
+        await websocket.close(code=1008)
+        return
     await websocket.accept()
     session = _Session(websocket)
     worker_fn = LOCAL_WORKERS.get(PROVIDER)

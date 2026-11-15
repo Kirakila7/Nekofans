@@ -25,6 +25,7 @@ import numpy as np
 from main_logic.tts_client._infra import AudioDoneEmitter, TTS_SHUTDOWN_SENTINEL
 
 SAMPLE_RATE = 48000
+MAX_TEXT_BUF_CHARS = 32 * 1024  # defensive cap; server enforces 32 KiB of UTF-8 text
 
 
 def tone_pcm(duration_ms: int, offset_ms: int = 0) -> bytes:
@@ -78,12 +79,26 @@ def tone_tts_worker(
 
     def synthesize(text: str) -> str:
         total_ms = max(min_ms, len(text.strip()) * ms_per_char)
+        # Wait out the first-audio delay with a blocking get(timeout=...) instead
+        # of a 10 ms busy poll. Control items return immediately; text/flush
+        # items are buffered for after this utterance. The deadline never grows.
         deadline = time.monotonic() + first_audio_delay_ms / 1000
-        while time.monotonic() < deadline:
-            ctl = poll_control()
-            if ctl:
-                return ctl
-            time.sleep(0.01)
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            try:
+                item = request_queue.get(timeout=remaining)
+            except Exception:  # queue.Empty: the wait window elapsed
+                break
+            sid, _text = item
+            if sid == TTS_SHUTDOWN_SENTINEL:
+                return "shutdown"
+            if sid == "__interrupt__":
+                return "stop"
+            pending.append(item)
+            if sid is not None and sid != current_speech_id:
+                return "stop"
         produced = 0
         while produced < total_ms:
             ctl = poll_control()
@@ -96,7 +111,8 @@ def tone_tts_worker(
         return "done"
 
     current_speech_id = None
-    text_buf = ""
+    text_buf = []       # list of chunks, joined only once per flush
+    text_len = 0
     while True:
         try:
             sid, text = next_item()
@@ -106,21 +122,25 @@ def tone_tts_worker(
             break
         if sid == "__interrupt__":
             audio_done.begin_interrupt()
-            current_speech_id, text_buf = None, ""
+            current_speech_id, text_buf, text_len = None, [], 0
             audio_done.reset()
             audio_done.end_interrupt()
             continue
         if sid is None:
             finished = current_speech_id
-            if finished is not None and text_buf.strip():
-                result = synthesize(text_buf)
+            buffered = "".join(text_buf)
+            if finished is not None and buffered.strip():
+                result = synthesize(buffered)
                 if result == "shutdown":
                     break
                 if result == "done":
                     audio_done.emit(finished)
-            current_speech_id, text_buf = None, ""
+            current_speech_id, text_buf, text_len = None, [], 0
             continue
         if sid != current_speech_id:
-            current_speech_id, text_buf = sid, ""
+            current_speech_id, text_buf, text_len = sid, [], 0
             audio_done.reset()
-        text_buf += text or ""
+        chunk = text or ""
+        if text_len + len(chunk) <= MAX_TEXT_BUF_CHARS:
+            text_buf.append(chunk)
+            text_len += len(chunk)

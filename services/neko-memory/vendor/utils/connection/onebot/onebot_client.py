@@ -103,11 +103,11 @@ class OneBotClient(NapCatActionsMixin, ConnectionBase):
 
         if self.direction == "forward":
             # Forward: onebot_url is the dial-out target of the OneBot WS server, not a listen address
-            self._listen_host = "0.0.0.0"
+            self._listen_host = "127.0.0.1"
             self._listen_port = 6199
         else:
             # Reverse: parse the listen address from onebot_url
-            self._listen_host = "0.0.0.0"
+            self._listen_host = "127.0.0.1"
             self._listen_port = 6199
             parsed = urlparse(self._onebot_url) if self._onebot_url else None
             if parsed and parsed.hostname:
@@ -152,7 +152,7 @@ class OneBotClient(NapCatActionsMixin, ConnectionBase):
         if self.direction == "forward":
             # Forward mode: onebot_url is the dial-out target, used as-is, not split as a listen address
             return
-        self._listen_host = "0.0.0.0"
+        self._listen_host = "127.0.0.1"
         self._listen_port = 6199
         parsed = urlparse(self._onebot_url) if self._onebot_url else None
         if parsed and parsed.hostname:
@@ -599,9 +599,21 @@ class OneBotClient(NapCatActionsMixin, ConnectionBase):
     # ── Client connection handling ────────────────────────────────────────
 
     def _check_token(self, websocket: websockets.WebSocketServerProtocol) -> bool:
-        """Verify the client token; allow all connections if no token is configured."""
+        """Verify the client token; without a token only loopback listeners are open."""
         if not self.token:
-            return True
+            # No token configured: keep the historical open behaviour only for a
+            # loopback listener. An unauthenticated server bound to 0.0.0.0 or a
+            # LAN/remote address must fail closed instead of allowing anyone.
+            import ipaddress
+            host = (self._listen_host or "").strip().lower().strip("[]")
+            if host == "localhost":
+                return True
+            try:
+                return ipaddress.ip_address(host).is_loopback
+            except ValueError:
+                # Hostnames such as "127.evil.com" are not loopback just
+                # because they start with "127."; fail closed instead.
+                return False
 
         # Extract access_token from the query string
         try:

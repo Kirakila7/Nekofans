@@ -328,6 +328,10 @@ export class PetOverlay {
     this.clearToasts();
     if (this.bubbleTimer !== undefined) this.clock.clearTimer(this.bubbleTimer);
     this.bubbleTimer = undefined;
+    // Flush any coalesced persistence synchronously so a restart right after
+    // dispose still loads the final state.
+    const store = this.store as OverlayStore & { flush?: () => void };
+    store.flush?.();
     this.listeners.clear();
   }
 
@@ -518,8 +522,40 @@ export class PetOverlay {
     this.toasts = [];
   }
 
+  /** Bound the two unbounded collections before persisting. Dedup keeps the first
+   *  occurrence (matching findTask / notified lookup by id); the cap keeps the
+   *  newest entries (both are appended at the end). Persisted keys/types are
+   *  unchanged, and the in-memory dedup index stays in sync with what is stored. */
+  private trimCollections(): void {
+    const seenTasks = new Set<string>();
+    const tasks: OverlayTaskView[] = [];
+    for (const t of this.persisted.tasks) {
+      if (seenTasks.has(t.task_id)) continue;
+      seenTasks.add(t.task_id);
+      tasks.push(t);
+    }
+    this.persisted.tasks = tasks.length > 500 ? tasks.slice(tasks.length - 500) : tasks;
+
+    const seenNotified = new Set<string>();
+    const notified: string[] = [];
+    for (const id of this.persisted.notified_task_ids) {
+      if (seenNotified.has(id)) continue;
+      seenNotified.add(id);
+      notified.push(id);
+    }
+    const kept = notified.length > 2000 ? notified.slice(notified.length - 2000) : notified;
+    this.persisted.notified_task_ids = kept;
+    this.notified.clear();
+    for (const id of kept) this.notified.add(id);
+  }
+
   private save(): void {
-    this.store.save(this.persisted);
+    this.trimCollections();
+    const store = this.store as OverlayStore & {
+      saveDebounced?: (state: OverlayPersisted) => void;
+    };
+    if (typeof store.saveDebounced === "function") store.saveDebounced(this.persisted);
+    else store.save(this.persisted);
   }
 
   private changed(): void {

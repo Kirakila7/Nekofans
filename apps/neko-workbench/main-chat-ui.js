@@ -57,6 +57,8 @@
     characterMenu.addEventListener('keydown',e=>{const buttons=[...characterMenu.querySelectorAll('button')],index=buttons.indexOf(doc.activeElement);if(['ArrowDown','ArrowUp','Home','End'].includes(e.key)){e.preventDefault();buttons[e.key==='Home'?0:e.key==='End'?buttons.length-1:(index+(e.key==='ArrowDown'?1:-1)+buttons.length)%buttons.length]?.focus();}});
     let records=[],visible=[],selectedId=null,view='stars',page=0,cutoff=null,minDay=0,maxDay=0,popoverOpen=true;
     let angle=.15,tilt=-.14,zoom=1,frame=0,disposed=false,points=[],pointer=null,width=0,height=0;
+    let renderDebounce=null,visibleCache=null;
+    const scheduleRender=()=>{win.clearTimeout(renderDebounce);renderDebounce=win.setTimeout(()=>{renderDebounce=null;if(!disposed)render();},120);};
     const colors={fact:'#ffdf8a',preference:'#f2a6c1',episode:'#b7efff',summary:'#c9b5ff'};
     const priority=r=>r.value?.priority??r.previousValue?.priority??50,pinned=r=>(r.value||r.previousValue)?.pinned===true;
     const timestamp=r=>Math.max(0,...r.heads.map(e=>Date.parse(e.occurredAt)||0));
@@ -67,15 +69,23 @@
       for(const button of host.querySelectorAll('[data-view]'))button.setAttribute('aria-pressed',String(button.dataset.view===view));
       render();if(view==='stars'){resize();schedule();}else{win.cancelAnimationFrame(frame);frame=0;}
     }
-    function render(){
-      const query=$('.memory-search').value.trim().toLocaleLowerCase(),kind=$('.memory-kind').value,state=$('.memory-state').value;
-      visible=records.filter(r=>{
+    // Cache the filter/sort result by records identity + every filter value +
+    // page, so repeated renders with unchanged inputs skip the O(n log n) pass.
+    function filteredVisible(){
+      const query=$('.memory-search').value.trim().toLocaleLowerCase(),kind=$('.memory-kind').value,state=$('.memory-state').value,sort=$('.memory-sort').value;
+      const key=JSON.stringify([query,kind,state,sort,cutoff,page]);
+      if(visibleCache&&visibleCache.records===records&&visibleCache.key===key)return visibleCache.visible;
+      const visible=records.filter(r=>{
         if(state==='active'&&r.deleted||state==='deleted'&&!r.deleted||state==='conflict'&&!r.conflict)return false;
         const values=r.value?[r.value]:r.previousValue?[r.previousValue]:r.heads.map(e=>e.value).filter(Boolean);
         return (kind==='all'||values.some(v=>v.kind===kind))&&(!query||values.some(v=>(v.text+' '+(v.evidenceRefs||[]).join(' ')).toLocaleLowerCase().includes(query)))&&(cutoff===null||day(r)<=cutoff);
       });
-      const sort=$('.memory-sort').value;
       visible.sort((a,b)=>(sort==='priority'?(Number(pinned(b))-Number(pinned(a))||priority(b)-priority(a)||timestamp(b)-timestamp(a)):sort==='oldest'?timestamp(a)-timestamp(b):timestamp(b)-timestamp(a))||a.itemId.localeCompare(b.itemId));
+      visibleCache={records,key,visible};
+      return visible;
+    }
+    function render(){
+      visible=filteredVisible();
       if(!visible.some(r=>r.itemId===selectedId))selectedId=visible[0]?.itemId||null;
       $('.memory-map-stats').textContent=`${visible.length} 条记忆 · ${visible.filter(pinned).length} 条置顶`;
       $('.memory-list-count').textContent=`${visible.length} 条记忆 · 优先级 0–100，数值越大越靠前；置顶优先。`;
@@ -131,7 +141,9 @@
     function schedule(){if(!disposed&&view==='stars'&&!frame)frame=win.requestAnimationFrame(draw);}
     function resize(){const rect=canvas.getBoundingClientRect();width=rect.width;height=rect.height;if(!width||!height)return;const scale=Math.min(win.devicePixelRatio||1,2);canvas.width=Math.round(width*scale);canvas.height=Math.round(height*scale);context?.setTransform(scale,0,0,scale,0,0);schedule();}
     const observer=win.ResizeObserver?new win.ResizeObserver(resize):null;observer?.observe(canvas);observer?.observe($('.memory-popover'));
-    const hit=(x,y)=>points.filter(p=>Math.hypot(p.x-x,p.y-y)<Math.max(12,p.size+5)).sort((a,b)=>Math.hypot(a.x-x,a.y-y)-Math.hypot(b.x-x,b.y-y))[0];
+    // One linear min scan instead of filter + full sort; strict "<" keeps the
+    // first of equally-distant points, matching the previous stable sort's [0].
+    const hit=(x,y)=>{let best=null,bestDist=Infinity;for(const p of points){const d=Math.hypot(p.x-x,p.y-y);if(d<Math.max(12,p.size+5)&&d<bestDist){best=p;bestDist=d;}}return best;};
     canvas.addEventListener('pointerdown',e=>{if(e.button!==0)return;pointer={id:e.pointerId,x:e.clientX,y:e.clientY,startX:e.clientX,startY:e.clientY,moved:false};canvas.setPointerCapture?.(e.pointerId);});
     canvas.addEventListener('pointermove',e=>{const rect=canvas.getBoundingClientRect();if(pointer&&e.pointerId===pointer.id){if(Math.hypot(e.clientX-pointer.startX,e.clientY-pointer.startY)>4)pointer.moved=true;if(pointer.moved){angle+=(e.clientX-pointer.x)*.007;tilt=Math.max(-1.3,Math.min(1.3,tilt+(e.clientY-pointer.y)*.005));}pointer.x=e.clientX;pointer.y=e.clientY;schedule();}else{const p=hit(e.clientX-rect.left,e.clientY-rect.top);canvas.style.cursor=p?'pointer':'grab';canvas.title=p?(p.record.value?.text||'待合并记忆').slice(0,120):'';}});
     canvas.addEventListener('pointerup',e=>{if(!pointer||pointer.id!==e.pointerId)return;const rect=canvas.getBoundingClientRect();if(!pointer.moved){const p=hit(e.clientX-rect.left,e.clientY-rect.top);if(p)select(p.record.itemId);}pointer=null;canvas.releasePointerCapture?.(e.pointerId);});
@@ -141,13 +153,15 @@
     $('.memory-popover-close').addEventListener('click',closePopover);
     const escape=e=>{if(e.key!=='Escape')return;if(!characterMenu.hidden){e.preventDefault();closeCharacters();characterToggle.focus();}else if(view==='stars'&&popoverOpen){e.preventDefault();closePopover();}};host.addEventListener('keydown',escape);
     for(const button of host.querySelectorAll('[data-view]'))button.addEventListener('click',()=>setView(button.dataset.view));
-    for(const selector of ['.memory-search','.memory-kind','.memory-state','.memory-sort'])$(selector).addEventListener(selector==='.memory-search'?'input':'change',()=>{page=0;render();});
+    for(const selector of ['.memory-search','.memory-kind','.memory-state','.memory-sort'])$(selector).addEventListener(selector==='.memory-search'?'input':'change',()=>{page=0;if(selector==='.memory-search')scheduleRender();else render();});
     $('.memory-prev').addEventListener('click',()=>{page--;render();});$('.memory-next').addEventListener('click',()=>{page++;render();});
     $('.memory-zoom-in').addEventListener('click',()=>{zoom=Math.min(2.8,zoom*1.2);schedule();});$('.memory-zoom-out').addEventListener('click',()=>{zoom=Math.max(.45,zoom/1.2);schedule();});$('.memory-reset').addEventListener('click',()=>{angle=.15;tilt=-.14;zoom=1;schedule();});
-    $('.memory-time-range').addEventListener('input',e=>{const value=Number(e.target.value);cutoff=value===maxDay?null:value;page=0;render();});
+    // Update cutoff/page immediately (so any intervening render reads fresh
+    // state) but debounce the expensive render itself.
+    $('.memory-time-range').addEventListener('input',e=>{const value=Number(e.target.value);cutoff=value===maxDay?null:value;page=0;scheduleRender();});
     const visibility=()=>{if(doc.hidden){win.cancelAnimationFrame(frame);frame=0;}else schedule();};doc.addEventListener('visibilitychange',visibility);
     setView('stars');
-    return {openStars(){setView('stars');},update(next,metadata={}){setCharacters(metadata);records=next;const days=records.map(day);minDay=days.length?Math.min(...days):0;maxDay=days.length?Math.max(...days):0;const slider=$('.memory-time-range');slider.min=String(minDay);slider.max=String(maxDay);if(cutoff!==null)cutoff=Math.max(minDay,Math.min(maxDay,cutoff));slider.value=String(cutoff??maxDay);slider.disabled=minDay===maxDay;render();},close(){disposed=true;observer?.disconnect();win.cancelAnimationFrame(frame);host.removeEventListener('keydown',escape);doc.removeEventListener('pointerdown',outsideCharacters);doc.removeEventListener('visibilitychange',visibility);}};
+    return {openStars(){setView('stars');},update(next,metadata={}){setCharacters(metadata);records=next;const days=records.map(day);minDay=days.length?Math.min(...days):0;maxDay=days.length?Math.max(...days):0;const slider=$('.memory-time-range');slider.min=String(minDay);slider.max=String(maxDay);if(cutoff!==null)cutoff=Math.max(minDay,Math.min(maxDay,cutoff));slider.value=String(cutoff??maxDay);slider.disabled=minDay===maxDay;render();},close(){disposed=true;win.clearTimeout(renderDebounce);observer?.disconnect();win.cancelAnimationFrame(frame);host.removeEventListener('keydown',escape);doc.removeEventListener('pointerdown',outsideCharacters);doc.removeEventListener('visibilitychange',visibility);}};
   }
   function mountMemory(host,pet){
     host.innerHTML='<main class="chat-panel memory-panel"><header><h1>鱼的记忆</h1><button type="button" class="refresh-memory">刷新</button></header><p>每个人物的记忆独立保存，点击头像切换查看。候选与模型推断不会冒充用户确认。</p><section class="memory-system"><h2>原生记忆服务</h2><button type="button" class="sync-memory">立即处理待存记忆</button><p class="memory-sync-status"></p><details class="memory-model-settings"><summary>N.E.K.O. 记忆组件与整理模型</summary><p>组件在本机自动运行，默认复用当前聊天通道：DeepSeek 账号模式使用账号额度，也可设置独立 API 模型。整理会调用所选模型。DSH 工作任务不进入这套记忆。</p><label class="check-label"><input type="checkbox" class="memory-reuse-chat" checked>使用当前聊天通道整理记忆（账号 / API）</label><form class="memory-model-form"><fieldset class="memory-custom-model"><legend>独立记忆整理模型</legend><label>协议<select name="protocol"><option value="openai-compatible">OpenAI 兼容</option><option value="anthropic">Anthropic</option></select></label><label>API 基础地址<input name="baseUrl" type="url" maxlength="2048"></label><label>模型<input name="model" maxlength="200"></label><label>超时（毫秒）<input name="requestTimeoutMs" type="number" min="1000" max="300000" value="60000"></label><label>新密钥<input name="apiKey" type="password" maxlength="16384" autocomplete="new-password" placeholder="留空保留已存密钥"></label></fieldset><button type="submit">保存并连接记忆组件</button><p class="memory-key-status"></p></form></details></section><p role="status" aria-live="polite"></p><section class="memory-items"></section><section class="memory-summaries"></section><details><summary>最近聊天记录</summary><div class="chat-history"></div></details></main>';
@@ -238,7 +252,14 @@
         if(!messages.length)history.append(node('p','还没有聊天记录。'));status.textContent=memory.viewMessage||'当前使用 N.E.K.O. 记忆，已读取本角色存档';
       }catch{if(!disposed&&token===generation){if(explorer)explorer.update([]);else items.replaceChildren();summaries.replaceChildren();history.replaceChildren();host.querySelector('.memory-system').hidden=owner!=='bigfish';status.textContent='此人物的记忆读取失败，请刷新重试或切换人物。';}}
     }
-    const off=pet.onState(state=>{const snapshot=state.mainChat;if(!snapshot)return;const backend=snapshot.backend,phase=snapshot.chat?.phase,memory=JSON.stringify(snapshot.memorySystem);const refreshNow=backend!==lastBackend||memory!==lastMemory||(['connecting','replying'].includes(lastPhase)&&!['connecting','replying'].includes(phase));lastBackend=backend;lastPhase=phase;lastMemory=memory;if(refreshNow)void refresh();});
+    // Lightweight version tag instead of JSON.stringify of the whole
+    // memorySystem. The main process ships a revision (events length) but that
+    // alone misses pending/providerStates/error changes, so the display-state
+    // scalars are compared too: identical "content changed -> redraw" semantics,
+    // without serializing the full object on every state push.
+    const off=pet.onState(state=>{const snapshot=state.mainChat;if(!snapshot)return;const backend=snapshot.backend,phase=snapshot.chat?.phase,ms=snapshot.memorySystem;
+      const memory=ms==null?ms:[ms.revision,ms.mode,ms.autoSync,ms.configured,ms.pending,ms.conflicts,ms.error,ms.providerStates?Object.values(ms.providerStates).join(','):''].join('\u0000');
+      const refreshNow=backend!==lastBackend||memory!==lastMemory||(['connecting','replying'].includes(lastPhase)&&!['connecting','replying'].includes(phase));lastBackend=backend;lastPhase=phase;lastMemory=memory;if(refreshNow)void refresh();});
     const offOpen=pet.onMemoryOpen?.(()=>explorer?.openStars());
     host.querySelector('.refresh-memory').addEventListener('click',()=>void refresh());void refresh();
     return ()=>{disposed=true;generation++;explorer?.close();offOpen?.();off?.();};

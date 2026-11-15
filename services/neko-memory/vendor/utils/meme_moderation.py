@@ -492,10 +492,6 @@ def _normalize_image_content_type(raw: str) -> str:
     return content_type or "image/jpeg"
 
 
-def _ssl_fallback_enabled() -> bool:
-    return _read_bool_env("MEME_MODERATION_ALLOW_SSL_FALLBACK", False)
-
-
 def _is_blocked_host(hostname: str) -> bool:
     if hostname in {"localhost", "localhost.localdomain"}:
         return True
@@ -563,47 +559,23 @@ async def _download_image_for_moderation(
         if cached_entry.last_modified:
             headers["If-Modified-Since"] = cached_entry.last_modified
 
-    async def _fetch(*, verify: bool) -> _DownloadedImage:
-        if verify:
-            client = get_external_http_client()
-            return await _stream_image_response(
-                client,
-                url,
-                headers,
-                timeout_seconds,
-                cached_entry=cached_entry,
-            )
-        async with httpx.AsyncClient(
-            timeout=timeout_seconds,
-            follow_redirects=False,
-            trust_env=True,
-            # Last-resort path for certificate-broken meme hosts. This only runs
-            # after strict verification fails and the env flag explicitly opts in.
-            verify=False,
-        ) as relaxed_client:
-            return await _stream_image_response(
-                relaxed_client,
-                url,
-                headers,
-                timeout_seconds,
-                cached_entry=cached_entry,
-            )
+    async def _fetch() -> _DownloadedImage:
+        client = get_external_http_client()
+        return await _stream_image_response(
+            client,
+            url,
+            headers,
+            timeout_seconds,
+            cached_entry=cached_entry,
+        )
 
     try:
-        image_data = await _fetch(verify=True)
-    except httpx.HTTPError as exc:
-        message = str(exc).lower()
-        if "ssl" not in message and "certificate" not in message:
-            raise
-        if not _ssl_fallback_enabled():
-            raise
-        host = (urlsplit(url).hostname or "").lower()
-        logger.warning(
-            "[Meme Moderation] SSL verification fallback enabled for image fetch host=%s error=%s",
-            host,
-            exc,
-        )
-        image_data = await _fetch(verify=False)
+        image_data = await _fetch()
+    except httpx.HTTPError:
+        # Certificate/SSL failures are rejected: strict verification is the only
+        # fetch path, never retried with verify=False. Preserve the original
+        # exception type and let the caller handle it.
+        raise
 
     return image_data
 

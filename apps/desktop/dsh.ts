@@ -154,10 +154,11 @@ export class DshDesktop {
       }
     })().finally(() => {
       this.refreshing = null;
-      if (!this.closed && this.client) {
-        const delay = this.refreshAgain ? 0 : 2000;
+      // No periodic poll: catalog updates arrive via DshCatalogEvents -> scheduleRefresh.
+      // Only replay an event that was coalesced while this refresh was in flight.
+      if (!this.closed && this.client && this.refreshAgain) {
         this.refreshAgain = false;
-        this.timer = setTimeout(() => { void this.refresh(); }, delay);
+        void this.refresh();
       }
     });
   }

@@ -18,6 +18,13 @@ const KINDS: ReadonlySet<string> = new Set(["fact", "preference", "episode", "su
 const MAX_TEXT_CHARS = 500;
 /** Per-item overhead in recall budgeting (list marker, newline). */
 const ITEM_OVERHEAD_TOKENS = 4;
+/**
+ * Conservative upper bound on recall candidates. recall is capped by budgetTokens
+ * (default 512; each item costs >= 5 tokens), so at most ~100 items can ever be
+ * returned. 2000 bounds tokenize/sort to a fixed O(N log N) while leaving ample
+ * headroom; ordering/tie-breakers are unchanged for any realistic store.
+ */
+const RECALL_CANDIDATE_LIMIT = 2000;
 const CJK_CHAR = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
 const TOKEN_RUN = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]+|[a-z0-9]+/gu;
 
@@ -107,11 +114,24 @@ export class SqliteMemoryStore implements MemoryProvider {
     this.now = opts.now ?? Date.now;
     this.db = new DatabaseSync(dbPath);
     this.db.exec(SCHEMA_SQL);
+    // Built-in node:sqlite custom function (no new dependency, no table/column
+    // change). Lets propose() reproduce the original normalize()-based dedup in a
+    // parameterised SQL query without materialising the persona's texts in JS.
+    this.db.function("neko_normalize", (value: SQLOutputValue) => normalize(String(value)));
   }
 
   async recall(personaId: PersonaId, query: string, budgetTokens: number): Promise<MemoryItem[]> {
     if (!Number.isInteger(budgetTokens) || budgetTokens <= 0) return [];
-    const items = await this.list(personaId, "confirmed");
+    // Recall-only bounded candidate query: same filter/ORDER BY as list(), plus a
+    // conservative LIMIT so tokenize + sort never scale with an unbounded table.
+    // list() itself is left untouched (other callers still get the full set).
+    const rows = this.db
+      .prepare(
+        `SELECT ${SELECT_COLUMNS} FROM memories WHERE persona_id = ? AND confirmation = ?
+         ORDER BY updated_at DESC, seq DESC LIMIT ?`,
+      )
+      .all(personaId, "confirmed", RECALL_CANDIDATE_LIMIT);
+    const items = rows.map(toItem);
     const queryTokens = tokenize(query);
     const scored = items.map((item, order) => {
       const itemTokens = tokenize(item.text);
@@ -154,8 +174,18 @@ export class SqliteMemoryStore implements MemoryProvider {
       throw new Error(`memory id ${item.id} already belongs to another persona`);
     }
     const key = normalize(text);
-    const texts = this.db.prepare("SELECT text FROM memories WHERE persona_id = ?").all(item.personaId);
-    if (texts.some((r) => normalize(r["text"] as string) === key)) return;
+    // Dedup stays parameterised and never loads the persona's texts into a JS
+    // array: one fast exact-match query, then (only on a miss) a single query
+    // using the registered normalize function that keeps the exact old
+    // whitespace-insensitive semantics (tabs / repeated / trailing spaces).
+    const duplicate =
+      this.db
+        .prepare("SELECT 1 FROM memories WHERE persona_id = ? AND text = ? LIMIT 1")
+        .get(item.personaId, text) !== undefined ||
+      this.db
+        .prepare("SELECT 1 FROM memories WHERE persona_id = ? AND neko_normalize(text) = ? LIMIT 1")
+        .get(item.personaId, key) !== undefined;
+    if (duplicate) return;
 
     this.db
       .prepare(

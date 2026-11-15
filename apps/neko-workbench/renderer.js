@@ -160,12 +160,35 @@ if(view==='chat-settings'){
     const b=appearance.isMedia()?{x0:0,y0:0,x1:640,y1:360}:window.PetShared.HIT_BOX;
     return x>=r.width*b.x0/640&&x<=r.width*b.x1/640&&y>=r.height*b.y0/360&&y<=r.height*b.y1/360;
   }
-  window.addEventListener('mousemove',passThrough);
-  window.addEventListener('mouseleave',()=>{lastHover=null;passThrough();});
+  // Coalesce high-frequency mousemove hit tests to at most one per frame. The
+  // synchronous layout/style/pixel reads stay inside passThrough; only their
+  // rate is bounded. Headless DOM without requestAnimationFrame keeps the
+  // original synchronous behaviour.
+  const raf=typeof window.requestAnimationFrame==='function'?window.requestAnimationFrame.bind(window):null;
+  const caf=typeof window.cancelAnimationFrame==='function'?window.cancelAnimationFrame.bind(window):null;
+  let hoverFrame=null,pendingHover=null;
+  function cancelHoverFrame(){if(hoverFrame!==null&&caf)caf(hoverFrame);hoverFrame=null;}
+  function queuePassThrough(event){
+    if(!raf){passThrough(event);return;}
+    if(document.hidden)return;
+    pendingHover=event;
+    if(hoverFrame!==null)return;
+    hoverFrame=raf(()=>{hoverFrame=null;const e=pendingHover;pendingHover=null;if(!document.hidden)passThrough(e);});
+  }
+  document.addEventListener('visibilitychange',()=>{
+    if(document.hidden){cancelHoverFrame();return;}
+    const e=pendingHover;pendingHover=null;passThrough(e||undefined);
+  });
+  window.addEventListener('mousemove',queuePassThrough);
+  window.addEventListener('mouseleave',()=>{cancelHoverFrame();pendingHover=null;lastHover=null;passThrough();});
   // Animated frames can move underneath a stationary cursor. Re-evaluate the
   // current alpha instead of retaining the last mousemove's native hit state.
-  const hitTimer=setInterval(()=>passThrough(),200);
-  window.addEventListener('unload',()=>clearInterval(hitTimer),{once:true});
+  // Poll at 500 ms and skip while hidden. The readable animation signals
+  // (runningPresentation, desktopMotion.phase, appearance.isMedia(),
+  // video.paused/readyState) do not cover webp sequences or CSS animations, so
+  // gating the poll on them could drop a resample and change the hit result.
+  const hitTimer=setInterval(()=>{if(!document.hidden)passThrough();},500);
+  window.addEventListener('unload',()=>{clearInterval(hitTimer);cancelHoverFrame();},{once:true});
   function showBubble(text) {feedback.showLocal(text);}
   function renderAnimation(a) {
     const visual=window.PetChatPresentation.animationActor(a,desktopMotion);

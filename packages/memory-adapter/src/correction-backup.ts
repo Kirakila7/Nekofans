@@ -235,6 +235,23 @@ export async function restoreBackup(opts: {
       error: "character_id is not a valid CharacterId",
     };
   }
+  if (
+    typeof opts.backup_file !== "string" ||
+    !opts.backup_file ||
+    opts.backup_file.includes("\0") ||
+    // Absolute paths are valid here: exportBackup() returns one. The service
+    // is authoritative for the backups/ boundary; only reject URL-shaped input.
+    opts.backup_file.includes("://") ||
+    opts.backup_file.replace(/\\/g, "/").split("/").some((part) => part === "..")
+  ) {
+    return {
+      status: "error",
+      character_id: "",
+      restored_files: [],
+      conflicts: [],
+      error: "backup_file must be a path without '..' segments",
+    };
+  }
   let characters: Character | null = null;
   try {
     characters = Character.open({ dbPath: opts.dbPath });

@@ -33,7 +33,15 @@
       for (const field of ['mode', 'protocol', 'baseUrl', 'model']) form.elements[field].value = config[field] || '';
       settingsMode(); loaded = true;
     }
-    const key = JSON.stringify(value.records);
+    // Lightweight diff key instead of serializing every record. records is a
+    // bounded (30) append-only window with head eviction, so length + head/tail
+    // identities (+ last timestamp) cover appends, evictions and replacement
+    // without touching record.text/question/usage. A mid-list in-place edit
+    // that keeps length and both ends would not retrigger a redraw; the runtime
+    // (screen-observation-runtime.cjs) never mutates those entries.
+    const list = value.records || [];
+    const first = list[0], last = list[list.length - 1];
+    const key = list.length + '|' + (first?.id ?? '') + '|' + (last?.id ?? '') + '|' + (last?.capturedAt ?? '');
     if (key !== renderedRecords) {
       renderedRecords = key; const list = $('records'); list.replaceChildren();
       for (const record of value.records) {

@@ -71,6 +71,39 @@ def _invalidate_pool_cache(character_dir: Path) -> None:
         pass
 
 
+def _backup_storage_dir() -> Path:
+    """Same directory export_backup writes to; restore must never leave it."""
+    return (Path(runtime._config_manager.app_docs_dir) / "backups").resolve()
+
+
+def _resolve_backup_path(raw: str) -> Path:
+    """export_backup returns an absolute path; accept it only inside backups/."""
+    if not isinstance(raw, str) or not raw or "\x00" in raw:
+        raise HTTPException(status_code=400, detail="invalid backup_file")
+    root = _backup_storage_dir()
+    candidate = Path(raw)
+    resolved = (candidate if candidate.is_absolute() else root / candidate).resolve()
+    if not resolved.is_relative_to(root) or not tarfile.is_tarfile(resolved):
+        raise HTTPException(status_code=400, detail="backup_file does not exist or is not a tarball")
+    return resolved
+
+
+def _safe_relative_path(raw: str) -> str:
+    """Manifest keys come from the archive: reject traversal before any read or write."""
+    if (
+        not isinstance(raw, str)
+        or not raw
+        or "\x00" in raw
+        or "\\" in raw
+        or raw.startswith("/")
+        or Path(raw).is_absolute()
+    ):
+        raise HTTPException(status_code=400, detail="invalid path in backup manifest")
+    if any(part in ("", ".", "..") for part in raw.split("/")):
+        raise HTTPException(status_code=400, detail="invalid path in backup manifest")
+    return raw
+
+
 def add_routes(app):
     @app.post("/correct_fact/{lanlan_name}")
     async def f08_correct_fact(lanlan_name: str, req: CorrectFactRequest):
@@ -312,9 +345,7 @@ def add_routes(app):
     async def f08_restore_backup(lanlan_name: str, req: RestoreBackupRequest):
         """Restore memory from a tarball. Verify sha256 and character_id; refuse 409 conflicts."""
         lanlan_name = validate_lanlan_name(lanlan_name)
-        backup_path = Path(req.backup_file)
-        if not backup_path.exists() or not tarfile.is_tarfile(backup_path):
-            raise HTTPException(status_code=400, detail="backup_file does not exist or is not a tarball")
+        backup_path = _resolve_backup_path(req.backup_file)
 
         temp_dir = tempfile.mkdtemp(prefix="f08-restore-")
         try:
@@ -327,23 +358,36 @@ def add_routes(app):
                 raise HTTPException(status_code=400, detail="manifest.json not found in backup")
 
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            if not isinstance(manifest, dict):
+                raise HTTPException(status_code=400, detail="invalid backup manifest")
             backup_character_id = manifest.get("character_id", "")
             backup_name = manifest.get("character_name", "")
             file_checksums = manifest.get("files", {})
+            if not isinstance(file_checksums, dict):
+                raise HTTPException(status_code=400, detail="invalid backup manifest files")
 
-            # Verify sha256 for each file.
+            # Validate every manifest key before touching the filesystem.
+            temp_root = Path(temp_dir).resolve()
+            safe_paths = {}
             for rel_path, expected_sha in file_checksums.items():
                 if rel_path in ("profile.json", "manifest.json"):
                     continue
-                file_path = Path(temp_dir) / rel_path
-                if not file_path.exists():
+                safe_paths[rel_path] = _safe_relative_path(rel_path)
+                if not isinstance(expected_sha, str):
+                    raise HTTPException(status_code=400, detail="invalid checksum in backup manifest")
+
+            # Verify sha256 for each file, confined to the extraction directory.
+            for rel_path, expected_sha in file_checksums.items():
+                if rel_path not in safe_paths:
+                    continue
+                file_path = (temp_root / safe_paths[rel_path]).resolve()
+                if not file_path.is_relative_to(temp_root) or not file_path.is_file():
                     raise HTTPException(status_code=400, detail=f"{rel_path} in manifest but not in tarball")
                 h = hashlib.sha256()
                 with open(file_path, "rb") as f:
                     while chunk := f.read(65536):
                         h.update(chunk)
-                actual_sha = h.hexdigest()
-                if actual_sha != expected_sha:
+                if h.hexdigest() != expected_sha:
                     raise HTTPException(status_code=400, detail=f"{rel_path} checksum mismatch")
 
             # Check character_id conflict.
@@ -364,11 +408,12 @@ def add_routes(app):
             target_memory_dir.mkdir(parents=True, exist_ok=True)
 
             restored = []
-            for rel_path in file_checksums:
-                if rel_path in ("profile.json", "manifest.json"):
-                    continue
-                src = Path(temp_dir) / rel_path
-                dst = target_memory_dir / rel_path
+            dst_root = target_memory_dir.resolve()
+            for rel_path, safe in safe_paths.items():
+                src = (temp_root / safe).resolve()
+                dst = (dst_root / safe).resolve()
+                if not src.is_relative_to(temp_root) or not dst.is_relative_to(dst_root):
+                    raise HTTPException(status_code=400, detail="invalid path in backup manifest")
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(src, dst)
                 restored.append(str(dst))

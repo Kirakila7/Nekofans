@@ -2,7 +2,7 @@ const {app,BrowserWindow,WebContentsView,ipcMain,screen,shell,Menu,Tray,nativeIm
 const {spawn} = require('node:child_process');
 const {resolveRuntimePaths,prepareRuntimeDirectories,assertDshRuntime,buildDshPatch,buildDshLaunch}=require('./runtime-config.cjs');
 const {createDshLifecycle}=require('./dsh-lifecycle.cjs');
-const {createSocialController}=require('./community-config.cjs');
+const {createSocialController,classifyCommunityNavigation}=require('./community-config.cjs');
 const {createNativeDividerController}=require('./native-divider-controller.cjs');
 const {createNativeComposerController}=require('./native-composer-controller.cjs');
 const {workbenchWindowOptions,updateWorkbenchWindowTheme}=require('./workbench-window.cjs');
@@ -177,7 +177,7 @@ const channelLife=createChannelLife({dataDir:data,fishLog:path.join(workspace,'f
   generate:(entry,signal)=>mainChatRuntime.generateProactive(entry,signal),
   present:reply=>{if(quitting)return;const a=state.actors[0];a.notice=null;a.screenReply=null;a.chatReply={id:reply.id,text:reply.text,streaming:false,proactive:true};a.messages.push({id:reply.id,role:'assistant',text:reply.text,time:Date.now(),proactive:true});broadcast();const w=createPetWindow(a);if(!workbenchOnly){if(w.isMinimized?.())w.restore();if(!w.webContents.isLoading())w.showInactive();}}
 });
-function save(){const f=path.join(data,'state.json');const actors=state.actors.map(a=>a.id==='main'&&usesMainChatService(a.chatBackend)?{...a,messages:[],chatReply:undefined,lastUserMessage:undefined}:a).map(a=>({...a,screenReply:undefined,returningHome:undefined}));writeAtomicStateFileSync(f,JSON.stringify({...state,actors,mainChat:undefined,connection:undefined},null,2));}
+function save(){const limit=200;const f=path.join(data,'state.json');const actors=state.actors.map(a=>a.id==='main'&&usesMainChatService(a.chatBackend)?{...a,messages:[],chatReply:undefined,lastUserMessage:undefined}:a.id==='main'?{...a,messages:(a.messages||[]).slice(-limit)}:a).map(a=>({...a,screenReply:undefined,returningHome:undefined}));const neko=state.neko?{...state.neko,history:(state.neko.history||[]).slice(-limit)}:state.neko;writeAtomicStateFileSync(f,JSON.stringify({...state,neko,actors,mainChat:undefined,connection:undefined},null,2));}
 const communityDaily=createCommunityDaily({dataDir:data,
   getIdentity:()=>visitsController?.communityIdentity()||null,
   getInteractions:()=>mainChatRuntime.history(),
@@ -189,6 +189,9 @@ questionRelay=createAgentQuestionRelay({getHost:()=>dshWindow,getSessionId:id=>i
 petQuestionController=createPetQuestionController({BrowserWindow,screen,ipcMain,request:(id,value)=>questionRelay.request(id,value)});
 function publishPetQuestions(){if(!questionRelay||!petQuestionController)return;for(const [id,w] of petWindows)if(w&&!w.isDestroyed()&&localWindows.has(w))petQuestionController.sync(id,w,questionRelay.forActor(id));}
 function broadcast(){for(const w of [...petWindows.values(),...renameWindows.values(),memoryWindow,settingsWindow,nekoSettingsWindow,chatSettingsWindow,chatMemoryWindow])if(w&&!w.isDestroyed()&&localWindows.has(w))w.webContents.send('pet:state',state);publishPetQuestions();if(dshWindow&&!dshWindow.isDestroyed()&&isWorkbenchOrigin(dshWindow.webContents.getURL()))dshWindow.webContents.send('workbench:state',workbenchState());}
+const STREAM_BROADCAST_MS=120;let streamBroadcastTimer=null;
+function broadcastStreaming(){if(streamBroadcastTimer)return;streamBroadcastTimer=setTimeout(()=>{streamBroadcastTimer=null;if(!quitting)broadcast();},STREAM_BROADCAST_MS);}
+function clearStreamBroadcast(){if(streamBroadcastTimer){clearTimeout(streamBroadcastTimer);streamBroadcastTimer=null;}}
 function loadLocalFile(window,query){const url=pathToFileURL(path.join(base,'index.html'));for(const [key,value] of Object.entries(query))url.searchParams.set(key,value);localWindows.set(window,url.href);window.webContents.on('will-navigate',(event,target)=>{if(target!==url.href)event.preventDefault();});window.webContents.setWindowOpenHandler(()=>({action:'deny'}));return window.loadURL(url.href);}
 function assertLocalCaller(event,window){if(!trustedLocalCaller(event,window,localWindows.get(window)))throw new Error('请从本应用的原始窗口操作');}
 function editCommunityDailySettings(){
@@ -238,6 +241,8 @@ ipcMain.handle('workbench:visits',async(event,payload)=>{
   try{return await visitsController.action(payload);}catch{throw new Error('串门操作未完成，请检查设置后重试');}
 });
 function isWorkbenchOrigin(candidate){try{const target=new URL(candidate),launch=new URL(dshLaunchUrl);return launch.protocol==='http:'&&launch.hostname==='127.0.0.1'&&target.origin===launch.origin;}catch{return false;}}
+function classifyWorkbenchNavigation(raw){try{if(dshLaunchUrl&&new URL(raw).origin===new URL(dshLaunchUrl).origin)return {kind:'internal'};return classifyCommunityNavigation(raw,process.env.NEKO_WORKBENCH_COMMUNITY_URL);}catch{return {kind:'blocked'};}}
+function guardWorkbenchNavigation(contents){contents.on('will-navigate',(event,url)=>{const d=classifyWorkbenchNavigation(url);if(d.kind==='internal')return;event.preventDefault();if(d.kind==='external')void shell.openExternal(d.url).catch(()=>{});});contents.setWindowOpenHandler(({url})=>{const d=classifyWorkbenchNavigation(url);if(d.kind==='internal')return {action:'allow',overrideBrowserWindowOptions:{webPreferences:{nodeIntegration:false,contextIsolation:true,sandbox:true,partition:'persist:pet-dsh'}}};if(d.kind==='external')void shell.openExternal(d.url).catch(()=>{});return {action:'deny'};});contents.on('did-create-window',child=>guardWorkbenchNavigation(child.webContents));}
 function assertWorkbenchCaller(event){if(!dshWindow||dshWindow.isDestroyed()||event.sender!==dshWindow.webContents||event.senderFrame!==event.sender.mainFrame||!isWorkbenchOrigin(event.senderFrame?.url))throw new Error('请从工作台操作');}
 function rolesState(){return {...workbenchRoles.get(),workspaceSessionId:state.dshRoot?.sessionId??null};}
 function publishRoles(){if(dshWindow&&!dshWindow.isDestroyed()&&isWorkbenchOrigin(dshWindow.webContents.getURL()))dshWindow.webContents.send('workbench:roles-state',rolesState());}
@@ -345,7 +350,7 @@ function applyMainChat(snapshot){
   }
   a.chatBackend=snapshot.backend;a.sessionId=null;
   if(usesMainChatService(snapshot.backend)){
-    state.neko.enabled=false;clearTimeout(nekoRetry);
+    state.neko.enabled=false;clearTimeout(nekoRetry);nekoRetry=null;
     // Invalidate pending character fetches even before a WebSocket exists.
     nekoChat.close();state.neko.connection='disabled';state.neko.error='';
     const chat=snapshot.chat,aBusy=['connecting','replying'].includes(chat.phase);
@@ -670,8 +675,7 @@ async function openDsh(){
   dshWindow.on('closed',()=>questionRelay.clear());
   dshWindow.webContents.on('did-finish-load',()=>{if(isWorkbenchOrigin(dshWindow.webContents.getURL())&&typeof dshWindow.webContents.executeJavaScript==='function')void dshWindow.webContents.executeJavaScript(fs.readFileSync(path.join(base,'screen-share-host.js'),'utf8')).catch(()=>{});});
   dshWindow.on('close',event=>{if(!quitting){event.preventDefault();dshWindow.hide();}});
-  dshWindow.webContents.on('will-navigate',(event,url)=>{if(!/^https?:/.test(url))event.preventDefault();});
-  dshWindow.webContents.setWindowOpenHandler(({url})=>/^https?:/.test(url)?{action:'allow',overrideBrowserWindowOptions:{webPreferences:{nodeIntegration:false,contextIsolation:true,sandbox:true,partition:'persist:pet-dsh'}}}:{action:'deny'});
+  guardWorkbenchNavigation(dshWindow.webContents);
   if(dshLaunchUrl){await applySkinCookie(dshWindow.webContents.session,dshLaunchUrl,dshSkin);await dshWindow.loadURL(dshLaunchUrl);}
   else await dshWindow.loadURL('data:text/html;charset=utf-8,'+encodeURIComponent('<meta charset="utf-8"><title>Nekofans</title><style>:root{color-scheme:light dark}body{margin:0;height:100vh;display:grid;place-items:center;font:14px system-ui,sans-serif;background:#EDF3F8;color:#4C5F73}@media (prefers-color-scheme:dark){body{background:#131C27;color:#9DB0C3}}</style><p>正在连接 Nekofans…</p>'));
   dshWindow.show();app.focus({steal:true});dshWindow.focus();
@@ -704,18 +708,20 @@ async function openNeko(){
   nekoWindow.webContents.on('will-navigate',(event,url)=>{try{if(new URL(url).origin!==localBase(state.neko.baseUrl))event.preventDefault();}catch{event.preventDefault();}});
   await nekoWindow.loadURL(localBase(state.neko.baseUrl)+'/chat');
 }
-async function connectNeko(){clearTimeout(nekoRetry);if(!state.neko.enabled||mainChatRuntime?.backend!=='neko'){state.neko.connection='disabled';state.neko.error='';update();return;}try{await nekoChat.connect(state.neko);}catch{}finally{if(!quitting&&state.neko.enabled&&mainChatRuntime?.backend==='neko'&&state.neko.connection!=='ready')nekoRetry=setTimeout(connectNeko,10000);}}
-nekoChat.on('connection',info=>{if(quitting||mainChatRuntime?.backend!=='neko')return;Object.assign(state.neko,info);if(info.connection==='disconnected'&&state.neko.enabled){clearTimeout(nekoRetry);nekoRetry=setTimeout(connectNeko,10000);}update();});
+let nekoRetryAttempt=0;
+function scheduleNekoRetry(){if(nekoRetry)return;const cap=Math.min(30000,1000*2**Math.min(nekoRetryAttempt,30));const delay=Math.floor(Math.random()*cap);nekoRetryAttempt+=1;nekoRetry=setTimeout(()=>{nekoRetry=null;connectNeko();},delay);}
+async function connectNeko(){clearTimeout(nekoRetry);nekoRetry=null;if(!state.neko.enabled||mainChatRuntime?.backend!=='neko'){state.neko.connection='disabled';state.neko.error='';update();return;}try{await nekoChat.connect(state.neko);}catch{}finally{if(!quitting&&state.neko.enabled&&mainChatRuntime?.backend==='neko'&&state.neko.connection!=='ready')scheduleNekoRetry();}}
+nekoChat.on('connection',info=>{if(quitting||mainChatRuntime?.backend!=='neko')return;Object.assign(state.neko,info);if(info.connection==='ready')nekoRetryAttempt=0;if(info.connection==='disconnected'&&state.neko.enabled){clearTimeout(nekoRetry);scheduleNekoRetry();}update();});
 nekoChat.on('characters',({names,character})=>{if(quitting||mainChatRuntime?.backend!=='neko')return;state.neko.characters=names;state.neko.character=character;state.actors[0].nekoCharacter=character;update();});
 nekoChat.on('profile-created',info=>{if(quitting||mainChatRuntime?.backend!=='neko')return;state.neko.profileCreated={...info,at:new Date().toISOString()};update();});
 nekoChat.on('start',()=>{if(quitting||mainChatRuntime?.backend!=='neko')return;const a=state.actors[0];a.active=true;a.status='working';a.currentActivity='正在聊天';setWork(a,'thinking',null);update();});
 nekoChat.on('reply',({requestId,text})=>{
   if(quitting||mainChatRuntime?.backend!=='neko')return;
   const a=state.actors[0];let reply=a.messages.find(m=>m.requestId===requestId&&m.role==='assistant');
-  if(!reply){reply={role:'assistant',requestId,text:'',time:Date.now()};a.messages.push(reply);}reply.text=text;a.chatReply={id:requestId,text,streaming:true};update();
+  if(!reply){reply={role:'assistant',requestId,text:'',time:Date.now()};a.messages.push(reply);}reply.text=text;a.chatReply={id:requestId,text,streaming:true};broadcastStreaming();
 });
-nekoChat.on('complete',({requestId,text})=>{if(quitting||mainChatRuntime?.backend!=='neko')return;const a=state.actors[0];state.neko.history=a.messages;a.status='idle';a.active=false;a.currentActivity='';a.chatReply={id:requestId,text,streaming:false};setWork(a,null);update();});
-nekoChat.on('failure',error=>{if(quitting||mainChatRuntime?.backend!=='neko')return;const a=state.actors[0];a.status='error';a.active=false;a.currentActivity='';if(a.chatReply)a.chatReply.streaming=false;notice(a,error.message);setWork(a,null);update();});
+nekoChat.on('complete',({requestId,text})=>{if(quitting||mainChatRuntime?.backend!=='neko')return;const a=state.actors[0];state.neko.history=a.messages;a.status='idle';a.active=false;a.currentActivity='';a.chatReply={id:requestId,text,streaming:false};setWork(a,null);clearStreamBroadcast();update();});
+nekoChat.on('failure',error=>{if(quitting||mainChatRuntime?.backend!=='neko')return;const a=state.actors[0];a.status='error';a.active=false;a.currentActivity='';if(a.chatReply)a.chatReply.streaming=false;notice(a,error.message);setWork(a,null);clearStreamBroadcast();update();});
 function setHelperLimit(value){const n=normalizeLimit(value);if(n<pinnedCount())return false;state.preferences.helperLimit=n;update();return true;}
 function pinHelper(a,pinned){
   if(pinned&&!orderedDesktopPets(state.actors,{taskOrder:state.taskOrder,catalogOrder:state.catalogOrder}).includes(a))return false;

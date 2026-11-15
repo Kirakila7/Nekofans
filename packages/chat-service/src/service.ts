@@ -259,6 +259,7 @@ export class MainChatService implements MainChatPort {
       return cancelled("");
     }
 
+    const chunks: string[] = [];
     let reply = "";
     let completedId: string | null = null;
     try {
@@ -275,7 +276,10 @@ export class MainChatService implements MainChatPort {
             break;
           }
           if (event.type === "delta" && event.text.length > 0) {
-            reply += event.text;
+            // Accumulate deltas in an array; build the flat string only where the
+            // full reply is needed (each streaming setState and the final value).
+            chunks.push(event.text);
+            reply = chunks.join("");
             this.setState({ personaId, phase: "replying", lastUserMessage: input, reply });
           }
         }

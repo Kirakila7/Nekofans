@@ -66,6 +66,8 @@ app = FastAPI()
 _server: uvicorn.Server | None = None
 
 SAMPLE_RATE = 48000
+MAX_SPEAK_TEXT_BYTES = 8 * 1024     # per-frame speak text
+MAX_SPEECH_TEXT_BYTES = 32 * 1024   # accumulated text for one speech
 DEFAULT_PROVIDER = os.getenv("NEKO_TTS_PROVIDER", "tone")
 DEFAULT_VOICE = os.getenv("NEKO_TTS_VOICE", "").strip()
 LAND_S = max(0, int(os.getenv("NEKO_TTS_INTERRUPT_LAND_MS", "120"))) / 1000
@@ -112,6 +114,7 @@ class _Session:
         self.responses: Queue = Queue()
         self.current: str | None = None
         self.started: set[str] = set()
+        self._spoken_bytes: dict[str, int] = {}  # accumulated bytes per active speech
         self.ready = False
         self.landing_until = 0.0
         self.send_lock = asyncio.Lock()
@@ -137,6 +140,7 @@ class _Session:
         await asyncio.sleep(LAND_S)
         if old is not None:
             self.started.discard(old)
+            self._spoken_bytes.pop(old, None)
             await self.send({
                 "kind": "interrupted",
                 "speech_id": old,
@@ -159,6 +163,20 @@ class _Session:
                 if not sid or sid.startswith("__"):
                     await self.error(sid, "BAD_SPEECH_ID", "speak needs a speech_id")
                     continue
+                if text:
+                    size = len(text.encode("utf-8"))
+                    if size > MAX_SPEAK_TEXT_BYTES:
+                        await self.error(sid, "BAD_MESSAGE", "text too large")
+                        continue
+                    # Only the current speech's accumulator is kept, so the
+                    # dict stays bounded as speech ids come and go.
+                    for key in [k for k in self._spoken_bytes if k != sid]:
+                        del self._spoken_bytes[key]
+                    used = self._spoken_bytes.get(sid, 0)
+                    if used + size > MAX_SPEECH_TEXT_BYTES:
+                        await self.error(sid, "BAD_MESSAGE", "text too large")
+                        continue
+                    self._spoken_bytes[sid] = used + size
                 if self.current is not None and self.current != sid:
                     # A new speech always preempts the old one, as upstream does on a new turn.
                     await self.interrupt()
@@ -168,6 +186,7 @@ class _Session:
             elif kind == "flush":
                 if sid is not None and sid == self.current:
                     self.requests.put((None, None))
+                    self._spoken_bytes.pop(sid, None)  # worker clears text_buf on flush
             elif kind == "interrupt":
                 if self.current is not None and (sid is None or sid == self.current):
                     await self.interrupt()
@@ -205,6 +224,7 @@ class _Session:
                 if done_sid and done_sid == self.current:
                     self.current = None
                     self.started.discard(done_sid)
+                    self._spoken_bytes.pop(done_sid, None)
                     await self.send({"kind": "ended", "speech_id": done_sid})
                 else:
                     self.stats["stale_done"] += 1
