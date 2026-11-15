@@ -1,8 +1,16 @@
 # Local integration 0.28.41 / build 77
 
+## Private chess compiler: Open Source and Erasure rule templates (2026-11-15)
+
+Extended `services/nekofans-game-hub/private-chess-compiler.mjs` to support 《开源与抹除》 rule templates in addition to opponent piece bans:
+- `shared-piece-pool` (开源·共享走法池): captures and removed pieces contribute to the shared move pool, verified by `getCapturedPiecePool(state)`.
+- `true-name-erasure` (抹除·真名契约): structured rule template aligned with the goddess true-name referee protocol.
+
+Updated `parseRuleProposal`, `compilePrivateRule` prompt, `classifyPrivatePosition`, and `permitsPrivateMove`. Added unit tests covering proposal parsing, captured pool calculation, and move validation (all 34 hub tests passing).
+
 ## Mind games site integration and 《开源与抹除》 showcase (2026-11-15)
 
-Integrated the Nekofans.Game mind-games showcase (`sites/nekofans-mindgames`), presenting the debut mind-game prototype 《开源与抹除》 and original secret rules by A.kira. Includes responsive catalog navigation, bookmarking, secret rule copy, D1 migration schema, and original playable demo assets (`rules.mp4`, `host.mp4`, `workbench.mp4`, `duel-concept.webp`).
+Integrated the Nekofans.Game mind-games showcase (`sites/nekofans-mindgames`), presenting the debut mind-game prototype 《开源与抹除》 and original secret rules by A.kira. Includes responsive catalog navigation, bookmarking, secret rule copy, creator signature guard, D1 migration schema, and gameplay recording clips (`rules.mp4`, `host.mp4`, `workbench.mp4`, `duel-concept.webp`). Added automated catalog and asset verification tests.
 
 ## macOS daily build verification (2026-11-14)
 

@@ -40,6 +40,9 @@ export async function POST(request: Request) {
   if (!['game', 'rule'].includes(kind) || title.length < 2 || title.length > 60 || summary.length < 8 || summary.length > 180 || body.length < 15 || body.length > 2000 || creator.length < 1 || creator.length > 30 || !categories.includes(category) || !['concept', 'prototype', 'playable'].includes(stage) || tags.length > 3 || tags.some(x => x.length > 12)) {
     return reply({ error: '请补全标题、简介、玩法详情和署名，并检查字数。' }, 400);
   }
+  if (creator.toLowerCase() === 'a.kira') {
+    return reply({ error: 'A.kira 为《开源与抹除》首发创作者精选署名，请使用你自己的原创作者名。' }, 400);
+  }
   let url = str('url');
   if (url) {
     try { const parsed = new URL(url); if (parsed.protocol !== 'https:' || parsed.username || parsed.password) throw new Error(); url = parsed.href; }
