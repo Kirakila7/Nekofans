@@ -3,7 +3,8 @@
 // for the WebSocket protocol.
 
 import { spawn, type ChildProcess } from "node:child_process";
-import { join } from "node:path";
+import { existsSync } from "node:fs";
+import { isAbsolute, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 
 import type { AsrEvent, AsrProvider } from "./asr.ts";
@@ -162,7 +163,17 @@ function toEvent(msg: Record<string, unknown>): AsrEvent | null {
 
 const REPO_ROOT = join(import.meta.dirname, "../../..");
 export const ASR_SIDECAR_SCRIPT = join(REPO_ROOT, "services/neko-asr/server.py");
-export const ASR_SIDECAR_PYTHON = join(REPO_ROOT, "services/neko-memory/.venv/Scripts/python.exe");
+
+// The sidecars share the uv-managed venv of services/neko-memory (see
+// services/neko-asr/VENDOR.md). Its layout differs per platform, and packaged
+// builds ship their own interpreter, so never hardcode a developer path here
+// (see docs/NEKO_NATIVE_VOICE_PLAN.md).
+export function asrSidecarPython(): string {
+  const override = process.env.NEKO_ASR_SIDECAR_PYTHON?.trim();
+  if (override) return override;
+  const venv = join(REPO_ROOT, "services/neko-memory/.venv");
+  return join(venv, process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
+}
 
 export interface AsrSidecarOptions {
   port?: number;
@@ -186,7 +197,14 @@ export async function startAsrSidecar(options: AsrSidecarOptions = {}): Promise<
   const port = options.port ?? DEFAULT_ASR_SIDECAR_PORT;
   const http_url = `http://127.0.0.1:${port}`;
   let output = "";
-  const proc: ChildProcess = spawn(options.python ?? ASR_SIDECAR_PYTHON, [ASR_SIDECAR_SCRIPT], {
+  const python = options.python ?? asrSidecarPython();
+  if (isAbsolute(python) && !existsSync(python)) {
+    throw new Error(
+      `Python for the neko-asr sidecar was not found at ${python}.\n` +
+        `Run "npm run setup:neko-memory" once, or set NEKO_ASR_SIDECAR_PYTHON to an existing interpreter.`,
+    );
+  }
+  const proc: ChildProcess = spawn(python, [ASR_SIDECAR_SCRIPT], {
     stdio: ["ignore", "pipe", "pipe"],
     env: {
       ...process.env,

@@ -52,3 +52,32 @@
 - N.E.K.O. 原生适配、语音、PNGTuber 仍属于后续适配阶段。
 
 本页记录本机交付验收，不代表 tag 或公开发布。根目录 `PROJECT_STATUS.md` 下方旧 v0.1 内容仅作历史记录。
+
+## 2026-11-16 安全与性能整改
+
+审查基线 `9de4753`，逐条依据见工作区 `Nekofans-code-review.md`，验证记录见 `Nekofans-fix-verification.md`，提交 `ab76055`。
+
+### 已修（19 条，另复核补修 7 处）
+
+安全 7 条：备份恢复路径穿越（服务端与客户端双端边界校验）、ASR `/ws` 与 `/shutdown` 来源校验、工作台导航 host 白名单与子窗口守卫、OneBot 默认监听改回环且无 token 时 fail-closed、本地静态服务 Host/Origin 校验、macOS 日常构建归档哈希基准校验、移除图片抓取的 TLS 降级回退。
+
+性能 12 条：流式回复改为 120ms 合并广播、完成时落盘一次、持久化历史上限 200 条；删除工作台目录 2 秒无条件轮询并并行预取；记忆检索下推 SQL 并限制候选；鼠标命中与筛选输入节流、命中检测改线性扫描；历史写盘防抖、任务集合设上限；网关 pull 分页与 `executemany`；ASR/TTS 会话数与文本长度设上限、忙轮询改阻塞读；SSE 游标解析、批量 `IN` 查询、回复按块累积、断线重连指数退避。
+
+复核轮另修 7 处本次修复引入的次生问题，其中一处为真 bug：ASR 终结 error 路径未回收会话，单连接累计 64 次失败后该连接永久不可用。
+
+### 未修（4 条，有意保留）
+
+vendor 反代 Host 判定、试玩房间配对码语义、会话列表跨模块分页、`launcher.py` Bearer 认证。首条会破坏反向代理部署，后三条需产品决策或连同所有调用方一起改造。
+
+### 验证
+
+- 改动文件语法：JS/CJS 与 TS 全部通过；456 个 Python 文件 `py_compile` 通过。
+- 包级测试：194 项，192 通过、0 失败、2 跳过。
+- 语音适配器测试：34 项，32 通过、0 失败、2 跳过（`asr-whisper-live` 需下载模型）。其中 6 项 sidecar 集成测试此前在 macOS 上因写死 Windows 解释器路径从未跑通，本次修复后可执行。
+- 工作台逐文件测试：失败集合与此前基线逐项一致，无新增回归。
+- 未做：真实启动 Electron 与 Python sidecar 的端到端运行；`npm run test:neko` 全量超时未跑完。
+
+### 跨端准备
+
+- 新增 `.gitattributes`（统一 LF、声明二进制资源）、`.nvmrc`（Node 24）、`scripts/bootstrap.mjs`（一条命令装齐 npm 与 uv 依赖，缺什么报什么）。
+- `packages/voice-adapter` 两个 sidecar 的解释器改为按平台解析（Windows 用 `Scripts/python.exe`，其余用 `bin/python`），并支持 `NEKO_ASR_SIDECAR_PYTHON`、`NEKO_TTS_SIDECAR_PYTHON` 覆盖；解释器缺失时给出可操作报错，不再抛裸 `spawn ENOENT`。原实现写死 Windows 路径，macOS/Linux 上语音集成测试必然失败。

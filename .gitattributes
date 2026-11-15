@@ -1,0 +1,32 @@
+# Normalize line endings: a Windows checkout must not rewrite every file.
+* text=auto eol=lf
+
+# Binary assets: never convert, never diff as text.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.icns binary
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary
+*.mp4 binary
+*.webm binary
+*.mov binary
+*.mp3 binary
+*.wav binary
+*.zip binary
+*.7z binary
+*.exe binary
+*.dll binary
+*.dylib binary
+*.node binary
+*.sqlite binary
+*.db binary
+
+# Generated lockfiles: collapse in review, they are reproduced by the tools.
+package-lock.json -diff linguist-generated
+uv.lock -diff linguist-generated

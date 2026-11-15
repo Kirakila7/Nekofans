@@ -90,13 +90,16 @@
 git clone https://github.com/Kirakila7/Nekofans.git
 cd Nekofans
 
-# 安装前端工程与构建依赖
+# 一条命令完成下面三步：检查 Node 版本 → 装 npm 依赖 → 同步 uv 依赖
+node scripts/bootstrap.mjs
+
+# 或手动执行：
 npm ci
 npm run setup:electron
-
-# 同步 Python 记忆微服务依赖（通过 uv 锁定）
 npm run setup:neko-memory
 ```
+
+**多端同步 / Multi-machine sync**：远端分支是唯一真相源，换机器只需 `git clone` + `node scripts/bootstrap.mjs`。`node_modules/`、`.venv/`、模型、`.env`、`*.sqlite` 一律不入库（见 `.gitignore`），每台机器本地重建；密钥放密码管理器，构建产物走 Releases 或移动硬盘。开工先 `git pull --rebase`，收工务必 push。Node 版本由 `.nvmrc` 固定，行尾与二进制文件由 `.gitattributes` 统一，避免 Windows 检出把整仓库改一遍。
 
 ### 3. 配置运行时与启动 / Launching
 

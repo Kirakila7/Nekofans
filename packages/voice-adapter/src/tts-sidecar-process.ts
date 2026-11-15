@@ -1,14 +1,24 @@
 // Spawn and stop services/neko-tts/server.py (Node only).
 
 import { spawn, type ChildProcess } from "node:child_process";
-import { join } from "node:path";
+import { existsSync } from "node:fs";
+import { isAbsolute, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 
 import { DEFAULT_TTS_SIDECAR_PORT } from "./tts-sidecar.ts";
 
 const REPO_ROOT = join(import.meta.dirname, "../../..");
 export const TTS_SIDECAR_SCRIPT = join(REPO_ROOT, "services/neko-tts/server.py");
-export const TTS_SIDECAR_PYTHON = join(REPO_ROOT, "services/neko-memory/.venv/Scripts/python.exe");
+
+// Shares the uv-managed venv of services/neko-memory; layout differs per
+// platform and packaged builds ship their own interpreter, so resolve it at
+// runtime instead of hardcoding a developer path.
+export function ttsSidecarPython(): string {
+  const override = process.env.NEKO_TTS_SIDECAR_PYTHON?.trim();
+  if (override) return override;
+  const venv = join(REPO_ROOT, "services/neko-memory/.venv");
+  return join(venv, process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
+}
 
 export interface TtsSidecarOptions {
   port?: number;
@@ -32,7 +42,14 @@ export async function startTtsSidecar(options: TtsSidecarOptions = {}): Promise<
   const port = options.port ?? DEFAULT_TTS_SIDECAR_PORT;
   const http_url = `http://127.0.0.1:${port}`;
   let output = "";
-  const proc: ChildProcess = spawn(options.python ?? TTS_SIDECAR_PYTHON, [TTS_SIDECAR_SCRIPT], {
+  const python = options.python ?? ttsSidecarPython();
+  if (isAbsolute(python) && !existsSync(python)) {
+    throw new Error(
+      `Python for the neko-tts sidecar was not found at ${python}.\n` +
+        `Run "npm run setup:neko-memory" once, or set NEKO_TTS_SIDECAR_PYTHON to an existing interpreter.`,
+    );
+  }
+  const proc: ChildProcess = spawn(python, [TTS_SIDECAR_SCRIPT], {
     stdio: ["ignore", "pipe", "pipe"],
     env: {
       ...process.env,
