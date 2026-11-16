@@ -1,0 +1,32 @@
+{
+  "story-v1": {
+    "id": "story-v1",
+    "abilities": {
+      "white": "open-source",
+      "black": "erase-note"
+    },
+    "poolTypes": [
+      "p",
+      "n",
+      "b",
+      "r",
+      "q"
+    ],
+    "kingErasureWins": true,
+    "names": [
+      {
+        "color": "w",
+        "type": "k",
+        "square": "e1",
+        "trueName": "梁文峰",
+        "alias": "梁武帝"
+      },
+      {
+        "color": "b",
+        "type": "k",
+        "square": "e8",
+        "trueName": "达里奥"
+      }
+    ]
+  }
+}

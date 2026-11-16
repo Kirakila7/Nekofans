@@ -17,7 +17,7 @@ For an operator setting up a test relay:
 
 3. Use the actual origin in the publisher's workbench. Both players use their own workbench account for their optional teammate. Rooms live in memory and expire after six hours.
 
-The story launcher is a local development option for an explicitly configured compatible project. The game-draft action produces a revision for later validation. The private chess trial is the runnable multiplayer game in this change.
+The workbench also bundles [Open Source & Erasure](story-trial/README.md), a separate local story with white, black and moderator views. The game-draft action produces a revision for later validation.
 
 Run the protocol checks with `node --test services/nekofans-game-hub/*.test.mjs services/nekofans-game-hub/private-trial/server.test.mjs`. Tests use local services and synthetic model responses.
 

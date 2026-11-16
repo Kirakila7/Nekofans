@@ -6425,20 +6425,31 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     // 本地棋局原型 · 真实账号模型桥: the renderer receives only the ephemeral
     // start command and plain status text; never persona or rule bodies.
     const relayHeading=el('h3','neko-lobby-game-prototype-heading','本地棋局原型 · 真实账号模型桥');
-    const relayState=el('p','neko-lobby-game-status','一键启动会打开已绑定模型桥的本机剧情棋局。');relayState.setAttribute('role','status');
+    const relayState=el('p','neko-lobby-game-status','《开源与抹除》在本机运行。三个视角进入同一局。');relayState.setAttribute('role','status');
     const relayRoom=el('input','neko-lobby-game-prototype-room');relayRoom.maxLength=10;relayRoom.setAttribute('aria-label','本地原型房间码');relayRoom.placeholder='8 位房间码或 r-xxxxxxxx';relayRoom.autocomplete='off';
     const relayOrigin=el('input','neko-lobby-game-prototype-origin');relayOrigin.type='url';relayOrigin.setAttribute('aria-label','本地原型地址');relayOrigin.value='http://127.0.0.1:8787';
     const relayCommand=el('textarea','neko-lobby-game-prototype-command');relayCommand.readOnly=true;relayCommand.rows=3;relayCommand.hidden=true;relayCommand.setAttribute('aria-label','本地原型启动命令');
     const relayWarning=el('p','neko-lobby-game-prototype-warning','命令含一次性桥接令牌，只在本次启动有效；不要发给别人或投屏。');relayWarning.hidden=true;
     const loopbackOrigin=value=>{let parsed;try{parsed=new URL(value);}catch{return null;}if((parsed.protocol!=='http:'&&parsed.protocol!=='https:')||parsed.username||parsed.password||parsed.search||parsed.hash||parsed.pathname!=='/')return null;return ['127.0.0.1','localhost','[::1]'].includes(parsed.hostname)?parsed.origin:null;};
     const relayStart=button('启动受控适配器','neko-lobby-game-prototype-start',async()=>{relayStart.disabled=true;try{const result=await callGame({action:'prototype-relay-start'});if(result.ok&&result.baseUrl&&result.token&&result.model&&result.label){relayCommand.value='NEKO_AI_BRIDGE_URL='+result.baseUrl+' NEKO_AI_BRIDGE_TOKEN='+result.token+' NEKO_AI_MODEL='+result.model+' NEKO_AI_BRIDGE_LABEL="'+String(result.label).replace(/"/gu,'')+'" npm start';relayCommand.hidden=false;relayWarning.hidden=false;relayState.textContent='适配器已启动（限时有效，最多 '+(Number.isFinite(result.maxCalls)?result.maxCalls:0)+' 次调用）。把命令粘贴到本地原型终端，创建房间后填写房间码并绑定。';}else if(result.ok&&result.status==='running'){relayState.textContent='适配器已在运行；如需新的启动命令，请先停止再启动。';}else relayState.textContent='适配器暂时无法启动，请检查 DeepSeek 登录后重试。';}finally{relayStart.disabled=false;}});
-    const storyStart=button('一键启动剧情对局','neko-lobby-game-story-start',async()=>{
-      storyStart.disabled=true;relayState.textContent='正在启动、建房并绑定模型桥…';
-      try{
-        const result=await callGame({action:'prototype-story-start'});
-        relayState.textContent=({opened:'已打开并绑定本机剧情棋局。',busy:'正在打开剧情棋局，请稍候。','already-bound':'适配器已绑定其他房间。可以继续原房间，或停止后另开一局。','missing-project':'找不到本机剧情工程。','bridge-unavailable':'模型适配器未就绪，请检查 DeepSeek 登录。','room-unavailable':'暂时无法打开本机剧情棋局。',timeout:'本机剧情服务启动超时。'})[result.status]||'剧情棋局未打开。';
-      }finally{storyStart.disabled=false;}
-    });
+    const openingStoryButtons=[];
+    function storyButton(label, className, seat){
+      const open=button(label,className,async()=>{
+        openingStoryButtons.forEach(action=>{action.disabled=true;});
+        relayState.textContent='正在打开本机剧情棋局…';
+        try{
+          const result=await callGame({action:'prototype-story-start',seat});
+          relayState.textContent=result.status==='opened'
+            ? (result.modelConnected===false?'已打开，可由玩家走棋、由女神裁定。':'已打开本机剧情棋局。')
+            : ({busy:'正在打开剧情棋局，请稍候。','already-bound':'适配器已绑定其他房间，请先停止。','missing-project':'找不到本机剧情工程。','bridge-unavailable':'模型适配器未就绪。','room-unavailable':'暂时无法打开本机剧情棋局。',timeout:'本机剧情服务启动超时。'})[result.status]||'剧情棋局未打开。';
+        }finally{openingStoryButtons.forEach(action=>{action.disabled=false;});}
+      });
+      openingStoryButtons.push(open);
+      return open;
+    }
+    const storyStart=storyButton('开源与抹除 · 白方','neko-lobby-game-story-start','white');
+    const storyBlack=storyButton('打开黑方','neko-lobby-game-story-black','black');
+    const storyHost=storyButton('打开女神','neko-lobby-game-story-host','goddess');
     const relayBind=button('绑定原型房间','neko-lobby-game-prototype-bind',async()=>{const roomId=relayRoom.value.trim().toUpperCase(),origin=loopbackOrigin(relayOrigin.value.trim());if(!/^(?:[A-HJ-NP-Z2-9]{8}|R-[0-9A-F]{8})$/.test(roomId)){relayState.textContent='请输入原型房间码或剧情房间 r-xxxxxxxx。';return;}if(!origin){relayState.textContent='原型地址只允许本机回环地址。';return;}relayBind.disabled=true;try{const result=await callGame({action:'prototype-relay-bind',roomId,prototypeOrigin:origin});relayState.textContent=({bound:'已绑定房间 '+(result.roomId||roomId)+'。女神可读取双方规则，决策队友只读取本方规则。','room-not-found':'原型里找不到这个房间，请先在原型里创建房间。','prototype-unavailable':'无法连接本地原型，请确认已用上面的命令启动。','invalid-room':'请输入原型房间码或剧情房间 r-xxxxxxxx。','invalid-origin':'原型地址只允许本机回环地址。','account-unavailable':'请先登录 DeepSeek 工作台账号。','already-bound':'适配器已经绑定房间。',busy:'正在核对原型房间，请稍候。',locked:'已经发生过模型调用，不能改绑房间；请停止后重新启动。','not-running':'适配器未运行或已过期，请重新启动。',expired:'适配器未运行或已过期，请重新启动。'})[result.status]||'绑定未完成，请检查原型和适配器状态。';}finally{relayBind.disabled=false;}});
     const relayStatus=button('查看适配器状态','neko-lobby-game-prototype-status',async()=>{const result=await callGame({action:'prototype-relay-status'});if(result.ok===false){relayState.textContent='暂时无法读取适配器状态，请稍后重试。';return;}relayState.textContent='适配器：'+(result.status==='running'?'运行中':'未运行')+'，已绑定房间 '+(result.roomId||'-')+'，已调用 '+(Number.isFinite(result.calls)?result.calls:0)+'/'+(Number.isFinite(result.maxCalls)?result.maxCalls:0)+' 次。';});
     const relayStop=button('停止适配器','neko-lobby-game-prototype-stop',async()=>{let result;try{result=await callGame({action:'prototype-relay-stop'});}catch{result={ok:false};}if(result&&result.ok===false){relayState.textContent='停止未确认，请检查适配器状态或稍后重试。';return;}relayCommand.value='';relayCommand.hidden=true;relayWarning.hidden=true;relayState.textContent='已停止；启动命令立即失效。';});
@@ -6482,7 +6493,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     publish.disabled=true;
     preview.append(gameName,description,opening,choices,publish);
     const advanced=el('details','neko-lobby-game-advanced');
-    advanced.append(el('summary','','高级设置'),field('游戏服务器',server),pairing,publicKey,connect,field('自己的席位配对码',pairCode,'已在浏览器入座时使用。'),pairSeat,field('本地原型房间码',relayRoom),field('本地原型地址',relayOrigin),relayHeading,relayState,storyStart,relayStop,relayStart,relayBind,relayStatus,relayCommand,relayWarning);
+    advanced.append(el('summary','','高级设置'),field('游戏服务器',server),pairing,publicKey,connect,field('自己的席位配对码',pairCode,'已在浏览器入座时使用。'),pairSeat,field('本地原型房间码',relayRoom),field('本地原型地址',relayOrigin),relayHeading,relayState,storyStart,storyBlack,storyHost,relayStop,relayStart,relayBind,relayStatus,relayCommand,relayWarning);
     const samples=el('details','neko-lobby-game-studio');
     samples.append(el('summary','','试玩示例'),field('示例游戏',gamePicker),inviteFriend,create);
     async function open(){

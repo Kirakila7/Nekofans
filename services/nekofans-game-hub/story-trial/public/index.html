@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Nekofans 双子棋局 · 本地原型</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body data-role="loading">
+  <div id="boot" class="boot">
+    <div class="boot-card">
+      <span class="paw big">🐾</span>
+      <p>正在连接棋局房间…</p>
+    </div>
+  </div>
+
+  <div id="fatal" class="fatal" hidden>
+    <div class="fatal-card">
+      <h1 id="fatalTitle">无法进入房间</h1>
+      <p id="fatalMessage"></p>
+      <a class="btn primary" href="/">返回控制台创建房间</a>
+    </div>
+  </div>
+
+  <div id="app" hidden>
+    <header class="topbar">
+      <div class="brand">
+        <span class="paw" aria-hidden="true">🐾</span>
+        <h1>Nekofans 双子棋局</h1>
+        <span class="ver">本地原型 · v0.1</span>
+      </div>
+      <div class="top-meta">
+        <span class="chip" id="roomChip">房间 …</span>
+        <span class="chip" id="phaseChip">准备中</span>
+        <span class="chip role-chip" id="roleChip">读取中</span>
+        <button type="button" class="chip secret-toggle" id="secrecyBtn" hidden>录屏遮罩：关</button>
+        <span class="conn" id="connChip"><i></i><span id="connText">连接中</span></span>
+      </div>
+    </header>
+    <div id="secrecyBanner" class="secrecy-banner" hidden>录屏遮罩已开启：女神机密面板与令牌已隐藏；关闭遮罩后再操作。</div>
+
+    <main class="layout">
+      <section class="board-panel" aria-label="棋盘区域">
+        <div class="player-bar" id="topBar">
+          <div class="player-name">
+            <span class="side-dot" id="topDot"></span>
+            <span id="topName">黑方</span>
+            <span class="seat-tag" id="topSelfTag" hidden>你</span>
+          </div>
+          <div class="player-tags" id="topTags"></div>
+        </div>
+
+        <div class="board-wrap">
+          <div id="board" class="board" role="grid" aria-label="国际象棋棋盘"></div>
+          <div id="pendingLock" class="board-lock" hidden>
+            <div class="lock-card">
+              <strong id="pendingTitle">等待女神裁决</strong>
+              <p id="pendingDetail"></p>
+              <button type="button" class="btn small" id="cancelPendingBtn" hidden>撤回这步</button>
+            </div>
+          </div>
+          <div id="promotion" class="promotion" hidden>
+            <div class="promotion-card">
+              <p>选择升变棋子</p>
+              <div class="promotion-choices" id="promotionChoices"></div>
+              <button type="button" class="link" id="promotionCancel">取消</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="player-bar bottom" id="bottomBar">
+          <div class="player-name">
+            <span class="side-dot" id="bottomDot"></span>
+            <span id="bottomName">白方</span>
+            <span class="seat-tag" id="bottomSelfTag" hidden>你</span>
+          </div>
+          <div class="player-tags" id="bottomTags"></div>
+        </div>
+
+        <div id="resultBanner" class="result-banner" role="status" hidden></div>
+        <div class="turn-line" id="turnLine">准备中…</div>
+        <p class="board-hint" id="boardHint"></p>
+
+        <div class="move-strip-wrap" aria-label="走子记录">
+          <div class="move-strip" id="moveStrip"></div>
+        </div>
+      </section>
+
+      <aside class="rail">
+        <div id="playerView" class="rail-view" hidden>
+          <section class="card" id="seatCard">
+            <div class="seat-head">
+              <span class="side-dot" id="seatDot"></span>
+              <div>
+                <strong id="seatTitle">白方席位</strong>
+                <p class="small" id="seatSub">你执白</p>
+              </div>
+            </div>
+            <div class="mini-row"><span>本席连接</span><span class="pill" id="seatSelfConn">连接中</span></div>
+            <div class="mini-row"><span>对手连接</span><span class="pill" id="seatOppConn">连接中</span></div>
+            <div class="mini-row"><span>待裁决走子</span><span class="pill" id="seatPending">无</span></div>
+            <p id="rejectionLine" class="note warn" hidden></p>
+          </section>
+
+          <section class="card" aria-label="隐藏规则">
+            <h2>我的隐藏规则 <span class="lock">仅你与女神可见</span></h2>
+            <div class="status-line" id="ruleStatus"></div>
+            <p id="ruleNote" class="note warn" hidden></p>
+            <div id="ruleEditBox">
+              <textarea id="ruleInput" maxlength="400" rows="4" placeholder="写一条可以被观察、也可能被猜到的隐藏规则…"></textarea>
+              <div class="row">
+                <span class="counter" id="ruleCounter">0 / 400</span>
+                <button type="button" class="btn primary" id="ruleSubmitBtn">封存并提交给女神</button>
+              </div>
+            </div>
+            <div id="ruleSealedBox" class="sealed" hidden></div>
+            <div class="divider"></div>
+            <div class="mini-row"><span>对方规则</span><span class="pill" id="opponentRulePill">未提交</span></div>
+            <p class="hint" id="opponentRuleHint">对方规则原文对你是保密的，只能通过棋盘和公开行动推测。</p>
+          </section>
+
+          <section class="card" id="storyCard" hidden>
+            <h2>剧情能力 <span class="lock">效果公开 · 规则文本仅你与女神可见</span></h2>
+            <div class="status-line" id="storyStatus"></div>
+            <p class="hint" id="storyAbilityHelp"></p>
+            <div class="mini-row"><span>公开行动池（可用）</span><span class="pill" id="specialCount">空</span></div>
+            <div class="special-list" id="specialList"></div>
+            <p class="hint" id="specialHint"></p>
+
+            <!-- B 的私密操作面板由 app.js 按席位动态创建。 -->
+            <div id="privateActionBox" hidden></div>
+
+            <div class="divider"></div>
+            <h3>公开行动</h3>
+            <ul class="plain-list" id="storyEvents"></ul>
+            <p class="hint" id="storyNoEvents">暂无公开行动。</p>
+          </section>
+
+          <section class="card" aria-label="猜测">
+            <h2>猜对方规则 <span class="lock">猜中即获胜</span></h2>
+            <div class="status-line" id="guessMeta"></div>
+            <div id="guessEditBox">
+              <textarea id="guessInput" maxlength="300" rows="2" placeholder="写下你对对方隐藏规则的判断…"></textarea>
+              <div class="row">
+                <span class="counter" id="guessCounter">0 / 300</span>
+                <button type="button" class="btn" id="guessSubmitBtn">提交猜测</button>
+              </div>
+            </div>
+            <div id="guessHistory" class="guess-history"></div>
+          </section>
+
+          <section class="card" id="teammateCard" hidden>
+            <h2>大肥鱼 · A 方决策队友 <span class="lock">预留真实模型入口</span></h2>
+            <div class="status-line" id="teammateStatus"></div>
+            <p class="hint" id="teammateNote"></p>
+            <p class="hint">可见：本方规则、公共行动、公开行动池、自己的猜测；不可见：B 规则原文、私密身份信息、B 的猜测。</p>
+            <div class="divider"></div>
+            <p class="hint">真实模型未接入。你可以在下面人工代填大肥鱼的判断，并以 A 席位提交（不代表模型已推理）。</p>
+            <textarea id="teammateGuessInput" maxlength="300" rows="2" placeholder="大肥鱼对 B 规则的猜测…"></textarea>
+            <div class="row">
+              <span class="counter" id="teammateGuessCounter">0 / 300</span>
+              <button type="button" class="btn" id="teammateGuessBtn">以 A 席位提交猜测</button>
+            </div>
+            <div class="divider"></div>
+            <div class="row">
+              <button type="button" class="btn primary" id="teammateDecideBtn" disabled>让大肥鱼决策（受控）</button>
+            </div>
+            <p class="hint" id="teammateDecisionResult"></p>
+            <p class="hint">仅 A 席位可触发；上下文由服务端白名单生成，失败/超时/中断都不会自动走子。</p>
+          </section>
+
+          <section class="card" id="revealCard" hidden>
+            <h2>规则揭晓 <span class="lock">女神公开</span></h2>
+            <div id="revealBody"></div>
+          </section>
+
+          <section class="card" aria-label="公告">
+            <h2>女神公告</h2>
+            <ul id="announceList" class="plain-list"></ul>
+            <p id="announceEmpty" class="hint">暂无公告。</p>
+          </section>
+
+          <section class="card" aria-label="笔记">
+            <h2>我的笔记 <span class="lock">只在本标签页</span></h2>
+            <textarea id="notesInput" rows="4" placeholder="记录你的推理与怀疑（不会上传服务器）"></textarea>
+          </section>
+        </div>
+
+        <div id="goddessView" class="rail-view" hidden>
+          <section class="card">
+            <h2>对局控制 <span class="lock">仅女神</span></h2>
+            <div class="status-line" id="goddessPhase"></div>
+            <div class="btn-grid">
+              <button id="startBtn" class="btn primary">开始对局</button>
+              <button id="pauseBtn" class="btn">暂停</button>
+              <button id="undoBtn" class="btn">撤销一步</button>
+              <button id="revealBothBtn" class="btn">揭晓双方规则</button>
+              <button id="resetBtn" class="btn danger">重开一局</button>
+            </div>
+            <label class="check"><input type="checkbox" id="reviewToggle"> 逐手审核（玩家走子需女神核准）</label>
+            <div class="row">
+              <label class="field inline">猜测次数上限（0=不限）
+                <input id="guessLimitInput" type="number" min="0" max="9" step="1">
+              </label>
+              <button id="saveSettingsBtn" class="btn small">保存设置</button>
+            </div>
+          </section>
+
+          <section class="card">
+            <h2>待裁决走子</h2>
+            <div id="reviewArea"></div>
+          </section>
+
+          <section class="card secret">
+            <h2>规则收件箱 <span class="lock">仅女神可见</span></h2>
+            <div id="ruleInbox"></div>
+          </section>
+
+          <section class="card secret" id="goddessStoryCard" hidden>
+            <h2>剧情规则与私密信息 <span class="lock">仅女神可见 · 录屏勿展示</span></h2>
+            <div class="status-line" id="goddessStoryStatus"></div>
+            <div class="mini-row"><span>公开行动池</span><span id="goddessSpecial" class="pill">空</span></div>
+            <div class="divider"></div>
+            <h3>私密字段管理 <span class="lock">字段跟随棋子；棋盘与玩家画面不显示</span></h3>
+            <p class="hint">编辑私密字段后保存；可同时设置公开标记。玩家与 A 队友视图不会收到这些字段。</p>
+            <div id="goddessNames" class="name-list"></div>
+            <div class="divider"></div>
+            <h3>私密行动审计</h3>
+            <div id="goddessAudit" class="audit-list"></div>
+            <div class="divider"></div>
+            <h3>公开行动（脱敏）</h3>
+            <ul id="goddessStoryEvents" class="plain-list"></ul>
+          </section>
+
+          <section class="card secret">
+            <h2>猜测核验 <span class="lock">仅女神可见</span></h2>
+            <div id="guessInbox"></div>
+          </section>
+
+          <section class="card">
+            <h2>棋盘修改 <span class="lock">结构化操作</span></h2>
+            <div class="edit-grid">
+              <label class="field">操作
+                <select id="editOp">
+                  <option value="remove">移除棋子</option>
+                  <option value="place">放置棋子</option>
+                  <option value="setTurn">改行棋方</option>
+                </select>
+              </label>
+              <label class="field" id="editSquareField">格子
+                <input id="editSquare" maxlength="2" placeholder="e7" autocomplete="off">
+              </label>
+              <label class="field" id="editPieceField" hidden>棋子
+                <select id="editPiece">
+                  <option value="p">兵</option>
+                  <option value="n">马</option>
+                  <option value="b">象</option>
+                  <option value="r">车</option>
+                  <option value="q">后</option>
+                  <option value="k">王</option>
+                </select>
+              </label>
+              <label class="field" id="editColorField" hidden>颜色
+                <select id="editColor">
+                  <option value="w">白方</option>
+                  <option value="b">黑方</option>
+                </select>
+              </label>
+              <label class="field" id="editTurnField" hidden>行棋方
+                <select id="editTurn">
+                  <option value="w">白方</option>
+                  <option value="b">黑方</option>
+                </select>
+              </label>
+              <label class="field wide">备注（仅女神可见）
+                <input id="editNote" maxlength="300" placeholder="可选，例如：依据私密规则移除">
+              </label>
+            </div>
+            <button id="editApplyBtn" class="btn">执行棋盘修改</button>
+            <p class="hint">也可以直接在棋盘上点棋子 → 目标格，二次确认后由女神代走一步。</p>
+          </section>
+
+          <section class="card">
+            <h2>结束对局</h2>
+            <div class="row">
+              <select id="endWinner" aria-label="胜方">
+                <option value="white">白方胜</option>
+                <option value="black">黑方胜</option>
+                <option value="draw">和棋</option>
+              </select>
+              <select id="endReason" aria-label="结束原因">
+                <option value="resign">认输</option>
+                <option value="goddess">女神裁定</option>
+                <option value="agreement">双方协议</option>
+                <option value="abort">对局中止</option>
+                <option value="timeout">超时</option>
+              </select>
+            </div>
+            <input id="endNote" maxlength="300" placeholder="备注（可选）">
+            <button id="endBtn" class="btn danger">结束并冻结对局</button>
+          </section>
+
+          <section class="card">
+            <h2>女神公告</h2>
+            <textarea id="announceInput" maxlength="300" rows="2" placeholder="双方可见；不要写任何一方规则原文"></textarea>
+            <div class="row">
+              <span class="counter" id="announceCounter">0 / 300</span>
+              <button id="announceBtn" class="btn">发送公告</button>
+            </div>
+          </section>
+
+          <section class="card secret">
+            <h2>席位链接 <span class="lock">含私密令牌</span></h2>
+            <button type="button" class="btn small" id="toggleSeatLinksBtn">显示席位链接（含令牌）</button>
+            <div id="seatLinksWrap" hidden>
+              <div id="seatLinks" class="link-list"></div>
+              <p class="hint">只把白方/黑方链接交给对应席位；女神链接不要出现在公开画面里。</p>
+            </div>
+          </section>
+
+          <section class="card secret">
+            <h2>事件日志</h2>
+            <ol id="eventLog" class="event-log"></ol>
+            <button id="exportBtn" class="btn small">导出完整对局记录（JSON）</button>
+          </section>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <div id="toastRoot" class="toast-root" aria-live="polite"></div>
+  <script src="/app.js"></script>
+</body>
+</html>

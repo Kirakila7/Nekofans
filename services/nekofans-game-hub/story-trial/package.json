@@ -1,0 +1,17 @@
+{
+  "name": "nekofans-hidden-rule-chess",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Nekofans 本机剧情棋局 · 开源与抹除",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test",
+    "demo": "node tools/demo.js",
+    "test:story": "node --test tests/story-rules.test.js tests/story-api.test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "Apache-2.0"
+}
