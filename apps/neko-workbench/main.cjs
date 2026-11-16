@@ -970,7 +970,15 @@ ipcMain.handle('workbench:game-friend-invites',async(event,request)=>{
 // Trusted-main-process-only local prototype bridge. The renderer receives only
 // an ephemeral start command; it never receives the account persona or rules.
 function prototypeRelay(){return privatePrototypeRelay??=require('./prototype-model-relay.cjs').createPrototypeModelRelay({rpc,getOwnPersona:async()=>ownGamePersona()});}
-function storyPrototype(){return storyPrototypeLauncher??=require('./story-prototype-launcher.cjs').createStoryPrototypeLauncher({projectDir:process.env.NEKO_STORY_PROJECT_DIR||path.join(app.getPath('documents'),'ChatGPT','猫娘计划','output','开源与抹除_对局录制','剧情规则_创造台'),executable:process.execPath,relay:prototypeRelay()});}
+function storyPrototype(){
+  const override=process.env.NEKO_STORY_PROJECT_DIR;
+  return storyPrototypeLauncher??=require('./story-prototype-launcher.cjs').createStoryPrototypeLauncher({
+    projectDir:override||path.resolve(base,'../../services/nekofans-game-hub/story-trial'),
+    dataDir:override?undefined:path.join(data,'story-chess'),
+    executable:process.execPath,
+    relay:prototypeRelay(),
+  });
+}
 ipcMain.handle('workbench:game-hub',async(event,request)=>{
   assertWorkbenchCaller(event);
   const {createGameHubBridge}=require('./game-hub-bridge.cjs');
@@ -1007,7 +1015,7 @@ ipcMain.handle('workbench:game-hub',async(event,request)=>{
   if(request?.action==='private-agent-stop')return {ok:true,...gameRuntime().stopAgent({inviteUrl:request.inviteUrl})};
   if(request?.action==='private-agent-status')return {ok:true,...gameRuntime().agentStatus()};
   if(request?.action==='prototype-relay-start')return {ok:true,...await prototypeRelay().start()};
-  if(request?.action==='prototype-story-start')return {ok:true,...await storyPrototype().openRoom(url=>shell.openExternal(url))};
+  if(request?.action==='prototype-story-start')return {ok:true,...await storyPrototype().openRoom(url=>shell.openExternal(url),request.seat)};
   if(request?.action==='prototype-relay-bind'){
     try{return {ok:true,...await prototypeRelay().bind({roomId:request.roomId,prototypeOrigin:request.prototypeOrigin})};}
     catch{return {ok:false,status:'unavailable',error:'本地原型地址或房间暂时无法核对'};}
@@ -1256,7 +1264,7 @@ app.whenReady().then(async()=>{
     const roomId=process.env.NEKO_STORY_AUTOBIND||'';
     if(started.status==='started'&&/^r-[0-9a-f]{8}$/.test(roomId)){
       for(let attempt=0;attempt<20&&!quitting;attempt++){
-        const result=await prototypeRelay().bind({roomId,prototypeOrigin:'http://127.0.0.1:8787'});
+        const result=await prototypeRelay().bind({roomId,prototypeOrigin:started.origin});
         if(result.status==='bound'||result.status==='already-bound')break;
         if(!['account-unavailable','prototype-unavailable','busy'].includes(result.status))break;
         await new Promise(resolve=>setTimeout(resolve,2000));

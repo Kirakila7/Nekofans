@@ -6,9 +6,9 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export function nekoTestFiles(sourceRoot = root) {
   const directories = ["tests/neko-launcher", "tests/neko-workbench",
-    "apps/neko-workbench/framework/tests"];
+    "apps/neko-workbench/framework/tests", "services/nekofans-game-hub/story-trial/tests"];
   return directories.flatMap(directory => readdirSync(join(sourceRoot, directory))
-    .filter(file => /\.test\.(?:cjs|mjs|ts)$/.test(file))
+    .filter(file => /\.test\.(?:cjs|mjs|js|ts)$/.test(file))
     .map(file => join(directory, file)));
 }
 
