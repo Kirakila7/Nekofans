@@ -84,16 +84,19 @@ function createStoryPrototypeLauncher({projectDir, executable, relay, dataDir, f
         stdio: ['ignore', 'pipe', 'pipe'],
       });
       child = running;
+      running.stdout.setEncoding('utf8');
       const result = await new Promise(resolve => {
         let out = '';
-        const timer = setTimeout(() => finish({status: 'timeout'}), 10000);
+        // First launch of a freshly signed macOS bundle can take longer while
+        // the system verifies the executable.
+        const timer = setTimeout(() => finish({status: 'timeout'}), bundled ? 30000 : 10000);
         function finish(value) {
           clearTimeout(timer);
           running.stdout.removeListener('data', onData);
           resolve(value);
         }
         function onData(chunk) {
-          out = (out + chunk.toString()).slice(-4096);
+          out = (out + chunk).slice(-4096);
           const match = out.match(/127\.0\.0\.1:(\d{1,5})（仅本机/u);
           if (match && Number(match[1]) > 0 && Number(match[1]) <= 65535) {
             const localOrigin = 'http://127.0.0.1:' + match[1];
