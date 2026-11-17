@@ -1,4 +1,4 @@
-const {app,BrowserWindow,WebContentsView,ipcMain,screen,shell,Menu,Tray,nativeImage,dialog,nativeTheme,safeStorage,clipboard,desktopCapturer,systemPreferences} = require('electron');
+const {app,BrowserWindow,WebContentsView,ipcMain,screen,shell,Menu,Tray,Notification,nativeImage,dialog,nativeTheme,safeStorage,clipboard,desktopCapturer,systemPreferences} = require('electron');
 const {spawn} = require('node:child_process');
 const {resolveRuntimePaths,prepareRuntimeDirectories,assertDshRuntime,buildDshPatch,buildDshLaunch}=require('./runtime-config.cjs');
 const {createDshLifecycle}=require('./dsh-lifecycle.cjs');
@@ -105,7 +105,7 @@ migrateChatRouting(state);
 state.connection='starting';state.error='';
 state.fish={enabled:false,phase:'paused',reason:'已暂停'};
 state.qqbot={enabled:false,phase:'paused',reason:'QQ 机器人已暂停。',bound:false,connected:false,scopeConfigured:false};
-let memoryWindow,settingsWindow,nekoSettingsWindow,chatSettingsWindow,chatMemoryWindow,nekoWindow,dshWindow,dshLaunchUrl,tray,child,childLifecycle,quitting=false,rpcId=0,startPromise,stderr='',rosterTimer,nekoRetry,mainChatRuntime,activeApiRequest,workbenchNavigation=null,questionRelay,petQuestionController;
+let memoryWindow,settingsWindow,nekoSettingsWindow,chatSettingsWindow,chatMemoryWindow,nekoWindow,dshWindow,dshWindowOpening,dshLaunchUrl,tray,child,childLifecycle,quitting=false,rpcId=0,startPromise,stderr='',rosterTimer,nekoRetry,mainChatRuntime,activeApiRequest,workbenchNavigation=null,questionRelay,petQuestionController;
 const localWindows=new WeakMap();
 const nekoChat=new NekoChat();
 let communityAccount,unifiedNekoLogin;
@@ -302,7 +302,71 @@ async function fishQqAction(request){
   return result;
 }
 function fishQqActive(){const value=fishQqCoordinator.snapshot();return value.unified||['fish','qqbot'].some(name=>value.selection[name]&&(value[name].enabled||['checking','starting','login-required','model-login-required','scope-required','bound','connecting'].includes(value[name].phase)));}
-function showConnectionStatus(){return dialog.showMessageBox(dshWindow&&!dshWindow.isDestroyed()?dshWindow:petWindows.get('main'),{type:'info',message:'N.E.K.O.：'+(state.neko.connection==='ready'?'已连接':'未连接')+' · 工作台：'+(state.connection==='ready'?'已连接':'未连接'),detail:[state.neko.error,state.error].filter(Boolean).join('\n')||'主角色聊天与工作台任务分别连接。',buttons:['好']});}
+const dshUpdateExtractor=process.platform==='win32'&&process.env.NEKO_WORKBENCH_DSH_UPDATE_EXTRACTOR;
+const dshUpdateVersion=process.env.NEKO_WORKBENCH_DSH_VERSION;
+const dshUpdater=dshUpdateExtractor?require('./windows-dsh-update.cjs'):null;
+const dshUpdateStore=dshUpdater?.createDshUpdateStore(data);
+let dshUpdateDialog, dshUpdateTimer, dshUpdateNotice, dshAvailableVersion;
+let dshUpdateTrial=!!dshUpdater&&process.env.NEKO_WORKBENCH_DSH_UPDATE_TRIAL==='1';
+let dshUpdateTrialTimer, dshUpdateTrialFailed=false, connectingChild;
+const statusParent=()=>dshWindow&&!dshWindow.isDestroyed()?dshWindow:petWindows.get('main');
+function checkDshUpdateInBackground(){
+  if(!dshUpdater||dshUpdateDialog||dshUpdateTrial||dshUpdateTrialFailed||quitting)return;
+  void dshUpdater.checkDshUpdate(dshUpdateVersion).then(release=>{
+    if(!release||quitting)return;
+    dshAvailableVersion=release.version;
+    if(dshUpdateDialog||dshUpdateNotice?.version===release.version||dshUpdateStore.select(dshUpdateVersion)?.version===release.version||!Notification?.isSupported())return;
+    const notification=new Notification({title:'DSH '+release.version+' 可更新',body:'点击查看并更新 Nekofans 内置工作引擎。'});
+    dshUpdateNotice={version:release.version,notification};
+    notification.on('click',()=>{void openDsh().catch(engineError);void showDshUpdate();});
+    notification.show();
+  }).catch(()=>{});
+}
+function showDshUpdate(){
+  if(!dshUpdater||dshUpdateTrial||dshUpdateTrialFailed)return Promise.resolve();
+  if(dshUpdateDialog)return dshUpdateDialog;
+  dshUpdateDialog=(async()=>{
+    const parent=statusParent();
+    try{
+      if(!dshUpdateStore.select(dshUpdateVersion)){
+        const release=await dshUpdater.checkDshUpdate(dshUpdateVersion);
+        if(quitting)return;
+        if(!release){
+          await dialog.showMessageBox(parent,{type:'info',message:'内置 DSH 已是当前版本',detail:dshUpdateVersion,buttons:['好']});
+          return;
+        }
+        let choice;
+        do{
+          choice=await dialog.showMessageBox(parent,{type:'info',message:'DSH '+release.version+' 可更新',
+            detail:'当前版本 '+dshUpdateVersion+'。下载完成后，重启 Nekofans 即可应用。',
+            buttons:['更新','稍后','查看官方更新说明'],defaultId:0,cancelId:1});
+          if(choice.response===2&&!quitting)await shell.openExternal('https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v'+release.version);
+        }while(choice.response===2&&!quitting);
+        if(choice.response!==0||quitting)return;
+        const window=dshWindow&&!dshWindow.isDestroyed()?dshWindow:parent;
+        try{
+          window?.setProgressBar?.(2);
+          let lastProgress=-1;
+          await dshUpdater.installDshUpdate({store:dshUpdateStore,release,currentVersion:dshUpdateVersion,extractor:dshUpdateExtractor,
+            progress:value=>{const rounded=Math.floor(value*100);if(rounded!==lastProgress&&!window?.isDestroyed()){lastProgress=rounded;window?.setProgressBar?.(value);}}});
+        }finally{if(window&&!window.isDestroyed())window.setProgressBar?.(-1);}
+      }
+      if(quitting)return;
+      const choice=await dialog.showMessageBox(statusParent(),{type:'info',message:'DSH 更新已准备好',
+        detail:'保存当前工作后，可以重启 Nekofans 应用更新。',buttons:['重启并应用','稍后'],defaultId:1,cancelId:1});
+      if(choice.response===0&&!quitting){app.relaunch();app.quit();}
+    }catch(error){
+      if(!quitting)await dialog.showMessageBox(statusParent(),{type:'error',message:'DSH 更新未完成',detail:String(error.message||error).slice(0,260),buttons:['好']});
+    }
+  })().finally(()=>{dshUpdateDialog=null;});
+  return dshUpdateDialog;
+}
+async function showConnectionStatus(){
+  const dshVersion=process.env.NEKO_WORKBENCH_DSH_VERSION;
+  const engine=dshVersion?'DeepSeek Harness '+dshVersion+'（'+process.env.NEKO_WORKBENCH_DSH_SOURCE+'）':'';
+  const choice=await dialog.showMessageBox(statusParent(),{type:'info',message:'N.E.K.O.：'+(state.neko.connection==='ready'?'已连接':'未连接')+' · 工作台：'+(state.connection==='ready'?'已连接':'未连接'),detail:[engine,state.neko.error,state.error].filter(Boolean).join('\n')||'主角色聊天与工作台任务分别连接。',buttons:dshUpdater?['好','检查 DSH 更新']:['好'],cancelId:0});
+  if(dshUpdater&&choice.response===1)await showDshUpdate();
+}
 async function workbenchAction(name){
   switch(name){
     case 'fish-settings':await openFishSettings();break;
@@ -576,7 +640,14 @@ function receive(message,replay=false){
   const p=message.params||{};
   if(message.method==='fish-care-state'){acceptChannelState('fish',p);return;}
   if(message.method==='qqbot-care-state'){acceptChannelState('qqbot',p);return;}
-  if(message.method==='ready'){connect().catch(engineError);return;}
+  if(message.method==='ready'){
+    if(!replay&&child&&connectingChild!==child&&!dshUpdateTrialFailed){
+      const ownedChild=child;
+      connectingChild=ownedChild;
+      connect(ownedChild).catch(error=>{if(child===ownedChild)engineError(error);});
+    }
+    return;
+  }
   if(!replay)fs.appendFileSync(path.join(data,'events.jsonl'),JSON.stringify({at:new Date().toISOString(),...message})+'\n');
   if(message.method==='agent-meta'){syncAgent(p);return;}
   if(message.method==='task-meta'){syncTask(p);return;}
@@ -634,20 +705,57 @@ function receive(message,replay=false){
   }
   update();
 }
-function engineError(error){state.connection='error';state.error=String(error.message||error);void fishQqCoordinator.pause();acceptChannelState('fish',{enabled:false,phase:'error',reason:'工作台连接已中断，养鱼状态无法确认。'});acceptChannelState('qqbot',{enabled:false,phase:'error',reason:'工作台连接已中断，QQ 状态无法确认。'});for(const a of state.actors.filter(a=>a.id!=='main')){a.active=false;a.returningHome=false;a.displayUntil=0;}update();}
-async function connect(){
+function engineError(error){
+  if(quitting||dshUpdateTrialFailed)return;
+  if(dshUpdateTrial){
+    dshUpdateTrial=false;
+    dshUpdateTrialFailed=true;
+    clearTimeout(dshUpdateTrialTimer);
+    try{if(dshUpdateStore.rollback(dshUpdateVersion)){app.relaunch();app.quit();return;}}
+    catch{error=new Error('无法保存 DSH 更新回退状态，请检查存储权限后重新打开 Nekofans。');}
+  }
+  state.connection='error';state.error=String(error.message||error);void fishQqCoordinator.pause();acceptChannelState('fish',{enabled:false,phase:'error',reason:'工作台连接已中断，养鱼状态无法确认。'});acceptChannelState('qqbot',{enabled:false,phase:'error',reason:'工作台连接已中断，QQ 状态无法确认。'});for(const a of state.actors.filter(a=>a.id!=='main')){a.active=false;a.returningHome=false;a.displayUntil=0;}update();
+}
+async function connect(ownedChild){
+  const stillConnecting=()=>child===ownedChild&&!quitting&&!dshUpdateTrialFailed;
   const r=await rpc('init',{rootId:state.rootId,resume:!!state.rootId,parentIds:[...new Set(state.actors.map(a=>a.parentSessionId).filter(Boolean))],taskIds:state.actors.filter(a=>a.kind==='task').map(a=>a.sessionId)});
+  if(!stillConnecting())return;
   const url=new URL(r.uiUrl);if(url.protocol!=='http:'||url.hostname!=='127.0.0.1')throw new Error('DSH 窗口地址不在本机。');
-  dshLaunchUrl=url.href;dshCookieFilter.setUrl(dshLaunchUrl);state.rootId=r.sessionId;state.dshRoot.sessionId=r.sessionId;state.connection='ready';state.error='';
+  dshLaunchUrl=url.href;dshCookieFilter.setUrl(dshLaunchUrl);
+  const trial=dshUpdateTrial;
+  if(trial){
+    const window=dshWindow;
+    if(!window||window.isDestroyed())throw new Error('DSH 更新验证窗口已关闭。');
+    await applySkinCookie(window.webContents.session,url.href,dshSkin);
+    if(!stillConnecting())return;
+    await dshUpdater.loadTrialPage(window,url);
+    if(!stillConnecting())return;
+    if(!dshUpdateStore.confirm(dshUpdateVersion))throw new Error('DSH 更新验证状态已变化。');
+    dshUpdateTrial=false;
+    clearTimeout(dshUpdateTrialTimer);
+    checkDshUpdateInBackground();
+  }
+  state.rootId=r.sessionId;state.dshRoot.sessionId=r.sessionId;state.connection='ready';state.error='';
   void mainChatRuntime?.refreshLobbyAccount({force:true});
   await Promise.all(['fish','qqbot'].map(async name=>{const revision=channelRevisions[name];try{const value=await channelAction(name,fishQqCoordinator.snapshot().selection[name]?'status':'pause');if(revision===channelRevisions[name])acceptChannelState(name,value);}catch{acceptChannelState(name,{enabled:false,phase:'error',reason:'渠道服务尚未就绪，请稍后重试。'});}}));
+  if(!stillConnecting())return;
   const frames=earlyFrames.get(r.sessionId);earlyFrames.delete(r.sessionId);for(const frame of frames||[])receive(frame,true);
   update();
-  if(dshWindow&&!dshWindow.isDestroyed()){await applySkinCookie(dshWindow.webContents.session,dshLaunchUrl,dshSkin);await dshWindow.loadURL(dshLaunchUrl);}
+  const window=dshWindow;
+  if(!trial&&window&&!window.isDestroyed()){
+    await applySkinCookie(window.webContents.session,url.href,dshSkin);
+    if(stillConnecting()&&!window.isDestroyed())await window.loadURL(url.href);
+  }
 }
 function startEngine(){
+  if(quitting||dshUpdateTrialFailed)return Promise.resolve();
   if(startPromise)return startPromise;
   startPromise=(async()=>{
+    if(dshUpdateTrial){
+      dshUpdateTrialTimer=setTimeout(()=>engineError(new Error('DSH 更新启动验证超时。')),120_000);
+      await openDsh();
+      if(quitting||dshUpdateTrialFailed)return;
+    }
     state.connection='starting';broadcast();
     assertDshRuntime(runtimePaths);
     prepareFishCare(runtimePaths,{baseDir:base});
@@ -659,7 +767,7 @@ function startEngine(){
     childLifecycle=createDshLifecycle(ownedChild,{onError:engineError,onClose:({code,error})=>{
       if(child!==ownedChild)return;
       for(const p of pending.values()){clearTimeout(p.timer);p.reject(new Error('DSH 已退出。'));}pending.clear();
-      child=null;childLifecycle=null;dshLaunchUrl=null;dshCookieFilter.setUrl(null);startPromise=null;
+      child=null;childLifecycle=null;connectingChild=null;dshLaunchUrl=null;dshCookieFilter.setUrl(null);startPromise=null;
       if(!quitting&&!error)engineError(new Error('DSH 已退出 ('+code+')。'+stderr.slice(-600)));
     }});
     child.stderr.on('data',d=>{stderr=(stderr+d.toString()).slice(-20000);fs.appendFileSync(path.join(data,'engine.log'),d);});
@@ -688,22 +796,35 @@ async function openDsh(){
     if(pet.isMinimized?.())pet.restore();
     if(!pet.webContents.isLoading())pet.showInactive();
   }}
-  if(dshWindow&&!dshWindow.isDestroyed()){dshWindow.show();app.focus({steal:true});dshWindow.focus();return;}
+  if(dshWindow&&!dshWindow.isDestroyed()){
+    dshWindow.show();app.focus({steal:true});dshWindow.focus();
+    await dshWindowOpening;
+    return;
+  }
   const workArea=screen.getDisplayNearestPoint?.(screen.getCursorScreenPoint?.())?.workArea || screen.getPrimaryDisplay().workArea;
   dshWindow=new BrowserWindow({...workbenchWindowOptions(process.platform,workArea,nativeTheme.shouldUseDarkColors),title:'Nekofans',backgroundColor:nativeTheme.shouldUseDarkColors?'#131C27':'#EDF3F8',show:false,webPreferences:{preload:path.join(base,'workbench-preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,partition:'persist:pet-dsh'}});
   dshCookieFilter.bind(dshWindow.webContents.session);
   communityController.bindHost(dshWindow);nativeDividerController.bind(dshWindow);nativeComposerController.bind(dshWindow);
   const clearAccountMenuLayer=()=>{nativeComposerController.setAccountMenuRect(null);videoFloatController.setAccountMenuRect(null);questionRelay.clear();};
   dshWindow.webContents.on('did-start-navigation',(_event,_url,_inPlace,isMainFrame)=>{if(isMainFrame)clearAccountMenuLayer();});
-  dshWindow.webContents.on('render-process-gone',clearAccountMenuLayer);
+  dshWindow.webContents.on('render-process-gone',()=>{
+    clearAccountMenuLayer();
+    if(dshUpdateTrial)engineError(new Error('DSH 更新验证期间，工作台页面进程退出。'));
+  });
   dshWindow.on('closed',()=>questionRelay.clear());
   dshWindow.webContents.on('did-finish-load',()=>{if(isWorkbenchOrigin(dshWindow.webContents.getURL())&&typeof dshWindow.webContents.executeJavaScript==='function')void dshWindow.webContents.executeJavaScript(fs.readFileSync(path.join(base,'screen-share-host.js'),'utf8')).catch(()=>{});});
   dshWindow.on('close',event=>{if(!quitting){event.preventDefault();dshWindow.hide();}});
   dshWindow.webContents.on('will-navigate',(event,url)=>{if(!/^https?:/.test(url))event.preventDefault();});
   dshWindow.webContents.setWindowOpenHandler(({url})=>/^https?:/.test(url)?{action:'allow',overrideBrowserWindowOptions:{webPreferences:{nodeIntegration:false,contextIsolation:true,sandbox:true,partition:'persist:pet-dsh'}}}:{action:'deny'});
-  if(dshLaunchUrl){await applySkinCookie(dshWindow.webContents.session,dshLaunchUrl,dshSkin);await dshWindow.loadURL(dshLaunchUrl);}
-  else await dshWindow.loadURL('data:text/html;charset=utf-8,'+encodeURIComponent('<meta charset="utf-8"><title>Nekofans</title><style>:root{color-scheme:light dark}body{margin:0;height:100vh;display:grid;place-items:center;font:14px system-ui,sans-serif;background:#EDF3F8;color:#4C5F73}@media (prefers-color-scheme:dark){body{background:#131C27;color:#9DB0C3}}</style><p>正在连接 Nekofans…</p>'));
-  dshWindow.show();app.focus({steal:true});dshWindow.focus();
+  const window=dshWindow;
+  const launchUrl=dshLaunchUrl;
+  const opening=(async()=>{
+    if(launchUrl){await applySkinCookie(window.webContents.session,launchUrl,dshSkin);await window.loadURL(launchUrl);}
+    else await window.loadURL('data:text/html;charset=utf-8,'+encodeURIComponent('<meta charset="utf-8"><title>Nekofans</title><style>:root{color-scheme:light dark}body{margin:0;height:100vh;display:grid;place-items:center;font:14px system-ui,sans-serif;background:#EDF3F8;color:#4C5F73}@media (prefers-color-scheme:dark){body{background:#131C27;color:#9DB0C3}}</style><p>正在连接 Nekofans…</p>'));
+  })();
+  dshWindowOpening=opening;
+  try{await opening;}finally{if(dshWindowOpening===opening)dshWindowOpening=null;}
+  if(!window.isDestroyed()&&!quitting){window.show();app.focus({steal:true});window.focus();}
 }
 function editMemory(){
   if(memoryWindow&&!memoryWindow.isDestroyed()){memoryWindow.show();memoryWindow.focus();return;}
@@ -875,6 +996,7 @@ function mainMenu(){return Menu.buildFromTemplate([
   {label:'养鱼',submenu:[{label:'聊天 API 设置…',click:editChatSettings},{label:'N.E.K.O. 记忆',submenu:memoryMenu()},{label:'渠道经历与主动搭话',submenu:channelLifeMenu()},{label:'社区日常',submenu:communityDailyMenu()},{label:'生活与 QQ 设置…',click:()=>openFishSettings().catch(engineError)}]},
   {type:'separator'},
   {label:'打开工作台',click:()=>openDsh().catch(engineError)},
+  ...(dshUpdater?[{label:dshAvailableVersion?'DSH '+dshAvailableVersion+' 可更新…':'检查 DSH 更新…',click:()=>{void showDshUpdate();}}]:[]),
   {label:'串门',click:openVisits},
   {label:'说话显示时长',submenu:speechDurationMenu()},
   {type:'separator'},
@@ -1210,6 +1332,7 @@ app.whenReady().then(async()=>{
   Menu.setApplicationMenu(Menu.buildFromTemplate([{label:'N.E.K.O.',submenu:[{label:'和大肥鱼说话',click:()=>showInput()},{label:'猫娘串门…',click:openVisits},{label:'主角色菜单',click:popupMainMenu},{label:'保存桌宠截图',accelerator:'CommandOrControl+Shift+S',click:capture},{label:'退出',role:'quit'}]},{label:'编辑',submenu:[{role:'undo'},{role:'redo'},{type:'separator'},{role:'cut'},{role:'copy'},{role:'paste'},{role:'selectAll'}]}]));
   createWindows();try{await startMainChat();}catch{if(!quitting)mainChatFailure();}
   if(quitting)return;
+  if(dshUpdater){checkDshUpdateInBackground();dshUpdateTimer=setInterval(checkDshUpdateInBackground,6*60*60_000);dshUpdateTimer.unref();}
   if(communityDaily.status().enabled){try{void ensureVisitsController().initialize().catch(()=>{}).finally(()=>communityDaily.start());}catch{communityDaily.start();}}else communityDaily.start();
   channelLife.start();startEngine().catch(engineError);connectNeko();if(process.env.PET_OPEN_WORKBENCH==='1')openDsh().catch(engineError);
 });
@@ -1218,6 +1341,8 @@ app.on('before-quit',event=>{
   if(shutdownComplete)return;
   event.preventDefault();
   if(shutdownStarted)return;
+  clearInterval(dshUpdateTimer);
+  clearTimeout(dshUpdateTrialTimer);
   channelLife.dispose();
   communityDaily.dispose();
   dshLoginBrowser.dispose();
