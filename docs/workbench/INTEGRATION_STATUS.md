@@ -10,6 +10,10 @@ The workbench's main process retains the seat credential. The bundled board rece
 
 The local story launcher can start and bind an explicitly configured project. Set `NEKO_STORY_PROJECT_DIR` to the absolute path of a trusted, compatible project containing `server.js` before launching the workbench. It is a separate development flow. The public multiplayer trial requires a configured relay. See [private chess trial](../../services/nekofans-game-hub/README.md) for setup, scope and verification.
 
+## QQ private chat continuation
+
+In Fish settings, the local owner can confirm a fresh QQ private pairing with **绑定并接续大肥鱼私聊**. The official QQ gateway relays new text from that one paired account into the current main companion conversation (DeepSeek workbench account or Chat API). The reply goes to the originating QQ private chat and the new turn appears on the desktop. Desktop turns are not pushed to QQ. Ordinary pairing keeps the independent QQ conversation. In daily mode, open **QQ 会话** from the left navigation to view newly tagged QQ turns in a dedicated page. Older untagged turns remain in main chat history. Closing continuation, pausing QQ, or changing the bot credentials or allowed chat scope blocks pending replies. Real account delivery has not been verified. The QQ profile keeps up to 4,096 recent delivery receipts across restarts. Each receipt stores a hash of the bot, private sender and message identifier. It is committed before handing a turn to the workbench, so the same delivery cannot start a second model call. If the app stops after claiming a turn but before replying, send a new message in QQ to continue.
+
 # Local integration 0.28.43-test.5 / build 88
 
 Windows test.5 uses the Bigfish icon in the notification area and uses the permitted owner-or-mention reply mode when a lobby disallows free speech. The saved trigger remains available in a channel that permits it. The targeted suite passed 158 checks. The separate rail placement assertion also fails on test.4.

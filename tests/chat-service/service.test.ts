@@ -616,3 +616,16 @@ test("dispose during a proposal never permits asynchronous state writes or later
   assert.equal(states.length, stateCount);
   assert.deepEqual(calls, ["slow"]);
 });
+
+test("QQ turns retain desktop context and tag both persisted messages", async () => {
+  const provider=fakeProvider([
+    [{delta:"记住了"}, {complete:"tag-desktop"}],
+    [{delta:"记得红茶"}, {complete:"tag-qq"}],
+  ]);
+  const chat=service(provider);
+  await chat.send("我喜欢红茶");
+  await chat.send("还记得吗", "qq");
+  assert.deepEqual(provider.inputs[1].messages.map(message=>message.text),["我喜欢红茶","记住了","还记得吗"]);
+  const qq=await store.recent("bigfish",chat.conversationId,40,"qq");
+  assert.deepEqual(qq.map(message=>[message.role,message.text]),[["user","还记得吗"],["assistant","记得红茶"]]);
+});

@@ -251,8 +251,17 @@ function installNekoAccountHabitat(ctx, options) {
   function nekoFlowBusy() { return ['checking','community','chatroom'].includes(nekoSnapshot?.login?.status); }
   function closeAccountMenu() { if (launcher?.element.getAttribute('aria-expanded') === 'true') launcher.element.click(); }
   function afterMenuClosed(callback) { closeAccountMenu(); win.setTimeout(() => { if (!stopped) callback(); }, 0); }
-  function workbenchSettings() {
-    const button=element('button','neh-workbench-settings','工作台设置');button.type='button';button.dataset.nekoWorkbenchSettings='';
+  const nativeMenuItem = 'button[role="menuitem"]:not([data-neko-workbench-settings])';
+  function workbenchSettings(nativeSettings) {
+    const button=element('button',nativeSettings.className);
+    button.type='button';button.dataset.nekoWorkbenchSettings='';button.setAttribute('role','menuitem');
+    // Keep the native icon and label styling without copying the action.
+    button.append(...Array.from(nativeSettings.childNodes,node=>node.cloneNode(true)));
+    for(const node of button.querySelectorAll('[id]'))node.removeAttribute('id');
+    const labels=doc.createTreeWalker(button,win.NodeFilter.SHOW_TEXT);
+    let label;
+    while((label=labels.nextNode()))if(/^(设置|settings)$/i.test(label.nodeValue.trim()))break;
+    if(label)label.nodeValue='工作台设置';else button.textContent='工作台设置';
     button.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();const returnFocus=launcher?.element;afterMenuClosed(()=>{doc.dispatchEvent(new win.CustomEvent('neko-workbench-open-settings',{detail:{tab:'general',returnFocus}}));});});
     return button;
   }
@@ -338,9 +347,9 @@ function installNekoAccountHabitat(ctx, options) {
       element('strong', 'neh-provider-balance', effectiveSignedIn(snap) ? balanceLabel(snap) : '登录后查看钱包余额'),
       element('span', 'neh-provider-source', '官方充值钱包'));
     menuRecord.owned.append(heading);
-    menuRecord.owned.append(workbenchSettings(),feedbackPanel());
+    menuRecord.owned.append(feedbackPanel());
     if (nekoSnapshot||typeof accountsBridge.nekoSignIn==='function'||typeof accountsBridge.communityLogin==='function')menuRecord.owned.append(nekoAccountCard());
-    menuRecord.owned.append(dsh, element('p', 'neh-menu-help', 'DSH 沿用本机工作账号；N.E.K.O. 登录与聊天室授权会自动衔接。'));
+    menuRecord.owned.append(dsh);
     if (focused) refresh.focus({ preventScroll: true });
     else if(focusedLogin)[...menuRecord.owned.querySelectorAll('[data-neko-login]')].find(button=>button.dataset.nekoLogin===focusedLogin&&!button.disabled)?.focus({preventScroll:true});
   }
@@ -378,7 +387,7 @@ function installNekoAccountHabitat(ctx, options) {
   }
   function releaseMenu() {
     if (!menuRecord) return;
-    pauseMedia(menuRecord.owned); menuRecord.owned.remove(); restoreAttributes(menuRecord);
+    pauseMedia(menuRecord.owned); menuRecord.owned.remove(); menuRecord.settings.remove(); restoreAttributes(menuRecord);
     menuRecord = null;
     reportMenuLayer();
   }
@@ -434,7 +443,7 @@ function installNekoAccountHabitat(ctx, options) {
     const summary = element('div', 'neh-service-summary');
     summary.append(element('strong', '', '账号'), element('span', '', '工作台账号'));
     const help = effectiveSignedIn(snap) ? '账号和充值可在下方设置中管理。' : '使用下方登录按钮连接账号。';
-    menuRecord.owned.append(heading,workbenchSettings(),feedbackPanel(),summary,habitat(snap,true),element('p','neh-menu-help',help));
+    menuRecord.owned.append(heading,feedbackPanel(),summary,habitat(snap,true),element('p','neh-menu-help',help));
   }
   function render() {
     if (stopped) return;
@@ -445,7 +454,7 @@ function installNekoAccountHabitat(ctx, options) {
     reportMenuLayer();
   }
   function matchAccountMenu(menu) {
-    const buttons = Array.from(menu.querySelectorAll('button[role="menuitem"]'));
+    const buttons = Array.from(menu.querySelectorAll(nativeMenuItem));
     const labels = buttons.map(button => {
       const label = button.querySelector('._itemLabel_4ub78_190');
       return (label || button).textContent.replace(/\s+/g, '').toLowerCase();
@@ -511,12 +520,15 @@ function installNekoAccountHabitat(ctx, options) {
       const menu = menus[0];
       const viewport = menu.querySelector('._viewport_4ub78_19[role="presentation"]') || menu.querySelector('[role="presentation"]');
       if (!viewport) releaseMenu();
-      else if (!menuRecord || menuRecord.element !== menu || !menuRecord.owned.isConnected) {
+      else if (!menuRecord || menuRecord.element !== menu || !menuRecord.owned.isConnected || !menuRecord.settings.isConnected) {
         releaseMenu();
         const own = element('div', 'neh-menu-card');
         own.setAttribute('data-neko-account-owned', 'menu-card');
         own.setAttribute('role', 'presentation');
-        menuRecord = { element: menu, owned: own, attributes: new Map(), renderKey: null };
+        const nativeSettings = menu.querySelector(nativeMenuItem);
+        const settings = workbenchSettings(nativeSettings);
+        nativeSettings.after(settings);
+        menuRecord = { element: menu, owned: own, settings, attributes: new Map(), renderKey: null };
         rememberSet(menuRecord, 'data-neko-account-habitat-menu', '');
         viewport.prepend(own); // Only our node is inserted; original buttons are untouched.
         if (accountsBridge) { if (signedIn) reader.refresh(); refreshNekoAccount(); }

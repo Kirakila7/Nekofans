@@ -16,7 +16,9 @@ test('avatar presentation restores Claude only in office, keeps retired role ent
  assert(roles.roles.some(role=>role.id==='claude'),'compatibility state retains the old role');
  assert.match(code,/snap\.state\.roles\.filter\(\(role\) => role\.id !== 'claude'\)\.map/);
  for(const name of ['builtinSrc','avatarName']){
-  const body=code.slice(code.indexOf('function '+name+'(id)'),code.indexOf('\n    }',code.indexOf('function '+name+'(id)'))+6);
+  const start=code.indexOf('function '+name+'(');
+  assert(start>=0,'avatar presentation function is present');
+  const body=code.slice(start,code.indexOf('\n    }',start)+6);
   let office=false;
   const fn=vm.runInNewContext('('+body+')',{AVATAR_ART:{bigfish:'fallback-fish',claude:'office-claude-art'},PLACEHOLDERS:{},DEFAULT_AVATAR:'yui',CUSTOM_NAME:'自定义',AVATARS:api.AVATARS,nekoOfficeEdition:()=>office,visibleAvatars:()=>office?[...api.AVATARS,{id:'claude',name:'Claude娘'}]:api.AVATARS});
   assert.equal(fn('claude'),name==='builtinSrc'?'fallback-fish':'大肥鱼');
@@ -24,5 +26,6 @@ test('avatar presentation restores Claude only in office, keeps retired role ent
   assert.equal(fn('claude'),name==='builtinSrc'?'office-claude-art':'Claude娘');
   office=false;
   assert.equal(fn('claude'),name==='builtinSrc'?'fallback-fish':'大肥鱼','returning to daily restores the daily presentation');
+  if(name==='builtinSrc')assert.equal(fn('claude',true),'office-claude-art','workbench appearance uses the selected portrait in daily mode');
  }
 });

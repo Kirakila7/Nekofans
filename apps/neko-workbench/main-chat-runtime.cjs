@@ -146,12 +146,12 @@ class WorkbenchMainChat {
   subscribe(listener) { this.listeners.add(listener); listener(this.read()); return () => this.listeners.delete(listener); }
   publish() { for (const listener of this.listeners) { try { listener(this.read()); } catch {} } }
   cancel() { const proactive=!!this.proactiveAbort;this.proactiveAbort?.abort();return this.opened?.service.cancel() || proactive; }
-  async send(text) {
+  async send(text, source) {
     this.proactiveAbort?.abort();
     if (this.closed || !usesChatService(this.backend) || !this.opened) throw new Error('请先启用聊天 API');
     if (this.backend === 'deepseek-account' && !this.accountProvider) throw new Error('工作台账号聊天尚未接入');
     if (typeof text !== 'string' || !text.trim() || text.length > 8000) throw new Error('请输入 1～8000 字的消息');
-    return this.opened.service.send(text);
+    return this.opened.service.send(text, source);
   }
   async generateProactive(entry,signal){
     if(this.closed||!usesChatService(this.backend)||!this.opened||this.opened.service.state().phase==='replying')throw Error('主角色正在忙');
@@ -270,11 +270,11 @@ class WorkbenchMainChat {
   prepareMedia(text,attachments){return this.media.prepare(text,attachments);}
   mediaMessage(message){const parsed=splitMessage(message.text);for(const a of parsed.attachments)this.visibleMediaIds.add(a.id);return {...message,text:parsed.text,...(parsed.attachments.length?{attachments:parsed.attachments}:{})};}
   readMedia(id){if(!this.visibleMediaIds.has(id))throw Error('请先在当前会话加载这张图片');return this.media.read(id);}
-  async history({beforeId,limit=200}={}) {
+  async history({beforeId,limit=200,source}={}) {
     if (!this.opened || this.closed) throw new Error('聊天记录暂不可用');
     const opened=this.opened;
     const store = new this.shared.SqliteConversationStore(path.join(this.dataDir, 'conversations.sqlite'));
-    try { const count=Math.max(1,Math.min(200,Number.isInteger(limit)?limit:200));const rows=beforeId?await store.pageBefore(PERSONA,opened.service.conversationId,beforeId,count):await store.recent(PERSONA,opened.service.conversationId,count);if(opened!==this.opened||this.closed)throw Error('会话已切换，请重新加载');return rows.map(m=>this.mediaMessage(m)); }
+    try { const count=Math.max(1,Math.min(200,Number.isInteger(limit)?limit:200));const rows=beforeId?await store.pageBefore(PERSONA,opened.service.conversationId,beforeId,count,source):await store.recent(PERSONA,opened.service.conversationId,count,source);if(opened!==this.opened||this.closed)throw Error('会话已切换，请重新加载');return rows.map(m=>this.mediaMessage(m)); }
     finally { store.close(); }
   }
   async memories() {

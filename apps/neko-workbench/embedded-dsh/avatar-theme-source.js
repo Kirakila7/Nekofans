@@ -132,7 +132,7 @@ const NekoAvatarTheme = (() => {
     const apply=(state) => {
       if(stopped)return
       const avatar=state?.avatar || {},known=Object.hasOwn(PALETTES,avatar.builtinId)
-      const id=avatar.builtinId==='claude' ? 'bigfish' : known ? avatar.builtinId : avatar.builtinId==='custom' ? 'custom' : 'yui'
+      const id=known ? avatar.builtinId : avatar.builtinId==='custom' ? 'custom' : 'yui'
       const data=id==='custom' && typeof avatar.customDataUrl==='string' ? avatar.customDataUrl : ''
       if(id===lastId && data===lastData)return
       lastId=id;lastData=data

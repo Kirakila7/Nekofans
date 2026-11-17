@@ -152,7 +152,7 @@ export class MainChatService implements MainChatPort {
     };
   }
 
-  async send(text: string): Promise<MainChatTurnResult> {
+  async send(text: string, source?: ChatMessage["source"]): Promise<MainChatTurnResult> {
     // Everything before the first await runs synchronously, so a second send() in the same
     // tick already sees this.turn.
     if (this.disposed) throw new Error("disposed");
@@ -163,7 +163,7 @@ export class MainChatService implements MainChatPort {
     const controller = new AbortController();
     this.turn = controller;
     try {
-      return await this.runTurn(input, controller.signal);
+      return await this.runTurn(input, controller.signal, source);
     } finally {
       if (this.turn === controller) this.turn = null;
     }
@@ -181,7 +181,7 @@ export class MainChatService implements MainChatPort {
     this.disposed = true;
   }
 
-  private async runTurn(input: string, signal: AbortSignal): Promise<MainChatTurnResult> {
+  private async runTurn(input: string, signal: AbortSignal, source?: ChatMessage["source"]): Promise<MainChatTurnResult> {
     let persona: Persona;
     try {
       persona = this.resolvePersona();
@@ -206,6 +206,7 @@ export class MainChatService implements MainChatPort {
       personaId,
       conversationId: this.conversationId,
       role: "user",
+      ...(source ? { source } : {}),
       text: input,
       createdAt: this.now(),
     };
@@ -304,6 +305,7 @@ export class MainChatService implements MainChatPort {
       personaId,
       conversationId: this.conversationId,
       role: "assistant",
+      ...(source ? { source } : {}),
       text: reply,
       createdAt: this.now(),
     };

@@ -535,3 +535,41 @@ test('QQ buffers complete replies, blocks split protocol markers and still deliv
   assert.deepEqual(f.fake.sends, [FORMAT_ERROR,'QQ连接成功']);
   assert.deepEqual(f.fake.streamUpdates, []);
 });
+
+test('confirmed private pairing routes text through companion IPC and returns only to its QQ conversation', async t => {
+  const access = {c2cMode:'disabled',c2cAllow:[],groupMode:'disabled',groupAllow:[]};
+  const f = await fixture(t, {...bound,access}, {sessions:true});
+  const handler = f.webRoutes.get('/qqbot-workbench/private-pairing');
+  async function request(action) {
+    const req=Readable.from(action?[JSON.stringify({action})]:[]);
+    req.method=action?'POST':'GET';
+    const res={statusCode:200,writeHead(status){this.statusCode=status;},end(body=''){this.body=body;}};
+    await handler(req,res);
+    assert.equal(res.statusCode,200);
+    return JSON.parse(res.body);
+  }
+  await f.wrapper.qqbotAction('start');
+  const {challenge}=await request('begin');
+  await tick();await tick();
+  let bot=f.fake.bots.at(-1);
+  bot.handlers.ready();
+  assert.equal(globalThis[RUNTIME]().capture({kind:'c2c',senderId:'chosen-user',content:challenge}),true);
+  await request('confirm-companion');
+  await tick();await tick();
+  bot=f.fake.bots.at(-1);
+  bot.handlers.ready();
+  assert.equal((await request()).companion,true);
+  const listener=id=>{
+    assert.deepEqual(f.wrapper.takeCompanion(id),{text:'local fixture'});
+    assert.equal(f.wrapper.replyCompanion(id,'接着上次聊'),true);
+  };
+  process.on('neko-qqbot-companion',listener);
+  t.after(()=>process.off('neko-qqbot-companion',listener));
+  await bot.handlers.message(message(bot));
+  assert.deepEqual(f.fake.sends,['接着上次聊']);
+  assert.equal(f.fake.followed,0,'does not open a second DSH session');
+  await request('disconnect-companion');
+  assert.equal((await request()).companion,false);
+  await bot.handlers.message(message(bot));
+  assert.equal(f.fake.followed,1,'ordinary QQ chat resumes');
+});
