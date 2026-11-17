@@ -1,6 +1,7 @@
 import {cpSync,existsSync,mkdirSync,readFileSync,writeFileSync,renameSync,readdirSync,statSync,openSync,readSync,writeSync,closeSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
+import {gameRuntimeFiles} from './neko-game-runtime-files.mjs';
 import {dirname,join,resolve,relative,isAbsolute} from 'node:path';
 import {packageWindowsInstaller} from './windows-installer.mjs';
 
@@ -65,7 +66,7 @@ export async function buildWindowsDaily({root,release,args}){
     writeFileSync(join(dshTarget,'RUNTIME_ORIGIN.json'),JSON.stringify({product:'DeepSeek Harness',version:value('--dsh-version')||'unknown',archiveSha256:sha(join(dshTarget,'app.asar')),bundledSupport:['app.asar.unpacked','runtime/primary-runtime','runtime/office-skills']},null,2)+'\n');
   }
   const destination=join(dir,'resources/workbench'),tracked=sourceManifest?.files||run('git',['ls-files','-z'],{cwd:root}).split('\0').filter(Boolean);
-  const files=tracked.filter(p=>p.startsWith('apps/neko-workbench/')||p.startsWith('packages/')||p.startsWith('config/')||p.startsWith('services/neko-memory/'));
+  const files=tracked.filter(p=>p.startsWith('apps/neko-workbench/')||p.startsWith('packages/')||p.startsWith('config/')||p.startsWith('services/neko-memory/')||gameRuntimeFiles.has(p));
   // Include the new bootstrap even before its first commit.
   const packagingFiles=['apps/neko-workbench/windows-bootstrap.cjs','apps/neko-workbench/windows-dsh-runtime.cjs'];
   files.push(...packagingFiles);

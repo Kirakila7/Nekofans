@@ -12,7 +12,7 @@ test('edition persistence migrates old profiles and leaves engine selections and
  assert.throws(()=>store.update({workbenchEdition:'codex'}));assert.equal(store.get().workbenchEdition,'office');
  fs.writeFileSync(file,JSON.stringify(oldRest));assert.equal(createWorkspaceLayout(file).get().workbenchEdition,'daily');
 });
-function fixture(t,{office=false,fail=false,nativeVideo=false,roomCompanion=false}={}){
+function fixture(t,{office=false,fail=false,nativeVideo=false,roomCompanion=false,gameHub}={}){
  const {store}=storeFor(t);if(office)store.update({workbenchEdition:'office'});
  const dom=new JSDOM('<body><div id="frame" style="display:grid;grid-template-columns:260px 760px 0px"><div id="track"><aside data-slot="sidebar"><button id="new" aria-label="新建会话">新建会话</button><nav><button id="tools">插件</button></nav><div data-neko-seat-mount></div><section data-slot="sidebar.workspaces"><button id="session">现有会话</button></section><footer><div data-slot="settings.launcher"><button aria-haspopup="menu" data-collapsed="false" data-signed-out="true" aria-label="登录">登录</button></div></footer></aside></div><main class="some_centerCol_HASH_42"><div data-composer-seat><div data-composer-card><textarea id="draft">工作草稿</textarea></div></div></main><div></div></div></body>',{runScripts:'outside-only',pretendToBeVisual:true});
  const w=dom.window,d=w.document,calls=[];const rect=(x,width,top=0,height=800)=>({left:x,right:x+width,top,bottom:top+height,width,height});
@@ -27,6 +27,7 @@ function fixture(t,{office=false,fail=false,nativeVideo=false,roomCompanion=fals
   bridge.home=async request=>{calls.push({channel:'home',...request});return {};};
   bridge.lobby=async request=>{calls.push({channel:'lobby',...request});return {ok:true,state:{connection:'online',auth:{status:'signed-in'},me:{user_id:'fixture'},channel:{id:'public'},messages:[],members:[],participation:{mode:'off',available:false}}};};bridge.subscribeLobby=()=>()=>{};
  }
+ if(gameHub)bridge.gameHub=async request=>{calls.push({channel:'game',...request});return gameHub(request);};
  if(nativeVideo){bridge.platform='win32';bridge.videoWindow=async request=>{calls.push({channel:'video',...request});return {open:request.action==='open'};};}
  for(const file of ['native-composer-source.js','chatroom-preview-source.js','workspace-shell-source.js','side-rail-source.js','unified-layout-source.js'])w.eval(fs.readFileSync(path.join(base,file),'utf8')+(file==='native-composer-source.js'?'\nwindow.createNativeComposerAdapter=createNativeComposerAdapter;':''));
  const stops=[];stops.push(w.installWorkbenchSideRail({window:w,document:d,bridge,openBilibiliHome:()=>{},cssText:fs.readFileSync(path.join(base,'side-rail-source.css'),'utf8')}));
@@ -37,6 +38,46 @@ function fixture(t,{office=false,fail=false,nativeVideo=false,roomCompanion=fals
  t.after(async()=>{stops.reverse().forEach(stop=>stop());await tick();dom.window.close();});return {w,d,store,calls,emitComposer:event=>composerEvent(event),defaultPreparations:()=>defaultPreparations,nativeDraft,emitDockVisibility:visible=>intersection?.callback([{target:intersection.target,isIntersecting:visible}])};
 }
 async function choose(d,id){d.querySelector('.neko-office-switch').click();await tick();}
+test('Windows office game studio previews a draft, publishes its revision and opens the room',async t=>{
+ const inviteUrl='https://play.nekofans.games/?room=abcdefghijklmnopqrstuvwx';
+ const {d,calls}=fixture(t,{office:true,roomCompanion:true,gameHub:request=>{
+  if(request.action==='copy-game-template')return {ok:true};
+  if(request.action==='draft-game')return {status:'draft',revisionId:'fixture-revision',preview:{title:'月球基地',description:'争夺基地',opening:'夜幕降临',choices:['修理','探索']}};
+  if(request.action==='publish-game')return {ok:true,status:'created',inviteUrl};
+  if(request.action==='private-copy-invite')return {ok:true};
+  if(request.action==='private-open-seat')return {status:'paired'};
+  return {status:'unavailable'};
+ }});
+ await tick();
+ const entry=d.querySelector('.neko-office-game-studio');
+ assert.equal(entry.hidden,false);
+ entry.click();
+ const dialog=d.querySelector('[data-dialog="game-studio"]');
+ assert.ok(dialog);
+ assert.match(dialog.textContent,/内置作品自动支持双人回合制/);
+ dialog.querySelector('.neko-game-copy-template').click();
+ await tick();
+ assert.ok(calls.some(request=>request.action==='copy-game-template'));
+ assert.match(dialog.textContent,/模板已复制/);
+ dialog.querySelector('textarea').value='两个人争夺月球基地';
+ dialog.querySelector('.neko-lobby-game-draft').click();
+ await tick();
+ assert.match(dialog.textContent,/月球基地/);
+ assert.match(dialog.textContent,/修理/);
+ assert.equal(calls.filter(r=>r.action==='publish-game').length,0);
+ dialog.querySelector('.neko-lobby-game-publish').click();
+ await tick();
+ assert.equal(d.body.dataset.nekoWorkbenchEdition,'daily');
+ assert.equal(entry.hidden,true);
+ assert.ok(d.querySelector('[data-dialog="game-room"] .neko-lobby-game-copy-invite'));
+ assert.deepEqual(calls.filter(r=>r.action==='publish-game').map(r=>r.revisionId),['fixture-revision']);
+ assert.deepEqual(calls.filter(r=>['private-copy-invite','private-open-seat'].includes(r.action)).map(({action,inviteUrl})=>({action,inviteUrl})),[
+  {action:'private-copy-invite',inviteUrl},
+  {action:'private-open-seat',inviteUrl},
+ ]);
+ assert.match(d.querySelector('[data-dialog="game-room"]').textContent,/邀请链接已复制/);
+ assert.equal(calls.some(r=>r.action==='share'||r.action==='send'),false);
+});
 test('bottom community login switches office to daily and opens the existing community owner without sending work',async t=>{
  const f=fixture(t,{office:true});await tick();const detail={};f.d.dispatchEvent(new f.w.CustomEvent('neko-account-open-community',{detail}));assert.equal(detail.handled,true);await detail.promise;await tick();assert.equal(f.d.body.dataset.nekoWorkbenchEdition,'daily');assert(f.calls.some(r=>r.action==='community-login'));assert(f.calls.some(r=>r.action==='open'&&r.site==='community'));assert.equal(f.d.querySelector('#draft').value,'工作草稿');assert(!f.calls.some(r=>r.action==='submit'||r.action==='send'));
 });
