@@ -129,3 +129,66 @@ window.addEventListener('message', event => {
 parent.postMessage({type:'nekofans:ready'}, '*');
 </script></html>`;
 }
+
+export function studioWorkshopHtml(definition) {
+  const game = validateStudioGame(definition);
+  if (!game) throw new TypeError('Invalid game studio definition');
+  const safeData = JSON.stringify(game).replaceAll('<', '\\u003c');
+  return `<html lang="zh-CN"><head><meta charset="utf-8">
+<style>
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:grid;align-items:center;padding:clamp(16px,5vw,48px);font:16px system-ui,sans-serif;background:#101b2c;color:#edf4ff}
+main{width:min(100%,660px);margin:auto;border:1px solid #4a6080;border-radius:20px;padding:clamp(18px,5vw,38px);background:#19283e}
+h1{font-size:clamp(24px,5vw,40px);margin:0 0 .45em}
+p{line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}
+#description{color:#bbcbe0}
+#scene{margin-top:1.5rem}
+#status{color:#b3d9ff}
+#choices{display:grid;gap:10px}
+button{font:inherit;text-align:left;color:inherit;border:1px solid #648bb8;border-radius:9px;padding:.75em 1em;background:#254265;cursor:pointer}
+button:disabled{opacity:.55;cursor:default}
+button:focus-visible{outline:2px solid #a8d5ff;outline-offset:3px}
+</style></head><body><main><h1 id="title"></h1><p id="description"></p>
+<p id="scene"></p><p id="status" role="status">等待同步</p><div id="choices"></div></main>
+<script>
+const game = ${safeData};
+const byId = id => document.getElementById(id);
+byId('title').textContent = game.title;
+byId('description').textContent = game.description;
+function choicesFor(state, player) {
+  const node = game.nodes[state.node];
+  return node.seat === player ? node.choices : [];
+}
+const room = NekofansGame.connect({
+  initialState: { node: 0 },
+  reducer(state, action, context) {
+    if (action.type !== 'choose' || !Number.isInteger(action.option)) return state;
+    const choice = choicesFor(state, context.player)[action.option];
+    return choice ? { node: choice.next } : state;
+  },
+  onChange(state, context) {
+    const node = game.nodes[state.node];
+    byId('scene').textContent = node.text;
+    const canChoose = context.isMyTurn && !context.agentActive && node.seat === context.player;
+    byId('status').textContent = node.choices
+      ? (canChoose ? '轮到你' : context.agentActive ? '伙伴接手中' : context.ready ? '等待对方操作' : '等待同步')
+      : (node.winner === 'draw' ? '平局' : node.winner === context.player ? '你赢了' : '好友获胜');
+    byId('choices').replaceChildren(...(node.choices ?? []).map(({ label }, option) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = label;
+      button.disabled = !canChoose;
+      button.addEventListener('click', () => room.submit({ type: 'choose', option }));
+      return button;
+    }));
+  },
+  onError(message) { byId('status').textContent = message; },
+  agent: {
+    observe(state) { return { title: game.title, objective: game.description, scene: game.nodes[state.node].text }; },
+    legalActions(state, context) {
+      return choicesFor(state, context.player).map(({ label }, option) => ({ label, action: { type: 'choose', option } }));
+    },
+  },
+});
+</script></body></html>`;
+}

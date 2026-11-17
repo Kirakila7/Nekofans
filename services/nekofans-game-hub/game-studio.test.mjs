@@ -1,5 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+import vm from 'node:vm';
 import {createGameStudio} from './game-studio.mjs';
 import {createRequire} from 'node:module';
 const {createCompanionAccountProvider}=createRequire(import.meta.url)('../../apps/neko-workbench/companion-account-provider.cjs');
@@ -46,4 +47,38 @@ test('invalid model responses and unsolicited chat histories are rejected',async
  assert.deepEqual(await createGameStudio({provider}).propose({prompt:'做游戏'}),{status:'invalid-proposal'});
  const ac=new AbortController();
  await assert.rejects(async()=>{for await(const e of provider.stream({persona:{id:'x'},signal:ac.signal,messages:[{role:'user',text:'one',conversationId:'private-game-rules'},{role:'user',text:'two',conversationId:'private-game-rules'}]}))void e;},/Private game context/);
+});
+
+test('a validated AI draft becomes a workshop game with the same choices and outcome', async () => {
+ const game = {title:'双人灯塔',description:'协作探索小岛',nodes:[
+   {text:'你发现了 <em>一盏灯</em>',seat:0,choices:[{label:'点灯',next:1}]},
+   {text:'灯照亮了另一块礁石',seat:1,choices:[{label:'前往礁石',next:2}]},
+   {text:'人们回到了家',winner:1},
+ ]};
+ const provider=createCompanionAccountProvider(async()=>({text:JSON.stringify(game)}),{namespace:'game-studio'});
+ const studio=createGameStudio({provider});
+ const draft=await studio.propose({prompt:'设计双人灯塔游戏'});
+ assert.equal(studio.workshopProject('missing'),null);
+ const project=studio.workshopProject(draft.revisionId);
+ assert.equal(project.title,game.title);
+ assert.equal(project.mode,'turns');
+ const source=project.html.match(/<script>([\s\S]*)<\/script>/)[1];
+ assert(!source.includes('<em>'));
+ const elements=new Map(), makeElement=()=>({children:[],replaceChildren(...children){this.children=children;},addEventListener(){}});
+ const document={getElementById(id){if (!elements.has(id))elements.set(id,makeElement());return elements.get(id);},createElement:makeElement};
+ let config;
+ vm.runInNewContext(source,{document,NekofansGame:{connect(value){config=value;return {submit(){}};}}});
+ let state=config.initialState;
+ config.onChange(state,{player:0,isMyTurn:true,ready:true});
+ assert.equal(elements.get('scene').textContent,game.nodes[0].text);
+ assert.equal(config.agent.legalActions(state,{player:1}).length,0);
+ const action=config.agent.legalActions(state,{player:0})[0].action;
+ const ignored=config.reducer(state,action,{player:1});
+ assert.equal(ignored.node,0);
+ state=config.reducer(state,action,{player:0});
+ assert.equal(state.node,1);
+ state=config.reducer(state,{type:'choose',option:0},{player:1});
+ assert.equal(state.node,2);
+ config.onChange(state,{player:1,ready:true});
+ assert.equal(elements.get('status').textContent,'你赢了');
 });
