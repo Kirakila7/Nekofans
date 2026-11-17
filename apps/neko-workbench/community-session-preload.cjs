@@ -95,6 +95,38 @@ if(process.isMainFrame&&location.origin==='https://community.project-neko.cn'){
   if(!Number.isSafeInteger(id)||id<1||location.origin!=='https://community.project-neko.cn')return;
   const reply=value=>ipcRenderer.send('workbench:community-game-ticket-result',{id,...value});
   const op=input?.op;
+  if(op==='workshop-identity'||op==='workshop-publish'){
+   try{
+    const session=current();
+    if(!session.token)return reply({status:'sign-in-required'});
+    const identity=await read();
+    if(!same(session,current()))return reply({status:'account-changed'});
+    if(identity?.status!=='signed-in')return reply({status:identity?.status==='signed-out'?'sign-in-required':'unavailable'});
+    if(op==='workshop-identity')return reply({status:'ready',userId:identity.userId});
+    if(!/^[A-Za-z0-9_-]{32}$/.test(input.state||''))return reply({status:'unavailable'});
+    const target=new URL(input.origin);
+    if(target.origin!==input.origin || target.protocol!=='https:'&&!(target.protocol==='http:'&&target.hostname==='127.0.0.1'))return reply({status:'unavailable'});
+    const params=new URLSearchParams({state:input.state,operation:'publish',target:'workshop'});
+    const response=await fetch('/api/game-seats/authorize?'+params,{
+     method:'POST',redirect:'error',cache:'no-store',signal:AbortSignal.timeout(8000),
+     headers:{Accept:'application/json',Authorization:'Bearer '+session.token},
+    });
+    if(!same(session,current()))return reply({status:'account-changed'});
+    if(response.status===401)return reply({status:'sign-in-required'});
+    if(response.status===403)return reply({status:'forbidden'});
+    if(!response.ok)return reply({status:'unavailable'});
+    const raw=await response.text();
+    if(raw.length>4096)return reply({status:'unavailable'});
+    const destination=new URL(JSON.parse(raw).location);
+    const hash=new URLSearchParams(destination.hash.slice(1));
+    const ticket=hash.get('communitySeat');
+    if(!same(session,current()))return reply({status:'account-changed'});
+    if(destination.origin!==target.origin||destination.pathname!=='/'||destination.search!=='?publish=1'||
+       destination.username||destination.password||[...hash].length!==1||!ticket||ticket.length>2040||
+       !/^[-\w]+\.[-\w]+\.[-\w]+$/.test(ticket))return reply({status:'unavailable'});
+    return reply({status:'ready',userId:identity.userId,ticket});
+   }catch{return reply({status:'unavailable'});}
+  }
   if(op!=='inbox'&&op!=='send')return reply({status:'unavailable'});
   if(op==='send'&&(!/^[a-f0-9-]{36}$/.test(input.target||'')||!/^[A-Za-z0-9_-]{24}$/.test(input.room||'')))return reply({status:'unavailable'});
   try{

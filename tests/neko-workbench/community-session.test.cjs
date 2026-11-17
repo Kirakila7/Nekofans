@@ -96,3 +96,19 @@ test('cancel during server verification invalidates only the pending login click
  let release;const f=fixture(t,{fetchImpl:()=>new Promise(resolve=>{release=resolve;})});f.w.localStorage.setItem('neko_oauth_access_token','synthetic-token');const button=f.w.document.querySelector('button');button.getClientRects=()=>[{}];let clicks=0;button.onclick=()=>clicks++;
  const pending=f.handlers['workbench:community-web-login']();f.handlers['workbench:community-web-login-cancel']();release(response({id:'verified-user'}));await pending;await new Promise(resolve=>setImmediate(resolve));assert.equal(clicks,0);assert.equal(f.sent.at(-1)[1].status,'signed-in');
 });
+test('workshop authorization reuses the signed-in community session and returns a scoped ticket',async t=>{
+ const state='a'.repeat(32),origin='https://workshop.nekofans.games';
+ const f=fixture(t,{fetchImpl:async route=>route==='/api/users/me'?response({id:me}):
+  Response.json({location:origin+'/?publish=1#communitySeat=fixture.payload.signature'})});
+ f.w.localStorage.setItem('neko_oauth_access_token','fixture-community-private');
+ const command=f.handlers['workbench:community-game-ticket'];
+ await command({},51,{op:'workshop-identity'});
+ assert.deepEqual(structuredClone(f.sent.at(-1)[1]),{id:51,status:'ready',userId:me});
+ await command({},52,{op:'workshop-publish',state,origin});
+ assert.deepEqual(structuredClone(f.sent.at(-1)[1]),{id:52,status:'ready',userId:me,ticket:'fixture.payload.signature'});
+ const [route,request]=f.requests.at(-1);
+ assert.equal(route,'/api/game-seats/authorize?state='+state+'&operation=publish&target=workshop');
+ assert.equal(request.redirect,'error');
+ assert.equal(request.headers.Authorization,'Bearer fixture-community-private');
+ assert.doesNotMatch(JSON.stringify(f.sent),/fixture-community-private/);
+});

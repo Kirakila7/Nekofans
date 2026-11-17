@@ -24,6 +24,8 @@ const {WorkbenchMainChat,trustedLocalCaller,PERSONA}=require('./main-chat-runtim
 const {createMemoryViewer}=require('./memory-viewer.cjs');
 const {createCompanionAccountProvider}=require('./companion-account-provider.cjs');
 const {parsePrivateRoomInvite,parseGameLaunchUrl}=require('../../services/nekofans-game-hub/private-game-origin.cjs');
+const {createGameWorkshop,workshopOrigin}=require('./game-workshop.cjs');
+const {createWorkshopWindow}=require('./game-workshop-window.cjs');
 const usesMainChatService=backend=>backend==='chat-api'||backend==='deepseek-account';
 const {createVisitsController}=require('./visits/controller.cjs');
 const {createWorkbenchCommunity}=require('./community-friends.cjs');
@@ -64,6 +66,8 @@ let dshSkin=null;
 const dshCookieFilter=createDshLoopbackCookieFilter();
 let visitsWindow,visitsController;
 let communityDailySettingsWindow;
+let desktopWorkshop, workshopAccount;
+const workshopWindow=createWorkshopWindow({BrowserWindow});
 const workbenchOnly=process.env.PET_WORKBENCH_ONLY==='1'; // Local visual QA only; normal launches show every pet.
 const {cleanPrompt,humanMessage,activity,acceptHuman}=require('./pet-context.js');
 const base=__dirname, runtimePaths=resolveRuntimePaths({baseDir:base});
@@ -118,8 +122,14 @@ const nativeComposerController=createNativeComposerController({WebContentsView,B
 const communityController=createSocialController({WebContentsView,openExternal:url=>shell.openExternal(url),copyText:text=>clipboard.writeText(text),
   onHide:()=>communityAccount?.cancel(),
   onAccountState:value=>{
-    if(value.status==='signed-in'||value.status==='signed-out')
-      privateGameRuntime?.communitySeatOwnerChanged(value.userId??null);
+    if(value.status==='signed-in'||value.status==='signed-out'){
+      const owner=value.userId??null;
+      privateGameRuntime?.communitySeatOwnerChanged(owner);
+      if(workshopAccount!==owner){
+        if(workshopAccount){desktopWorkshop?.invalidate();workshopWindow.close();}
+        workshopAccount=owner;
+      }
+    }
     unifiedNekoLogin?.communityChanged(value);publishNekoAccount();
   },
   onState:(host,value)=>{if(host===dshWindow&&!host.isDestroyed()&&isWorkbenchOrigin(host.webContents.getURL())){host.webContents.send('workbench:community-state',value);nativeDividerController.setEnabled(communityController.hasVisibleView);nativeDividerController.raise(value.status==='ready');nativeComposerController.raise();}},
@@ -1091,7 +1101,14 @@ ipcMain.handle('workbench:lobby',async(event,request)=>{
 let privateGameStudio=null,privatePrototypeRelay=null,storyPrototypeLauncher=null;
 let pendingGameInvite=null;
 function queueGameInvite(value) {
-  const inviteUrl=parseGameLaunchUrl(value);
+  let inviteUrl=parseGameLaunchUrl(value);
+  if(!inviteUrl&&typeof value==='string'&&value.length<=500){
+    try{
+      const url=new URL(value);
+      if(url.protocol==='nekofans:'&&url.host==='join'&&!url.pathname&&!url.hash&&!url.username&&!url.password&&
+         [...url.searchParams].length===1)inviteUrl=gameWorkshop().parseRoom(url.searchParams.get('invite'))?.inviteUrl;
+    }catch{}
+  }
   if(!inviteUrl)return false;
   pendingGameInvite=inviteUrl;
   void app.whenReady().then(async()=>{
@@ -1143,8 +1160,52 @@ function storyPrototype(){
     relay:prototypeRelay(),
   });
 }
+function gameWorkshop(){
+  return desktopWorkshop??=createGameWorkshop({
+    origin:workshopOrigin(process.env.NEKO_WORKSHOP_ORIGIN||undefined),
+    getAccount:()=>communityController.accountState,
+    getTicket:request=>communityController.readGameTicket(dshWindow,request),
+    openPage:workshopWindow.open,
+  });
+}
+async function handleWorkshop(request){
+  try{
+    const workshop=gameWorkshop();
+    switch(request.action){
+      case 'workshop-config':return {ok:true,origin:workshop.origin};
+      case 'workshop-publish-draft':{
+        const project=typeof request.revisionId==='string'&&privateGameStudio?.workshopProject(request.revisionId);
+        if(!project)return {ok:false,status:'not-found',error:'找不到这次生成的稿件，请重新制作。'};
+        return {ok:true,project:await workshop.publish(project)};
+      }
+      case 'workshop-publish-html':return {ok:true,project:await workshop.publish(request.project)};
+      case 'workshop-list':return {ok:true,projects:await workshop.list()};
+      case 'workshop-create':return {ok:true,...await workshop.create(request.gameId)};
+      case 'workshop-open-room':await workshop.openRoom(request.inviteUrl);return {ok:true};
+      case 'workshop-copy-room':{
+        const room=workshop.parseRoom(request.inviteUrl);
+        if(!room)break;
+        clipboard.writeText(room.inviteUrl);
+        return {ok:true};
+      }
+      case 'workshop-share-room':{
+        const room=workshop.parseRoom(request.inviteUrl);
+        if(!room||!room.inviteUrl.startsWith('https:'))break;
+        const label=typeof request.title==='string'?request.title.replace(/[\u0000-\u001f\u007f」]/g,' ').trim().slice(0,60):'';
+        const text='来一起玩「'+(label||'Nekofans 联机游戏')+'」：'+room.inviteUrl;
+        const sender=lobbyController.prepareGameInvitation?.();
+        const result=sender?await sender(text):{status:'not-sent'};
+        return {ok:result.status==='shared',status:result.status};
+      }
+    }
+    return {ok:false,status:'invalid',error:'游戏操作无效。'};
+  }catch(failure){
+    return {ok:false,status:failure.status||'unavailable',error:failure.status?failure.message:'游戏工坊暂时无法连接，请稍后重试。'};
+  }
+}
 ipcMain.handle('workbench:game-hub',async(event,request)=>{
   assertWorkbenchCaller(event);
+  if(typeof request?.action==='string'&&request.action.startsWith('workshop-'))return handleWorkshop(request);
   const {createGameHubBridge}=require('./game-hub-bridge.cjs');
   const gameCatalog=require('../../services/nekofans-game-hub/game-catalog.cjs');
   const bridge=createGameHubBridge({lobbyController,privateGame:gameRuntime,gameCatalog,

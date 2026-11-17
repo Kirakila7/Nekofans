@@ -78,6 +78,8 @@ function installWorkspaceShell(options = {}) {
   }) : null;
   if (lobby) { own(lobby.panel); releases.push(lobby.dispose); }
   async function enterGameRoom(inviteUrl, notice) {
+    const opened=await lobby.openWorkshopInvite(inviteUrl);
+    if(opened)return opened.ok===true;
     if (isOfficeEdition() && !await saveLayout({workbenchEdition:'daily'})) return false;
     lobby.show();
     lobby.openGameRoom(inviteUrl, notice);
@@ -1743,6 +1745,36 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
   let draft = C ? C.create() : null, assistOpen = false, menuFor = null, dialog = null, lastMode = null, nudgeSeen = null, membersKey = '', cardKey = '';
   let browsingHistory = false, loadingOlder = false, messageMenuAnchor = null;
   const rows = new Map();
+  const hasWorkshop=typeof bridge.gameWorkshop==='function';
+  let workshopOrigin=null,workshopConfig=null;
+  async function workshopCall(request){
+    try{return await bridge.gameWorkshop(request);}
+    catch{return {ok:false,error:'游戏工坊暂时无法连接，请稍后重试。'};}
+  }
+  function getWorkshopOrigin(){
+    if(!hasWorkshop)return Promise.resolve(null);
+    workshopConfig??=workshopCall({action:'workshop-config'}).then(result=>{
+      if(result?.ok&&typeof result.origin==='string'){
+        workshopOrigin=result.origin;
+        if(!disposed){rows.clear();render();}
+      }
+      return workshopOrigin;
+    });
+    return workshopConfig;
+  }
+  function isWorkshopInvite(value){
+    if(!workshopOrigin)return false;
+    try{
+      const url=new URL(value);
+      return url.origin===workshopOrigin&&url.pathname==='/'&&!url.username&&!url.password&&!url.hash&&
+        [...url.searchParams].length===1&&/^[A-Za-z0-9_-]{12}$/.test(url.searchParams.get('room')||'');
+    }catch{return false;}
+  }
+  async function openWorkshopInvite(inviteUrl){
+    if(!await getWorkshopOrigin()||!isWorkshopInvite(inviteUrl))return null;
+    return workshopCall({action:'workshop-open-room',inviteUrl});
+  }
+
   const svg = (tag, attrs) => { const n = doc.createElementNS('http://www.w3.org/2000/svg', tag); for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v); return n; };
   const railButton = button('', 'neko-side-rail__button neko-lobby-switch', () => toggle());
   railButton.setAttribute('aria-label', '频道 · 公共大厅'); railButton.title = '频道 · 公共大厅'; railButton.setAttribute('aria-expanded', 'false');
@@ -2019,13 +2051,27 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
       if (source) quote.appendChild(source.deleted ? el('span', 'neko-lobby-deleted', '消息已删除') : richText(Array.from(source.text || '').slice(0, 80).join(''), 'neko-lobby-quote__text'));
       bubble.appendChild(quote);
     }
-    const invite = !m.deleted && typeof bridge.gameHub === 'function'
-      ? /^(?:来一起玩「([^\r\n]{1,80})」：)?(https:\/\/(?:[a-z0-9-]+\.trycloudflare\.com|play\.nekofans\.games)\/\?room=[A-Za-z0-9_-]{24})$/.exec((m.text || '').trim())
+    const candidate = !m.deleted && typeof bridge.gameHub === 'function'
+      ? /^(?:来一起玩「([^\r\n]{1,80})」：)?(https?:\/\/[^\s]+)$/.exec((m.text || '').trim())
       : null;
-    if (invite) {
-      const [, title, inviteUrl] = invite;
+    const workshopInvite=candidate&&isWorkshopInvite(candidate[2]);
+    const privateInvite=candidate&&/^https:\/\/(?:[a-z0-9-]+\.trycloudflare\.com|play\.nekofans\.games)\/\?room=[A-Za-z0-9_-]{24}$/.test(candidate[2]);
+    if (workshopInvite || privateInvite) {
+      const [, title, inviteUrl] = candidate;
       if (title) bubble.appendChild(el('span','neko-lobby-game-invite-title',title));
-      bubble.appendChild(button('加入游戏','neko-lobby-game-join',()=>openDialog('game-room',inviteUrl)));
+      const status=el('span','neko-lobby-game-status');status.setAttribute('role','status');status.hidden=true;
+      const joinGame=button('加入游戏','neko-lobby-game-join',async()=>{
+        if(!workshopInvite){openDialog('game-room',inviteUrl);return;}
+        joinGame.disabled=true;
+        try{
+          const result=await openWorkshopInvite(inviteUrl);
+          if(result?.status==='sign-in-required')signIn.hidden=false;
+          status.textContent=result?.ok?'已在 Nekofans 打开房间。':result?.error||'暂时无法加入游戏。';
+          status.hidden=false;
+        }finally{joinGame.disabled=false;}
+      });
+      const signIn=button('连接社区账号','neko-lobby-game-connect',()=>void beginSignIn());signIn.hidden=true;
+      bubble.append(joinGame,signIn,status);
     } else {
       bubble.appendChild(m.deleted ? el('p', 'neko-lobby-deleted', '消息已删除') : richText(m.text, 'neko-lobby-text'));
     }
@@ -2765,15 +2811,90 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     if(inviteUrl){invite.value=inviteUrl;invite.readOnly=true;}
     const join=button('加入游戏','neko-lobby-game-open-room',async()=>{
       if(!invite.value.trim()){invite.focus();return;}
-      if(!enterRoom){openDialog('game-room',invite.value.trim());return;}
       join.disabled=true;
-      try{if(!await enterRoom(invite.value))status.textContent='未能进入聊天室，请重试。';}
-      finally{join.disabled=false;}
+      try{
+        const opened=await openWorkshopInvite(invite.value.trim());
+        if(opened){status.textContent=opened.ok?'已打开房间。':opened.error||'暂时无法加入房间。';return;}
+        if(!enterRoom){openDialog('game-room',invite.value.trim());return;}
+        if(!await enterRoom(invite.value))status.textContent='未能进入聊天室，请重试。';
+      }finally{join.disabled=false;}
     });
     invite.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();join.click();}});
-    return {nodes:[field('邀请链接',invite,'入座后，在房间里提交本方秘密规则。'),join,status],request:()=>null};
+    const studio=hasWorkshop?button('制作或上传游戏','neko-workshop-open-studio',
+      ()=>openDialog('game-studio',null,enterInvitedRoom)):null;
+    return {nodes:[field('邀请链接',invite,'使用朋友发给你的游戏房间链接。'),join,...(studio?[studio]:[]),status],request:()=>null};
+  }
+  function workshopProjectFields() {
+    const actions=el('section','neko-lobby-game-room-controls neko-workshop-project-actions');
+    const status=el('p','neko-lobby-game-status');status.setAttribute('role','status');
+    const caption=el('strong','neko-workshop-picked-game');
+    const signedIn=button('连接社区账号','neko-workshop-sign-in',()=>void beginSignIn());
+    signedIn.hidden=true;
+    let project=null,inviteUrl='',busy=false;
+    function report(result, text){
+      if(!actions.isConnected)return;
+      signedIn.hidden=result?.status!=='sign-in-required';
+      status.textContent=result?.ok?text:result?.error||
+        (result?.status==='delivery-unknown'?'没有收到确认，请在聊天室查看消息。':'暂时无法完成，请稍后重试。');
+    }
+    async function perform(request, done, text){
+      if(busy)return;
+      busy=true;actions.setAttribute('aria-busy','true');
+      try{
+        const result=await workshopCall(request);
+        report(result,text);
+        if(actions.isConnected&&result?.ok)done?.(result);
+      }finally{busy=false;actions.removeAttribute('aria-busy');}
+    }
+    function select(value){
+      project=value;inviteUrl='';caption.textContent=value.title;
+      room.hidden=true;create.hidden=false;
+    }
+    const create=button('用这个作品开房','neko-workshop-create',()=>{
+      if(project)void perform({action:'workshop-create',gameId:project.id},result=>{
+        inviteUrl=result.inviteUrl;room.hidden=false;create.hidden=true;
+      },'房间已创建，可以分享给朋友。');
+    });
+    create.hidden=true;
+    const room=el('div','neko-workshop-room-actions');room.hidden=true;
+    room.append(
+      button('打开房间','neko-workshop-open',()=>void perform({action:'workshop-open-room',inviteUrl},null,'已打开房间。')),
+      button('分享到聊天室','neko-workshop-share',()=>void perform({action:'workshop-share-room',inviteUrl,title:project?.title},null,'房间邀请已发到聊天室。')),
+      button('复制链接','neko-workshop-copy',()=>void perform({action:'workshop-copy-room',inviteUrl},null,'已复制邀请链接。'))
+    );
+    const library=el('div','neko-workshop-my-projects');
+    const myProjects=button('我的作品','neko-workshop-library',()=>void perform({action:'workshop-list'},result=>{
+      library.replaceChildren(...result.projects.map(item=>button(item.title,'neko-workshop-project',()=>select(item))));
+    },'选择作品后可以开新房。'));
+    const upload=el('details','neko-workshop-upload');
+    const file=el('input');file.type='file';file.accept='.html,.htm,text/html';file.setAttribute('aria-label','联机 HTML 文件');
+    const title=el('input');title.maxLength=60;title.setAttribute('aria-label','作品名称');
+    const mode=el('select');mode.setAttribute('aria-label','联机方式');
+    for(const [value,label]of [['turns','轮流操作'],['shared','共同操作']]){
+      const entry=el('option','',label);entry.value=value;mode.append(entry);
+    }
+    file.addEventListener('change',()=>{const chosen=file.files?.[0];if(chosen)title.value=chosen.name.replace(/\.html?$/i,'').slice(0,60);});
+    const uploadButton=button('上传并发布','neko-workshop-upload-action',async()=>{
+      const chosen=file.files?.[0];
+      if(!chosen||chosen.size>512*1024||!title.value.trim()){
+        report({error:'请选择不超过 512 KB 的 HTML 文件，并填写作品名称。'});return;
+      }
+      if(uploadButton.disabled||busy)return;
+      uploadButton.disabled=true;
+      try{
+        const html=await chosen.text();
+        await perform({action:'workshop-publish-html',project:{title:title.value,mode:mode.value,html}},
+          result=>{select(result.project);upload.open=false;},'作品已上传，可以开房。');
+      }catch{report({error:'无法读取所选文件，请重新选择。'});}
+      finally{uploadButton.disabled=false;}
+    });
+    upload.append(el('summary','','上传游戏'),field('联机 HTML 文件',file),field('作品名称',title),field('联机方式',mode),uploadButton);
+    actions.append(caption,create,room,myProjects,library,upload,status,signedIn);
+    return {node:actions,publish:revisionId=>perform({action:'workshop-publish-draft',revisionId},
+      result=>select(result.project),'作品已发布，可以开房。')};
   }
   function gameFields(enterRoom) {
+    const workshop=hasWorkshop?workshopProjectFields():null;
     const url = el('input', 'neko-lobby-game-url'); url.type = 'url'; url.setAttribute('aria-label', '游戏邀请链接'); url.placeholder = 'https://…/?room=…';
     const server = el('input','neko-lobby-game-server'); server.type='url'; server.setAttribute('aria-label','游戏服务器'); server.placeholder='https://play.nekofans.games';
 
@@ -2890,7 +3011,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     const multiplayerInfo=el('div','neko-game-multiplayer-info');
     multiplayerInfo.append(
       el('strong','','内置作品自动支持双人回合制'),
-      el('p','neko-lobby-field__hint','用其他 Coding Agent 做游戏？复制模板，让它添加联机模式，再到独立游戏工坊发布 HTML。')
+      el('p','neko-lobby-field__hint',workshop?'已有联机 HTML 时，可以直接上传。':'用其他 Coding Agent 做游戏？复制模板，让它添加联机模式，再到独立游戏工坊发布 HTML。')
     );
     const templateStatus=el('p','neko-lobby-field__hint');
     templateStatus.setAttribute('role','status');
@@ -2943,11 +3064,18 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
       }finally{draft.disabled=publish.disabled=false;}
     });
     publish.disabled=true;
-    preview.append(gameName,description,opening,choices,publish);
+    const publishToWorkshop=workshop?button('发布到游戏工坊','neko-workshop-publish',async()=>{
+      if(!revisionId||publishToWorkshop.disabled||draft.disabled)return;
+      publishToWorkshop.disabled=true;
+      try{await workshop.publish(revisionId);}
+      finally{publishToWorkshop.disabled=false;}
+    }):null;
+    preview.append(gameName,description,opening,choices,publishToWorkshop||publish);
     const advanced=el('details','neko-lobby-game-advanced');
     advanced.append(el('summary','','高级设置'),field('游戏服务器',server),pairing,publicKey,connect,field('自己的席位配对码',pairCode,'已在浏览器入座时使用。'),pairSeat,field('本地原型房间码',relayRoom),field('本地原型地址',relayOrigin),relayHeading,relayState,storyStart,storyBlack,storyHost,relayStop,relayStart,relayBind,relayStatus,relayCommand,relayWarning);
     const samples=el('details','neko-lobby-game-studio');
     samples.append(el('summary','','试玩示例'),field('示例游戏',gamePicker),inviteFriend,create);
+    if(workshop)advanced.append(el('p','neko-lobby-field__hint','使用原来的秘密规则棋局服务建房'),publish);
     async function open(){
       const {games,teammateName}=await callGame({action:'private-games'})||{};
       if(!gamePicker.isConnected)return;
@@ -2960,7 +3088,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
       inviteFriend.textContent = inviteEnabled ? '创建房间并邀请好友' : '创建并复制好友邀请';
       publish.textContent = inviteEnabled ? '开房并邀请好友' : '开房并复制好友邀请';
     }
-    return {nodes:[multiplayer,field('描述你想玩的游戏',prompt,'创造台可以制作双人回合制游戏。'),draft,preview,gameState,resultActions,identityNote,samples,advanced],open,syncInviteAvailability,request:()=>null};
+    return {nodes:[multiplayer,field('描述你想玩的游戏',prompt,'创造台可以制作双人回合制游戏。'),draft,preview,...(workshop?[workshop.node]:[]),gameState,resultActions,identityNote,samples,advanced],open,syncInviteAvailability,request:()=>null};
   }
   function catFields() {
     const settings = snap?.catSettings || {}, part = snap?.participation || {}, own = snap?.me?.cat;
@@ -3156,6 +3284,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     finishFriendLogin(value?.login);
   });}catch{}}
   call({ action: 'state' });
+  void getWorkshopOrigin();
   if (typeof bridge.gameInvites === 'function') {
     void checkInviteAvailability();
     inviteStatusTimer = doc.defaultView.setInterval(() => {
@@ -3170,7 +3299,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     disposed = true;loginReturn=null;clearTimeout(inboxTimer);doc.defaultView.clearInterval(inviteStatusTimer); if (typeof release === 'function') release();if(typeof releaseNeko==='function')releaseNeko(); rows.clear(); if (dialog) { dialog.cleanup?.(); dialog.node.remove(); dialog = null; } doc.removeEventListener('pointerdown', dismissMessageMenu); doc.removeEventListener('focusin', dismissMessageMenu); panel.remove(); railButton.remove();
   }
   return { panel, railButton, show, hide, isOpen: () => open, dialogOpen: () => !!dialog, place, renderStatus,
-    openFriends,openGameInbox,
+    openFriends,openGameInbox,openWorkshopInvite,
     openGameStudio: enterRoom=>openDialog('game-studio',null,enterRoom),
     openGameInvite: (inviteUrl,enterRoom)=>openDialog('game-invite',inviteUrl,enterRoom),
     openGameRoom: (inviteUrl,notice)=>openDialog('game-room',inviteUrl,null,notice),

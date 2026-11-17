@@ -39,7 +39,7 @@ function snapshot(over={}){
   outbox:[],catSettings:{mode:'assist'},cat:{},suggestion:null,nudge:null,error:'',...over};
 }
 
-function setup(t,{lobby=true,snap=snapshot(),respond,composer=true,home=false,officeMode='dsh',workbenchEdition,unifiedLogin=null,projectUnavailableCodex=false,gameHub=null,subscribeGameInvite=null,friends=null,gameInvites=null}={}){
+function setup(t,{lobby=true,snap=snapshot(),respond,composer=true,home=false,officeMode='dsh',workbenchEdition,unifiedLogin=null,projectUnavailableCodex=false,gameHub=null,gameWorkshop=null,subscribeGameInvite=null,friends=null,gameInvites=null}={}){
  const dom=new JSDOM('<body><aside data-neko-side-rail><div class="neko-side-rail__theme"></div></aside><div data-slot="sidebar"><button data-neko-new-session="plus">+</button><div data-neko-seat-mount></div><div data-slot="sidebar.workspaces">native</div><div data-slot="settings.launcher"></div></div><main><textarea>native draft</textarea></main></body>',{runScripts:'outside-only'});
  t.after(()=>dom.window.close());
  const {window:w}=dom,doc=w.document;doc.querySelector('[data-slot="sidebar"]').getBoundingClientRect=()=>({right:300});
@@ -50,6 +50,7 @@ function setup(t,{lobby=true,snap=snapshot(),respond,composer=true,home=false,of
   subscribeCommunity:fn=>{community=fn;return()=>{};},companion:async()=>({}),
   workspace:async r=>{if(r.action==='update')layout={...layout,...r.patch};if(r.action==='codex-state')return {status:'idle',items:[],approvals:[]};if(r.action==='catalog')return {sessions:[],projects:[],providers:{dsh:'ready'}};return structuredClone(projectUnavailableCodex&&layout.officeMode==='codex'?{...layout,officeMode:'dsh',codexAvailable:false}:layout);}};
  if(gameHub)bridge.gameHub=gameHub;
+ if(gameWorkshop)bridge.gameWorkshop=gameWorkshop;
  if(gameInvites)bridge.gameInvites=gameInvites;
  if(friends)bridge.friends=friends;
  if(subscribeGameInvite)bridge.subscribeGameInvite=subscribeGameInvite;
@@ -699,4 +700,50 @@ test('local home and lobby retain independent navigation and home stage',{skip:D
  const lobby=doc.querySelector('.neko-lobby-panel'),open=doc.querySelector('[aria-label="打开公共聊天室"]');open.click();await tick();
  assert(!lobby.hidden,'opening lobby shows its own panel');assert.match(stage.textContent,/home fixture/,'home is not destroyed');
  doc.querySelector('.neko-lobby-back').click();await tick();assert(lobby.hidden);home.click();await tick();assert(!homeView.hidden);assert.match(stage.textContent,/home fixture/);
+});
+
+test('game hub publishes a generated project and shares an invite that opens in Nekofans',{skip:DOM_SKIP},async t=>{
+ const origin='https://workshop.nekofans.games',inviteUrl=origin+'/?room=abcdefghijkl',calls=[];
+ const docFixture=setup(t,{workbenchEdition:'office',
+   gameHub:async request=>request.action==='draft-game'?{status:'draft',revisionId:'revision-1',
+     preview:{title:'雾岛灯塔',description:'两人轮流探险',opening:'涨潮前',choices:['点亮灯塔']}}:{},
+   gameWorkshop:async request=>{
+     calls.push(structuredClone(request));
+     switch(request.action){
+       case 'workshop-config':return {ok:true,origin};
+       case 'workshop-publish-draft':return {ok:true,project:{id:'game-fixture',title:'雾岛灯塔'}};
+       case 'workshop-create':return {ok:true,inviteUrl};
+       default:return {ok:true};
+     }
+   },
+ });
+ const {doc}=docFixture;
+ await tick();
+ doc.querySelector('.neko-office-game-studio').click();
+ doc.querySelector('.neko-lobby-game-prompt').value='做一个双人灯塔游戏';
+ doc.querySelector('.neko-lobby-game-draft').click();
+ await tick();
+ doc.querySelector('.neko-workshop-publish').click();
+ await tick();
+ assert.equal(doc.querySelector('.neko-workshop-picked-game').textContent,'雾岛灯塔');
+ doc.querySelector('.neko-workshop-create').click();
+ await tick();
+ doc.querySelector('.neko-workshop-share').click();
+ await tick();
+ assert.deepEqual(calls.slice(1,4),[
+   {action:'workshop-publish-draft',revisionId:'revision-1'},
+   {action:'workshop-create',gameId:'game-fixture'},
+   {action:'workshop-share-room',title:'雾岛灯塔',inviteUrl},
+ ]);
+ assert.match(doc.querySelector('.neko-workshop-project-actions').textContent,/房间邀请已发到聊天室/);
+ doc.querySelector('[data-dialog="game-studio"] button[aria-label="关闭"]')?.click();
+ doc.querySelector('.neko-lobby-switch').click();
+ await tick();
+ const text='来一起玩「雾岛灯塔」：'+inviteUrl;
+ docFixture.push(snapshot({messages:[msg(30,human(ZS,'好友'),'human','好友',text),
+   msg(31,human(ZS,'好友'),'human','好友',text+'#untrusted')]}));
+ assert.equal(rowOf(doc,31).querySelector('.neko-lobby-game-join'),null);
+ rowOf(doc,30).querySelector('.neko-lobby-game-join').click();
+ await tick();
+ assert.deepEqual(calls.at(-1),{action:'workshop-open-room',inviteUrl});
 });

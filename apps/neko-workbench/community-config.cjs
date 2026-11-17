@@ -814,24 +814,25 @@ function createSocialController(options = {}) {
       if(ticketRequests.size>=4)return {status:'unavailable'};
       const id=++ticketId;
       return await new Promise(resolve=>{
-        ticketRequests.set(id,{contents,resolve,timer:setTimeout(()=>finishTicket(id,{status:'unavailable'}),10000)});
+        ticketRequests.set(id,{contents,resolve,op:input?.op,timer:setTimeout(()=>finishTicket(id,{status:'unavailable'}),input?.op==='workshop-publish'?18000:10000)});
         try{contents.send('workbench:community-game-ticket',id,input);}catch{finishTicket(id,{status:'unavailable'});}
       });
     }catch{return {status:'unavailable'};}
   }
   function acceptGameTicket(event,value){
-    const contents=ticketRequests.get(value?.id)?.contents;
+    const request=ticketRequests.get(value?.id),contents=request?.contents;
     const origin=new URL(DEFAULT_COMMUNITY_URL).origin;
     if(!contents||contents.isDestroyed()||event.sender!==contents||event.senderFrame!==contents.mainFrame||
        parseWebUrl(event.senderFrame?.url)?.origin!==origin||parseWebUrl(contents.getURL())?.origin!==origin)return false;
     if(['unavailable','sign-in-required','account-changed','forbidden'].includes(value.status)){
       finishTicket(value.id,{status:value.status});return true;
     }
-    if(value.status!=='ready'||typeof value.userId!=='string'||typeof value.ticket!=='string'||value.ticket.length>2040)return false;
+    if(value.status!=='ready'||typeof value.userId!=='string'||
+       request.op!=='workshop-identity'&&(typeof value.ticket!=='string'||value.ticket.length>2040))return false;
     if(accountState.status!=='signed-in'||accountState.userId!==value.userId){
       finishTicket(value.id,{status:'account-changed'});return true;
     }
-    finishTicket(value.id,{status:'ready',userId:value.userId,ticket:value.ticket});return true;
+    finishTicket(value.id,{status:'ready',userId:value.userId,...(request.op!=='workshop-identity'?{ticket:value.ticket}:{})});return true;
   }
   return Object.freeze({ action, readFriends, readFriendAvatar, acceptFriends, readGameTicket, acceptGameTicket,
     get accountState(){return {...accountState};},

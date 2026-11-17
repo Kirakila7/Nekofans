@@ -516,3 +516,9 @@ body[data-neko-workspace-shell] .neko-chatroom-preview::before { content:''; pos
 .neko-game-multiplayer-template > p { flex-basis:100%; margin:0; }
 .neko-lobby-game-invite-title { margin-inline-end:8px; }
 .neko-lobby-bubble .neko-lobby-game-join { padding:5px 10px; border:1px solid var(--nws-border); border-radius:8px; background:var(--nws-hover); color:var(--nws-text); cursor:pointer; font:inherit; }
+
+.neko-workshop-project-actions { padding:12px; border:1px solid var(--nws-border); border-radius:12px; }
+.neko-workshop-picked-game:empty,.neko-workshop-my-projects:empty,.neko-workshop-project-actions [role="status"]:empty { display:none; }
+.neko-workshop-room-actions:not([hidden]),.neko-workshop-my-projects { display:flex; flex-wrap:wrap; gap:8px; }
+.neko-workshop-upload { padding:3px 0; }
+.neko-workshop-upload summary { cursor:pointer; }

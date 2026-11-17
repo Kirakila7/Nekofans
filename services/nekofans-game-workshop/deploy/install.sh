@@ -42,7 +42,11 @@ fi
 chmod 600 /etc/nekofans-games.env
 chown -R nekofans-games:nekofans-games /var/lib/nekofans-games
 cp "$source_dir/deploy/nekofans-games.service" /etc/systemd/system/nekofans-games.service
-cat > /etc/nginx/sites-available/nekofans-games <<EOF
+nginx_site=/etc/nginx/sites-available/nekofans-games
+# Certificate tooling may have added HTTPS and redirects to this file.
+# Keep the existing virtual host on upgrades.
+if [[ ! -f $nginx_site ]]; then
+  cat > "$nginx_site" <<EOF
 server {
   listen 80;
   server_name ${game_host};
@@ -57,13 +61,14 @@ server {
   }
 }
 EOF
-ln -sfn /etc/nginx/sites-available/nekofans-games /etc/nginx/sites-enabled/nekofans-games
+fi
+ln -sfn "$nginx_site" /etc/nginx/sites-enabled/nekofans-games
 nginx -t
 systemctl daemon-reload
-systemctl enable --now nekofans-games
+systemctl enable nekofans-games
 systemctl restart nekofans-games
+curl -fsS --retry 8 --retry-connrefused --retry-delay 1 --max-time 3 http://127.0.0.1:3088/healthz
 systemctl reload nginx
-curl -fsS http://127.0.0.1:3088/healthz
 echo
 echo "测试入口：http://${game_host}"
 echo '发布凭证位于 /etc/nekofans-games.env 的 PUBLISH_KEY 项；请仅由服主管理。'
