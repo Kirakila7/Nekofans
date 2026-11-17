@@ -1,5 +1,11 @@
 # 本版验证记录
 
+2026-11-18，香港 Ubuntu 24.04 x64。固定源码 `123685b` 与官方 Node.js 24.13.1 下载指纹均已核对。工坊 11 项测试通过，`nekofans-games.service` 已在 127.0.0.1:3088 启动。新增 `workshop.nekofans.games` A 记录，沿用既有 Caddy 提供 HTTPS，配置验证通过并留存原配置备份。本机外网和服务器均收到 `/healthz` 200 与 `ok: true`，既有 `play.nekofans.games` 首页继续返回 200。
+
+公网工坊当前没有预置作品。`/api/config` 的 `publishEnabled`、`adminPublish`、`demo`、`communitySeats` 均为 `false`，真实社区授权接口尚待维护者上线，实名发布、账号入座、真实 DeepSeek 与两台设备完整完局尚未验收。
+
+另在本机验证了部署包的隔离 HTTPS 代理与两个模拟社区账号，包括原生窗口入座、完整完局和服务端进程重启恢复。2026-11-18 新增社区维护者 HTTP 签发模块测试，工坊共 12 项通过。历史记录如下。
+
 2026-11-14，Windows／Node 24。6 项回归通过，包括真实本机 HTTP/WebSocket 和 SDK。另用 Edge 的独立桌面和窄屏浏览器上下文复测了两个合成身份、入座和刷新恢复、Agent 接手和撤回，以及通过 Ollama 夹具发现模型和按席位选择队友。没有使用真实 DeepSeek、N.E.K.O. 或 Ollama 推理，也没有部署公网服务。
 
 2026-11-07，本机 Windows / Node，使用合成玩家与本机服务。

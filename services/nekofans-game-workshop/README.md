@@ -65,6 +65,8 @@ npm run preview
 
 工坊启用社区授权后，作品页会显示「用 N.E.K.O. 账号建房」。已登录社区的好友打开房间链接即可入座。游戏服务器把席位与社区用户的稳定 ID 关联。同一个账号可以用另一台设备打开同一房间链接，恢复原席位和进度。
 
+社区维护者的 HTTP 适配模块、前端路由和公钥交换步骤见 [授权接入说明](community/INTEGRATION.md)。
+
 1. 在社区前端挂载 `/game-seats/authorize`。使用 `community/seat-authorization.mjs` 和社区已有的 OAuth 登录状态。将现有 access token 通过同源请求发给 `/api/game-seats/authorize`。如果会话过期，调用社区现有的登录流程，登录后回到同一个授权页面继续。
 2. 在社区后端挂载 `POST /api/game-seats/authorize`。用现有社区认证中间件验证请求，再调用 `server/community-seats.mjs` 的 `createCommunitySeatAuthorizer`。`authenticate` 返回可信的 `{id, name}`，其中 `id` 与 `/api/users/me` 返回的 `user.id` 一致。将返回的 `status` 和 `{location}` 写回，响应头设为 `Cache-Control: no-store`。签名私钥放在社区服务端，`gameOrigin` 固定为工坊的 HTTPS 域名。
 3. 在工坊服务配置 `PUBLIC_ORIGIN`、`NEKO_GAME_COMMUNITY_ORIGIN` 和 `NEKO_GAME_COMMUNITY_PUBLIC_KEY`。最后一个值是签名公钥 PEM 文件的路径。重启工坊后 `/api/config` 的 `communitySeats` 应为 `true`。
@@ -72,6 +74,8 @@ npm run preview
 游戏票据有效期为 45 秒，只能用于发起请求的浏览器和指定作品或房间。公开房间链接只包含房间号。社区 OAuth 凭证只在社区域名内使用，游戏页面接收的房间状态只包含玩家显示名和对局数据。
 
 ## Ubuntu 24.04 部署
+
+香港现有主机使用 Caddy，新工坊使用独立的 `nekofans-games.service` 和本地 3088 端口。已有 Caddy 的主机可参照 `deploy/Caddyfile` 添加独立站点，先验证配置再 reload。下面的安装脚本适用于使用 Nginx 的独立主机。
 
 ### 社区账号正式入口
 

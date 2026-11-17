@@ -1,0 +1,6 @@
+WORKSHOP_DOMAIN {
+  encode gzip
+  reverse_proxy 127.0.0.1:3088 {
+    header_up X-Nekofans-Client-IP {remote_host}
+  }
+}
