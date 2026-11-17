@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { generateKeyPairSync } from 'node:crypto';
+import { createServer } from 'node:http';
 import test from 'node:test';
 import { createGameWorkshop, parseWorkshopRoom } from '../../../apps/neko-workbench/game-workshop.cjs';
 import { createApp } from '../server/index.mjs';
-import { createCommunitySeatAuthorizer } from '../server/community-seats.mjs';
+import { createGameAuthorizationHandler } from '../community/http-authorization.mjs';
 const official = 'https://community.project-neko.cn';
 const owner = { id: '11111111-1111-4111-8111-111111111111', name: '红帽' };
 const guest = { id: '22222222-2222-4222-8222-222222222222', name: '蓝帽' };
@@ -20,7 +21,14 @@ test('desktop uses signed authorization through publish, library, create, and op
   const app = createApp({ directory: null, publicOrigin: origin, community: { issuer: official, publicKey } });
   await new Promise(resolve => app.server.listen(0, '127.0.0.1', resolve));
   t.after(() => app.close());
-  const issued = createCommunitySeatAuthorizer({ issuer: official, gameOrigin: origin, privateKey, authenticate: async account => account });
+  const accounts = new Map([[`Bearer fixture-${owner.id}`, owner], [`Bearer fixture-${guest.id}`, guest]]);
+  const community = createServer(createGameAuthorizationHandler({
+    issuer: official, gameOrigin: origin, privateKey,
+    authenticate: async request => accounts.get(request.headers.authorization),
+  }));
+  await new Promise(resolve => community.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise(resolve => community.close(resolve)));
+  const authorize = `http://127.0.0.1:${community.address().port}/api/game-seats/authorize`;
   const fetchImpl = (url, options) => {
     const target = new URL(url);
     assert.equal(target.origin, origin);
@@ -35,7 +43,12 @@ test('desktop uses signed authorization through publish, library, create, and op
         identity = { status: 'signed-in', userId: account.id };
         if (input.op === 'workshop-identity') return { status: 'ready', userId: account.id };
         assert.equal(input.op, 'workshop-publish');
-        const { location } = await issued(account, new URLSearchParams({ state: input.state, operation: 'publish', target: 'workshop' }));
+        const query = new URLSearchParams({ state: input.state, operation: 'publish', target: 'workshop' });
+        const response = await fetch(`${authorize}?${query}`, {
+          method: 'POST', headers: { Origin: official, Authorization: `Bearer fixture-${account.id}` },
+        });
+        assert.equal(response.status, 200);
+        const { location } = await response.json();
         const ticket = new URLSearchParams(new URL(location).hash.slice(1)).get('communitySeat');
         return { status: 'ready', userId: account.id, ticket };
       },
