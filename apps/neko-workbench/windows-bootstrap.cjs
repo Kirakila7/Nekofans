@@ -8,16 +8,31 @@ if(local.profileName!==undefined&&(typeof local.profileName!=='string'||! /^[A-Z
 const data=process.env.NEKO_WORKBENCH_DATA_DIR||local.dataDir||path.join(app.getPath('appData'),local.profileName||'N.E.K.O. Workbench');
 const workspace=process.env.NEKO_WORKBENCH_WORKSPACE||local.workspaceDir||path.join(app.getPath('documents'),'NEKOfuns',...(local.profileName?[local.profileName]:[]),'workspaces');
 for(const value of [data,workspace])if(typeof value!=='string'||!path.isAbsolute(value))throw Error('工作台数据和工作区需要绝对路径');
-const {resolveWindowsDsh}=require(path.join(process.resourcesPath,'workbench/apps/neko-workbench/windows-dsh-runtime.cjs'));
-const dsh=resolveWindowsDsh({resourcesPath:process.resourcesPath,homeDir:app.getPath('home'),programFiles:process.env.ProgramFiles,explicitInstall:local.dshInstall,bundledOnly:local.bundledDshOnly===true});
+const {resolveWindowsDsh,readWindowsDshVersion}=require(path.join(process.resourcesPath,'workbench/apps/neko-workbench/windows-dsh-runtime.cjs'));
+const bundledOnly=local.bundledDshOnly===true;
+let dsh=resolveWindowsDsh({resourcesPath:process.resourcesPath,homeDir:app.getPath('home'),programFiles:process.env.ProgramFiles,explicitInstall:local.dshInstall,bundledOnly});
 delete process.env.ELECTRON_RUN_AS_NODE;
-if(!dsh){app.whenReady().then(()=>{dialog.showErrorBox('工作引擎未找到',local.bundledDshOnly?'内置工作引擎不完整，请重新解包 Nekofans。':'请先安装 DeepSeek Harness，再打开 Nekofans。');app.quit();});}
+if(!dsh){app.whenReady().then(()=>{dialog.showErrorBox('工作引擎未找到',bundledOnly?'内置工作引擎不完整，请重新解包 Nekofans。':'请安装受支持的 DeepSeek Harness，或重新安装 Nekofans。');app.quit();});}
 else {
+  let dshVersion='';
+  try{dshVersion=readWindowsDshVersion(dsh.resources);}catch{/* Retain legacy external engine startup. */}
+  const extractor=path.join(process.resourcesPath,'dsh-update-tools/7z.exe');
+  const updateEnabled=dsh.bundled&&dshVersion&&fs.existsSync(extractor);
+  let trial=false;
+  if(updateEnabled){
+    const {createDshUpdateStore}=require(path.join(process.resourcesPath,'workbench/apps/neko-workbench/windows-dsh-update.cjs'));
+    const cached=createDshUpdateStore(data).select(dshVersion);
+    if(cached){dsh={...dsh,resources:cached.resources};dshVersion=cached.version;trial=cached.trial;}
+  }
   Object.assign(process.env,{
     NEKO_WORKBENCH_DATA_DIR:data,NEKO_WORKBENCH_WORKSPACE:workspace,
     NEKO_WORKBENCH_ELECTRON_USER_DATA:path.join(data,'electron'),
     NEKO_WORKBENCH_DSH_CLI:path.join(dsh.resources,'app.asar/dsh/node_modules/@deepseek-ai/dsh-desktop-host/lib/cli.js'),
     NEKO_WORKBENCH_DSH_MODULES:path.join(dsh.resources,'app.asar/dsh/node_modules/@deepseek-ai'),
+    NEKO_WORKBENCH_DSH_VERSION:dshVersion,
+    NEKO_WORKBENCH_DSH_SOURCE:dsh.bundled?'内置':'本机安装',
+    NEKO_WORKBENCH_DSH_UPDATE_EXTRACTOR:updateEnabled?extractor:'',
+    NEKO_WORKBENCH_DSH_UPDATE_TRIAL:trial?'1':'',
     NEKO_WORKBENCH_DSH_HOME:'',NEKO_WORKBENCH_DSH_PROFILE:'web',DSH_DESKTOP_NODE_EXECUTABLE:'',
     PET_OPEN_WORKBENCH:'1',PET_WORKBENCH_ONLY:''
   });
