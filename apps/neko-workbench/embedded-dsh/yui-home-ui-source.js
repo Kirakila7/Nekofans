@@ -1,5 +1,5 @@
 // Workbench-local building surface. The original Yui home remains separate.
-async function mountYuiHome(stage, options = {}) {
+async function mountYuiBlockHome(stage, options = {}) {
   const doc = stage.ownerDocument, win = options.window || doc.defaultView, bridge = options.bridge || win?.nekoWorkbench;
   if (typeof bridge?.home !== 'function') throw new Error('工作台家园连接不可用。');
   const el = (tag, cls, text) => { const n = doc.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; };

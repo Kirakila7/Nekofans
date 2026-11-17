@@ -20,7 +20,7 @@ function installWorkbenchSideRail(options = {}) {
   for (const [key, value] of Object.entries({ d: 'M5 4.5h14a1.5 1.5 0 0 1 1.5 1.5v12a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 18V6A1.5 1.5 0 0 1 5 4.5Zm4.5 0v15M13 9l3 3-3 3', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.6, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' })) expandPath.setAttribute(key, value);
   expandIcon.appendChild(expandPath); expand.appendChild(expandIcon);
   const bili = doc.createElement('button'); bili.type = 'button'; bili.className = 'neko-side-rail__button neko-side-rail__bilibili neko-community neko-bilibili';
-  bili.dataset.nekoVideoEntry = ''; bili.setAttribute('aria-haspopup', 'menu'); bili.setAttribute('aria-expanded', 'false');
+  bili.dataset.nekoVideoEntry = ''; bili.dataset.videoPlatform = 'bilibili';
   bili.setAttribute('aria-label', '哔哩哔哩主页'); bili.title = '哔哩哔哩主页';
   const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true');
@@ -29,20 +29,6 @@ function installWorkbenchSideRail(options = {}) {
   const path = doc.createElementNS('http://www.w3.org/2000/svg', 'path');
   for (const [key, value] of Object.entries({ d: 'M7 2.5 10 6m7-3.5L14 6M8 11v3m8-3v3M9 20l-1 1m7-1 1 1', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.7, 'stroke-linecap': 'round' })) path.setAttribute(key, value);
   svg.append(rect, path); bili.appendChild(svg);
-  const youtubeIcon = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  youtubeIcon.setAttribute('viewBox', '0 0 24 24'); youtubeIcon.setAttribute('aria-hidden', 'true'); youtubeIcon.setAttribute('hidden','');
-  const youtubeBox = doc.createElementNS('http://www.w3.org/2000/svg', 'rect');
-  for (const [key,value] of Object.entries({x:2,y:5,width:20,height:14,rx:4,fill:'none',stroke:'currentColor','stroke-width':1.7})) youtubeBox.setAttribute(key,value);
-  const youtubePlay = doc.createElementNS('http://www.w3.org/2000/svg', 'path');
-  for (const [key,value] of Object.entries({d:'M10 9v6l5-3z',fill:'currentColor'})) youtubePlay.setAttribute(key,value);
-  youtubeIcon.append(youtubeBox,youtubePlay); bili.appendChild(youtubeIcon);
-  const videoMenu = doc.createElement('div'); videoMenu.className = 'neko-side-rail__video-menu'; videoMenu.id = 'neko-video-platform-menu'; videoMenu.hidden = true;
-  videoMenu.setAttribute('role','menu'); videoMenu.setAttribute('aria-label','选择视频平台'); bili.setAttribute('aria-controls',videoMenu.id);
-  const videoOptions = {};
-  for (const [platform,label] of [['bilibili','B站'],['youtube','YouTube']]) {
-    const item = doc.createElement('button'); item.type = 'button'; item.dataset.platform = platform;
-    item.setAttribute('role','menuitemradio'); item.textContent = label; videoOptions[platform] = item; videoMenu.appendChild(item);
-  }
   const fish = doc.createElement('button'); fish.type = 'button'; fish.className = 'neko-side-rail__button neko-side-rail__fish';
   const fishLabel = (options.fishLabel || '养鱼设置').replace('养鱼界面', '养鱼设置');
   fish.setAttribute('aria-label', fishLabel); fish.title = fishLabel;
@@ -50,12 +36,12 @@ function installWorkbenchSideRail(options = {}) {
   if (/^data:image\/(?:png|webp|jpeg);base64,/.test(options.fishAvatar || '')) image.src = options.fishAvatar;
   fish.appendChild(image);
   const account = doc.createElement('button'); account.type = 'button'; account.className = 'neko-side-rail__button neko-side-rail__account';
-  account.setAttribute('aria-label', '账号与额度'); account.setAttribute('aria-haspopup', 'menu'); account.title = '账号与额度';
+  account.setAttribute('aria-label', '账号与设置'); account.setAttribute('aria-haspopup', 'menu'); account.title = '账号与设置';
   const accountImage = doc.createElement('img'); accountImage.alt = ''; accountImage.draggable = false;
   if (/^data:image\/(?:png|webp|jpeg);base64,/.test(options.accountAvatar || '')) accountImage.src = options.accountAvatar;
   account.appendChild(accountImage);
   const notice = doc.createElement('p'); notice.className = 'neko-side-rail__notice'; notice.hidden = true; notice.setAttribute('role', 'status');
-  bottom.append(expand, bili, fish, account); rail.append(theme, space, bottom, notice, videoMenu);
+  bottom.append(expand, bili, fish, account); rail.append(theme, space, bottom, notice);
   // The upstream DSH sidebar handle clamps its width like a navigation rail.
   // The left content area is a primary surface, so give it a live grid divider.
   const chatDivider = doc.createElement('div'); chatDivider.className = 'neko-chat-sidebar-divider'; chatDivider.hidden = true;
@@ -63,8 +49,10 @@ function installWorkbenchSideRail(options = {}) {
   chatDivider.setAttribute('aria-label', '调整左侧内容和工作区宽度');
   chatDivider.title = '拖动调整宽度 · 双击恢复 3:1 · 方向键调整';
   let preferredRatio = 1, restoreRatio = .75, chatFrame = null, chatCenter = null, oldChatGrid = null, chatDrag = null, lastChatGeometry = null;
-  // One remembered width shared by the Chat and Work layouts.
-  let gridMode = null;
+  // Office and social layouts have separate remembered widths. Office always
+  // keeps both the project list and work area visible.
+  let gridMode = null, officeRatio = null, socialRatio = 1;
+  const socialFloatingOnly = options.socialFloatingOnly === true;
   let nativeDividerKey = '';
   function postNativeDivider(rect) {
     if (typeof bridge.divider !== 'function') return;
@@ -105,9 +93,21 @@ function installWorkbenchSideRail(options = {}) {
     if (oldChatGrid?.value) chatFrame.style.setProperty('--neko-chat-sidebar-grid', oldChatGrid.value, oldChatGrid.priority);
     else chatFrame.style.removeProperty('--neko-chat-sidebar-grid');
     chatFrame = null; chatCenter = null; oldChatGrid = null; lastChatGeometry = null; chatDivider.hidden = true;
-    if (doc.body.hasAttribute('data-neko-workspace-collapsed')) doc.body.removeAttribute('data-neko-workspace-collapsed');
+    if (!doc.body.hasAttribute('data-neko-daily-compact') && doc.body.hasAttribute('data-neko-workspace-collapsed')) doc.body.removeAttribute('data-neko-workspace-collapsed');
     postNativeDivider(null);
     win.dispatchEvent(new win.Event('resize'));
+  }
+  const windowsHost = bridge.platform === 'win32';
+  const titlebar = windowsHost ? doc.createElement('header') : null;
+  let windowDark = null;
+  if (titlebar) {
+    mark(doc.body, 'data-neko-window-chrome', 'windows');
+    titlebar.className = 'neko-window-titlebar'; titlebar.dataset.nekoWindowTitlebar = '';
+    const brand = doc.createElement('span'); brand.className = 'neko-window-titlebar__brand';
+    const iconSrc = options.accountAvatar || options.fishAvatar;
+    if (iconSrc) { const icon = doc.createElement('img'); icon.src = iconSrc; icon.alt = ''; brand.appendChild(icon); }
+    const name = doc.createElement('span'); name.textContent = 'Nekofans'; brand.appendChild(name);
+    titlebar.appendChild(brand); doc.body.prepend(titlebar);
   }
   function findChatFrame(sidebar) {
     // On current DSH the sidebar slot is display:contents. The grid track is
@@ -129,11 +129,12 @@ function installWorkbenchSideRail(options = {}) {
     const reserve = center.width > 0 && center.right > bounds.left && center.right <= bounds.right ? Math.max(0, bounds.right - center.right) : 0;
     const width = bounds.width - reserve;
     if (!Number.isFinite(width) || width < 240 || bounds.height < 100) return null;
-    const min = Math.min(265, width), max = mode === 'office' ? Math.max(min, width - Math.min(320, width * .4)) : width;
+    const min = Math.min(180, width * .2), max = mode === 'office' ? Math.max(min, width - Math.min(320, width * .4)) : width;
     return { bounds, width, min, max };
   }
   function setChatRatio(next) {
     if (!Number.isFinite(next)) return;
+    if (socialFloatingOnly && gridMode === 'social') next = 1;
     // A small snap area at the edge lets a pointer reach the collapsed state
     // without requiring a pixel-perfect drag to the window boundary.
     if (gridMode === 'social' && lastChatGeometry && next >= 1 - Math.min(24 / lastChatGeometry.width, .06)) next = 1;
@@ -141,24 +142,25 @@ function installWorkbenchSideRail(options = {}) {
     schedule();
   }
   function syncChatGrid(sidebar) {
+    if (doc.body.getAttribute('data-neko-workbench-edition') === 'office') { clearChatGrid(); return; }
+    const dailyCompact = doc.body.hasAttribute('data-neko-daily-compact');
     const found = sidebar && findChatFrame(sidebar);
-    const social = doc.body.hasAttribute('data-neko-chatroom-active') || doc.body.hasAttribute('data-neko-side-social-active');
-    const active = !doc.body.hasAttribute('data-neko-flex-mode') && found && !sidebar.closest('[data-sidebar-collapsed="true"]');
+    const social = dailyCompact || doc.body.hasAttribute('data-neko-chatroom-active') || doc.body.hasAttribute('data-neko-side-social-active');
+    const active = !doc.body.hasAttribute('data-neko-flex-mode') && !doc.body.hasAttribute('data-neko-fixed-scene') && found && !sidebar.closest('[data-sidebar-collapsed="true"]');
     const mode = active ? (social ? 'social' : 'office') : null;
     const rawColumns = found?.frame.style.gridTemplateColumns || '';
     const rest = rawColumns.match(/^\s*\S+\s+([\s\S]+)$/)?.[1];
     const geometry = active && rest ? chatGeometry(found, mode) : null;
     if (!geometry) { clearChatGrid(); return; }
     if (gridMode !== mode) {
-      const first = gridMode === null;
+      if (gridMode === 'office') officeRatio = preferredRatio;
+      else if (gridMode === 'social') socialRatio = preferredRatio;
       clearChatGrid();
       gridMode = mode;
-      if (first) {
-        const nativeWidth = /^\s*(\d+(?:\.\d+)?)px(?:\s|$)/.exec(rawColumns);
-        preferredRatio = nativeWidth ? Number(nativeWidth[1]) / geometry.width : .26;
-      }
-      // Both modes share one width; switching keeps the current ratio.
+      const nativeWidth = /^\s*(\d+(?:\.\d+)?)px(?:\s|$)/.exec(rawColumns);
+      preferredRatio = mode === 'office' ? (officeRatio ?? (nativeWidth ? Number(nativeWidth[1]) / geometry.width : .32)) : socialRatio;
     }
+    if (socialFloatingOnly && mode === 'social') preferredRatio = socialRatio = 1;
     const dividerLabel = mode === 'office' ? '调整项目列表和工作区宽度' : '调整左侧内容和工作区宽度';
     if (chatDivider.getAttribute('aria-label') !== dividerLabel) chatDivider.setAttribute('aria-label', dividerLabel);
     chatDivider.title = mode === 'office' ? '拖动调整宽度 · 双击恢复默认 · 方向键调整' : '拖动调整宽度 · 双击恢复 3:1 · 方向键调整';
@@ -168,7 +170,7 @@ function installWorkbenchSideRail(options = {}) {
     }
     if (chatCenter !== found.center) { if (chatCenter) release(chatCenter, 'data-neko-chat-center'); chatCenter = found.center; }
     mark(chatCenter, 'data-neko-chat-center');
-    const actual = Math.max(geometry.min, Math.min(geometry.max, geometry.width * preferredRatio));
+    const actual = dailyCompact ? geometry.width : Math.max(geometry.min, Math.min(geometry.max, geometry.width * preferredRatio));
     const width = Math.round(actual), grid = `${width}px ${rest}`;
     const collapsed = width >= Math.round(geometry.width);
     if (collapsed !== doc.body.hasAttribute('data-neko-workspace-collapsed')) doc.body.toggleAttribute('data-neko-workspace-collapsed', collapsed);
@@ -180,8 +182,8 @@ function installWorkbenchSideRail(options = {}) {
     // can otherwise cover the half protruding into the neighboring region.
     for (const [key, value] of Object.entries({ left: `${Math.round(geometry.bounds.left + width - 12)}px`, top:`${Math.round(geometry.bounds.top)}px`, height:`${Math.round(geometry.bounds.height)}px` }))
       if (chatDivider.style[key] !== value) chatDivider.style[key] = value;
-    chatDivider.hidden = false;
-    postNativeDivider({x:Math.round(geometry.bounds.left + width - 12),y:Math.round(geometry.bounds.top),width:12,height:Math.round(geometry.bounds.height)});
+    chatDivider.hidden = dailyCompact || (socialFloatingOnly && mode === 'social');
+    postNativeDivider(chatDivider.hidden ? null : {x:Math.round(geometry.bounds.left + width - 12),y:Math.round(geometry.bounds.top),width:12,height:Math.round(geometry.bounds.height)});
     chatDivider.setAttribute('aria-valuemin', String(Math.round(geometry.min / geometry.width * 100)));
     chatDivider.setAttribute('aria-valuemax', String(Math.round(geometry.max / geometry.width * 100)));
     chatDivider.setAttribute('aria-valuenow', String(Math.round(width / geometry.width * 100)));
@@ -192,12 +194,16 @@ function installWorkbenchSideRail(options = {}) {
   }
   function sync() {
     queued = false; if (stopped) return;
+    if (windowsHost) {
+      const dark = doc.body.hasAttribute('data-ds-dark-theme');
+      if (dark !== windowDark) { windowDark = dark; if (typeof bridge.windowTheme === 'function') void Promise.resolve(bridge.windowTheme(dark)).catch(() => {}); }
+    }
     const sidebar = doc.querySelector('[data-slot="sidebar"]');
     syncChatGrid(sidebar);
-    const frame = sidebar?.closest('[data-sidebar-collapsed="true"]');
+    const frame = doc.body.getAttribute('data-neko-workbench-edition') === 'office' ? null : sidebar?.closest('[data-sidebar-collapsed="true"]');
     nativeToggle = frame ? [...sidebar.querySelectorAll('button')].find(button => /^(打开侧边栏|展开侧边栏|open sidebar|expand sidebar)$/i.test((button.getAttribute('aria-label') || button.getAttribute('title') || '').trim())) : null;
     const columns = frame?.style.gridTemplateColumns || '';
-    const hiddenColumns = /^\s*\S+\s+/.test(columns) ? columns.replace(/^\s*\S+\s+/, '72px ') : '';
+    const hiddenColumns = /^\s*\S+\s+/.test(columns) ? columns.replace(/^\s*\S+\s+/, '0px ') : '';
     if (hiddenFrame && (hiddenFrame !== frame || !nativeToggle || !hiddenColumns)) releaseFrame();
     if (frame && nativeToggle && hiddenColumns) {
       if (!hiddenFrame) { hiddenFrame = frame; previousGrid = { value: frame.style.getPropertyValue('--neko-hidden-grid'), priority: frame.style.getPropertyPriority('--neko-hidden-grid') }; }
@@ -219,8 +225,11 @@ function installWorkbenchSideRail(options = {}) {
     if (nativeAccount) {
       mark(nativeAccount, 'data-neko-rail-account-original'); mark(nativeAccount, 'tabindex', '-1');
       mark(nativeAccount, 'aria-hidden', 'true');
-      const label = nativeAccount.getAttribute('aria-label') || '账号与额度';
+      const label = nativeAccount.getAttribute('aria-label') || '账号与设置';
       if (account.getAttribute('aria-label') !== label) account.setAttribute('aria-label', label);
+      const communityStatus = nativeAccount.getAttribute('data-neko-community-login') || 'unknown';
+      if(account.dataset.communityLogin!==communityStatus)account.dataset.communityLogin=communityStatus;
+      account.title=label;
       const expanded = nativeAccount.getAttribute('aria-expanded') === 'true' ? 'true' : 'false';
       if (account.getAttribute('aria-expanded') !== expanded) account.setAttribute('aria-expanded', expanded);
     }
@@ -239,56 +248,15 @@ function installWorkbenchSideRail(options = {}) {
     catch { if (!stopped) { notice.textContent = button === bili ? '视频未能打开，请重试' : '养鱼设置未能打开，请重试'; notice.hidden = false; } }
     finally { pending = false; if (!stopped) button.removeAttribute('aria-busy'); }
   }
-  let videoPlatform = 'bilibili', videoSelectionRevision = 0, videoMenuTimer = null;
-  function showVideoPlatform(platform) {
-    videoPlatform = platform === 'youtube' ? 'youtube' : 'bilibili';
-    const label = videoPlatform === 'youtube' ? 'YouTube 视频' : '哔哩哔哩主页';
-    bili.setAttribute('aria-label', label); bili.title = label + ' · 悬停选择视频平台';
-    bili.dataset.videoPlatform = videoPlatform; svg.toggleAttribute('hidden',videoPlatform !== 'bilibili'); youtubeIcon.toggleAttribute('hidden',videoPlatform !== 'youtube');
-    for (const [key,item] of Object.entries(videoOptions)) item.setAttribute('aria-checked',String(key === videoPlatform));
-  }
-  function setVideoMenu(open, focus = false) {
-    if (stopped) return;
-    if (videoMenuTimer) win.clearTimeout(videoMenuTimer); videoMenuTimer = null;
-    videoMenu.hidden = !open; bili.setAttribute('aria-expanded',String(open));
-    if (open) { const rect = bili.getBoundingClientRect(); videoMenu.style.top = Math.max(8,Math.min(win.innerHeight - 112,rect.top - 12))+'px'; videoMenu.style.left = Math.max(8, Math.round(rect.left))+'px'; }
-    if (focus && open) videoOptions[videoPlatform].focus(); else if (focus) bili.focus();
-  }
-  function delayVideoMenuClose() { if (videoMenuTimer) win.clearTimeout(videoMenuTimer); videoMenuTimer = win.setTimeout(() => setVideoMenu(false),220); }
   function openVideo() {
     return act(bili, () => {
-      const detail = {platform:videoPlatform,handled:false,promise:null};
+      const detail = {platform:'bilibili',handled:false,promise:null};
       doc.dispatchEvent(new win.CustomEvent('neko-video-open',{detail}));
       if (detail.handled) return detail.promise;
-      if (videoPlatform === 'bilibili') return options.openBilibiliHome();
-      if (typeof options.openYoutubeHome === 'function') return options.openYoutubeHome();
-      throw new Error('视频入口暂不可用');
+      return options.openBilibiliHome();
     });
   }
-  const onBili = () => { setVideoMenu(false); void openVideo(); };
-  const onVideoEnter = () => setVideoMenu(true);
-  const onVideoLeave = event => { if (videoMenu.contains(doc.activeElement) || event.relatedTarget && (videoMenu.contains(event.relatedTarget) || bili.contains(event.relatedTarget))) return; delayVideoMenuClose(); };
-  const onVideoFocusOut = event => { if (!videoMenu.hidden && event.relatedTarget && !videoMenu.contains(event.relatedTarget) && event.relatedTarget !== bili) setVideoMenu(false); };
-  const onVideoKey = event => {
-    if (event.key === 'Escape' && !videoMenu.hidden) { event.preventDefault(); event.stopPropagation(); setVideoMenu(false,true); }
-    else if (event.key === 'ArrowDown' && event.target === bili) { event.preventDefault(); setVideoMenu(true,true); }
-    else if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && videoMenu.contains(event.target)) { event.preventDefault(); const items = Object.values(videoOptions), index=items.indexOf(doc.activeElement); items[(index+(event.key==='ArrowDown'?1:items.length-1))%items.length].focus(); }
-  };
-  const onVideoSelect = async event => {
-    const item = event.target.closest?.('[data-platform]'); if (!item || !videoMenu.contains(item)) return;
-    const selected = item.dataset.platform; if (!['bilibili','youtube'].includes(selected)) return;
-    ++videoSelectionRevision; showVideoPlatform(selected); setVideoMenu(false,true);
-    let saveFailed = false;
-    if (typeof bridge.workspace === 'function') try { await bridge.workspace({action:'set-video-platform',platform:selected}); }
-    catch { saveFailed = true; }
-    if (!stopped) { await openVideo(); if (saveFailed) { notice.textContent = '视频平台设置未能保存，本次仍可使用'; notice.hidden = false; } }
-  };
-  const onVideoOutside = event => { if (!videoMenu.hidden && !videoMenu.contains(event.target) && !bili.contains(event.target)) setVideoMenu(false); };
-  showVideoPlatform('bilibili');
-  if (typeof bridge.workspace === 'function') {
-    const revision = videoSelectionRevision;
-    Promise.resolve().then(() => bridge.workspace({action:'video-platform'})).then(value => { if (!stopped && revision === videoSelectionRevision) showVideoPlatform(value?.platform); }).catch(() => {});
-  }
+  const onBili = () => { void openVideo(); };
   const onExpand = () => { if (!stopped && nativeToggle?.isConnected) nativeToggle.click(); };
   const onDragStart = event => {
     const handle = event.target?.closest?.('[data-side="sidebar"]');
@@ -341,10 +309,10 @@ function installWorkbenchSideRail(options = {}) {
     event.preventDefault(); setChatRatio(next);
   };
   const onChatReset = () => setChatRatio(gridMode === 'office' ? .32 : .75);
-  const onWorkspaceExpand = () => { if (doc.body.hasAttribute('data-neko-workspace-collapsed')) setChatRatio(restoreRatio < 1 ? restoreRatio : .75); };
+  const onWorkspaceExpand = () => { if (!(socialFloatingOnly && gridMode === 'social') && !doc.body.hasAttribute('data-neko-daily-compact') && doc.body.hasAttribute('data-neko-workspace-collapsed')) setChatRatio(restoreRatio < 1 ? restoreRatio : .75); };
   doc.addEventListener('neko-workspace-expand', onWorkspaceExpand);
   const unsubscribeNativeDivider = typeof bridge.subscribeDivider === 'function' ? bridge.subscribeDivider(event => {
-    if (event?.id !== 'chat' || !lastChatGeometry) return;
+    if (event?.id !== 'chat' || !lastChatGeometry || socialFloatingOnly && gridMode === 'social') return;
     if (event.type === 'start') { if (!chatDrag) { if (preferredRatio < 1) restoreRatio = preferredRatio; chatDrag = {id:'native',started:preferredRatio}; chatDivider.dataset.dragging='true'; } }
     else if (event.type === 'move' && chatDrag?.id === 'native' && Number.isFinite(event.x)) {
       const {bounds,width,min,max}=lastChatGeometry; setChatRatio(Math.max(min,Math.min(max,event.x-bounds.left))/width);
@@ -360,20 +328,15 @@ function installWorkbenchSideRail(options = {}) {
   chatDivider.addEventListener('keydown', onChatKey); chatDivider.addEventListener('dblclick', onChatReset);
   win.addEventListener('resize', schedule);
   expand.addEventListener('click', onExpand); bili.addEventListener('click', onBili); fish.addEventListener('click', onFish);
-  bili.addEventListener('mouseenter',onVideoEnter); bili.addEventListener('mouseleave',onVideoLeave); bili.addEventListener('keydown',onVideoKey);
-  videoMenu.addEventListener('mouseenter',onVideoEnter); videoMenu.addEventListener('mouseleave',onVideoLeave); videoMenu.addEventListener('keydown',onVideoKey); videoMenu.addEventListener('click',onVideoSelect); videoMenu.addEventListener('focusout',onVideoFocusOut);
-  doc.addEventListener('pointerdown',onVideoOutside,true);
   account.addEventListener('click', onAccount); doc.addEventListener('focusin', onFocus);
   doc.addEventListener('pointerdown', onDragStart, true); doc.addEventListener('pointerup', onDragEnd); doc.addEventListener('pointercancel', onDragEnd);
   doc.head.appendChild(style); doc.body.prepend(rail); doc.body.appendChild(chatDivider); doc.body.setAttribute('data-neko-side-rail-layout', '');
   const observer = new win.MutationObserver(schedule);
-  observer.observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-label', 'aria-expanded', 'data-sidebar-collapsed', 'data-neko-chatroom-active', 'data-neko-side-social-active', 'data-neko-flex-mode', 'style'] });
+  observer.observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-label', 'aria-expanded', 'data-sidebar-collapsed', 'data-neko-workbench-edition', 'data-neko-chatroom-active', 'data-neko-side-social-active', 'data-neko-flex-mode', 'data-neko-fixed-scene', 'data-ds-dark-theme', 'style'] });
   sync();
   return () => {
     if (stopped) return; stopped = true; observer.disconnect();
     expand.removeEventListener('click', onExpand); bili.removeEventListener('click', onBili); fish.removeEventListener('click', onFish);
-    bili.removeEventListener('mouseenter',onVideoEnter); bili.removeEventListener('mouseleave',onVideoLeave); bili.removeEventListener('keydown',onVideoKey);
-    videoMenu.removeEventListener('mouseenter',onVideoEnter); videoMenu.removeEventListener('mouseleave',onVideoLeave); videoMenu.removeEventListener('keydown',onVideoKey); videoMenu.removeEventListener('click',onVideoSelect); videoMenu.removeEventListener('focusout',onVideoFocusOut); doc.removeEventListener('pointerdown',onVideoOutside,true); if (videoMenuTimer) win.clearTimeout(videoMenuTimer);
     account.removeEventListener('click', onAccount); doc.removeEventListener('focusin', onFocus);
     doc.removeEventListener('pointerdown', onDragStart, true); doc.removeEventListener('pointerup', onDragEnd); doc.removeEventListener('pointercancel', onDragEnd);
     win.removeEventListener('resize', schedule); clearChatGrid(); if (typeof unsubscribeNativeDivider === 'function') unsubscribeNativeDivider();
@@ -384,6 +347,6 @@ function installWorkbenchSideRail(options = {}) {
       if (originalBodyMarker === null) doc.body.removeAttribute('data-neko-side-rail-layout');
       else doc.body.setAttribute('data-neko-side-rail-layout', originalBodyMarker);
     }
-    rail.remove(); chatDivider.remove(); style.remove();
+    titlebar?.remove(); rail.remove(); chatDivider.remove(); style.remove();
   };
 }

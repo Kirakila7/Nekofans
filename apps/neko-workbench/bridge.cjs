@@ -8,27 +8,49 @@ const {catalogOrder,mergeCatalogOrder}=require('./pet-roster.cjs');
 const {cleanPrompt,historyContext}=require('./pet-context.js');
 const {resolveRuntimePaths}=require('./runtime-config.cjs');
 const {createTaskSessionTracker}=require('./task-session-tracker.cjs');
-const {readDshWorkspaceCatalog,checkDshWorkspaceSession,publicDshWorkspaceSessionIds}=require('./dsh-workspace-catalog.cjs');
+const {readDshWorkspaceCatalog}=require('./dsh-workspace-catalog.cjs');
+const {createDshProjectDiscovery}=require('./dsh-project-discovery.cjs');
 const {accountRoute}=require('./account-route.cjs');
 const {createChannelSessionPrivacy}=require('./channel-session-privacy.cjs');
 const {createCompanionAccountBridge}=require('./companion-account-bridge.cjs');
+const {createDshLoginWatch}=require('./dsh-login-watch.cjs');
+const {homeBuildReceipt}=require('./home-build-tracker.cjs');
 const runtimePaths=resolveRuntimePaths();
 const runtime=runtimePaths.modulesDir;
 let createUserMessage,createAssistantMessage,carrierKeyOf;
 exports.name='pet-lab-bridge';
 exports.inject=['agents','subagents','sessionQuery','sessionController','agentPresets','webApp','connection','llm','workingDirectory'];
 exports.apply=function(ctx){
+  const projectDiscovery=createDshProjectDiscovery();
   let root,closing=false;
+  let homeAgent=null;
   const catalog=new Map();
   const initialPrompts=new Map();
   const children=new Map();
   const syncingParents=new Map();let lastRoster='';
   const options=accountRoute();
   const channelPrivacy=createChannelSessionPrivacy(runtimePaths.dataDir,{fishWorkspace:path.join(runtimePaths.workspaceDir,'fish-care')});
-  const companionAccount=createCompanionAccountBridge({ctx,route:options,createUserMessage: input=>{if(typeof createUserMessage!=='function')throw Error('DSH 尚未就绪');return createUserMessage(input);},createAssistantMessage: input=>{if(typeof createAssistantMessage!=='function')throw Error('DSH 尚未就绪');return createAssistantMessage(input);}});
+  const accountDeps={ctx,route:options,loadImageDecoder:()=>require('node:module').createRequire(runtime+'/dsh-attachment-local/package.json')('sharp'),createUserMessage: input=>{if(typeof createUserMessage!=='function')throw Error('DSH 尚未就绪');return createUserMessage(input);},createAssistantMessage: input=>{if(typeof createAssistantMessage!=='function')throw Error('DSH 尚未就绪');return createAssistantMessage(input);}};
+  const companionAccount=createCompanionAccountBridge(accountDeps);
+  // Same authenticated model/credit owner, separate in-flight lock and cancellation.
+  const lobbyAccount=createCompanionAccountBridge({...accountDeps,namespace:'lobby'});
+  const proactiveAccount=createCompanionAccountBridge({...accountDeps,namespace:'proactive'});
+  const memoryAccount=createCompanionAccountBridge({...accountDeps,namespace:'memory'});
+  const gameAccount=createCompanionAccountBridge({...accountDeps,namespace:'game'});
+  const gameStudioAccount=createCompanionAccountBridge({...accountDeps,namespace:'game-studio',timeoutMs:85000});
+  // Big Fish is a seat-bound teammate. The goddess/compiler has a separate
+  // stateless channel, so compiling either rule cannot occupy or cancel a move.
+  const gamePlayerAccount=createCompanionAccountBridge({...accountDeps,namespace:'game-player',timeoutMs:105000});
   const emit=(method,params)=>process.stdout.write(JSON.stringify({method,params})+'\n');
+  ctx.on('tools/result',(exec,result)=>{
+    const receipt=homeBuildReceipt(exec,result,{sessionId:homeAgent?.agent.id,sceneFile:path.join(runtimePaths.workspaceDir,'our-home','scene.json')});
+    if(receipt)emit('home-build',receipt);
+  });
+  const loginWatch=createDshLoginWatch({getAccount:()=>ctx.get?.('deepseekAccount'),emit});
   const qqbotState=value=>emit('qqbot-care-state',value);
   process.on('neko-qqbot-state',qqbotState);
+  const channelExperience=value=>{const {validExperience}=require('./channel-experiences.cjs');if(validExperience(value))emit('channel-experience',value);};
+  process.on('neko-channel-experience',channelExperience);
   const taskSessions=createTaskSessionTracker({emit,getAgent:id=>ctx.agents.get(id),observeSession:observePublicSession,
     getLiveJobs:id=>ctx.get('jobs')?.list(id)});
   const signal=()=>new AbortController().signal;
@@ -181,16 +203,12 @@ exports.apply=function(ctx){
   async function dispatch(method,p){
     if(method==='init'){
       await ctx.get('loader')?.await();
+      loginWatch.start();
       ({createUserMessage,createAssistantMessage}=await import(require('node:url').pathToFileURL(runtime+'/dsh-llm/lib/index.js').href));
       ({carrierKeyOf}=await import(require('node:url').pathToFileURL(runtime+'/dsh-scope/lib/index.js').href));
-      let sessionId=p.rootId||randomUUID();
+      const sessionId=p.rootId||randomUUID();
       const setup=async agentCtx=>{await ctx.agentPresets.mount(agentCtx,'standard');};
-      const create=id=>ctx.agents.create({sessionId:id,meta:{cwd:runtimePaths.workspaceDir,agentPreset:'standard'},agentOptions:options,setup});
-      if(p.resume){
-        // A saved root can disappear when DSH history is cleared or the workspace is relinked; start a fresh root instead of failing init.
-        try{root=await ctx.agents.resume({resumeSessionId:sessionId,agentOptions:options,setup});}
-        catch(error){if(error?.name!=='ApiSessionNotFound'&&!/^session ".*" not found$/.test(String(error?.message||'')))throw error;sessionId=randomUUID();root=await create(sessionId);}
-      }else root=await create(sessionId);
+      root=p.resume?await ctx.agents.resume({resumeSessionId:sessionId,agentOptions:options,setup}):await ctx.agents.create({sessionId,meta:{cwd:runtimePaths.workspaceDir,agentPreset:'standard'},agentOptions:options,setup});
       await hydrate({sessionId:root.agent.id,title:''});
       const parents=new Set([sessionId,...(p.parentIds||[])]),visited=new Set();
       for(const parentId of parents)await syncParent(parentId,visited);
@@ -199,12 +217,34 @@ exports.apply=function(ctx){
     }
     if(!root)throw new Error('DSH 尚未就绪');
     if(method==='companion-account-status')return companionAccount.status();
-    if(method==='companion-account-chat')return companionAccount.send({requestId:p.requestId,text:p.text,context:p.context,history:p.history,maxTokens:p.maxTokens});
-    if(method==='memory-account-model')return companionAccount.send({requestId:p.requestId,text:p.text,context:p.context,history:p.history,maxTokens:p.maxTokens,purpose:'memory'});
+    if(method==='companion-account-chat')return companionAccount.send({requestId:p.requestId,text:p.text,context:p.context,history:p.history,images:p.images,maxTokens:p.maxTokens});
     if(method==='companion-account-cancel')return companionAccount.cancel({requestId:p.requestId});
-    if(method==='workspace-catalog')return readDshWorkspaceCatalog(ctx,p,{isPrivateSession:excludePrivate});
-    if(method==='workspace-session-check')return checkDshWorkspaceSession(ctx,p.id,{isPrivateSession:excludePrivate});
-    if(method==='workspace-session-privacy')return publicDshWorkspaceSessionIds(ctx,p.ids,{isPrivateSession:excludePrivate});
+    if(method==='lobby-account-status')return lobbyAccount.status();
+    if(method==='lobby-account-chat')return lobbyAccount.send({requestId:p.requestId,text:p.text,context:p.context,history:p.history,maxTokens:p.maxTokens});
+    if(method==='lobby-account-cancel')return lobbyAccount.cancel({requestId:p.requestId});
+    if(method==='proactive-account-status')return proactiveAccount.status();
+    if(method==='memory-account-status')return memoryAccount.status();
+    if(method==='memory-account-chat')return memoryAccount.send({requestId:p.requestId,text:p.text,context:p.context,history:p.history,maxTokens:p.maxTokens});
+    if(method==='memory-account-cancel')return memoryAccount.cancel({requestId:p.requestId});
+    if(method==='game-account-status')return gameAccount.status();
+    if(method==='game-account-chat')return gameAccount.send({requestId:p.requestId,text:p.text,context:p.context,history:p.history,maxTokens:p.maxTokens});
+    if(method==='game-account-cancel')return gameAccount.cancel({requestId:p.requestId});
+    if(method==='game-studio-account-chat')return gameStudioAccount.send({requestId:p.requestId,text:p.text,context:p.context,history:p.history,maxTokens:p.maxTokens});
+    if(method==='game-studio-account-cancel')return gameStudioAccount.cancel({requestId:p.requestId});
+    if(method==='game-player-account-status')return gamePlayerAccount.status();
+    if(method==='game-player-account-chat')return gamePlayerAccount.send({requestId:p.requestId,text:p.text,context:p.context,history:p.history,images:p.images,maxTokens:p.maxTokens});
+    if(method==='game-player-account-cancel')return gamePlayerAccount.cancel({requestId:p.requestId});
+    if(method==='proactive-account-chat')return proactiveAccount.send({requestId:p.requestId,text:p.text,context:p.context,history:p.history,maxTokens:p.maxTokens});
+    if(method==='proactive-account-cancel')return proactiveAccount.cancel({requestId:p.requestId});
+    if(method==='workspace-catalog')return readDshWorkspaceCatalog(ctx,p,{readInstalledProjects:options=>projectDiscovery.list(options)});
+    if(method==='home-session'){
+      if(homeAgent)return {sessionId:homeAgent.agent.id};
+      const cwd=path.join(runtimePaths.workspaceDir,'our-home'),setup=async agentCtx=>{await ctx.agentPresets.mount(agentCtx,'standard');};
+      const sessionId=typeof p.sessionId==='string'&&/^[a-z0-9-]{1,64}$/i.test(p.sessionId)?p.sessionId:randomUUID();
+      if(p.sessionId){try{homeAgent=await ctx.agents.resume({resumeSessionId:sessionId,agentOptions:options,setup});}catch{throw Error('共建会话暂时无法恢复，原会话已保留');}}
+      else homeAgent=await ctx.agents.create({sessionId,meta:{cwd,agentPreset:'standard',title:'共建我们的家'},agentOptions:options,setup});
+      return {sessionId:homeAgent.agent.id};
+    }
     if(method==='fish-care'){
       if(!['status','start','pause'].includes(p.action))throw new Error('未知养鱼操作');
       const fish=await import(require('node:url').pathToFileURL(require('node:path').join(__dirname,'vendor/dsh-bili-whale/lib/index.js')).href);
@@ -245,6 +285,6 @@ exports.apply=function(ctx){
   const lines=readline.createInterface({input:process.stdin});
   lines.on('line',async line=>{let request;try{request=JSON.parse(line);const result=await dispatch(request.method,request.params||{});process.stdout.write(JSON.stringify({id:request.id,result})+'\n');}catch(error){process.stdout.write(JSON.stringify({id:request?.id,error:String(error?.message||error)})+'\n');}});
   lines.on('close',()=>{if(closing)return;closing=true;Promise.resolve().then(()=>typeof ctx.root?.dispose==='function'?ctx.root.dispose():ctx.dispose?.()).finally(()=>process.exit(0));});
-  ctx.on('dispose',()=>{closing=true;companionAccount.dispose();process.removeListener('neko-qqbot-state',qqbotState);taskSessions.dispose();lines.close();});
+  ctx.on('dispose',()=>{closing=true;loginWatch.dispose();companionAccount.dispose();lobbyAccount.dispose();proactiveAccount.dispose();memoryAccount.dispose();gameAccount.dispose();gameStudioAccount.dispose();gamePlayerAccount.dispose();process.removeListener('neko-qqbot-state',qqbotState);process.removeListener('neko-channel-experience',channelExperience);taskSessions.dispose();lines.close();});
   emit('ready',{version:2});
 };

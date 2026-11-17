@@ -10,8 +10,8 @@ let activeDom;
 
 (async () => {
   const dom = new JSDOM(`<!doctype html><html><head></head><body>
-    <div data-slot="settings.launcher"><button class="current_trigger_HASH" aria-haspopup="menu" aria-expanded="false" data-collapsed="false" data-signed-out="true" aria-label="Native login">
-      <span class="current_avatar_HASH">native</span><span id="native-label" class="current_label_HASH">Login</span><svg></svg>
+    <div data-slot="settings.launcher"><button class="hjANda_trigger" aria-haspopup="menu" aria-expanded="false" data-collapsed="false" data-signed-out="true" aria-label="Native login">
+      <span class="hjANda_avatar">native</span><span class="hjANda_label">Login</span><svg></svg>
     </button></div></body></html>`, { url: 'http://127.0.0.1/', runScripts: 'outside-only', pretendToBeVisual: true });
   activeDom = dom;
   const win = dom.window;
@@ -38,7 +38,7 @@ let activeDom;
   assert.equal(owned.firstElementChild.getAttribute('src'), icon);
   assert.equal(button.getAttribute('aria-label'), '登录 DeepSeek 账号');
   assert.equal(win.getComputedStyle(button).width, '36px');
-  assert.equal(win.getComputedStyle(button.querySelector('#native-label')).display, 'none');
+  assert.equal(win.getComputedStyle(button.querySelector('.hjANda_label')).display, 'none');
   button.click();
   assert.equal(clicks, 1, 'the native account button remains clickable');
   button.setAttribute('data-signed-out', 'false');

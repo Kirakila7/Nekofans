@@ -1,7 +1,5 @@
-// The room directory stays local; channel and home navigation use their own services.
-// Navigation and lifetime are owned by workspace shell.
+// Room navigation and home lifetime are owned by the workspace shell.
 function createChatroomPreview(doc, avatar = () => '', options = {}) {
-  const openPublicRoom = typeof options.openPublicRoom === 'function' ? options.openPublicRoom : null;
   const el = (tag, cls, text) => {
     const node = doc.createElement(tag);
     if (cls) node.className = cls;
@@ -10,10 +8,10 @@ function createChatroomPreview(doc, avatar = () => '', options = {}) {
   };
   const panel = el('section', 'neko-chatroom-preview');
   panel.dataset.nekoChatroomPreview = '';
-  panel.setAttribute('aria-label', openPublicRoom ? '聊天室' : '聊天室界面预览');
+  panel.setAttribute('aria-label', typeof options.onOpenLobby === 'function' ? '聊天室' : '聊天室界面预览');
 
   const heading = el('div', 'neko-chatroom-preview__heading');
-  heading.append(el('h2', '', '聊天室'), el('span', 'neko-chatroom-preview__badge', openPublicRoom ? '频道入口' : '界面预览'));
+  heading.append(el('h2', '', '聊天室'), el('span', 'neko-chatroom-preview__badge', typeof options.onOpenLobby === 'function' ? '公共频道' : '界面预览'));
   const introduction = el('p', 'neko-chatroom-preview__intro', '和人、AI 一起相遇的地方');
 
   const search = el('input', 'neko-chatroom-preview__search');
@@ -23,7 +21,7 @@ function createChatroomPreview(doc, avatar = () => '', options = {}) {
   search.setAttribute('aria-label', '搜索聊天室，功能尚未开放');
 
   const label = el('div', 'neko-chatroom-preview__label', '聊天室');
-  label.appendChild(el('span', '', openPublicRoom ? '浏览' : '示意'));
+  if (typeof options.onOpenLobby !== 'function') label.appendChild(el('span', '', '示意'));
   const rooms = el('div', 'neko-chatroom-preview__rooms');
   const addRoom = (name, description, symbol, kind, interactive = false) => {
     const row = el(interactive ? 'button' : 'div', 'neko-chatroom-preview__room');
@@ -31,19 +29,18 @@ function createChatroomPreview(doc, avatar = () => '', options = {}) {
     const icon = el('span', 'neko-chatroom-preview__room-icon ' + kind, symbol);
     icon.setAttribute('aria-hidden', 'true');
     const copy = el('span', 'neko-chatroom-preview__room-copy');
-    copy.append(el('strong', '', name), el('small', '', description));
+    copy.append(el('strong', '', name)); if(description)copy.append(el('small', '', description));
     row.append(icon, copy);
     rooms.appendChild(row);
     return row;
   };
-  const publicRoom = addRoom('公共聊天室', openPublicRoom ? '进入频道，一起交流与分享' : '一起交流与分享', '✦', 'is-public', !!openPublicRoom);
-  if (openPublicRoom) {
-    publicRoom.setAttribute('data-neko-public-room', '');
-    publicRoom.setAttribute('aria-label', '进入公共聊天室，频道');
-    publicRoom.addEventListener('click', () => { homeView.hidden = true; openPublicRoom(); });
-  }
-  const home = addRoom('我的小窝', '进入 Yui 的家', '⌂', 'is-home', true);
-  home.setAttribute('aria-label', '进入我的小窝，Yui 的家');
+  const publicRoom = addRoom('公共聊天室', '一起交流与分享', '✦', 'is-public', typeof options.onOpenLobby === 'function');
+  if (options.onOpenLobby) { publicRoom.setAttribute('aria-label', '打开公共聊天室'); publicRoom.addEventListener('click', () => { panel.openLobby(); options.onOpenLobby(); }); }
+  const home = addRoom('我的小窝', '', '⌂', 'is-home', true);
+  home.setAttribute('aria-label', '进入我的小窝');
+  const fishDate=typeof options.createFishDate==='function'?addRoom('肥鱼有约','和她谈心','♡','is-fish-date',true):null;
+  const fishDatePanel=fishDate?options.createFishDate():null;
+  if(fishDate)fishDate.setAttribute('aria-label','打开肥鱼有约，和她谈心');
 
   const empty = el('div', 'neko-chatroom-preview__empty');
   const illustration = el('div', 'neko-chatroom-preview__illustration');
@@ -54,18 +51,19 @@ function createChatroomPreview(doc, avatar = () => '', options = {}) {
   if (src) portrait.src = src;
   else portrait.hidden = true;
   illustration.append(portrait, el('span', '', '✧'));
-  empty.append(illustration, el('strong', '', '期待在这里相遇'), el('p', '', openPublicRoom ? '公共聊天室已接入频道，其他聊天室尚未开放。' : '这里是聊天室的简化展示，聊天功能尚未开放。'));
+  empty.append(illustration, el('strong', '', '期待在这里相遇'), el('p', '', typeof options.onOpenLobby === 'function' ? '点击公共聊天室进入频道，登录与连接状态以频道内显示为准。' : '这里是聊天室的简化展示，聊天功能尚未开放。'));
 
   const room = el('div', 'neko-chatroom-preview__room-view');
   room.append(heading, introduction, search, label, rooms, empty);
+  const content = el('div', 'neko-chatroom-preview__content');content.hidden=true;content.setAttribute('aria-label','聊天室与小窝内容');
   const homeView = el('section', 'neko-chatroom-preview__home-view');
   homeView.hidden = true;
-  homeView.setAttribute('aria-label', 'Yui 的家');
+  homeView.setAttribute('aria-label', '我的小窝');
   const header = el('div', 'neko-chatroom-preview__home-header');
   const back = el('button', 'neko-chatroom-preview__home-back', '‹ 返回聊天室');
   back.type = 'button';
-  const title = el('h2', '', 'Yui 的家');
-  const storage = el('p', 'neko-chatroom-preview__home-storage', '工作台本地存档 · 尚未同步');
+  const title = el('h2', '', '我的小窝');
+  const storage = el('p', 'neko-chatroom-preview__home-storage', '');
   header.append(back, title, storage);
   const status = el('p', 'neko-chatroom-preview__home-status');
   status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite');
@@ -85,28 +83,25 @@ function createChatroomPreview(doc, avatar = () => '', options = {}) {
       if (disposed) { if (typeof release === 'function') release(); return; }
       releaseHome = typeof release === 'function' ? release : null;
       mounted = true; status.hidden = true;
+      if(selected==='home')stage.dispatchEvent(new doc.defaultView.Event('neko-home-enter'));
     } catch (error) {
       if (!disposed) { status.textContent = error?.message || '家园暂不可用，请稍后重试。'; retry.hidden = false; }
     } finally {
       mounting = false; homeView.removeAttribute('aria-busy');
     }
   };
-  const win = doc.defaultView;
-  function placeHome() {
-    if (homeView.hidden || !win) return;
-    const center = doc.querySelector('[data-neko-chat-center]');
-    const rect = center?.getBoundingClientRect();
-    const box = rect && rect.width > 80 ? rect : { left: 0, top: 0, width: win.innerWidth, height: win.innerHeight };
-    Object.assign(homeView.style, { left: Math.round(box.left) + 'px', top: Math.round(box.top) + 'px', width: Math.round(box.width) + 'px', height: Math.round(box.height) + 'px' });
-  }
-  const onHomeResize = () => placeHome();
-  // The home opens in the main work area; the room list stays in the sidebar.
-  home.addEventListener('click', () => { homeView.hidden = false; placeHome(); doc.dispatchEvent(new win.Event('neko-home-open')); back.focus(); void mount(); });
-  back.addEventListener('click', () => { homeView.hidden = true; doc.dispatchEvent(new win.Event('neko-home-close')); home.focus(); });
+  let split=false,selected='welcome';
+  function selection(kind){selected=kind;panel.dataset.roomView=kind;for(const [node,name]of [[publicRoom,'lobby'],[home,'home'],[fishDate,'date']]){if(!node)continue;if(kind===name)node.setAttribute('aria-current','page');else node.removeAttribute('aria-current');}if(fishDatePanel)fishDatePanel.hidden=kind!=='date';options.onDateVisibility?.(kind==='date');}
+  panel.setSplit = enabled => {if(split===!!enabled)return;split=!!enabled;panel.toggleAttribute('data-neko-room-split',split);if(split){content.prepend(empty);content.append(homeView);room.hidden=false;content.hidden=false;empty.hidden=selected!=='welcome';homeView.hidden=selected!=='home';}else{room.append(empty);const detail=selected==='home'||selected==='date';content.hidden=!detail;room.hidden=detail;empty.hidden=false;}};
+  panel.showRooms = () => {selection('welcome');homeView.hidden=true;room.hidden=false;content.hidden=!split;empty.hidden=false;panel.removeAttribute('data-home-open');};
+  panel.openLobby = () => {selection('lobby');homeView.hidden=true;panel.removeAttribute('data-home-open');if(split){room.hidden=false;content.hidden=false;empty.hidden=true;}};
+  panel.openHome = () => {options.onBeforeHome?.();selection('home');room.hidden=!split;content.hidden=false;empty.hidden=split;homeView.hidden=false;panel.setAttribute('data-home-open','');back.focus();if(mounted&&!disposed){stage.dispatchEvent(new doc.defaultView.Event('neko-home-enter'));return Promise.resolve();}return mount(); };
+  panel.openFishDate=()=>{if(!fishDatePanel)return;options.onBeforeDate?.();selection('date');room.hidden=!split;content.hidden=false;empty.hidden=true;homeView.hidden=true;panel.removeAttribute('data-home-open');};
+  fishDate?.addEventListener('click',()=>panel.openFishDate());
+  home.addEventListener('click', () => { void panel.openHome(); });
+  back.addEventListener('click', () => {if(split&&options.onOpenLobby){panel.openLobby();options.onOpenLobby();}else{panel.showRooms();home.focus();}});
   retry.addEventListener('click', () => { void mount(); });
-  if (win) win.addEventListener('resize', onHomeResize);
-  panel.focusPublicRoom = () => { if (!homeView.hidden) return; publicRoom.focus?.(); };
-  panel.disposeHome = () => { disposed = true; if (win) win.removeEventListener('resize', onHomeResize); releaseHome?.(); releaseHome = null; };
-  panel.append(room, homeView);
+  panel.disposeHome = () => { disposed = true; releaseHome?.(); releaseHome = null; };
+  content.append(homeView);if(fishDatePanel)content.append(fishDatePanel);panel.append(room, content);
   return panel;
 }

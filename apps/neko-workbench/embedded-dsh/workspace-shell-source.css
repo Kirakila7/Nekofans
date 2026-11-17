@@ -1,38 +1,4 @@
-/* Workbench design tokens. Colours derive from the embedded DSH theme aliases
-   so light and dark skins stay consistent; spacing, radii and type stay fixed.
-   Patch CSS consumes these (and the legacy --nws-* aliases below). */
-:root, body {
-  --nk-canvas:var(--dsw-alias-bg-base,#f4f5f7);
-  --nk-surface:var(--dsw-alias-bg-layer-1,#ffffff);
-  --nk-surface-2:var(--dsw-alias-bg-layer-2,#f7f8fa);
-  --nk-surface-3:var(--dsw-alias-bg-layer-3,var(--dsw-alias-bg-layer-2,#eef0f3));
-  --nk-hover:var(--dsw-alias-interactive-bg-hover,#f2f4f7);
-  --nk-active:var(--dsw-alias-interactive-bg-active,#e9edf3);
-  --nk-border:var(--dsw-alias-border-l1,#e4e7ec);
-  --nk-border-strong:var(--dsw-alias-border-l2,#d5d9e0);
-  --nk-text:var(--dsw-alias-label-primary,#1d2430);
-  --nk-text-2:var(--dsw-alias-label-secondary,#5f6773);
-  --nk-text-3:var(--dsw-alias-label-tertiary,#8b929e);
-  --nk-accent:var(--dsw-alias-brand-primary,#3f6ea8);
-  --nk-accent-soft:color-mix(in srgb,var(--dsw-alias-brand-primary,#3f6ea8) 14%,transparent);
-  --nk-focus:var(--dsw-alias-brand-primary,#3f6ea8);
-  --nk-space-1:4px; --nk-space-2:8px; --nk-space-3:12px; --nk-space-4:16px; --nk-space-5:20px; --nk-space-6:24px;
-  --nk-radius-xs:4px; --nk-radius-sm:6px; --nk-radius-md:8px; --nk-radius-lg:12px; --nk-radius-xl:16px;
-  --nk-font-xs:11px; --nk-font-sm:12px; --nk-font-md:13px; --nk-font-lg:15px; --nk-font-xl:18px;
-  --nk-leading:1.5;
-  --nk-pane-header:44px;
-  --nk-pane-pad-x:12px;
-  --nk-pane-pad-y:12px;
-  --nk-gutter:8px;
-  --nk-shadow-sm:0 1px 2px #141e2d0f;
-  --nk-shadow-md:0 6px 20px #141e2d1a;
-  /* Legacy aliases kept for the existing patch rules. */
-  --nws-bg:var(--nk-surface);
-  --nws-border:var(--nk-border);
-  --nws-text:var(--nk-text);
-  --nws-muted:var(--nk-text-2);
-  --nws-hover:var(--nk-hover);
-}
+body[data-neko-workspace-shell] { --nws-bg:var(--dsw-alias-bg-layer-1,#fbfeff); --nws-border:var(--dsw-alias-border-l1,#c4dbe6); --nws-text:var(--dsw-alias-label-primary,#17303d); --nws-muted:var(--dsw-alias-label-secondary,#637d8c); --nws-hover:var(--dsw-alias-interactive-bg-hover,#ddedf4); }
 body:is([data-neko-workspace-collapsed],[data-neko-flex-workspace-collapsed]) [data-neko-collapsed-composer] { position:fixed !important; z-index:2147481000 !important; right:16px !important; bottom:16px !important; left:auto !important; top:auto !important; margin:0 !important; box-sizing:border-box !important; width:min(480px, calc(100vw - 96px)) !important; max-width:calc(100vw - 96px) !important; max-height:45vh; overflow:auto; background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:20px; box-shadow:0 8px 28px #17303d24; }
 body:is([data-neko-workspace-collapsed],[data-neko-flex-workspace-collapsed]) [data-neko-collapsed-composer] .neko-gallery { display:none !important; }
 /* The native seat remains in its React tree. Hide its decorative landing hero
@@ -62,110 +28,40 @@ body[data-neko-flex-workspace-collapsed] .neko-workspace-expand-control { right:
 body[data-neko-workspace-shell] .neko-avatar-anchor,
 body[data-neko-workspace-shell] .neko-avatar-portal,
 body[data-neko-workspace-shell] .neko-role-host .neko-roles,
-body[data-neko-workspace-shell] .neko-role-host .neko-community:not(.neko-side-rail__button),
+body[data-neko-workspace-shell] .neko-role-host .neko-community,
+body[data-neko-workspace-shell] .neko-mode-switch,
 body[data-neko-workspace-shell] [data-neko-session-browser-original],
 body[data-neko-workspace-shell] .neko-hero-pick__name { display:none !important; }
-/* Sidebar brand row: the wordmark is the only brand text in the room column. */
-body[data-neko-workspace-shell] .neko-wordmark { font-size:var(--nk-font-lg); font-weight:600; letter-spacing:.01em; }
-/* The native community mode switch stays out of the sidebar. */
-body[data-neko-workspace-shell] .neko-mode-switch { display:none !important; }
-/* Home / Work sits under the brand as one segmented control. */
-body[data-neko-workspace-shell] .neko-home-work-switch { display:flex; gap:2px; margin:8px 10px 10px; padding:3px; border:1px solid var(--nk-border); border-radius:var(--nk-radius-md); background:var(--nk-surface-2); }
-body[data-neko-workspace-shell] .neko-home-work-switch__button { flex:1 1 0; min-width:0; padding:5px 8px; border:0; border-radius:var(--nk-radius-sm); background:transparent; color:var(--nk-text-2); font:var(--nk-font-sm)/1.4 system-ui,sans-serif; cursor:pointer; }
-body[data-neko-workspace-shell] .neko-home-work-switch__button:hover:not(:disabled) { background:var(--nk-hover); color:var(--nk-text); }
-body[data-neko-workspace-shell] .neko-home-work-switch__button[aria-pressed="true"] { background:var(--nk-surface); color:var(--nk-text); box-shadow:var(--nk-shadow-sm); }
-body[data-neko-workspace-shell] .neko-home-work-switch__button:disabled { opacity:.5; cursor:not-allowed; }
-body[data-neko-workspace-shell] .neko-home-work-switch__button:focus-visible { outline:2px solid var(--nk-focus); outline-offset:1px; }
-body[data-ds-dark-theme] .neko-home-work-switch { background:#1b1a1f; border-color:#2c2b31; }
-body[data-ds-dark-theme] .neko-home-work-switch__button { color:var(--nk-text-3); font-weight:500; }
-body[data-ds-dark-theme] .neko-home-work-switch__button[aria-pressed="true"] { background:#3a3941; color:#ffffff; font-weight:600; box-shadow:0 1px 3px #00000073; }
-/* The embedded DSH sidebar uses a quiet vertical gradient in dark mode. */
-body[data-ds-dark-theme] [data-neko-native-sidebar-column] { background:linear-gradient(180deg,#212023 0%,#1f1f21 58%,#26262a 100%) !important; }
-/* Keep the Work session list on the same content edge as the seats. */
-body[data-neko-workspace-shell] .neko-session-browser { margin:0 12px 0 4px; }
-/* Drag the window from the brand row now that the native title bar is hidden. */
-body[data-neko-workspace-shell] [data-neko-native-brand-row] { -webkit-app-region:drag; }
-body[data-neko-workspace-shell] [data-neko-native-brand-row] button,
-body[data-neko-workspace-shell] [data-neko-native-brand-row] a,
-body[data-neko-workspace-shell] [data-neko-native-brand-row] input { -webkit-app-region:no-drag; }
-/* Keep the collapse/expand toggle level with the native traffic lights. */
-body[data-neko-workspace-shell] [data-neko-native-sidebar] { position:relative; }
-body[data-neko-workspace-shell] [data-neko-native-sidebar] [data-neko-native-sidebar-toggle] { position:absolute; top:2px; right:12px; z-index:5; display:flex !important; -webkit-app-region:no-drag; }
-/* Collapsed: show the native rail (expand + new session), hide our column content. */
-[data-sidebar-collapsed="true"] .neko-chatroom-preview,
-[data-sidebar-collapsed="true"] .neko-home-work-switch,
-[data-sidebar-collapsed="true"] .neko-home-features,
-[data-sidebar-collapsed="true"] .neko-session-browser,
-[data-sidebar-collapsed="true"] .neko-work-tools { display:none !important; }
-body[data-neko-chatroom-active] [data-sidebar-collapsed="true"] .neko-sidebar-items { display:grid !important; }
-/* Community, video and fish sit above the room list under Home. */
-.neko-home-features { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; margin:0 0 var(--nk-space-3); }
-.neko-home-features > .neko-side-rail__button {
-  display:grid !important; justify-items:center; align-content:center; gap:4px;
-  width:100% !important; height:auto !important; min-height:58px; padding:8px 4px !important;
-  border:1px solid var(--nk-border); border-radius:var(--nk-radius-lg); background:var(--nk-surface-2) !important;
-  color:var(--nk-text-2) !important; font:var(--nk-font-xs)/1.3 system-ui,sans-serif !important;
-  cursor:pointer;
-}
-.neko-home-features > .neko-side-rail__button:hover { background:var(--nk-hover) !important; color:var(--nk-text) !important; }
-.neko-home-features > .neko-side-rail__button:focus-visible { outline:2px solid var(--nk-focus); outline-offset:-2px; }
-.neko-home-features .neko-side-rail__button img { width:26px !important; height:26px !important; border-radius:8px; object-fit:contain; }
-.neko-home-features .neko-side-rail__button svg { display:block; width:22px; height:22px; }
-.neko-home-features .neko-community-yui::after { content:'社区'; }
-.neko-home-features .neko-side-rail__bilibili::after { content:'视频'; }
-.neko-home-features .neko-side-rail__fish::after { content:'养鱼'; }
 body[data-neko-workspace-shell] button[data-neko-new-session="plus"] { position:absolute !important; visibility:hidden !important; pointer-events:none !important; }
 .neko-workspace-rail-controls { display:flex; flex-direction:column; gap:10px; padding-top:14px; }
 .neko-room-entry, .neko-room-workspace { font-size:21px; line-height:1; }
 .neko-room-entry[aria-pressed="true"], .neko-room-workspace[aria-pressed="true"] { background:var(--nws-hover); color:#396c9f; }
 body[data-neko-workspace-shell] [data-neko-room-masked] { visibility:hidden !important; }
-body[data-neko-workspace-shell] .neko-chatroom-preview { position:relative; z-index:auto; box-sizing:border-box; flex:1 1 auto; min-height:0; overflow:auto; background:transparent; }
-/* Leave room for the companion and its input dock at the column foot. */
-body[data-neko-chatroom-active] .neko-chatroom-preview { padding-bottom:136px; }
-body[data-neko-workspace-shell] .neko-role-host { display:flex; flex-direction:column; min-height:0; }
-/* The native sidebar keeps its intrinsic width; stretch it to the split track
-   so the Home column, the divider and the account row share one edge. */
-body[data-neko-workspace-shell] [data-neko-native-sidebar] { width:100% !important; max-width:none !important; flex:1 1 auto !important; min-width:0 !important; }
-body[data-neko-workspace-shell] .neko-role-host { min-width:0; }
-/* While Home is active, masked native branches must not reserve layout space. */
-body[data-neko-chatroom-active] [data-neko-room-masked] { display:none !important; }
-/* Home owns the sidebar column; the native navigation and seats step aside. */
-body[data-neko-chatroom-active] .neko-sidebar-items,
-body[data-neko-chatroom-active] .neko-session-browser,
-body[data-neko-chatroom-active] .neko-seat-mount { display:none !important; }
-/* Home never shows the DSH page; its own view covers the main area. */
-body[data-neko-home-active] [data-neko-chat-center] { visibility:hidden !important; }
-body[data-neko-home-active] .neko-workspace-directory,
-body[data-neko-home-active] .neko-scene-projects { display:none !important; }
-/* Follow the official DeepSeek Harness dark palette instead of the skin tint. */
-html body[data-ds-dark-theme] {
-  --dsw-alias-bg-base:#151517 !important;
-  --dsw-alias-bg-layer-1:#202329 !important;
-  --dsw-alias-bg-layer-2:#2c2c2e !important;
-  --dsw-specific-sidebar-fill:#212025 !important;
-  --dsw-alias-border-l1:#2c2e35 !important;
-  --dsw-alias-label-primary:#f2f2f4 !important;
-  --dsw-alias-label-secondary:#a7a9b0 !important;
-  --dsw-alias-interactive-bg-hover:#262830 !important;
-  --dsw-alias-interactive-bg-active:#2e3038 !important;
-  --dsw-alias-brand-primary:#7d9bc9 !important;
-  --nk-canvas:#151517 !important;
-  --nk-surface:#202329 !important;
-  --nk-surface-2:#24252d !important;
-  --nk-surface-3:#2c2c2e !important;
-  --nk-hover:#262830 !important;
-  --nk-active:#2e3038 !important;
-  --nk-border:#2c2e35 !important;
-  --nk-border-strong:#3a3d45 !important;
-  --nk-text:#f2f2f4 !important;
-  --nk-text-2:#a7a9b0 !important;
-  --nk-text-3:#7f828a !important;
-  --nk-accent:#7d9bc9 !important;
-  --nk-accent-soft:#2a3446 !important;
-  --nk-focus:#7d9bc9 !important;
-}
+body[data-neko-workspace-shell] .neko-chatroom-preview { position:fixed; z-index:35; box-sizing:border-box; overflow:auto; background:var(--dsw-specific-sidebar-fill,#e5edf8); }
 .neko-workspace-settings { font-size:24px; line-height:1; }
 .neko-office-switch { border:1px solid var(--nws-border); background:var(--nws-hover); }
+body[data-neko-daily-compact] :is(.neko-room-workspace,.neko-custom-seats,.neko-session-browser,.neko-startup,.neko-scene-projects,.neko-workspace-directory,.neko-native-tools-entry,.neko-workspace-expand-control,.neko-office-panel) { display:none!important; }
+body[data-neko-daily-compact] :is([data-neko-chat-center],[data-neko-unified-coding]) { visibility:hidden!important; pointer-events:none!important; }
+body[data-neko-daily-compact] [data-neko-collapsed-composer] { visibility:visible!important; pointer-events:auto!important; }
+.neko-office-switch { display:flex; flex-direction:column; justify-content:center; gap:1px; }
+.neko-office-switch .neko-edition-icon { font:23px/1 system-ui,sans-serif; }
+.neko-office-switch small { font:10px/1.1 system-ui,sans-serif; }
+.neko-edition-menu { position:fixed; z-index:2147482500; width:218px; padding:6px; border:1px solid var(--nws-border); border-radius:14px; background:var(--nws-bg); color:var(--nws-text); box-shadow:0 12px 36px #17303d26; font:13px/1.4 system-ui,sans-serif; -webkit-app-region:no-drag; }
+.neko-edition-menu[hidden] { display:none!important; }
+.neko-edition-menu button { display:flex; flex-direction:column; gap:3px; width:100%; padding:12px 14px; text-align:left; border:0; border-radius:9px; background:transparent; color:inherit; cursor:pointer; }
+.neko-edition-menu button[aria-checked="true"],.neko-edition-menu button:hover { background:var(--nws-hover); }
+.neko-edition-menu button[aria-checked="true"] strong::after { content:' ✓'; }
+.neko-edition-menu small { color:var(--nws-muted); }
+.neko-edition-menu p:empty { display:none; }
+.neko-edition-menu p { margin:6px 10px; }
+.neko-edition-menu button:focus-visible { outline:2px solid #4c89ad; outline-offset:-2px; }
+body[data-neko-workbench-edition="office"] :is(.neko-workspace-rail-controls,.neko-side-rail__space,.neko-side-rail__video-menu,.neko-native-tools-entry,.neko-role-host,.neko-custom-seats,.neko-session-browser,.neko-startup,.neko-workspace-directory,.neko-scene-projects) { display:none!important; }
+body[data-neko-workbench-edition="office"] .neko-side-rail__bottom > :not(.neko-side-rail__account) { display:none!important; }
+body[data-neko-workbench-edition="office"] .neko-side-rail__bottom { margin-top:auto; }
+body[data-neko-workbench-edition="office"] .neko-companion-dock { margin:0 10px 8px; width:calc(100% - 20px); min-width:0; }
+body[data-neko-workbench-edition="office"] .neko-companion-character { height:72px; }
+body[data-neko-workbench-edition="office"] .neko-companion-history { max-height:min(26vh,220px); }
+body[data-neko-workbench-edition="office"] .neko-companion-dock[data-neko-office-floating] { position:fixed; z-index:90; left:74px; bottom:12px; width:min(280px,calc(100vw - 94px)); padding:8px; border:1px solid var(--nws-border); border-radius:14px; background:var(--nws-bg); box-shadow:0 8px 28px #17303d24; }
 .neko-custom-seats { display:grid; gap:3px; margin:10px 0 6px; min-width:0; container-type:inline-size; }
 .neko-custom-seat { display:flex; align-items:center; border-radius:9px; min-width:0; }
 .neko-custom-seat[data-active="true"] { background:var(--nws-hover); }
@@ -204,10 +100,21 @@ html body[data-ds-dark-theme] {
    geometry is supplied by the workspace shell and follows its left pane. */
 .neko-companion-dock[data-neko-companion-expanded] { position:fixed; left:var(--neko-companion-left); bottom:var(--neko-companion-bottom); width:var(--neko-companion-width); max-width:none; margin:0; z-index:52; }
 .neko-companion-dock[data-neko-companion-expanded] .neko-companion-form { width:100%; box-sizing:border-box; }
-.neko-companion-dock[data-neko-companion-rail-chat] { position:fixed; inset:auto; left:var(--neko-rail-chat-left); top:var(--neko-rail-chat-top); width:var(--neko-rail-chat-width); max-height:calc(100vh - 32px); overflow:auto; z-index:2147481002; margin:0; padding:32px 10px 10px; border:1px solid var(--nws-border); border-radius:14px; background:var(--nws-bg); box-shadow:0 8px 28px #17303d2b; }
-.neko-companion-dock[data-neko-companion-rail-chat] .neko-companion-history { max-height:240px; }
-.neko-companion-rail-close { position:absolute; top:4px; right:6px; width:26px; height:26px; border:0; border-radius:8px; background:transparent; color:inherit; cursor:pointer; font:20px system-ui; }
+.neko-companion-chat-panel { display:contents; }
+.neko-companion-chat-panel[hidden] { display:none !important; }
+.neko-companion-chat-close{position:absolute;right:3px;top:1px;display:grid;place-items:center;width:23px;height:23px;padding:0;border:0;border-radius:5px;background:transparent;color:var(--nws-muted);font:16px/1 system-ui;cursor:pointer}.neko-companion-chat-close[hidden]{display:none!important}.neko-companion-chat-close:hover{background:var(--nws-hover)}.neko-companion-chat-close:focus-visible{outline:2px solid #4c89ad}
+.neko-companion-dock[data-neko-companion-lobby] { pointer-events:none; }
+.neko-companion-dock[data-neko-companion-lobby] .neko-companion-character { pointer-events:auto; }
+.neko-companion-dock[data-neko-companion-lobby] .neko-companion-chat-panel { display:flex; flex-direction:column; gap:4px; position:absolute; z-index:4; bottom:calc(100% + 8px); left:calc(50% + var(--neko-companion-offset,0px)); transform:translateX(-50%); width:min(320px,100%); box-sizing:border-box; padding:24px 8px 8px; border:1px solid color-mix(in srgb,var(--nws-muted) 24%,transparent); border-radius:12px; background:var(--dsw-specific-sidebar-fill,var(--nws-bg)); box-shadow:0 6px 20px #17303d1c; pointer-events:auto; }
+.neko-companion-dock[data-neko-companion-lobby] .neko-companion-history { position:static; height:auto; max-height:96px; min-height:0; box-shadow:none; }
+.neko-companion-dock[data-neko-companion-lobby] .neko-companion-reply { --pet-size:400px; bottom:calc(100% + 12px + var(--neko-companion-chat-height,0px)); left:calc(50% + var(--neko-companion-offset,0px)); width:max-content; max-width:min(300px,100%); white-space:pre-wrap; overflow-wrap:anywhere; user-select:text; pointer-events:auto; }
+.neko-companion-dock[data-neko-companion-room-lobby] .neko-companion-chat-panel{position:relative;bottom:auto;left:auto;transform:none;width:100%;min-height:0;max-height:var(--neko-room-companion-panel-max-height,none);overflow-y:auto;padding:24px 8px 8px;grid-row:1}
+.neko-companion-dock[data-neko-companion-room-lobby] .neko-companion-reply{bottom:calc(100% + 12px)}
+.neko-companion-reply-text { display:block; max-height:140px; overflow-y:auto; }
+.neko-companion-reply[hidden] { display:none !important; }
+.neko-companion-dock[hidden] { display:none !important; }
 .neko-companion-character { justify-self:center; width:76px; height:90px; position:relative; transform:translateX(var(--neko-companion-offset,0px)); cursor:grab; touch-action:none; user-select:none; -webkit-user-select:none; }
+.neko-companion-dock[data-neko-companion-room-lobby] .neko-companion-character{grid-row:2;margin-top:4px;transform:none;height:var(--neko-room-companion-sprite-height,90px);width:calc(var(--neko-room-companion-sprite-height,90px) * .844444)}
 .neko-companion-character[data-dragging="true"] { cursor:grabbing; }
 .neko-companion-menu { position:fixed; z-index:60; display:grid; gap:3px; min-width:160px; max-width:240px; box-sizing:border-box; padding:6px; color:var(--nws-text); background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:12px; box-shadow:0 8px 28px #17303d20; font:13px/1.5 system-ui; }
 .neko-companion-menu[hidden] { display:none !important; }
@@ -217,14 +124,9 @@ html body[data-ds-dark-theme] {
 .neko-companion-menu__status { max-width:220px; margin:3px 8px; color:var(--nws-muted); font-size:11px; overflow-wrap:anywhere; }
 .neko-companion-menu__status:empty { display:none; }
 .neko-side-rail__space { position:relative; width:calc(100% + 24px); overflow:hidden; }
-.neko-rail-companion { flex:none; width:56px; height:70px; padding:0; cursor:pointer; }
-.neko-rail-companion[data-neko-rail-roam] { position:absolute; left:0; top:0; z-index:1; max-width:100%; max-height:100%; touch-action:none; cursor:grab; }
-.neko-rail-companion[data-dragging="true"] { cursor:grabbing; }
-.neko-rail-companion .neko-companion-character { width:min(54px, 100%); height:min(68px, 100%); transform:none; cursor:inherit; }
-.neko-rail-companion img.neko-companion-poster,.neko-rail-companion video.neko-companion-video { width:100%; height:100%; border-radius:0; object-fit:contain; }
-.neko-rail-companion [hidden] { display:none !important; }
 .neko-companion-character:focus-visible { outline:2px dashed #4c89ad; outline-offset:-3px; border-radius:12px; }
 .neko-companion-poster,.neko-companion-video { display:block; position:absolute; inset:0; width:100%; height:100%; background:transparent; object-position:center; object-fit:cover; pointer-events:none; }
+.neko-companion-character [hidden] { display:none !important; }
 .neko-companion-history { position:absolute; z-index:4; bottom:calc(100% + 6px); left:0; right:0; box-sizing:border-box; height:96px; overflow:auto; margin:0; padding:10px; border:1px solid color-mix(in srgb,var(--nws-muted) 18%,transparent); border-radius:10px; background:var(--dsw-specific-sidebar-fill,var(--nws-bg)); box-shadow:0 4px 16px #17303d0a; line-height:18px; white-space:pre-wrap; overflow-wrap:anywhere; }
 .neko-companion-message,.neko-companion-empty { margin:0; font-size:12px; line-height:18px; }
 .neko-companion-empty { color:var(--nws-muted); }
@@ -239,10 +141,10 @@ html body[data-ds-dark-theme] {
 .neko-companion-form button:hover,.neko-companion-history-toggle[aria-expanded="true"] { background:color-mix(in srgb,var(--nws-muted) 9%,transparent); color:var(--nws-text); }
 .neko-companion-form button:focus-visible { outline:2px solid #4c89ad; outline-offset:1px; }
 .neko-companion-history-toggle svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round; }
-.neko-office-panel { position:fixed; z-index:28; display:flex; flex-direction:column; box-sizing:border-box; container:neko-office / inline-size; padding:var(--nk-pane-pad-y) clamp(18px,5vw,75px) var(--nk-pane-pad-y); color:var(--nws-text); background:var(--nk-surface); font:14px/1.65 system-ui,sans-serif; }
-.neko-office-panel[hidden],.neko-workspace-modal[hidden],.neko-companion-dock[hidden],.neko-companion-dock [hidden] { display:none !important; }
+.neko-office-panel { position:fixed; z-index:28; display:flex; flex-direction:column; box-sizing:border-box; container:neko-office / inline-size; padding:22px clamp(18px,5vw,75px) 24px; color:var(--nws-text); background:var(--dsw-alias-bg-base,#edf6fa); font:14px/1.65 system-ui,sans-serif; }
+.neko-office-panel[hidden],.neko-workspace-modal[hidden],.neko-companion-dock [hidden] { display:none !important; }
 .neko-office-panel[data-neko-compact] { padding:14px 12px 16px; }
-.neko-office-header { display:flex; align-items:center; gap:10px; min-height:var(--nk-pane-header); flex:none; border-bottom:1px solid var(--nws-border); }
+.neko-office-header { display:flex; align-items:center; gap:10px; min-height:42px; flex:none; }
 .neko-office-brand { width:32px; height:32px; object-fit:contain; }
 .neko-office-header strong { max-width:45%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .neko-office-model { font-size:11px; color:var(--nws-muted); margin-right:auto; }
@@ -258,7 +160,7 @@ html body[data-ds-dark-theme] {
 .neko-office-welcome img { width:100px; height:100px; object-fit:contain; }
 .neko-office-welcome h2 { font-size:20px; margin:12px 0 0; color:var(--nws-text); }
 .neko-office-welcome p { font-size:13px; }
-.neko-office-form { flex:none; background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:var(--nk-radius-lg); padding:12px 15px; box-shadow:var(--nk-shadow-sm); }
+.neko-office-form { flex:none; background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:18px; padding:12px 15px; box-shadow:0 5px 24px #13304808; }
 .neko-office-form textarea { width:100%; resize:vertical; max-height:180px; min-height:65px; color:inherit; background:transparent; border:0; font:14px/1.65 system-ui; outline:none; box-sizing:border-box; }
 .neko-office-controls { display:flex; align-items:center; flex-wrap:wrap; gap:8px 14px; padding:8px 0; border-top:1px solid var(--nws-border); }
 .neko-office-control { display:flex; align-items:center; gap:6px; min-width:0; font-size:11px; color:var(--nws-muted); }
@@ -286,6 +188,7 @@ html body[data-ds-dark-theme] {
 .neko-office-choice { flex:1 1 88px; min-width:0; display:grid; justify-items:center; gap:7px; padding:14px 8px !important; }
 .neko-office-choice img { width:45px; height:45px; object-fit:contain; }
 .neko-office-choice[aria-pressed="true"] { outline:2px solid #4c89ad; outline-offset:-2px; }
+.neko-display-choice__detail { color:var(--nws-muted); font-size:11px; text-align:center; }
 .neko-workspace-palettes { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:18px; }
 .neko-workspace-palettes button { padding:4px; }
 .neko-workspace-palettes img { width:35px; height:35px; object-fit:contain; }
@@ -324,17 +227,12 @@ body[data-neko-workspace-shell] [data-neko-companion-footer] { display:block !im
 
 .neko-lobby-switch svg { width:24px; height:24px; }
 .neko-lobby-switch[data-connection="online"] { color:#2f7d5b; }
-.neko-lobby-panel { position:fixed; z-index:29; display:flex; flex-direction:column; box-sizing:border-box; padding:var(--nk-pane-pad-y) clamp(18px,4vw,60px) var(--nk-pane-pad-y); color:var(--nws-text); background:var(--nk-surface); font:14px/1.6 system-ui,sans-serif; }
+.neko-lobby-panel { position:fixed; z-index:35; display:flex; flex-direction:column; box-sizing:border-box; container-type:inline-size; padding:12px; color:var(--nws-text); background:var(--dsw-alias-bg-base,#edf6fa); font:14px/1.6 system-ui,sans-serif; }
 .neko-lobby-panel[hidden],.neko-lobby-panel [hidden] { display:none !important; }
-/* 公共聊天室: the channel fills only the chatroom column, above the preview. */
-.neko-lobby-panel[data-neko-lobby-in-room] { z-index:36; padding:var(--nk-pane-pad-y) var(--nk-pane-pad-x) 14px; font-size:13px; }
-.neko-lobby-panel[data-neko-lobby-in-room] .neko-lobby-header { flex-wrap:wrap; row-gap:4px; }
-.neko-lobby-panel[data-neko-lobby-in-room] .neko-lobby-members { display:none; }
-.neko-lobby-room-back { flex:none; }
 .neko-lobby-panel button { color:inherit; background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:8px; padding:5px 10px; font:12px/1.5 system-ui; cursor:pointer; }
 .neko-lobby-panel button:disabled { opacity:.45; cursor:default; }
 .neko-lobby-panel button:focus-visible,.neko-lobby-log:focus-visible { outline:2px solid #4c89ad; outline-offset:1px; }
-.neko-lobby-header { display:flex; align-items:center; gap:10px; min-height:var(--nk-pane-header); flex:none; border-bottom:1px solid var(--nws-border); padding-bottom:0; }
+.neko-lobby-header { display:flex; align-items:center; flex-wrap:wrap; gap:6px; min-height:38px; flex:none; border-bottom:1px solid var(--nws-border); padding-bottom:8px; }
 .neko-lobby-title { font-size:16px; max-width:30%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .neko-lobby-topic { flex:1; min-width:0; color:var(--nws-muted); font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .neko-lobby-online { color:var(--nws-muted); font-size:12px; white-space:nowrap; }
@@ -344,21 +242,21 @@ body[data-neko-workspace-shell] [data-neko-companion-footer] { display:block !im
 .neko-lobby-older { align-self:center; margin:8px 0 0; }
 .neko-lobby-log { flex:1; min-height:80px; overflow:auto; padding:12px 0; }
 .neko-lobby-empty { color:var(--nws-muted); text-align:center; margin-top:40px; }
-.neko-lobby-message { display:flex; gap:10px; margin:0 0 var(--nk-space-3); padding:10px 12px; border-radius:var(--nk-radius-lg); }
-.neko-lobby-message[data-kind="cat"] { background:var(--nk-surface-2); }
-.neko-lobby-message[data-mine="true"][data-kind="human"] { background:var(--nk-accent-soft); }
+.neko-lobby-message { display:flex; gap:10px; margin:0 0 12px; padding:8px 12px; border-radius:14px; }
+.neko-lobby-message[data-kind="cat"] { background:color-mix(in srgb,#f3b56b 14%,var(--nws-bg)); }
+.neko-lobby-message[data-mine="true"][data-kind="human"] { background:var(--nws-bg); }
 .neko-lobby-message--outbox { opacity:.75; }
 .neko-lobby-avatar { width:32px; height:32px; flex:none; border-radius:50%; object-fit:cover; }
 .neko-lobby-avatar[data-kind="cat"] { border-radius:10px; object-fit:contain; }
 .neko-lobby-avatar--hue { display:grid; place-items:center; color:#fff; font-size:14px; background:hsl(var(--neko-lobby-hue,200) 45% 52%); }
 .neko-lobby-message__body { flex:1; min-width:0; }
-.neko-lobby-message__meta { display:flex; align-items:center; flex-wrap:wrap; gap:6px; margin-bottom:3px; font-size:var(--nk-font-xs); color:var(--nws-muted); }
+.neko-lobby-message__meta { display:flex; align-items:center; flex-wrap:wrap; gap:6px; font-size:12px; color:var(--nws-muted); }
 .neko-lobby-label { color:var(--nws-text); font-weight:600; overflow-wrap:anywhere; }
 .neko-lobby-badge { font-size:10px; border:1px solid var(--nws-border); border-radius:5px; padding:0 4px; }
 .neko-lobby-badge--assist { border-style:dashed; }
 .neko-lobby-time { font-size:10px; }
 .neko-lobby-text,.neko-lobby-quote__text { white-space:pre-wrap; overflow-wrap:anywhere; }
-.neko-lobby-mention { color:var(--nk-accent); background:var(--nk-accent-soft); border-radius:var(--nk-radius-xs); padding:0 2px; }
+.neko-lobby-mention { color:#246b91; background:color-mix(in srgb,#246b91 10%,transparent); border-radius:4px; padding:0 2px; }
 .neko-lobby-mention[data-kind="cat"] { color:#9a5a17; background:color-mix(in srgb,#f3b56b 22%,transparent); }
 .neko-lobby-quote { margin:4px 0; padding:2px 8px; border-left:3px solid var(--nws-border); color:var(--nws-muted); font-size:12px; }
 .neko-lobby-quote__label { display:block; font-weight:600; }
@@ -370,13 +268,18 @@ body[data-neko-workspace-shell] [data-neko-companion-footer] { display:block !im
 .neko-lobby-pending { color:var(--nws-muted); }
 .neko-lobby-error { margin:0 0 6px; font-size:12px; color:#bd5c4e; }
 .neko-lobby-modebar { display:flex; align-items:center; flex-wrap:wrap; gap:8px; flex:none; margin:4px 0 8px; font-size:12px; }
-.neko-lobby-modes { display:flex; gap:4px; }
+.neko-lobby-modes { display:flex; flex-wrap:wrap; gap:4px; }
 .neko-lobby-mode[aria-pressed="true"] { outline:2px solid #4c89ad; outline-offset:-2px; }
 .neko-lobby-reason { color:var(--nws-muted); }
 .neko-lobby-dots { display:flex; gap:10px; margin-left:auto; color:var(--nws-muted); }
 .neko-lobby-dot::before { content:''; display:inline-block; width:7px; height:7px; margin-right:4px; border-radius:50%; background:#b9c6cd; vertical-align:middle; }
 .neko-lobby-dot[data-on="true"]::before { background:#3fa36f; }
-.neko-lobby-form { position:relative; flex:none; background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:var(--nk-radius-lg); padding:10px 14px; }
+.neko-lobby-form { position:relative; flex:none; background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:16px; padding:10px 14px; }
+.neko-lobby-panel[data-neko-lobby-full] .neko-lobby-form { align-self:flex-start; box-sizing:border-box; width:max(0px,min(50%,calc(100% - var(--neko-lobby-floating-reserve,0px)))); max-width:100%; }
+.neko-lobby-panel[data-neko-room-column]{border-left:1px solid var(--nws-border);overflow:hidden;z-index:36;padding-bottom:calc(12px + var(--neko-room-work-reserve,0px))}
+.neko-lobby-panel[data-neko-room-column] .neko-lobby-form{width:100%;box-sizing:border-box;align-self:stretch}
+.neko-lobby-panel[data-neko-room-column] .neko-lobby-stream{padding-bottom:calc(10px + var(--neko-room-companion-reserve,0px))}
+body[data-neko-room-columns] .neko-companion-dock[data-neko-companion-expanded]{z-index:52}
 .neko-lobby-form textarea { width:100%; resize:none; min-height:44px; max-height:160px; color:inherit; background:transparent; border:0; font:14px/1.6 system-ui; outline:none; box-sizing:border-box; }
 .neko-lobby-reply { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--nws-muted); margin-bottom:4px; }
 .neko-lobby-reply__text { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -388,6 +291,7 @@ body[data-neko-workspace-shell] [data-neko-companion-footer] { display:block !im
 .neko-lobby-picker__item[aria-selected="true"] { background:var(--nws-hover); }
 .neko-lobby-picker__item[data-offline="true"] { opacity:.6; }
 .neko-lobby-header__actions { display:flex; gap:6px; margin-left:auto; }
+.neko-lobby-members-toggle { display:none; }
 .neko-lobby-header__actions .neko-lobby-sign-out { margin-left:0; }
 .neko-lobby-middle { display:flex; flex:1; min-height:0; gap:14px; }
 .neko-lobby-stream { display:flex; flex-direction:column; flex:1; min-width:0; min-height:0; }
@@ -424,7 +328,42 @@ body[data-neko-workspace-shell] [data-neko-companion-footer] { display:block !im
 .neko-lobby-marker { font-size:10px; color:#9a5a17; border:1px dashed #d7a165; border-radius:5px; padding:0 5px; white-space:nowrap; }
 .neko-lobby-form[data-assist="true"] { border-color:#d7a165; }
 .neko-lobby-dialog { position:absolute; inset:0; z-index:5; display:grid; place-items:center; padding:24px; background:#0c24394d; }
+/* While 猫猫设置 is open she stands at the right edge, above the scrim; the
+   card centres in the remaining width so no field or button is beneath her. */
+.neko-lobby-panel[style*="--neko-lobby-dialog-companion-reserve"] .neko-lobby-dialog { padding-right:max(24px,var(--neko-lobby-dialog-companion-reserve,24px)); }
 .neko-lobby-dialog__card { width:min(460px,92%); max-height:85%; overflow:auto; display:grid; gap:10px; background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:16px; box-shadow:0 24px 80px #17303d30; padding:18px; }
+.neko-lobby-dialog[data-dialog="game-room"] .neko-lobby-dialog__card { width:min(840px,94%); }
+.neko-lobby-dialog:is([data-dialog="friends"],[data-dialog="game-inbox"]) .neko-lobby-dialog__card { width:min(640px,95%); max-height:min(78vh,650px); padding:clamp(16px,3vw,26px); gap:14px; }
+.neko-lobby-dialog:is([data-dialog="friends"],[data-dialog="game-inbox"]) .neko-lobby-dialog__title { font-size:clamp(18px,3vw,24px); }
+.neko-friends-panel { min-width:0; display:grid; gap:10px; }
+.neko-friends-overview { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:12px 14px; border:1px solid var(--nws-border); border-radius:13px; background:linear-gradient(105deg,var(--nws-hover),var(--nws-bg)); }
+.neko-friends-overview__identity { display:flex; align-items:center; gap:10px; font-size:14px; }
+.neko-friends-overview__mark { display:grid; place-items:center; width:32px; height:32px; border-radius:10px; background:var(--nws-bg); color:#5482b2; font:22px/1 system-ui,sans-serif; }
+.neko-friends-overview__count { color:var(--nws-muted); font-size:12px; }
+.neko-friends-tools { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.neko-friends-search { min-width:120px; flex:1; padding:8px 10px; border:1px solid var(--nws-border); border-radius:8px; background:var(--nws-bg); color:inherit; font:inherit; }
+.neko-friends-filters { display:flex; gap:3px; }
+.neko-friends-filter[aria-pressed="true"] { background:var(--nws-hover); font-weight:600; }
+.neko-lobby-friend-list { list-style:none; padding:0; margin:0; max-height:310px; overflow:auto; }
+.neko-lobby-friend-list:empty { display:none; }
+.neko-friends-contact { display:flex; align-items:center; gap:12px; padding:8px 9px; border-bottom:1px solid var(--nws-border); }
+.neko-friends-contact:last-child { border-bottom:0; }
+.neko-friends-avatar { position:relative; flex:0 0 38px; height:38px; display:grid; place-items:center; border-radius:50%; overflow:hidden; background:color-mix(in srgb,hsl(var(--neko-friend-hue,200) 70% 72%) 30%,var(--nws-bg)); color:var(--nws-text); font-weight:700; }
+.neko-friends-avatar__image { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+.neko-friends-contact button.neko-friends-avatar--invite { border:1px solid var(--nws-border); border-radius:50%; padding:0; cursor:pointer; }
+.neko-friends-avatar--invite:is(:hover,:focus-visible) { outline:2px solid #4c89ad; outline-offset:2px; }
+.neko-game-inbox { position:relative; }
+.neko-game-inbox:not([data-count=""])::after { content:attr(data-count); position:absolute; top:2px; right:1px; min-width:14px; border-radius:999px; padding:1px 3px; background:#4c79b4; color:white; font:10px/1.4 system-ui,sans-serif; }
+.neko-friends-contact__name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; }
+.neko-friends-presence { display:flex; align-items:center; gap:5px; flex:none; color:var(--nws-muted); font-size:12px; }
+.neko-friends-presence::before { content:''; width:7px; height:7px; border-radius:50%; background:currentColor; opacity:.45; }
+.neko-friends-presence[data-online="true"]::before { background:#39a47b; opacity:1; }
+.neko-friends-empty { min-height:80px; display:grid; justify-items:center; align-content:center; gap:12px; text-align:center; padding:12px; }
+.neko-friends-status { color:var(--nws-muted); margin:0; }
+.neko-friends-panel .neko-lobby-friends-login { background:var(--nws-hover); font-weight:600; }
+.neko-friends-panel [hidden] { display:none!important; }
+.neko-lobby-game-board { width:100%; height:760px; border:1px solid var(--nws-border); border-radius:12px; }
+.neko-lobby-game-room-controls:not([hidden]) { display:grid; gap:8px; }
 .neko-lobby-dialog__title { margin:0; font-size:16px; }
 .neko-lobby-field { display:grid; gap:4px; font-size:12px; }
 .neko-lobby-field__label { font-weight:600; }
@@ -439,16 +378,13 @@ body[data-neko-workspace-shell] [data-neko-companion-footer] { display:block !im
 .neko-lobby-cat-api[data-ready="true"] { background:color-mix(in srgb,#3fa36f 12%,transparent); }
 .neko-lobby-dialog__error { margin:0; color:#bd5c4e; font-size:12px; }
 .neko-lobby-dialog__footer { display:flex; justify-content:flex-end; gap:8px; }
-@media(max-width:900px) { .neko-lobby-members { display:none; } }
-.neko-lobby-panel { padding:12px; overflow:hidden; }
-.neko-lobby-header { flex-wrap:wrap; gap:6px; }
-.neko-lobby-topic { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.neko-lobby-panel[data-neko-narrow] .neko-lobby-members { display:none; }
-.neko-lobby-panel:not([data-neko-narrow]) .neko-lobby-members { display:block; }
-.neko-lobby-panel:not([data-neko-narrow]) .neko-lobby-members-toggle { display:none; }
-.neko-lobby-panel[data-neko-narrow][data-members-open] .neko-lobby-members { display:block; position:absolute; z-index:3; top:100px; right:12px; bottom:120px; width:min(200px,calc(100% - 24px)); padding:12px; border:1px solid var(--nws-border); border-radius:10px; background:var(--nws-bg); box-shadow:0 6px 20px #17303d24; }
-.neko-lobby-panel[data-neko-narrow] .neko-lobby-header__actions { width:100%; flex-wrap:wrap; margin:0; }
-.neko-lobby-panel[data-neko-narrow] .neko-lobby-modes { flex-wrap:wrap; }
+@container (max-width:540px) {
+  .neko-lobby-header__actions { flex-wrap:wrap; }
+  .neko-lobby-members-toggle { display:inline-flex; }
+  .neko-lobby-members { display:none; position:absolute; right:8px; top:54px; z-index:4; box-sizing:border-box; width:min(200px,calc(100% - 16px)); max-height:60%; padding:10px; border:1px solid var(--nws-border); border-radius:10px; background:var(--nws-bg); box-shadow:0 8px 24px #17303d30; }
+  .neko-lobby-panel[data-members-open] .neko-lobby-members { display:block; }
+  .neko-lobby-dialog { padding:8px; }
+}
 
 /* Interaction states: hover/press cues on enabled controls only, visible focus
    rings, and busy/disabled cues. Disabled (e.g. Codex 测试中) never gets hover. */
@@ -472,16 +408,84 @@ body[data-neko-workspace-shell] [data-neko-companion-footer] { display:block !im
 .neko-workspace-directory__button:hover { background:var(--nws-hover); }
 .neko-workspace-directory__button:focus-visible { outline:2px solid #4c89ad; outline-offset:2px; }
 .neko-workspace-directory__status { position:absolute; right:0; bottom:42px; box-sizing:border-box; width:max-content; max-width:min(220px,70vw); padding:7px 10px; border:1px solid var(--nws-border); border-radius:8px; background:var(--nws-bg); color:var(--nws-text); font:12px/1.4 system-ui,sans-serif; }
-/* Native DSH tools live above the seats instead of the floating top-right entry. */
-.neko-work-tools { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:4px; margin:0 0 var(--nk-space-2); }
-/* Collapsed rail: our own expand + new-session icons, level with the lights. */
-.neko-collapsed-rail { display:none; position:fixed; left:0; top:0; bottom:0; width:72px; box-sizing:border-box; z-index:50; flex-direction:column; align-items:center; gap:4px; padding-top:42px; background:linear-gradient(180deg,#212023 0%,#1f1f21 58%,#26262a 100%); -webkit-app-region:no-drag; }
-body[data-neko-sidebar-collapsed] .neko-collapsed-rail { display:flex; }
-.neko-collapsed-rail__button { display:grid; place-items:center; width:36px; height:36px; padding:6px; border:1px solid transparent; border-radius:8px; background:transparent; color:var(--nk-text-2); font:18px/1 system-ui,sans-serif; cursor:pointer; }
-.neko-collapsed-rail__button:hover { background:var(--nk-hover); color:var(--nk-text); }
-.neko-collapsed-rail__button:focus-visible { outline:2px solid var(--nk-focus); outline-offset:1px; }
-.neko-collapsed-rail__button svg { width:18px; height:18px; }
-.neko-work-tools__button { min-width:0; padding:6px 4px; border:1px solid var(--nk-border); border-radius:var(--nk-radius-md); background:var(--nk-surface); color:var(--nk-text-2); font:var(--nk-font-sm)/1.3 system-ui,sans-serif; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.neko-work-tools__button:hover { background:var(--nk-hover); color:var(--nk-text); }
-.neko-work-tools__button:focus-visible { outline:2px solid var(--nk-focus); outline-offset:1px; }
-body[data-neko-workspace-shell] .neko-native-tools-entry { display:none !important; }
+.neko-scene-projects { position:fixed; z-index:41; width:100px; height:36px; border:1px solid var(--nws-border); border-radius:9px; background:var(--nws-bg); color:var(--nws-text); font:12px system-ui,sans-serif; cursor:pointer; }
+.neko-scene-projects[hidden] { display:none !important; }
+.neko-scene-projects:hover { background:var(--nws-hover); }
+.neko-scene-projects:focus-visible { outline:2px solid #4c89ad; outline-offset:2px; }
+.neko-startup { position:fixed; z-index:40; box-sizing:border-box; overflow:auto; container-type:inline-size; color:var(--nws-text); background:var(--dsw-alias-bg-base,#edf4fb); font:14px/1.5 system-ui,sans-serif; }
+.neko-startup[hidden] { display:none !important; }
+.neko-startup__inner { width:min(760px,100%); margin:0 auto; box-sizing:border-box; padding:clamp(22px,5vw,54px); }
+.neko-startup__header { display:flex; align-items:start; justify-content:space-between; gap:16px; margin-bottom:24px; }
+.neko-startup__header h1 { font-size:24px; line-height:1.3; margin:0; }
+.neko-startup__header p { color:var(--nws-muted); font-size:13px; margin:7px 0 0; }
+.neko-startup button { color:inherit; font:inherit; cursor:pointer; }
+.neko-startup__continue,.neko-startup__refresh,.neko-startup__more { background:transparent; border:1px solid var(--nws-border); border-radius:9px; padding:7px 12px; }
+.neko-startup__search { width:100%; box-sizing:border-box; border:1px solid var(--nws-border); border-radius:10px; background:color-mix(in srgb,var(--nws-bg) 68%,transparent); color:inherit; padding:10px 13px; font:inherit; }
+.neko-startup__toolbar { display:flex; justify-content:space-between; align-items:center; gap:12px; margin:24px 0 8px; }
+.neko-startup__toolbar strong { font-size:13px; }
+.neko-startup__refresh { font-size:12px !important; padding:5px 10px; }
+.neko-startup__status { min-height:1.5em; color:var(--nws-muted); font-size:12px; margin:0 0 10px; }
+.neko-startup__projects { display:grid; gap:12px; }
+.neko-startup__project { border:1px solid var(--nws-border); border-radius:12px; background:color-mix(in srgb,var(--nws-bg) 72%,transparent); overflow:hidden; }
+.neko-startup__project-row { display:flex; align-items:center; min-width:0; }
+.neko-startup__project-header { display:flex; flex:1; min-width:0; justify-content:space-between; gap:12px; border:0; background:transparent; text-align:left; padding:11px 15px; }
+.neko-startup__project-header strong { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.neko-startup__provider { flex:none; color:var(--nws-muted); font-size:11px; }
+.neko-startup__project-new { flex:none; border:1px solid var(--nws-border); border-radius:7px; background:transparent; margin:0 10px; padding:5px 8px; font-size:12px !important; }
+.neko-startup__session { display:flex; box-sizing:border-box; align-items:center; justify-content:space-between; gap:10px; width:100%; min-width:0; border:0; border-top:1px solid color-mix(in srgb,var(--nws-border) 70%,transparent); background:transparent; text-align:left; padding:10px 15px; }
+.neko-startup__session span:first-child { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.neko-startup__arrow { flex:none; color:var(--nws-muted); font-size:20px; line-height:1; }
+.neko-startup button:hover:not(:disabled) { background:var(--nws-hover); }
+.neko-startup button:active:not(:disabled) { background:var(--dsw-alias-interactive-bg-active,#d0e5ef); }
+.neko-startup button:disabled { opacity:.5; cursor:not-allowed; }
+.neko-startup button:focus-visible,.neko-startup input:focus-visible { outline:2px solid #4c89ad; outline-offset:2px; }
+.neko-startup__project button:focus-visible { outline-offset:-2px; }
+.neko-startup__more { justify-self:start; font-size:12px !important; }
+@media(max-width:620px) { .neko-startup__header { flex-wrap:wrap; } .neko-startup__inner { padding:20px; } }
+/* The chooser lives inside a resizable work column, independent of the window. */
+@container (max-width:600px) {
+  .neko-startup__inner { padding:20px; }
+  .neko-startup__header { flex-wrap:wrap; }
+}
+@container (max-width:400px) {
+  .neko-startup__inner { padding:16px 12px; }
+  .neko-startup__header { flex-direction:column; align-items:flex-start; gap:10px; margin-bottom:16px; }
+  .neko-startup__header h1 { font-size:20px; }
+  .neko-startup__continue { white-space:nowrap; }
+  .neko-startup__toolbar { margin-top:16px; }
+  .neko-startup__project-header { gap:6px; padding:9px 8px; }
+  .neko-startup__project-header strong { flex:1; min-width:0; }
+  .neko-startup__provider { flex:none; }
+  .neko-startup__project-new { white-space:nowrap; margin:0 6px; padding:5px 6px; }
+  .neko-startup__session { padding:9px 8px; }
+}
+/* Keep the last project row reachable beside the fixed directory shortcut. */
+.neko-startup__inner { padding-bottom:64px; }
+
+/* Project history uses the existing session chooser while the work area is compact. */
+.neko-floating-records-control { position:fixed; right:112px; z-index:2147481001; padding:7px 12px; border:1px solid var(--nws-border); border-radius:9px; background:var(--nws-bg); color:var(--nws-text); font:12px system-ui,sans-serif; cursor:pointer; box-shadow:0 4px 14px #17303d19; }
+.neko-floating-records-control[hidden] { display:none !important; }
+.neko-floating-records-control:focus-visible { outline:2px solid #4c89ad; outline-offset:2px; }
+.neko-startup[data-neko-floating-records] { z-index:2147481001; resize:both; overflow:auto; min-width:min(260px,calc(100vw - 96px)); min-height:160px; max-width:calc(100vw - 96px); max-height:calc(100vh - 160px); border:1px solid var(--nws-border); border-radius:14px; box-shadow:0 8px 28px #17303d24; }
+.neko-startup[data-neko-floating-records] .neko-startup__inner { padding:16px 14px 28px; }
+
+.neko-office-switch img.neko-edition-avatar{width:40px;height:40px;object-fit:contain;pointer-events:none}.neko-office-switch{padding:0!important;background:transparent!important;border-color:transparent!important}.neko-office-switch:hover{background:var(--nws-hover,#dce6f5)!important}
+body[data-neko-workbench-edition] .neko-fixed-scene-entry{display:none!important}
+
+/* Desktop shell refinements; the original input, pet and session owners stay mounted. */
+body[data-neko-window-chrome="windows"] :is(.neko-companion-dock,.neko-companion-menu,.neko-session-browser,.neko-custom-seats,.neko-startup,.neko-office-panel,.neko-workspace-modal) { font-family:var(--neko-font-ui); }
+body[data-neko-window-chrome="windows"] [data-neko-companion-footer] { background:var(--dsw-specific-sidebar-fill); }
+body[data-neko-window-chrome="windows"] .neko-companion-dock[data-neko-companion-expanded] { box-sizing:border-box; padding:0 20px 12px; }
+body[data-neko-window-chrome="windows"] .neko-companion-form { min-height:44px; gap:5px; padding:5px 7px; background:var(--nws-bg); border:1px solid var(--nws-border); border-radius:13px; box-shadow:0 3px 12px #29446b05; }
+body[data-neko-window-chrome="windows"] .neko-companion-form textarea { height:32px; border:0; padding:7px 5px; font-size:12px; background:transparent; }
+body[data-neko-window-chrome="windows"] .neko-companion-form button { width:28px; height:30px; border-radius:8px; }
+body[data-neko-window-chrome="windows"] .neko-companion-form button[type="submit"]:not(:disabled) { color:var(--neko-ui-accent); background:var(--neko-ui-accent-soft); }
+body[data-neko-window-chrome="windows"] .neko-companion-character { width:72px; height:86px; margin-bottom:7px; }
+body[data-neko-window-chrome="windows"] .neko-startup__inner { max-width:820px; margin:auto; padding:44px 36px; }
+body[data-neko-window-chrome="windows"] .neko-startup__header h1 { font-size:26px; font-weight:650; letter-spacing:-.02em; }
+body[data-neko-window-chrome="windows"] .neko-startup__search { min-height:44px; border-radius:12px; background:var(--nws-bg); font-size:13px; }
+
+body[data-neko-workspace-shell] .neko-chatroom-preview::before { content:''; position:fixed; z-index:-1; pointer-events:none; left:inherit; top:inherit; width:inherit; height:var(--neko-chatroom-pane-height,100%); background:inherit; }
+
+/* Lucide brain icon, bundled locally; see assets/memory-icons/LICENSE. */
+.neko-memory-icon{display:block;width:20px;height:20px;background:currentColor;mask:url("data:image/svg+xml;base64,PHN2ZwogIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIKICB3aWR0aD0iMjQiCiAgaGVpZ2h0PSIyNCIKICB2aWV3Qm94PSIwIDAgMjQgMjQiCiAgZmlsbD0ibm9uZSIKICBzdHJva2U9ImN1cnJlbnRDb2xvciIKICBzdHJva2Utd2lkdGg9IjIiCiAgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIgogIHN0cm9rZS1saW5lam9pbj0icm91bmQiCj4KICA8cGF0aCBkPSJNMTIgMThWNSIgLz4KICA8cGF0aCBkPSJNMTUgMTNhNC4xNyA0LjE3IDAgMDEtMy00IDQuMTcgNC4xNyAwIDAxLTMgNCIgLz4KICA8cGF0aCBkPSJNMTcuNzA3IDYuMjk0QTMgMyAwIDEwMTIgNWEzIDMgMCAxMC01LjcwNyAxLjI5NCIgLz4KICA8cGF0aCBkPSJNMTcuOTk2IDUuMTI1YTQgNCAwIDAxMi41MjYgNS43NyIgLz4KICA8cGF0aCBkPSJNMTggMThhNCA0IDAgMDAyLTcuNDY1IiAvPgogIDxwYXRoIGQ9Ik0xOS45NjcgMTcuNDgyYTQgNCAwIDExLTcuOTY3LjUxNyA0IDQgMCAxMS03Ljk2Ny0uNTE3IiAvPgogIDxwYXRoIGQ9Ik02IDE4YTQgNCAwIDAxLTItNy40NjUiIC8+CiAgPHBhdGggZD0iTTYuMDA0IDUuMTI1YTQgNCAwIDAwLTIuNTI2IDUuNzciIC8+Cjwvc3ZnPgo=") center/contain no-repeat;-webkit-mask:url("data:image/svg+xml;base64,PHN2ZwogIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIKICB3aWR0aD0iMjQiCiAgaGVpZ2h0PSIyNCIKICB2aWV3Qm94PSIwIDAgMjQgMjQiCiAgZmlsbD0ibm9uZSIKICBzdHJva2U9ImN1cnJlbnRDb2xvciIKICBzdHJva2Utd2lkdGg9IjIiCiAgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIgogIHN0cm9rZS1saW5lam9pbj0icm91bmQiCj4KICA8cGF0aCBkPSJNMTIgMThWNSIgLz4KICA8cGF0aCBkPSJNMTUgMTNhNC4xNyA0LjE3IDAgMDEtMy00IDQuMTcgNC4xNyAwIDAxLTMgNCIgLz4KICA8cGF0aCBkPSJNMTcuNzA3IDYuMjk0QTMgMyAwIDEwMTIgNWEzIDMgMCAxMC01LjcwNyAxLjI5NCIgLz4KICA8cGF0aCBkPSJNMTcuOTk2IDUuMTI1YTQgNCAwIDAxMi41MjYgNS43NyIgLz4KICA8cGF0aCBkPSJNMTggMThhNCA0IDAgMDAyLTcuNDY1IiAvPgogIDxwYXRoIGQ9Ik0xOS45NjcgMTcuNDgyYTQgNCAwIDExLTcuOTY3LjUxNyA0IDQgMCAxMS03Ljk2Ny0uNTE3IiAvPgogIDxwYXRoIGQ9Ik02IDE4YTQgNCAwIDAxLTItNy40NjUiIC8+CiAgPHBhdGggZD0iTTYuMDA0IDUuMTI1YTQgNCAwIDAwLTIuNTI2IDUuNzciIC8+Cjwvc3ZnPgo=") center/contain no-repeat}

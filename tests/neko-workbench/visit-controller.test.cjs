@@ -70,6 +70,18 @@ function fixture(t) {
     failNotification: () => { notificationFailure = true; }, failTransport: () => { transportFailure = true; } };
 }
 
+test('community daily capability is main-only and fenced by account generation and logout', async t => {
+  const f=fixture(t),service=f.social(A),sent=[];
+  service.publishDaily=async value=>{value.assertCurrent();sent.push(value);return {id:'synthetic-post'};};
+  const a=f.make(A,{social:service});assert.equal(a.communityIdentity(),null);await a.action({action:'login'});
+  const identity=a.communityIdentity();assert.equal(identity.userId,A);
+  await a.publishDaily({identity,title:'今日小记',body:'合成日常'});assert.equal(sent.length,1);assert.equal(sent[0].ownerId,A);
+  await assert.rejects(a.action({action:'publishDaily',body:'renderer cannot publish'}));
+  await a.action({action:'stop'});await assert.rejects(a.publishDaily({identity,title:'旧会话',body:'不能发送'}),/account_changed/);
+  const current=a.communityIdentity();await a.action({action:'logout'});assert.equal(a.communityIdentity(),null);
+  await assert.rejects(a.publishDaily({identity:current,title:'已退出',body:'不能发送'}),/account_changed/);assert.equal(sent.length,1);
+});
+
 test('existing backend without end API completes six lines, drains RTC and preserves isolated account history', async t => {
   const f = fixture(t), a = f.make(A), b = f.make(B);
   await a.action({ action: 'login' }); await b.action({ action: 'login' });

@@ -1,10 +1,10 @@
 'use strict';
 const fs=require('node:fs'),path=require('node:path');
-const file=path.join(__dirname,'b0-skin/packages/dsh-client-ui-white-label/lib/client.js');
-const source=fs.readFileSync(path.join(__dirname,'account-habitat-source.js'),'utf8');
+const base=__dirname,file=path.join(base,'b0-skin/packages/dsh-client-ui-white-label/lib/client.js');
+const source=fs.readFileSync(path.join(base,'account-habitat-source.js'),'utf8');
 let code=fs.readFileSync(file,'utf8');
-const start=code.indexOf('function formatNekoWalletBalance',code.indexOf('// @neko-account-habitat:start'));
-const end=code.indexOf('// @neko-account-habitat:end',start);
+const marker='// @neko-account-habitat:end';
+const end=code.indexOf(marker),start=code.lastIndexOf('/**\n * Copy these function declarations',end);
 if(start<0||end<start)throw Error('Account habitat source markers missing');
-code=code.slice(0,start)+source.slice(source.indexOf('function formatNekoWalletBalance')).trimEnd()+'\n'+code.slice(end);
+code=code.slice(0,start)+source+code.slice(end);
 fs.writeFileSync(file,code);

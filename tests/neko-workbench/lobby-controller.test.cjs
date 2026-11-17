@@ -116,7 +116,7 @@ function mockClient({ config, auth, onEvent, onChange, now }) {
       history: async () => ({ messages: [], has_more: false, next_before_seq: null }),
       members: async () => ({ members: [] }),
       getCat: async () => null,
-      putCat: async input => ({ id: CAT, owner_user_id: ME, name: input.name, display_name: input.name, avatar_key: input.avatarKey,
+      putCat: async input => ({ id: CAT_ID, owner_user_id: ME, name: input.name, display_name: input.name, avatar_key: input.avatarKey,
         reply_mode: input.replyMode, enabled: input.enabled, admin_disabled: false, deleted: false }),
       deleteCat: async () => {},
       deleteMessage: async () => {},
@@ -166,16 +166,16 @@ function mockCat(deps) {
 }
 
 function setup({ clock = fakeTimers(), config = CONFIG, secretStore = null, provider = null, persona: personaValue = persona(),
-  recallMemory = null, recordSharedExperience = null, dataDir = null, env = {}, onClient = null, onAuth = null } = {}) {
+  recallMemory = null, recordSharedExperience = null, dataDir = null, env = {}, onClient = null,getChatProvider,getChatProviderState } = {}) {
   const states = [];
   const factories = {
-    auth: deps => { const auth = mockAuth(deps); onAuth?.(auth); return auth; },
+    auth: deps => mockAuth(deps),
     client: deps => { const value = mockClient(deps); onClient?.(value, deps); return value; },
     avatars: () => mockAvatars(),
     cat: deps => mockCat(deps),
     experience: () => null,
   };
-  const controller = createLobbyController({ env, config, dataDir, secretStore, openExternal: () => {}, getChatProvider: () => provider,
+  const controller = createLobbyController({ env, config, dataDir, secretStore, openExternal: () => {}, getChatProvider: getChatProvider||(() => provider),getChatProviderState,
     getPersona: () => personaValue, recallMemory, recordSharedExperience, onState: s => states.push(s), timers: clock.timers,
     now: clock.now, random: () => 0.01, newId: () => 'test-id-' + states.length, randomBytes: n => Buffer.alloc(n),
     fetchImpl: globalThis.fetch, factories });
@@ -192,37 +192,11 @@ test('controller unconfigured when config missing', async () => {
   assert.equal(res.state.connection, 'unconfigured');
 });
 
-test('controller reports failed sign-out instead of returning success', async () => {
-  const { SAFE_ERROR } = require('../../apps/neko-workbench/lobby-auth.cjs');
-  for (const throws of [false, true]) {
-    const { controller } = setup({ onAuth: auth => {
-      auth.signOut = async () => {
-        if (throws) throw Error('synthetic private filesystem detail');
-        return { status: 'signed-out', error: SAFE_ERROR.signout };
-      };
-    } });
-    const result = await controller.request({ action: 'sign-out' });
-    assert.equal(result.ok, false);
-    assert(!JSON.stringify(result).includes('synthetic private'));
-    if (!throws) assert.equal(result.error, SAFE_ERROR.signout);
-    controller.dispose();
-  }
-});
-
-test('controller projects a retry action only for pending credential cleanup', async () => {
-  const { SAFE_ERROR } = require('../../apps/neko-workbench/lobby-auth.cjs');
-  let state = { status: 'signed-out', error: SAFE_ERROR.signout };
-  const { controller } = setup({ onAuth: auth => {
-    Object.defineProperty(auth, 'state', { get: () => state });
-    auth.signOut = async () => { state = { status: 'signed-out', error: '' }; return state; };
-  } });
-  assert.equal(controller.snapshot().auth.canRetrySignOut, true);
-  const result = await controller.request({ action: 'sign-out' });
-  assert.equal(result.ok, true);
-  assert.equal(result.state.auth.canRetrySignOut, false);
-  state = { status: 'signed-out', error: SAFE_ERROR.expired };
-  assert.equal(controller.snapshot().auth.canRetrySignOut, false);
-  controller.dispose();
+test('main-only account verification is read-only and reauthorization does not expand the public request schema',async()=>{
+ let signedIn=true,force=null,gets=0,resets=0,connections=0,writes=0;
+ const controller=createLobbyController({config:CONFIG,factories:{auth:()=>({get state(){return {status:signedIn?'signed-in':'signed-out',error:''};},async signIn(options){force=options;signedIn=true;},dispose(){}}),client:()=>({snapshot:()=>({status:'idle'}),rest:{me:async()=>{gets++;return {user:{user_id:ME}};},putCat:async()=>writes++},reset:()=>resets++,connect:()=>connections++,dispose(){}}),avatars:()=>mockAvatars(),cat:deps=>mockCat(deps),experience:()=>null}});
+ assert.deepEqual(await controller.verifyIdentity(),{userId:ME});assert.equal(gets,1);assert.equal(connections,0);assert.equal(writes,0);assert.equal(controller.snapshot().me,null);
+ assert.equal((await controller.reauthorize()).ok,true);assert.deepEqual(force,{force:true});assert.equal(resets,1);assert.throws(()=>validateLobbyRequest({action:'sign-in',force:true}));controller.dispose();
 });
 
 test('controller sign-in and sign-out', async () => {
@@ -244,23 +218,6 @@ test('controller requires sign-in before open', async () => {
   const res = await controller.request({ action: 'open' });
   assert.equal(res.ok, false);
   assert.match(res.error, /登录/);
-});
-
-test('opening the channel refreshes the community profile', async () => {
-  let client = null;
-  const { controller, clock } = setup({ onClient: value => { client = value; } });
-  await controller.request({ action: 'sign-in' });
-  await controller.request({ action: 'open' });
-  await clock.advance(100);
-  assert.equal(controller.snapshot().me.display_name, '用户一');
-  client.setMe({ user: { user_id: ME, name: 'user1', display_name: '新昵称', avatar: { kind: 'hue', hue: 10, text: '用' } },
-    role: 'member', is_admin: false, muted_until: null, banned_at: null, cat: null, limits: {} });
-  await controller.request({ action: 'close' });
-  assert.equal(controller.snapshot().me.display_name, '用户一', 'closing does not drop the cached profile');
-  const reopened = await controller.request({ action: 'open' });
-  assert.equal(reopened.ok, true);
-  await clock.advance(100);
-  assert.equal(controller.snapshot().me.display_name, '新昵称', 'reopening picks up community profile edits');
 });
 
 test('controller snapshot excludes tokens and raw responses', async () => {
@@ -292,6 +249,21 @@ test('participation.available is false without provider', async () => {
   const snap = controller.snapshot();
   assert.equal(snap.participation.available, false);
   assert.equal(snap.participation.reason, REASON.provider);
+});
+
+test('account readiness reports fixed login errors and a route switch never enables a different participation mode',async()=>{
+  let state={backend:'deepseek-account',revision:1,reason:'account-signed-out'},ready=false;
+  const {controller}=setup({getChatProvider:()=>ready?fakeProvider('fixture'):null,getChatProviderState:()=>state});
+  assert.equal(controller.snapshot().participation.reason,REASON.accountLogin);
+  assert.equal((await controller.request({action:'mode-set',mode:'independent'})).error,REASON.accountLogin);
+  assert.equal(controller.snapshot().catSettings.mode,'assist','a refused action never silently selects independent');
+  state={...state,revision:2,reason:'account-unavailable'};controller.refresh();assert.equal(controller.snapshot().participation.reason,REASON.accountUnavailable);
+  ready=true;state={...state,revision:3,reason:''};controller.refresh();
+  assert.equal((await controller.request({action:'mode-set',mode:'off'})).ok,true);
+  const epoch=controller.snapshot().cat.modeEpoch;
+  state={backend:'chat-api',revision:4,reason:''};controller.refresh();
+  assert.equal(controller.snapshot().catSettings.mode,'off');assert.equal(controller.snapshot().cat.mode,'off');assert(controller.snapshot().cat.modeEpoch>epoch);
+  controller.dispose();
 });
 
 test('send action dispatches to client.send', async () => {

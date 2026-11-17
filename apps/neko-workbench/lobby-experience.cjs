@@ -65,8 +65,8 @@ async function summarize(segment, { provider, timers, now, newId, signal }) {
 /**
  * deps:
  *  file                 data/lobby/pending-experience.json
- *  getProvider()        ChatProvider | null (chat-api only)
- *  getMemory()          {recordSharedExperience} | null (chat-api only)
+ *  getProvider()        isolated ChatProvider | null for the selected companion route
+ *  getMemory()          {recordSharedExperience} | null, public provenance only
  *  now, timers, newId
  */
 function createLobbyExperience(deps) {
@@ -150,9 +150,11 @@ function createLobbyExperience(deps) {
     if (!provider || !memory) return 'retry';
     let text = '';
     for (let attempt = 0; attempt < 2 && !text; attempt++) {
-      try { text = await summarize(segment, { provider, timers, now, newId }); } catch { text = ''; }
+      try { text = await summarize(segment, { provider, timers, now, newId }); }
+      catch (error) { if(error?.code==='provider_changed'||provider.isCurrent?.()===false)return 'retry';text = ''; }
       if (disposed) return 'stopped';
     }
+    if(provider.isCurrent?.()===false)return 'retry';
     if (!text) return 'discard';                       // retried once; drop, never write raw text
     const stamped = `${whenText(segment.endedAt)}，${text}`;
     try {
@@ -202,7 +204,7 @@ function createLobbyExperience(deps) {
     processing = (async () => {
       const segments = readPending();
       if (!fs.existsSync(deps.file)) return 0;
-      if (!deps.getProvider?.() || !deps.getMemory?.()) return 0;   // keep for a later chat-api start
+      if (!deps.getProvider?.() || !deps.getMemory?.()) return 0;   // keep until the selected companion route is ready
       let written = 0;const completed=new Set();
       for (const segment of segments) {
         const result=await processSegment(segment);

@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Nekofans 双子棋局 · 本地控制台</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    /* 控制台页面的少量专属样式（仍无外部资源） */
+    .landing-wrap { max-width: 1080px; margin: 0 auto; }
+    .landing-head { margin: 8px 0 18px; }
+    .landing-head .brand { align-items: center; }
+    .landing-head h1 { font-size: clamp(22px, 3vw, 32px); }
+    .lede { color: var(--ink-soft); margin-top: 8px; max-width: 720px; font-size: 14px; line-height: 1.7; }
+    .landing-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; }
+    .landing-grid .card { background: var(--surface); }
+    .landing-grid .wide { grid-column: 1 / -1; }
+    .create-card form { display: grid; gap: 10px; }
+    .steps { margin: 0; padding-left: 18px; color: var(--ink-soft); font-size: 13px; line-height: 1.8; }
+    .created-links { display: grid; gap: 9px; margin: 10px 0 4px; }
+    .link-row .lr-head span { font-weight: 600; }
+    .link-row .lr-actions { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+    .recent-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+    .recent-row .hint { font-size: 11px; }
+    .landing-foot { color: var(--ink-faint); font-size: 11.5px; text-align: center; margin: 22px 0 6px; }
+    .warn-card { border-color: #eccb9a; background: #fffaf0; }
+    .warn-card h2 { color: var(--warn); }
+    @media (max-width: 860px) { .landing-grid { grid-template-columns: 1fr; } .landing-grid .wide { grid-column: auto; } }
+  </style>
+</head>
+<body>
+  <div class="landing-wrap">
+    <header class="landing-head">
+      <div class="brand">
+        <span class="paw" aria-hidden="true">🐾</span>
+        <h1>Nekofans 双子棋局</h1>
+        <span class="ver">本地原型 · v0.1</span>
+      </div>
+      <p class="lede">
+        本地运行的双人隐藏规则棋局。白方、黑方、女神各用一条私密链接进入；
+        双方先在局前私下向女神提交一条隐藏规则，之后通过观察对局、猜中对方规则取胜。
+        剧情场景的具体能力、私密信息与必要交互会在进入席位后由服务端按席位下发；棋盘与玩家画面只显示「白方 / 黑方」，不显示角色姓名。
+      </p>
+    </header>
+
+    <main class="landing-grid">
+      <section class="card create-card">
+        <h2>创建房间</h2>
+        <form id="createForm">
+          <label class="field">猜规则次数上限（0 = 不限次数）
+            <input id="guessLimit" type="number" min="0" max="9" step="1" value="3">
+          </label>
+          <label class="check">
+            <input type="checkbox" id="reviewMode" checked>
+            逐手审核：玩家每步走子先由女神核准才生效
+          </label>
+          <label class="field">房间类型
+            <select id="scenario">
+              <option value="story-v1" selected>剧情场景 story-v1（私密能力按席位下发）</option>
+              <option value="">标准原型（无剧情能力）</option>
+            </select>
+          </label>
+          <p class="hint">剧情场景的能力说明与私密操作不会写在控制台；进入对应席位后由服务端按令牌下发本方内容，公共静态资源不展示双方具体能力。</p>
+          <button class="btn primary" type="submit" id="createBtn">创建本地房间</button>
+        </form>
+        <p id="createHint" class="hint" style="margin-top:10px">
+          创建后请立刻复制三条链接：白方、黑方、女神各一条。刷新或关闭本页后房间仍保存在本地磁盘，
+          但链接里的令牌请自行保管。
+        </p>
+      </section>
+
+      <section class="card" id="linksCard" hidden>
+        <h2>房间已创建 <span class="lock" id="createdRoomId"></span></h2>
+        <p class="hint">三条链接都含私密令牌。请把「白方 / 黑方」链接分别给对应席位；女神链接不要出现在共享画面里。</p>
+        <div id="createdLinks" class="created-links"></div>
+        <div class="row">
+          <button id="copyAllBtn" class="btn">复制三条链接</button>
+          <a id="openGoddessLink" class="btn primary" href="#" target="_blank" rel="noopener">打开女神席</a>
+        </div>
+      </section>
+
+      <section class="card wide" id="recentCard" hidden>
+        <h2>最近创建的房间（本标签页）</h2>
+        <div id="recentList" class="created-links"></div>
+      </section>
+
+      <section class="card">
+        <h2>角色与流程</h2>
+        <ol class="steps">
+          <li>创建房间，得到「白方 / 黑方 / 女神」三条链接。</li>
+          <li>双方各开一席，在右侧私密填写并提交一条隐藏规则。</li>
+          <li>女神在女神席逐个审核；双方规则都生效后才能开始对局。</li>
+          <li>对局中女神按规则主持（核走子、改棋盘、管理私密信息、裁定猜测）；玩家观察并猜测对方规则。</li>
+          <li>剧情场景下：各席位只在自己的页面看到本方能力与必要操作；A 的大肥鱼面板可人工代交猜测。</li>
+          <li>猜中对方隐藏规则即获胜，对局结束并揭晓双方规则。</li>
+        </ol>
+        <p class="hint" style="margin-top:8px">女神可以把「逐手审核」关掉快速走子；仍在右侧「待裁决走子」里处理暂停、撤销与揭晓。</p>
+      </section>
+
+      <section class="card warn-card">
+        <h2>本地安全边界</h2>
+        <ul class="plain-list">
+          <li>服务只监听 <code>127.0.0.1</code>，本原型不会发布公网、不开隧道、不连接外部服务。</li>
+          <li>玩家令牌无法读取对方规则、猜测原文或女神接口；规则只保存在服务端与本地 <code>data/</code> 目录。</li>
+          <li>标准房间不内置具体隐藏规则；剧情场景的机制由服务端预置并按席位下发，
+            规则文本仍由双方私密提交，公共入口与对手视图不展示双方具体能力或私密信息。</li>
+          <li>私密令牌只存本标签页 <code>sessionStorage</code>；刷新页面后若跳到无令牌页面，请重新用保留的链接打开。</li>
+        </ul>
+      </section>
+    </main>
+
+    <p class="landing-foot">Nekofans · 双子棋局本地原型 · 仅用于本地测试与录制彩排，未经确认不要发布到公网。</p>
+  </div>
+
+  <div id="toastRoot" class="toast-root" aria-live="polite"></div>
+  <script src="/landing.js"></script>
+</body>
+</html>

@@ -14,7 +14,7 @@ test('all three role appearance defaults remain independent and actor choices su
  promoteTaskRecord(state,{source:'dsh-subagent-catalog',sessionId:'real-task',parentSessionId:'parent'});assert.equal(task.appearanceId,A.ORIGINAL);
  A.setActor(task,A.CAT);const restored=restoreDesktopActor(JSON.parse(JSON.stringify(task)),{});assert.equal(A.selected(state,restored),A.CAT);assert.equal(restored.metadataReady,false);
  A.setActor(restored,null);assert.equal(A.selected(state,restored),A.ORIGINAL);A.setDefault(state,'subagent',A.CAT);assert.equal(A.selected(state,restored),A.CAT);
- assert.equal(A.setActor({id:'main'},A.CAT),true);assert.equal(A.selected(state,{id:'main'}),A.CLAUDE);
+ assert.equal(A.setActor({id:'main'},A.CAT),true);assert.equal(A.selected(state,{id:'main'}),A.ORIGINAL);assert.equal(state.preferences.mainAppearance,A.CLAUDE,'legacy default stays stored while its visible character falls back');
 });
 
 class Element {
@@ -31,6 +31,22 @@ function fixture(reduced=false){
  const presenter=A.install({character,videos,feedback,document:{createElement:()=>new Element()},matchMedia:()=>media,onHeadInset:value=>insets.push(value)});
  return {character,videos,feedback,presenter,media,listeners,calls,insets,original,motion:character.children[0],image:character.children[0].children[0]};
 }
+test('Doubao appearance follows the real helper working state and respects reduced motion',()=>{
+ const state={preferences:A.normalizePreferences({})};
+ assert.equal(A.choices.find(choice=>choice.id===A.DOUBAO).label,'豆奶 · 工作点按');
+ assert(A.setDefault(state,'subagent',A.DOUBAO));
+ const actor={id:'subagent-real',kind:'subagent',sessionId:'real-child',active:true,status:'working'};
+ const f=fixture();f.presenter.render(state,actor);
+ assert.equal(A.selected(state,actor),A.DOUBAO);assert.equal(A.frameAspect(state,actor),16/9);
+ assert.equal(f.image.src,'assets/doubao-work/working.webp');
+ const writes=f.image.srcWrites;f.presenter.render(state,actor);assert.equal(f.image.srcWrites,writes);
+ actor.active=false;actor.status='idle';f.presenter.render(state,actor);assert.equal(f.image.src,'assets/doubao-work/still.png');
+ actor.active=true;actor.status='working';f.media.matches=true;for(const listener of f.listeners)listener();assert.equal(f.image.src,'assets/doubao-work/still.png');
+ assert.equal(actor.sessionId,'real-child');assert.equal(A.selected(state,{id:'main'}),A.ORIGINAL);assert.equal(A.selected(state,{id:'task',kind:'task'}),A.ORIGINAL);
+ const bytes=fs.readFileSync(path.resolve(__dirname,'../../apps/neko-workbench/assets/doubao-work/working.webp'));
+ assert(require('../../apps/neko-workbench/pet-appearance-import.cjs').animationFrames(bytes,'image/webp')>1);
+ f.presenter.dispose();
+});
 test('native kitten switches live without stale video playback, keeps work state, stops patrol for drag and restores original media',()=>{
  const f=fixture(),actor={id:'task-real',kind:'task',active:true,status:'working',work:{state:'thinking'}},state={preferences:{taskAppearance:A.CAT}};
  f.presenter.render(state,actor);assert.equal(f.motion.hidden,false);assert.equal(f.image.src,A.assets.idle);assert.equal(f.motion.dataset.phase,'idle');assert(f.videos.every(v=>v.hidden&&v.paused&&v.loaded));
@@ -93,7 +109,7 @@ test('all bundled Claude and Gemini states are genuine multi-frame WebP with pin
 });
 
 test('pixel alternatives render on all three roles, follow real work states and keep existing character choices',()=>{
- for(const tier of ['main','task','subagent'])for(const id of [A.CLAUDE_PIXEL,A.GEMINI_PIXEL]){
+ for(const tier of ['main','task','subagent'])for(const id of [A.GEMINI_PIXEL]){
   const state={preferences:A.normalizePreferences({})},actor={id:tier==='main'?'main':tier+'-real',kind:tier==='task'?'task':'subagent',sessionId:tier==='main'?null:'real-session',parentSessionId:tier==='subagent'?'real-parent':null,chatBackend:tier==='main'?'chat-api':'dsh',status:'idle',work:{state:null}},identity=JSON.stringify([actor.id,actor.sessionId,actor.parentSessionId,actor.chatBackend]);
   assert(A.setDefault(state,tier,id));assert.equal(A.selected(state,actor),id);assert.equal(A.frameAspect(state,actor),A.pixelFrames[id].width/A.pixelFrames[id].height);
   const f=fixture();f.presenter.render(state,actor);assert.match(f.image.src,/pixel-ai-girls\/(claude|gemini)\/idle.webp$/);
@@ -105,6 +121,15 @@ test('pixel alternatives render on all three roles, follow real work states and 
   const saved=JSON.parse(JSON.stringify(actor));if(tier!=='main')Object.assign(saved,restoreDesktopActor(saved,{}));assert.equal(A.selected(JSON.parse(JSON.stringify(state)),saved),id);
   assert(A.setActor(actor,A.GEMINI));f.presenter.render(state,actor);assert.match(f.image.src,/assets\/ai-girls\/gemini\//);assert.equal(JSON.stringify([actor.id,actor.sessionId,actor.parentSessionId,actor.chatBackend]),identity);
   f.presenter.dispose();
+ }
+});
+
+test('retired desktop appearances are absent from menus and render the original fish without changing saved preferences or actors',()=>{
+ assert(!A.choices.some(choice=>/claude/i.test(choice.id+' '+choice.label)));
+ for(const id of [A.CLAUDE,A.CLAUDE_PIXEL,'crosspet-claude']){
+  const state={preferences:{mainAppearance:id,taskAppearance:A.CAT}},actor={id:'main',appearanceId:id,sessionId:'retained-session',work:{state:'working'}},before=JSON.stringify({state,actor}),f=fixture();
+  assert(A.valid(id),'legacy saved identifiers remain accepted');assert.equal(A.selected(state,actor),A.ORIGINAL);assert.equal(A.frameAspect(state,actor),16/9);f.presenter.render(state,actor);assert(f.motion.hidden);assert(f.videos.every(video=>!video.hidden));assert(!/claude/i.test(f.image.src||''));assert.equal(JSON.stringify({state,actor}),before);f.presenter.dispose();
+  const normalized=A.normalizePreferences({mainAppearance:id});assert.equal(normalized.mainAppearance,A.normalizeId(id));assert.equal(A.selected({preferences:normalized},{id:'main'}),A.ORIGINAL);
  }
 });
 

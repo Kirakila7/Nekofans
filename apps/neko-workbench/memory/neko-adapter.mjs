@@ -1,8 +1,22 @@
 import { spawn } from 'node:child_process';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, isAbsolute } from 'node:path';
 import { capabilities, validateEvents } from './event-store.mjs';
+
+export function memoryLaunch({directory,python,uv='uv',env=process.env}){
+  const script=join(directory,'workbench_server.py'),direct=env.NEKO_WORKBENCH_MEMORY_PYTHON_DIRECT;
+  if(direct){
+    const libs=env.NEKO_WORKBENCH_MEMORY_PYTHON_LIBS;
+    if(!isAbsolute(direct)||!existsSync(direct)||!libs||!isAbsolute(libs)||!existsSync(libs))throw Error('内置记忆运行环境不完整，请重新安装工作台');
+    // Process .pth files too: pywin32 needs its DLL/bootstrap paths on Windows.
+    // Paths are argv, never shell code; credentials still travel only on stdin.
+    return {command:direct,args:['-B','-c','import os,runpy,site,sys; site.addsitedir(sys.argv[1]); script=sys.argv[2]; sys.path.insert(0,os.path.dirname(script)); sys.argv=[script]; runpy.run_path(script,run_name="__main__")',libs,script]};
+  }
+  const configured=python||env.NEKO_WORKBENCH_MEMORY_PYTHON;
+  if(!configured&&!existsSync(join(directory,'.venv',process.platform==='win32'?'Scripts/python.exe':'bin/python')))throw Error('请先运行 npm run setup:neko-memory 安装记忆组件');
+  return {command:uv,args:configured?['run','--no-project','--offline','--no-python-downloads','--python',configured,'python','-B',script]:['run','--frozen','--no-sync','python','-B',script]};
+}
 
 /** Parent-owned process lifecycle adapted from f750605's NekoNativeProvider.
  * Uses the same EOF ownership protocol, with a private memory-only listener.
@@ -23,12 +37,9 @@ export class NekoMemoryWorker {
     const model=await this.getModel(),persona=await this.getPersona();
     if(!model?.baseUrl||!model.model||!model.apiKey)throw Error('请先配置记忆整理模型');
     if(this.closed||generation!==this.generation)throw Error('记忆启动已取消');
-    const directory=join(this.repositoryRoot,'services/neko-memory'),script=join(directory,'workbench_server.py');
-    const directPython=process.platform==='win32'?process.env.NEKO_WORKBENCH_MEMORY_PYTHON_DIRECT:'';
-    const configuredPython=this.python||process.env.NEKO_WORKBENCH_MEMORY_PYTHON;
-    if(!directPython&&!configuredPython&&!existsSync(join(directory,'.venv',process.platform==='win32'?'Scripts/python.exe':'bin/python')))throw Error('请先运行 npm run setup:neko-memory 安装记忆组件');
-    const args=directPython?['-B',join(directory,'workbench-direct-launcher.py')]:configuredPython?['run','--no-project','--offline','--no-python-downloads','--python',configuredPython,'python','-B',script]:['run','--frozen','--no-sync','python','-B',script];
-    const child=spawn(directPython||this.uv,args,{cwd:directory,windowsHide:true,stdio:['pipe','pipe','pipe'],env:{...process.env,PYTHONUNBUFFERED:'1'}});
+    const directory=join(this.repositoryRoot,'services/neko-memory');
+    const launch=memoryLaunch({directory,python:this.python,uv:this.uv});
+    const child=spawn(launch.command,launch.args,{cwd:directory,windowsHide:true,stdio:['pipe','pipe','pipe'],env:{...process.env,PYTHONUNBUFFERED:'1'}});
     this.child=child;const instanceId=randomUUID(),token=randomBytes(32).toString('hex');
     child.stdin.on('error',()=>{});child.stderr.on('data',()=>{});
     try{

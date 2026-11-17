@@ -31,7 +31,7 @@ function within(parent, candidate) {
   return relative === '' || (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
 }
 
-function resolveRuntimePaths({ baseDir = __dirname, env = process.env, platform = process.platform, homeDir = os.homedir() } = {}) {
+function resolveRuntimePaths({ baseDir = __dirname, env = process.env, platform = process.platform, homeDir = os.homedir(), resourcesPath = process.resourcesPath } = {}) {
   baseDir = path.resolve(baseDir);
   const dataDir = absoluteSetting(env.NEKO_WORKBENCH_DATA_DIR, path.join(baseDir, 'data'), 'NEKO_WORKBENCH_DATA_DIR');
   const workspaceDir = absoluteSetting(env.NEKO_WORKBENCH_WORKSPACE || env.NEKO_WORKBENCH_WORKSPACE_DIR,
@@ -49,7 +49,16 @@ function resolveRuntimePaths({ baseDir = __dirname, env = process.env, platform 
   if (within(globalDsh, dataDir) || (!sharedDsh && within(globalDsh, dshHomeDir)) || within(globalDsh, userDataDir) || within(globalDsh, workspaceDir)) {
     throw new Error('工作台不能使用全局 ~/.dsh 目录；请选择独立数据和工作区');
   }
-  const macResources = '/Applications/DeepSeek Harness.app/Contents/Resources';
+  // The bundled app retains DSH's own Contents layout so its Electron host,
+  // ASAR, unpacked native modules and primary runtime keep their relative paths.
+  // Pass the chosen root to the host process: that process has a different
+  // process.resourcesPath from the enclosing NEKOfuns application.
+  const bundledResources = platform === 'darwin' && typeof resourcesPath === 'string' && path.isAbsolute(resourcesPath)
+    ? path.join(resourcesPath, 'dsh-runtime', 'DeepSeek Harness.app', 'Contents', 'Resources') : '';
+  const bundledExecutable = bundledResources && path.join(bundledResources, '../MacOS/DeepSeek Harness');
+  const bundledAvailable = bundledExecutable && fs.existsSync(bundledExecutable);
+  const macResources = absoluteSetting(env.NEKO_WORKBENCH_DSH_RESOURCES,
+    bundledAvailable ? bundledResources : '/Applications/DeepSeek Harness.app/Contents/Resources', 'NEKO_WORKBENCH_DSH_RESOURCES');
   const cli = absoluteSetting(env.NEKO_WORKBENCH_DSH_CLI,
     platform === 'darwin' ? path.join(macResources, 'runtime/cli/bin/dsh') : '', 'NEKO_WORKBENCH_DSH_CLI');
   const modulesDir = absoluteSetting(env.NEKO_WORKBENCH_DSH_MODULES || env.NEKO_WORKBENCH_DSH_MODULES_DIR,
@@ -109,6 +118,7 @@ function buildDshLaunch(runtime, { env = process.env, patchFile = path.join(runt
         ...(desktop?{ELECTRON_RUN_AS_NODE:'1',DSH_DESKTOP_NODE_EXECUTABLE:runtime.desktopExecutable}:{}),
         NEKO_WORKBENCH_DATA_DIR: runtime.dataDir, NEKO_WORKBENCH_WORKSPACE: runtime.workspaceDir,
         NEKO_WORKBENCH_DSH_HOME: runtime.sharedDsh ? runtime.dshHomeDir : '', NEKO_WORKBENCH_DSH_PROFILE: runtime.dshProfile || 'web',
+        NEKO_WORKBENCH_DSH_RESOURCES: runtime.desktopResources,
         NEKO_WORKBENCH_WORKSPACE_DIR: runtime.workspaceDir, NEKO_WORKBENCH_ELECTRON_USER_DATA: runtime.userDataDir,
         NEKO_WORKBENCH_DSH_CLI: runtime.cli, NEKO_WORKBENCH_DSH_MODULES: runtime.modulesDir,
         NEKO_WORKBENCH_DSH_MODULES_DIR: runtime.modulesDir, NEKO_WORKBENCH_DSH_CREDENTIALS: runtime.credentialsFile || '',

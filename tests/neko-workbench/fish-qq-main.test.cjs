@@ -144,7 +144,7 @@ async function runMainHarness() {
     static fromWebContents(wc) { return windows.find(w => w.webContents === wc); }
   }
   class Tray extends EventEmitter { setTitle() {} setToolTip() {} popUpContextMenu() {} }
-  const electron = { app, BrowserWindow: Window, ipcMain: Object.assign(new EventEmitter(), { handle: (name, handler) => handlers.set(name, handler) }),
+  const electron = { app, BrowserWindow: Window, ipcMain: Object.assign(new EventEmitter(), { handle: (name, handler) => handlers.set(name, handler), removeHandler: name => handlers.delete(name) }),
     screen: { getPrimaryDisplay: () => ({ workArea: { x: 0, y: 0, width: 1600, height: 1000 } }) },
     shell: { openExternal: async () => {}, openPath: async () => {} },
     Menu: { buildFromTemplate: template => ({ template, popup() { menus.push(template); } }), setApplicationMenu() {} },
@@ -170,7 +170,7 @@ async function runMainHarness() {
     require('../../apps/neko-workbench/main.cjs');
     if (startupRace) {
       await wait(() => handlers.has('pet:call') && windows.length > 0);
-      const pet = windows.find(window => window.options.title !== 'N.E.K.O. 工作台');
+      const pet = windows.find(window => window.options.title !== 'Nekofans');
       const petCall = (method, value) => handlers.get('pet:call')(event(pet), method, value);
       await wait(async () => (await petCall('state')).connection === 'ready' && pendingStatuses.some(item => item.request.method === 'fish-care'));
       await petCall('menu');
@@ -182,9 +182,9 @@ async function runMainHarness() {
       assert.equal((await petCall('state')).fish.phase, 'login-required', 'older startup status must not supersede an issued start');
       app.quit(); await wait(() => stopped); console.log('Fish/QQ startup race passed'); return;
     }
-    await wait(() => handlers.has('workbench:call') && windows.some(window => window.options.title === 'N.E.K.O. 工作台'));
-    const pet = windows.find(window => window.options.title !== 'N.E.K.O. 工作台');
-    const workbench = windows.find(window => window.options.title === 'N.E.K.O. 工作台');
+    await wait(() => handlers.has('workbench:call') && windows.some(window => window.options.title === 'Nekofans'));
+    const pet = windows.find(window => window.options.title !== 'Nekofans');
+    const workbench = windows.find(window => window.options.title === 'Nekofans');
     const call = (method, value) => handlers.get('workbench:call')(event(workbench), method, value);
     const get = () => call('state');
     await wait(() => workbench.webContents.getURL() === 'http://127.0.0.1:12345/' && channelRequests().length === 2);

@@ -1,0 +1,16 @@
+'use strict';
+const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),os=require('node:os');
+const {WorkbenchMainChat}=require('../../apps/neko-workbench/main-chat-runtime.cjs');
+test('account-mode memory reuses the signed-in route without chat API settings or a stored API key; shutdown closes it',async t=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'memory-account-runtime-'));let calls=0;
+ const provider={status:async()=>({status:'signed-in'}),async *stream(){calls++;yield{type:'delta',text:'{"summary":"合成记忆"}'};}};
+ const runtime=new WorkbenchMainChat({dataDir:root,repositoryRoot:path.resolve(__dirname,'../..'),safeStorage:{isEncryptionAvailable:()=>true,encryptString:v=>Buffer.from(v),decryptString:v=>v.toString()},initialBackend:'deepseek-account',accountProvider:provider,memoryAccountProvider:provider,memoryWorker:{request:async()=>{throw Error('synthetic offline memory');},stop:async()=>{},close:async()=>{}}});
+ t.after(async()=>{await runtime.close();fs.rmSync(root,{recursive:true,force:true});});await runtime.start();const model=await runtime.memoryModel();assert.match(model.baseUrl,/^http:\/\/127\.0\.0\.1:\d+\/v1$/);assert.equal(runtime.readMemoryModel().route,'deepseek-account');assert.equal(runtime.secretStore.has(),false);assert.equal(runtime.memorySecretStore.has(),false);assert.equal(calls,0);
+ const result=await fetch(model.baseUrl+'/chat/completions',{method:'POST',headers:{authorization:'Bearer '+model.apiKey,'content-type':'application/json'},body:JSON.stringify({model:model.model,messages:[{role:'user',content:'仅整理这段合成材料'}]})});assert.equal(result.status,200);assert.equal(calls,1);assert(!fs.readFileSync(runtime.personasDir+'/bigfish.json','utf8').includes(model.apiKey));assert(!fs.existsSync(runtime.memoryConfigFile));
+ assert(!JSON.stringify(runtime.read()).includes(model.apiKey));assert(!JSON.stringify(await runtime.memories()).includes(model.apiKey));
+ await runtime.close();await assert.rejects(fetch(model.baseUrl+'/chat/completions'));
+});
+test('switching to a standalone API closes account memory and keeps the ordinary key path',async t=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'memory-route-switch-')),provider={status:async()=>({status:'signed-in'}),async *stream(){yield{type:'delta',text:'{}'};}};
+ const runtime=new WorkbenchMainChat({dataDir:root,repositoryRoot:path.resolve(__dirname,'../..'),safeStorage:{isEncryptionAvailable:()=>true,encryptString:v=>Buffer.from(v),decryptString:v=>v.toString()},initialBackend:'deepseek-account',accountProvider:provider,memoryAccountProvider:provider,memoryWorker:{request:async()=>{throw Error('offline fixture');},stop:async()=>{},close:async()=>{}}});t.after(async()=>{await runtime.close();fs.rmSync(root,{recursive:true,force:true});});await runtime.start();const old=await runtime.memoryModel();await runtime.saveApi({protocol:'openai-compatible',baseUrl:'https://example.invalid/v1',model:'synthetic-api',requestTimeoutMs:5000,maxOutputTokens:256,key:{action:'replace',value:'synthetic-secret'}});const next=await runtime.memoryModel();assert.equal(next.model,'synthetic-api');assert.equal(next.apiKey,'synthetic-secret');assert.equal(runtime.readMemoryModel().route,'api-key');await assert.rejects(fetch(old.baseUrl+'/chat/completions'));
+});

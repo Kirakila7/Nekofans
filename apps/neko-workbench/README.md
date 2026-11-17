@@ -44,7 +44,7 @@ macOS 的 DSH 默认路径来自已安装的 DeepSeek Harness；其他安装位�
 | `NEKO_WORKBENCH_DSH_CREDENTIALS` | 可选：显式选定凭据文件。默认使用独立 `data/dsh/.credentials.yaml` |
 | `NEKO_WORKBENCH_COMMUNITY_URL` | 默认官方 `https://community.project-neko.cn/feed`；可显式配置无凭据的 HTTPS 目标 |
 | `PET_DSH_SKIN` | `neko-mist`（默认）、`bigfish` 或 `off` |
-| `NEKO_WORKBENCH_CHAT_URL` | 频道服务（N.E.K.O.Chat）地址；内置生产地址 `https://chat.nekotech.ai/`，必须是无凭据的 HTTPS，只有 `127.0.0.1`、`localhost`、`[::1]` 允许 HTTP；显式设为空字符串可关闭频道（面板显示「频道服务未配置」） |
+| `NEKO_WORKBENCH_CHAT_URL` | 频道服务（N.E.K.O.Chat）地址，默认 `https://chat.nekotech.ai`；可设置其他无凭据的 HTTPS 地址，本机 `127.0.0.1`、`localhost`、`[::1]` 也允许 HTTP。显式设为空字符串可禁用频道服务 |
 | `NEKO_WORKBENCH_CHAT_CLIENT_ID` | 频道 OAuth 公共客户端，默认 `neko-chat-desktop-prod`，须匹配 `neko-chat-desktop-<小写字母>` |
 | `NEKO_WORKBENCH_CHAT_AUTH_URL` | 频道登录的认证服务，默认官方社区认证地址；只有频道地址也是本机回环时才允许回环 HTTP |
 | `NEKO_WORKBENCH_CHAT_OAUTH_PORTS` | 可选：登录回调端口，逗号分隔的 1024–65535 端口，最多 8 个；依次尝试；不设时使用官方认证平台登记的 `48921,48922,48923` |
@@ -63,7 +63,7 @@ DSH 子进程固定使用本副本的 `DSH_HOME`、所选工作目录和动态�
 
 从主角色右键的聊天设置，或“工作台选项 → N.E.K.O. 聊天设置”打开统一设置，可选 OpenAI 兼容 / Anthropic 协议，配置 API 地址、模型与密钥；配置完成前不自动发送请求。密钥由 Electron safeStorage 加密保存，设置页仅返回是否已保存；安全存储不可用或落入不受保护的回退后端时拒绝保存，不退回明文文件。
 
-主角色统一使用原生 N.E.K.O. 记忆，默认复用聊天 API 自动连接；可单独配置整理模型，也可明确开启工作台账号整理（默认关闭）。所需私聊片段会发送给所选模型服务商，实际费用未知；账号通道目前仅经合成测试。原生引擎负责事实提取、整理与召回，本地规则候选与摘要生成已关闭。旧记忆按原 ID 迁移，原始聊天、日记、修订和删除记录保留；离线保留待处理队列，不回退到日记召回。DSH 任务备注继续独立。使用与验证范围见 [工作台原生记忆](../../docs/WORKBENCH_MEMORY.md)。
+主角色统一使用原生 N.E.K.O. 记忆，默认复用聊天 API 自动连接；可单独配置整理模型。原生引擎负责事实提取、整理与召回，本地规则候选与摘要生成已关闭。旧记忆按原 ID 迁移，原始聊天、日记、修订和删除记录保留；离线保留待处理队列，不回退到日记召回。DSH 任务备注继续独立。使用与验证范围见 [工作台原生记忆](../../docs/WORKBENCH_MEMORY.md)。
 
 可选 `neko-chat.cjs` 本机连接器与 Chat API 模式互斥，切换会取消旧请求、关闭旧连接；同一条输入只进入一个后端。本机连接器只有用户显式启用后才连接已有 N.E.K.O. 服务，可能创建“大肥鱼”角色。原生语音与 PNGTuber 尚待对应合同及后续接入，记忆系统的当前实现见上文说明。
 

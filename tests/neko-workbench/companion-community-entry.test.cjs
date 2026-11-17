@@ -37,11 +37,12 @@ test('dragging, dragging back to the origin, and pointer cancellation never open
   pointer('pointerdown', 100); pointer('pointercancel', 100); character.click(); assert(menu.hidden); assert.equal(fixture.calls, 0);
   pointer('pointerdown', 100); pointer('pointerup', 100); character.click(); assert(!menu.hidden);
 });
-test('the collapsed-rail pet uses the same menu and community failures remain visible without losing drafts', { skip: !JSDOM }, async t => {
+test('the main pet keeps its menu and draft after restoring a collapsed sidebar and a failed community visit', { skip: !JSDOM }, async t => {
   const { d, fixture, character, menu, visit, chat } = await setup(t), frame = d.querySelector('#frame'), expand = d.querySelector('.neko-side-rail__expand');
   frame.setAttribute('data-sidebar-collapsed', 'true'); expand.hidden = false; await tick();
-  const railPet = d.querySelector('.neko-rail-companion'); assert.equal(character.parentElement, railPet);
-  character.click(); assert(!menu.hidden); assert.equal(fixture.calls, 0, 'one click bubbles to the rail trigger only once');
+  assert.equal(d.querySelector('.neko-rail-companion'), null); assert.equal(character.parentElement, d.querySelector('.neko-companion-dock'));
+  frame.removeAttribute('data-sidebar-collapsed'); expand.hidden = true; await tick();
+  character.click(); assert(!menu.hidden); assert.equal(fixture.calls, 0, 'a click opens the main pet menu without starting a visit');
   chat.value = '继续陪我聊天'; fixture.error = '社区暂时离线'; let release; fixture.pending = new Promise(resolve => release = resolve);
   visit.click(); visit.click(); assert(visit.disabled); assert.equal(fixture.calls, 1); release(); await tick();
   assert(!menu.hidden); assert(!visit.disabled); assert.match(menu.textContent, /社区暂时离线/); assert.equal(chat.value, '继续陪我聊天');

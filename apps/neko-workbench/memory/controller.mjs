@@ -143,6 +143,25 @@ export class WorkbenchMemory {
     }catch(error){this.providerStates.neko='暂不可用';this.error='N.E.K.O. 记忆暂不可用，本次聊天继续，记录已保留待重试';this.publish();throw error;}
   }
   async recordTurn(){await this.localSync();void this.sync().catch(()=>{});}
+  async recordChannelExperience(entry){
+    const {validExperience}=await import('../channel-experiences.cjs');
+    if(this.closed||!validExperience(entry))throw Error('渠道经历无效或记忆服务已关闭');
+    const task=this.lobbyTail.then(async()=>{
+      if(this.closed)throw Error('记忆服务已关闭');
+      const itemId=`channel:${entry.channel}:${entry.id}`,eventId='channel:'+hash([entry.channel,entry.id]);
+      const prior=this.hub.snapshot().events.find(e=>e.itemId===itemId);
+      if(prior){const record=this.channelExperience(itemId);return {itemId,eventId:prior.eventId,created:false,available:!!record};}
+      const event=this.event(itemId,{kind:'episode',text:entry.text,visibility:'private',certainty:'inferred',evidenceRefs:[...entry.evidenceRefs]},[],'upsert','user',eventId);
+      event.occurredAt=new Date(entry.occurredAt).toISOString();await this.hub.add([event]);this.publish();
+      return {itemId,eventId,created:true,available:true};
+    });
+    this.lobbyTail=task.catch(()=>{});const result=await task;
+    if(!this.closed)void this.sync().catch(()=>{});return result;
+  }
+  channelExperience(itemId){
+    const row=this.hub.records().find(r=>r.itemId===itemId);
+    return row&&!row.deleted&&!row.conflict&&row.value?structuredClone(row.value):null;
+  }
   /** A short lobby summary the user took part in. Raw lobby text never comes through here.
    * The origin stays 'user'; the 'lobby:' item prefix and 'lobby-msg:' refs mark the source. */
   async recordSharedExperience({id,text,occurredAt,evidenceRefs}={}){
@@ -185,7 +204,7 @@ export class WorkbenchMemory {
     catch(error){this.providerStates.neko='待连接或待重试';this.error='N.E.K.O. 记忆尚未就绪，请检查组件与记忆模型设置';this.publish();throw error;}
     void this.sync().catch(()=>{});this.publish();return this.status();
   }
-  async change({action,id,text,revisionIds}){
+  async change({action,id,text,revisionIds,priority,pinned}){
     await this.localSync();const record=this.hub.records().find(r=>r.itemId===id);
     if(!record||!Array.isArray(revisionIds)||stable([...revisionIds].sort())!==stable(record.heads.map(e=>e.eventId).sort()))throw Error('记忆已变化，请刷新后再操作');
     let value=record.value,operation='upsert';
@@ -199,7 +218,10 @@ export class WorkbenchMemory {
       else if(record.conflict)throw Error('请先合并冲突');
       if(!value)throw Error('记忆内容不可用');value=structuredClone(value);
       if(action==='event-resolve')value.evidenceRefs=[...new Set(record.heads.flatMap(e=>e.value?.evidenceRefs||[]))].slice(0,256);
-      if(action==='event-confirm')value.certainty='user-confirmed';
+      if(action==='event-priority'){
+        if(!Number.isInteger(priority)||priority<0||priority>100||typeof pinned!=='boolean')throw Error('优先级应为 0–100 的整数');
+        value.priority=priority;value.pinned=pinned;
+      }else if(action==='event-confirm')value.certainty='user-confirmed';
       else if(['event-update','event-resolve'].includes(action)){
         if(typeof text!=='string'||!text.trim()||text.length>30000)throw Error('记忆内容无效');value.text=text.trim();value.certainty='user-confirmed';
       }else throw Error('记忆操作无效');

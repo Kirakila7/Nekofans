@@ -1,0 +1,32 @@
+'use strict';
+const {test}=require('node:test'),assert=require('node:assert/strict');
+const {createMemoryAccountRelay}=require('../../apps/neko-workbench/memory-account-relay.cjs');
+const {createCompanionAccountProvider}=require('../../apps/neko-workbench/companion-account-provider.cjs');
+async function fixture(t,provider){let current=true;const calls=[];provider??={status:async()=>({status:'signed-in'}),async *stream(input){calls.push(input);yield{type:'delta',text:'{"facts":["喜欢海洋"]}'};}};const relay=createMemoryAccountRelay({provider,isCurrent:()=>current});t.after(()=>relay.stop());const model=await relay.start();const request=(body={},headers={})=>fetch(model.baseUrl+'/chat/completions',{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+model.apiKey,...headers},body:JSON.stringify({model:model.model,messages:[{role:'system',content:'仅整理输入材料'},{role:'user',content:'合成记忆材料'}],...body})});return{relay,model,request,calls,switch:()=>current=false};}
+test('authenticated loopback completion uses a separate memory RPC namespace with no API credentials',async t=>{
+ const rpcCalls=[],provider=createCompanionAccountProvider(async(method,p)=>{rpcCalls.push({method,p});return method.endsWith('status')?{status:'signed-in'}:{text:'{"facts":["合成事实"]}'};},{namespace:'memory'}),f=await fixture(t,provider);const response=await f.request({response_format:{type:'json_object'},max_tokens:1200});assert.equal(response.status,200);assert.equal((await response.json()).choices[0].message.content,'{"facts":["合成事实"]}');const call=rpcCalls.find(c=>c.method==='memory-account-chat');assert(call);assert.match(call.p.requestId,/^memory-/);assert.match(call.p.context,/JSON/);assert.equal(call.p.maxTokens,1200);assert(!rpcCalls.some(c=>c.method.startsWith('companion-')||c.method.startsWith('lobby-')));assert(!JSON.stringify(rpcCalls).includes(f.model.apiKey));
+});
+test('SSE compatibility delivers text, stop and DONE without polluting ordinary chat context',async t=>{const f=await fixture(t);const response=await f.request({stream:true});assert.match(response.headers.get('content-type'),/text\/event-stream/);const text=await response.text();assert.match(text,/chat.completion.chunk/);assert.match(text,/\[DONE\]/);assert.deepEqual(f.calls[0].memories,[]);assert.deepEqual(f.calls[0].summaries,[]);assert.deepEqual(f.calls[0].memoryContext,[]);});
+test('missing token, browser origins, tools and malformed contexts never reach the model',async t=>{const f=await fixture(t);assert.equal((await f.request({}, {authorization:'Bearer invalid'})).status,401);assert.equal((await f.request({}, {origin:'https://example.invalid'})).status,401);for(const body of [{tools:[{}]},{model:'other-account'},{messages:[{role:'tool',content:'attack'}]},{messages:[{role:'user',content:[{type:'text',text:'unsupported'}]}]},{max_tokens:999999}])assert.equal((await f.request(body)).status,400);assert.equal(f.calls.length,0);});
+test('model failures are redacted and account sign-out is rechecked before generation',async t=>{let signed=true;const provider={status:async()=>({status:signed?'signed-in':'signed-out'}),async *stream(){throw Error('PRIVATE_PROVIDER_SECRET');}};const f=await fixture(t,provider);let response=await f.request();assert.equal(response.status,503);assert(!(await response.text()).includes('PRIVATE_PROVIDER_SECRET'));signed=false;response=await f.request();assert.equal(response.status,503);});
+test('concurrent memory calls serialize without a busy failure and closing revokes the endpoint',async t=>{let active=0,maxActive=0;const f=await fixture(t,{status:async()=>({status:'signed-in'}),async *stream(){active++;maxActive=Math.max(maxActive,active);await new Promise(r=>setTimeout(r,20));active--;yield{type:'delta',text:'{}'};}});const responses=await Promise.all([f.request(),f.request(),f.request()]);assert(responses.every(r=>r.status===200));assert.equal(maxActive,1);f.switch();assert.equal((await f.request()).status,503);await f.relay.stop();await assert.rejects(f.request());});
+test('cancellation aborts the active account call and prevents queued obsolete work from starting',async t=>{let started=0;const f=await fixture(t,{status:async()=>({status:'signed-in'}),async *stream(input){started++;await new Promise(resolve=>input.signal.addEventListener('abort',resolve,{once:true}));throw Error('cancelled');}});const first=f.request().catch(()=>null),second=f.request().catch(()=>null);for(let i=0;i<100&&!started;i++)await new Promise(r=>setTimeout(r,2));assert.equal(started,1);await f.relay.stop();await Promise.all([first,second]);await new Promise(r=>setTimeout(r,10));assert.equal(started,1);});
+test('not signed in never creates a local memory endpoint',async()=>{const relay=createMemoryAccountRelay({provider:{status:async()=>({status:'signed-out'}),stream(){throw Error('must not generate');}}});await assert.rejects(relay.start(),/登录/);await relay.stop();});
+
+test('memory account work and cancellation do not block or cancel companion chat',async t=>{
+ const {createCompanionAccountBridge}=require('../../apps/neko-workbench/companion-account-bridge.cjs');
+ let started=false;
+ const ctx={get:()=>({getState:async()=>({status:'credential-stored'})}),llm:{prepareCall:async config=>({config,stream:async function*(input){
+  if(input.system==='memory fixture'){started=true;await new Promise(resolve=>input.signal.addEventListener('abort',resolve,{once:true}));}
+  else yield{type:'text-delta',index:0,text:'合成私聊回复'};
+  yield{type:'finish',reason:{kind:input.signal.aborted?'aborted':'stop'}};
+ }})}};
+ const make=namespace=>createCompanionAccountBridge({namespace,ctx,route:{provider:'deepseek-account',model:'deepseek-flash'},createUserMessage:v=>v,createAssistantMessage:v=>v});
+ const memory=make('memory'),chat=make('companion');t.after(()=>{memory.dispose();chat.dispose();});
+ const pending=memory.send({requestId:'memory-test',text:'合成资料',context:'memory fixture',maxTokens:1024});pending.catch(()=>{});
+ for(let i=0;i<100&&!started;i++)await new Promise(r=>setTimeout(r,2));assert(started);
+ assert.deepEqual(await chat.send({requestId:'companion-during-memory',text:'你好',maxTokens:256}),{text:'合成私聊回复'});
+ assert.deepEqual(memory.cancel({requestId:'companion-during-memory'}),{accepted:false});
+ memory.cancel({requestId:'memory-test'});await assert.rejects(pending,/取消/);
+ assert.deepEqual(await chat.send({requestId:'companion-after-memory',text:'再聊一句',maxTokens:256}),{text:'合成私聊回复'});
+});

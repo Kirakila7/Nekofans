@@ -52,105 +52,17 @@ test('production temporarily disables every multi-pane entry without rewriting o
   assert.equal(q(f,'.neko-companion-dock textarea').value,'pet draft'); f.cleanup();
 });
 
-test('settings can explicitly opt into adjustable panes while compact startup preserves saved preferences', {skip:!JSDOM}, async t=>{
- const old={enabled:true,side:'workspace',left:'community',right:'coding',ratio:.61,flex:{enabled:true,rootAxis:'x',stackAxis:'y',rootRatio:.62,stackRatio:.46,slots:['social','bilibili','coding']}};
- const f=fixture(t,old,{allowLegacyMultiPane:false});await tick();await tick();
- assert.equal(q(f,'.neko-layout-entry'),null);assert.equal(f.calls.filter(c=>c.action==='set-pane-layout').length,0);
- f.d.dispatchEvent(new f.w.CustomEvent('neko-unified-open-config',{detail:{optIn:true}}));await tick();await tick();
- assert(q(f,'.neko-layout-entry'));assert.equal(q(f,'.neko-unified-config').hidden,false);
- const restore=[...f.d.querySelectorAll('.neko-unified-config button')].find(b=>b.textContent==='恢复上次多栏布局');assert.equal(restore.hidden,false);restore.click();await tick();
- assert.equal(f.d.body.hasAttribute('data-neko-flex-mode'),true);assert.equal(q(f,'#draft').value,'coding draft');assert.equal(f.saved.flex.rootRatio,.62);
- const before=f.d.querySelectorAll('.neko-layout-entry').length;f.d.dispatchEvent(new f.w.CustomEvent('neko-unified-open-config',{detail:{optIn:true}}));await tick();assert.equal(f.d.querySelectorAll('.neko-layout-entry').length,before);
- f.cleanup();
+test('B站 entry preserves the three-pane layout and ignores the removed YouTube choice', { skip:!JSDOM }, async t => {
+ const f=fixture(t);await tick();q(f,'.neko-layout-entry').click();[...f.d.querySelectorAll('.neko-flex-config button')].find(b=>b.textContent==='左侧聊天室 / 右侧上下').click();await tick();q(f,'.neko-unified-config .close').click();await tick();await tick();
+ const original=JSON.stringify(f.saved.flex),input=q(f,'#draft');assert(f.calls.some(c=>c.action==='open'&&c.slot==='left'&&c.site==='bilibili'));
+ const removed={platform:'youtube'};f.d.dispatchEvent(new f.w.CustomEvent('neko-video-open',{detail:removed}));await tick();assert(!removed.handled);assert(!f.calls.some(c=>c.action==='open'&&c.site==='youtube'));assert.equal(input.value,'coding draft');assert.equal(JSON.stringify(f.saved.flex),original);
+ key(f,q(f,'.neko-flex-divider'),'End');await tick();assert(f.d.body.hasAttribute('data-neko-flex-workspace-collapsed'));f.d.dispatchEvent(new f.w.CustomEvent('neko-video-open',{detail:{platform:'bilibili'}}));await tick();assert(f.d.body.hasAttribute('data-neko-flex-workspace-collapsed'));assert.equal(input.value,'coding draft');f.d.dispatchEvent(new f.w.Event('neko-workspace-expand'));await tick();assert(!f.d.body.hasAttribute('data-neko-flex-workspace-collapsed'));f.cleanup();
 });
-
-test('three-pane video entry switches B站 and YouTube in one slot, preserves other regions and opens the entered video', { skip:!JSDOM }, async t => {
-  const f=fixture(t); let social=null;
-  f.d.addEventListener('neko-flex-social-geometry', event=>{ if (event.detail) social=event.detail; });
-  await tick(); q(f,'.neko-layout-entry').click();
-  [...f.d.querySelectorAll('.neko-flex-config button')].find(b=>b.textContent==='左侧聊天室 / 右侧上下').click();
-  await tick(); q(f,'.neko-unified-config .close').click(); await tick(); await tick();
-  const original=JSON.stringify(f.saved.flex), code=q(f,'#draft');
-  assert(f.calls.some(c=>c.action==='open'&&c.slot==='left'&&c.site==='bilibili'));
-  assert(social && social.width>0 && social.height>0); assert.equal(code.value,'coding draft');
-  const detail={platform:'youtube'};
-  f.d.dispatchEvent(new f.w.CustomEvent('neko-video-open',{detail})); await tick(); await tick();
-  assert.equal(detail.handled,true); assert.equal(JSON.stringify(f.saved.flex),original);
-  assert(f.calls.some(c=>c.action==='open'&&c.slot==='left'&&c.site==='youtube'));
-  assert.equal(code.value,'coding draft'); assert.equal(q(f,'.some_centerCol_HASH_42').getAttribute('data-neko-flex-coding'),'');
-  const panel=q(f,'[data-neko-unified-slot="left"]'), input=panel.querySelector('.neko-youtube-url');
-  assert.equal(panel.hidden,false); assert.match(panel.getAttribute('aria-label'),/YouTube/); assert.equal(input.hidden,false);
-  assert.equal([...panel.querySelectorAll('button')].find(b=>b.textContent==='返回工作区').hidden,true,'three-pane video has no inert return action');
-  assert(f.d.querySelector('.neko-flex-move[aria-label="拖动YouTube到其他区域"]'),'the drag handle names the selected provider');
-  q(f,'.neko-layout-entry').click(); await tick();
-  assert.match(q(f,'.neko-unified-config .summary').textContent,/YouTube/);
-  assert([...f.d.querySelectorAll('.neko-flex-slot option')].some(option=>option.value==='bilibili'&&option.textContent==='YouTube'));
-  q(f,'.neko-unified-config .close').click(); await tick(); await tick();
-  const send=panel.querySelector('.neko-youtube-open'); send.click();
-  assert.match(panel.querySelector('.status').textContent,/粘贴/);
-  assert(!f.calls.some(c=>c.action==='open-youtube-video'));
-  input.value=' https://www.youtube.com/watch?v=jNQXAC9IVRw '; key(f,input,'Enter'); await tick();
-  assert(f.calls.some(c=>c.action==='open-youtube-video'&&c.slot==='left'&&c.videoUrl==='https://www.youtube.com/watch?v=jNQXAC9IVRw'));
-  input.value='https://www.youtube.com/playlist?list=PL1234567890abcdefgh'; send.click(); await tick();
-  assert(f.calls.some(c=>c.action==='open-youtube-video'&&c.slot==='left'&&c.videoUrl==='https://www.youtube.com/playlist?list=PL1234567890abcdefgh'),'playlist is sent through the same video slot');
-  const shorts=panel.querySelector('.neko-youtube-shorts'); assert(shorts && !shorts.hidden);
-  shorts.click(); await tick();
-  assert(f.calls.some(c=>c.action==='open-youtube-shorts'&&c.slot==='left'),'Shorts must open in the existing video slot');
-  assert.equal(code.value,'coding draft'); assert.equal(JSON.stringify(f.saved.flex),original);
-  f.listener({slot:'left',site:'youtube',status:'ready',tooSmall:true});
-  assert.match(panel.querySelector('.status').textContent,/200\s*×\s*200/);
-  f.d.dispatchEvent(new f.w.CustomEvent('neko-video-open',{detail:{platform:'bilibili'}})); await tick(); await tick();
-  assert(f.calls.filter(c=>c.action==='open'&&c.slot==='left'&&c.site==='bilibili').length>=2);
-  assert(f.d.querySelector('.neko-flex-move[aria-label="拖动B站视频到其他区域"]'),'switching back restores the B站 label');
-  assert.equal(input.hidden,true); assert.equal(shorts.hidden,true); assert.equal(code.value,'coding draft'); assert.equal(JSON.stringify(f.saved.flex),original);
-  f.cleanup();
+test('a saved YouTube preference cannot reactivate the removed platform', { skip:!JSDOM }, async t => {
+ const f=fixture(t,{}, {videoPlatform:'youtube'});await tick();q(f,'.neko-layout-entry').click();[...f.d.querySelectorAll('.neko-flex-config button')].find(b=>b.textContent==='左侧聊天室 / 右侧上下').click();await tick();q(f,'.neko-unified-config .close').click();await tick();await tick();assert(f.calls.some(c=>c.action==='open'&&c.site==='bilibili'));assert(!f.calls.some(c=>c.action==='open'&&c.site==='youtube'));assert.equal(f.saved.flex.slots[1],'bilibili');f.cleanup();
 });
-
-test('switching video while work is collapsed retains the floating work state', { skip:!JSDOM }, async t => {
-  const f=fixture(t); await tick(); q(f,'.neko-layout-entry').click();
-  [...f.d.querySelectorAll('.neko-flex-config button')].find(b=>b.textContent==='左侧聊天室 / 右侧上下').click();
-  await tick(); q(f,'.neko-unified-config .close').click(); await tick(); await tick();
-  const input=q(f,'#draft'), ratio=f.saved.flex.stackRatio;
-  key(f,q(f,'.neko-flex-divider'),'End'); await tick();
-  assert(f.d.body.hasAttribute('data-neko-flex-workspace-collapsed'));
-  const before=input.value;
-  for (const platform of ['youtube','bilibili']) {
-    f.d.dispatchEvent(new f.w.CustomEvent('neko-video-open',{detail:{platform}})); await tick(); await tick();
-    assert(f.d.body.hasAttribute('data-neko-flex-workspace-collapsed'),platform+' must keep the work composer collapsed');
-    assert(f.calls.some(c=>c.action==='open'&&c.slot==='left'&&c.site===platform),platform+' must occupy the same video slot');
-    assert.equal(input.value,before); assert.equal(f.saved.flex.stackRatio,ratio);
-  }
-  f.d.dispatchEvent(new f.w.Event('neko-workspace-expand')); await tick();
-  assert(!f.d.body.hasAttribute('data-neko-flex-workspace-collapsed'));
-  assert.equal(input.value,before); f.cleanup();
-});
-
-test('saved YouTube preference restores in the existing video slot, and a late preference cannot override a new selection', { skip:!JSDOM }, async t => {
-  const f=fixture(t,{}, {videoPlatform:'youtube'}); await tick();
-  q(f,'.neko-layout-entry').click(); [...f.d.querySelectorAll('.neko-flex-config button')].find(b=>b.textContent==='左侧聊天室 / 右侧上下').click();
-  await tick(); q(f,'.neko-unified-config .close').click(); await tick(); await tick();
-  assert(f.calls.some(c=>c.action==='open'&&c.slot==='left'&&c.site==='youtube'));
-  assert.equal(f.saved.flex.slots[1],'bilibili','legacy stored video slot remains compatible'); f.cleanup();
-
-  let resolvePreference; const pending=new Promise(resolve=>{resolvePreference=resolve;});
-  const g=fixture(t,{}, {videoPlatformRequest:()=>pending}); await tick();
-  q(g,'.neko-layout-entry').click(); [...g.d.querySelectorAll('.neko-flex-config button')].find(b=>b.textContent==='左侧聊天室 / 右侧上下').click();
-  await tick(); q(g,'.neko-unified-config .close').click(); await tick();
-  g.d.dispatchEvent(new g.w.CustomEvent('neko-video-open',{detail:{platform:'bilibili'}}));
-  resolvePreference({platform:'youtube'}); await tick(); await tick();
-  assert(!g.calls.some(c=>c.action==='open'&&c.site==='youtube'),'late persisted value must not undo the user selection');
-  assert(g.calls.some(c=>c.action==='open'&&c.site==='bilibili')); g.cleanup();
-});
-
-test('YouTube entry opens in the ordinary sidebar without replacing the workspace draft', { skip:!JSDOM }, async t => {
-  const f=fixture(t); await tick();
-  f.d.dispatchEvent(new f.w.CustomEvent('neko-video-open',{detail:{platform:'youtube'}})); await tick(); await tick();
-  assert(f.calls.some(c=>c.action==='open'&&c.slot==='side'&&c.site==='youtube'));
-  assert.equal(f.d.body.hasAttribute('data-neko-side-social-active'),true);
-  assert.equal(q(f,'#draft').value,'coding draft');
-  assert.equal(q(f,'[data-neko-unified-slot="side"] .neko-youtube-url').hidden,false);
-  assert.equal([...q(f,'[data-neko-unified-slot="side"]').querySelectorAll('button')].find(b=>b.textContent==='返回聊天室').hidden,false,'the functional sidebar return remains available');
-  f.cleanup();
+test('B站 entry opens in the ordinary sidebar without replacing the workspace draft', { skip:!JSDOM }, async t => {
+ const f=fixture(t);await tick();f.d.dispatchEvent(new f.w.CustomEvent('neko-video-open',{detail:{platform:'bilibili'}}));await tick();await tick();assert(f.calls.some(c=>c.action==='open'&&c.slot==='side'&&c.site==='bilibili'));assert(f.d.body.hasAttribute('data-neko-side-social-active'));assert.equal(q(f,'#draft').value,'coding draft');assert(q(f,'[data-neko-unified-slot="side"] .neko-youtube-url').hidden);f.cleanup();
 });
 
 test('divider exposes separator semantics and supports arrow, Shift, Home and End keys', { skip:!JSDOM }, async t => {

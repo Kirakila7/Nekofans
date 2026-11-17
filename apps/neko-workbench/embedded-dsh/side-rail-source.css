@@ -1,20 +1,26 @@
 /* One independent rail; the native session/sidebar/composer layout remains. */
-body[data-neko-side-rail-layout] { --neko-rail-width: 0px; }
-/* The rail is gone: its entries moved into Home and the native settings dialog. */
-body[data-neko-side-rail-layout] .neko-side-rail,
-body[data-neko-side-rail-layout] .neko-avatar-portal { display: none !important; }
-/* Clear the native traffic lights now that the sidebar starts at the window edge. */
-body[data-neko-side-rail-layout] [data-neko-native-brand-row] { padding-top: 38px; }
-/* The engine switch and workbench settings entry moved into the native settings dialog. */
-body[data-neko-side-rail-layout] .neko-office-switch,
-body[data-neko-side-rail-layout] .neko-workspace-settings { display: none !important; }
-/* The channel shortcut is paused; the chatroom still opens the channel room. */
-body[data-neko-side-rail-layout] .neko-lobby-switch { display: none !important; }
-/* Home/Work in the sidebar replaces the rail's room/work buttons; the rail's
-   account shortcut is replaced by the bottom account row. */
-body[data-neko-side-rail-layout] .neko-room-entry,
-body[data-neko-side-rail-layout] .neko-room-workspace,
-body[data-neko-side-rail-layout] .neko-side-rail__account { display: none !important; }
+body[data-neko-side-rail-layout] { --neko-rail-width: 64px; }
+/* The native caption buttons keep Windows snap/resize behavior. The page owns
+   the matching drag surface and reserves the actual overlay height at any zoom. */
+body[data-neko-window-chrome="windows"] { --neko-titlebar-height:env(titlebar-area-height,36px); overflow:hidden; }
+body[data-neko-window-chrome="windows"] { --neko-font-ui:"Segoe UI Variable","Segoe UI","Microsoft YaHei UI","Microsoft YaHei",sans-serif; --neko-ui-accent:#5278cf; --neko-ui-accent-soft:#eaf0ff; }
+body[data-neko-window-chrome="windows"]:not([data-ds-dark-theme]) {
+  --dsw-alias-bg-base:#f7f9fd; --dsw-alias-bg-layer-1:#ffffff; --dsw-specific-sidebar-fill:#f4f7fc;
+  --dsw-alias-border-l1:#e3e9f2; --dsw-alias-label-primary:#28364d; --dsw-alias-label-secondary:#65748b;
+  --dsw-alias-brand-primary:#5278cf; --dsw-alias-primary:#5278cf;
+  --dsw-alias-interactive-bg-hover:#edf2fa; --dsw-alias-interactive-bg-active:#eaf0ff;
+}
+body[data-neko-window-chrome="windows"][data-ds-dark-theme] { --neko-ui-accent:#9ab5ff; --neko-ui-accent-soft:#273951; }
+body[data-neko-window-chrome="windows"] :is(button,input,textarea,select) { font-family:var(--neko-font-ui); }
+.neko-window-titlebar { position:fixed; inset:0 0 auto; height:var(--neko-titlebar-height); z-index:300; box-sizing:border-box; background:var(--dsw-alias-bg-layer-1,#fbfeff); color:var(--dsw-alias-label-primary,#263750); border-bottom:1px solid var(--dsw-alias-border-l1,#cbdbee); -webkit-app-region:drag; user-select:none; }
+.neko-window-titlebar__brand { display:flex; align-items:center; gap:9px; height:100%; margin-left:env(titlebar-area-x,0px); width:env(titlebar-area-width,calc(100% - 140px)); box-sizing:border-box; padding:0 16px; font:600 12px/1 var(--neko-font-ui,system-ui); letter-spacing:.025em; overflow:hidden; white-space:nowrap; }
+.neko-window-titlebar__brand img { width:22px; height:22px; object-fit:contain; }
+body[data-neko-window-chrome="windows"] [data-neko-rail-app] { margin-top:var(--neko-titlebar-height) !important; height:calc(100vh - var(--neko-titlebar-height)) !important; min-height:0 !important; }
+body[data-neko-window-chrome="windows"] .neko-side-rail { top:var(--neko-titlebar-height); }
+body[data-neko-window-chrome="windows"] .neko-avatar-anchor { top:calc(var(--neko-titlebar-height) + 14px); }
+body[data-neko-window-chrome="windows"] .neko-side-rail { padding-top:16px; border-right-color:var(--dsw-alias-border-l1); }
+body[data-neko-window-chrome="windows"] .neko-side-rail__button { border-radius:12px; color:var(--dsw-alias-label-secondary); }
+body[data-neko-window-chrome="windows"] .neko-side-rail__button:is([aria-pressed="true"],[aria-expanded="true"]) { background:var(--neko-ui-accent-soft); color:var(--neko-ui-accent); }
 body[data-neko-side-rail-layout] [data-neko-rail-app] {
   width: calc(100% - var(--neko-rail-width)) !important;
   margin-left: var(--neko-rail-width) !important; min-width: 0;
@@ -38,9 +44,9 @@ body[data-neko-side-rail-layout] [data-neko-chat-center] [contenteditable="true"
   position: fixed; inset: 0 auto 0 0; z-index: 40;
   display: flex; flex-direction: column; align-items: center;
   width: var(--neko-rail-width, 64px); box-sizing: border-box; padding: 14px 12px 12px;
-  border-right: 1px solid var(--nk-border, #e4e7ec);
-  background: var(--nk-surface, #fff);
-  color: var(--nk-text, #1d2430);
+  border-right: 1px solid color-mix(in srgb, var(--dsw-alias-border-l1, #c4dbe6) 72%, transparent);
+  background: var(--dsw-alias-bg-layer-1, #fbfeff);
+  color: var(--dsw-alias-label-primary, #17303d);
   -webkit-app-region: no-drag;
 }
 .neko-side-rail__theme { width: 40px; height: 40px; flex: none; }
@@ -53,10 +59,10 @@ body[data-neko-side-rail-layout] .neko-workspace-rail-controls { gap: 7px; paddi
   transition: background-color .16s ease, color .16s ease;
 }
 .neko-side-rail__button[hidden] { display: none !important; }
-.neko-side-rail__button:hover { background: var(--nk-hover, #f2f4f7); }
-.neko-side-rail__button:focus-visible { outline: 2px solid var(--nk-focus, #3f6ea8); outline-offset: 2px; }
+.neko-side-rail__button:hover { background: var(--dsw-alias-interactive-bg-hover, #ddedf4); }
+.neko-side-rail__button:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary, #246b91); outline-offset: 2px; }
 .neko-side-rail__button[aria-busy="true"] { opacity: .55; cursor: progress; }
-.neko-side-rail__button[aria-expanded="true"], .neko-side-rail__button[aria-pressed="true"] { background: var(--nk-active, #e9edf3); color: var(--nk-accent, #3f6ea8); }
+.neko-side-rail__button[aria-expanded="true"], .neko-side-rail__button[aria-pressed="true"] { background: var(--dsw-alias-interactive-bg-active, #d0e5ef); color: var(--dsw-alias-brand-primary, #246b91); }
 .neko-side-rail__button svg { display: block; width: 22px; height: 22px; }
 .neko-side-rail__button svg[hidden] { display: none !important; }
 .neko-side-rail__button img { display: block; width: 36px; height: 36px; object-fit: contain; border-radius: 10px; }
@@ -76,27 +82,36 @@ body[data-neko-side-rail-layout] .neko-workspace-rail-controls { gap: 7px; paddi
   background: var(--dsw-alias-bg-layer-1, #fbfeff); color: inherit; font: 12px/1.5 system-ui, sans-serif;
 }
 .neko-side-rail__notice[hidden] { display: none; }
+body[data-neko-side-rail-layout] .neko-avatar-anchor {
+  position: fixed; left: 12px; top: 14px; width: 40px !important; height: 40px !important; z-index: 41;
+}
 body[data-neko-side-rail-layout] .neko-avatar-portal .neko-avatar--mark {
   width: 100%; height: 100%; object-fit: contain;
 }
-body[data-neko-side-rail-layout] .neko-role-host .neko-bilibili:not(.neko-side-rail__button),
+body[data-neko-side-rail-layout] .neko-role-host .neko-bilibili,
 body[data-neko-side-rail-layout] [data-neko-rail-fish-original] { display: none !important; }
 body[data-neko-side-rail-layout] .neko-role-host .neko-social-actions { grid-template-columns: 1fr; }
 body[data-neko-side-rail-layout] [data-slot="settings.launcher"] { height: 0; min-height: 0; margin: 0; padding: 0; }
-/* Bottom account row: avatar + name, opens the native account menu. */
 body[data-neko-side-rail-layout] button[data-neko-account-habitat][data-neko-unified-account] {
-  position: fixed; left: var(--neko-sidebar-left, var(--neko-companion-left, 64px)); bottom: 0; z-index: 45;
-  display: flex !important; align-items: center; width: var(--neko-sidebar-width, var(--neko-companion-width, 280px)) !important; height: 48px !important;
-  min-height: 48px !important; padding: 0 12px !important; margin: 0 !important; box-sizing: border-box !important;
-  border: 0 !important; border-top: 1px solid var(--nk-border, #e4e7ec) !important; border-radius: 0 !important;
-  background: var(--nk-surface, #fff) !important; box-shadow: none !important;
-  opacity: 1 !important; pointer-events: auto !important;
-  color: var(--nk-text, #1d2430) !important; font: 13px/1.4 system-ui, sans-serif !important; cursor: pointer !important; text-align: left !important;
+  position: fixed; left: 12px; bottom: 12px; z-index: 41;
+  display: grid !important; place-items: center; width: 40px !important; height: 40px !important;
+  min-height: 40px !important; padding: 4px !important; margin: 0 !important;
+  border: 0 !important; border-radius: 12px; background: transparent;
+  opacity: 0 !important; pointer-events: none !important;
 }
-body[data-neko-side-rail-layout] button[data-neko-unified-account]:hover { background: var(--nk-hover, #f2f4f7) !important; }
-body[data-neko-side-rail-layout] button[data-neko-unified-account]:focus-visible { outline: 2px solid var(--nk-focus, #3f6ea8); outline-offset: -2px; }
+body[data-neko-side-rail-layout] button[data-neko-unified-account] .neh-launcher {
+  display: block !important; width: 32px !important; height: 32px !important;
+}
+body[data-neko-side-rail-layout] button[data-neko-unified-account] .neh-identity { display: block; }
+body[data-neko-side-rail-layout] button[data-neko-unified-account] .neh-developer-avatar { width: 32px; height: 32px; }
+body[data-neko-side-rail-layout] button[data-neko-unified-account] .neh-developer-name,
+body[data-neko-side-rail-layout] button[data-neko-unified-account] .neh-providers { display: none; }
+body[data-neko-side-rail-layout] button[data-neko-unified-account]:hover { background: var(--dsw-alias-interactive-bg-hover, #ddedf4); }
+body[data-neko-side-rail-layout] button[data-neko-unified-account]:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary, #246b91); outline-offset: 2px; }
 /* Press and disabled cues for rail icon buttons (focus ring is defined above). */
 .neko-side-rail__button:active:not(:disabled) { background: var(--dsw-alias-interactive-bg-active, #d0e5ef); }
 .neko-side-rail__button:disabled { opacity: .45; cursor: not-allowed; }
 .neko-side-rail__button:disabled:hover { background: transparent; }
 @media (prefers-reduced-motion: reduce) { .neko-side-rail__button { transition: none; } }
+
+.neko-side-rail__account{position:relative}.neko-side-rail__account::after{content:'';position:absolute;right:3px;bottom:3px;width:8px;height:8px;border-radius:50%;background:#9ba8b9;border:2px solid var(--dsw-alias-bg-base,#f8fbff)}.neko-side-rail__account[data-community-login=signed-in]::after{background:#43bd9a}.neko-side-rail__account[data-community-login=checking]::after{background:#e6b45a}

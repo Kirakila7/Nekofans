@@ -37,6 +37,7 @@ function createQQRuntime(ctx) {
     allowPairing() { return runtime.active() && host?.allowPairing?.() === true; },
     pairingOnly() { return !runtime.active() || host?.pairingOnly?.() === true; },
     mark(key) { host?.mark?.(key); },
+    experience(entry) { if(runtime.active())host?.experience?.(entry); },
     report(phase) { if (runtime.active()) host.report(phase); },
   };
   ctx.on('dispose', () => { disposed = true; });

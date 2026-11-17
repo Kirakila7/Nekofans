@@ -34,6 +34,8 @@ export class MemoryHub {
         if (!value || typeof value.text !== 'string' || value.text.length > 30000) throw Error('invalid value');
         if (!['owner', 'private'].includes(value.visibility)) throw Error('invalid visibility');
         if (!['candidate', 'inferred', 'user-confirmed'].includes(value.certainty)) throw Error('invalid certainty');
+        if (value.priority !== undefined && (!Number.isInteger(value.priority) || value.priority < 0 || value.priority > 100)) throw Error('invalid priority');
+        if (value.pinned !== undefined && typeof value.pinned !== 'boolean') throw Error('invalid pin');
       }
       const old = known.get(event.eventId);
       if (old && stable(old) !== stable(event)) throw Error('eventId collision');
@@ -64,7 +66,8 @@ export class MemoryHub {
       const superseded = new Set(events.flatMap(event => event.parents));
       const heads = events.filter(event => !superseded.has(event.eventId));
       const deleted = heads.some(event => event.operation === 'delete');
-      return { itemId, heads: copy(heads), conflict: heads.length !== 1, deleted,
+      return { itemId, createdAt: events[0].occurredAt, heads: copy(heads), conflict: heads.length !== 1, deleted,
+        ...(deleted ? { previousValue: copy([...events].reverse().find(event => event.value)?.value) } : {}),
         value: heads.length === 1 && !deleted ? copy(heads[0].value) : null };
     });
   }

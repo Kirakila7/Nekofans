@@ -44,6 +44,37 @@ class GatewayRecoveryTest(unittest.IsolatedAsyncioTestCase):
             await gateway.push([event])
             rows=await gateway.native_facts()
             self.assertEqual(sum(f.get("text")==event["value"]["text"] for f in rows),1)
+            # Metadata edits preserve native fact identity and do not re-extract.
+            source_id=gateway.db.execute("SELECT native_id FROM projections WHERE item=?",(event["itemId"],)).fetchone()[0]
+            prioritized={**event,"eventId":"priority-revision","parents":[event["eventId"]],"value":{**event["value"],"priority":88,"pinned":True}}
+            with patch.object(runtime.fact_store,"_apersist_new_facts",new=AsyncMock(side_effect=AssertionError("metadata re-extracted"))):
+                await gateway.push([prioritized])
+            self.assertEqual(gateway.db.execute("SELECT native_id FROM projections WHERE event=?",("priority-revision",)).fetchone()[0],source_id)
+            episode={**event,"itemId":"priority-episode","eventId":"episode-base","value":{**event["value"],"kind":"episode","certainty":"inferred","text":"用户原话：合成用户喜欢海边。角色回复：下次一起去。"}}
+            with patch.object(runtime.fact_store,"_allm_extract_facts",new=AsyncMock(return_value=[dict(text="合成用户喜欢海边",importance=6,entity="master")])):
+                await gateway.push([episode])
+            count_before=len(await gateway.native_facts())
+            with patch.object(runtime.fact_store,"_allm_extract_facts",new=AsyncMock(side_effect=AssertionError("episode metadata re-extracted"))):
+                await gateway.push([{**episode,"eventId":"episode-priority","parents":[episode["eventId"]],"value":{**episode["value"],"priority":75,"pinned":True}}])
+            self.assertEqual(len(await gateway.native_facts()),count_before)
+            # A second confirmed fact ranked first by retrieval yields to the pin;
+            # a small injection budget must be allocated after priority sorting.
+            other={**event,"itemId":"other-preference","eventId":"other-preference","value":{**event["value"],"text":"恢复测试用户也喜欢阳光", "priority":99}}
+            await gateway.push([other])
+            other_id=gateway.db.execute("SELECT native_id FROM projections WHERE item=?",(other["itemId"],)).fetchone()[0]
+            from app.memory_server import routes
+            with patch.object(routes,"query_memory",new=AsyncMock(return_value={"results":[{"id":other_id,"tier":"fact"},{"id":source_id,"tier":"fact"}]})):
+                values=(await gateway.recall("偏好",512))["values"]
+                self.assertEqual(values[0]["priority"],88)
+                self.assertTrue(values[0]["pinned"])
+                demoted={**prioritized,"eventId":"demoted-preference","parents":[prioritized["eventId"]],"value":{**prioritized["value"],"priority":0,"pinned":False}}
+                await gateway.push([demoted])
+                values=(await gateway.recall("偏好",512))["values"]
+                self.assertEqual(values[0]["text"],other["value"]["text"])
+                self.assertEqual(values[-1]["priority"],0)
+                prioritized=demoted
+            for value in (-1,101,True,1.5):
+                with self.assertRaises(ValueError):gateway.append([{**other,"eventId":"invalid-priority","value":{**other["value"],"priority":value}}])
             await persist("大肥鱼",[dict(text="原生端新增的恢复测试事实",importance=6,entity="master")],semantic_dedup=False,effect_keys=["synthetic-native-origin"])
             original_set=gateway.set
             def interrupt_observation(key,value):
@@ -65,7 +96,7 @@ class GatewayRecoveryTest(unittest.IsolatedAsyncioTestCase):
             from app.memory_server import routes
             with patch.object(runtime.reflection_engine,"aload_reflections",new=AsyncMock(return_value=[reflection])), patch.object(routes,"query_memory",new=AsyncMock(return_value={"results":[{"id":reflection["id"],"tier":"reflection"}]})):
                 self.assertEqual(len((await gateway.recall("偏好",512))["values"]),1)
-                correction={**event,"eventId":"corrected-preference","parents":[event["eventId"]],"value":{**event["value"],"text":"恢复测试用户改为喜欢热闹的客厅"}}
+                correction={**event,"eventId":"corrected-preference","parents":[prioritized["eventId"]],"value":{**prioritized["value"],"text":"恢复测试用户改为喜欢热闹的客厅"}}
                 await gateway.push([correction])
                 self.assertEqual((await gateway.recall("偏好",512))["values"],[])
         finally:

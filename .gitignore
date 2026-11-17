@@ -46,3 +46,17 @@ apps/neko-workbench/runtime/
 apps/neko-workbench/workspaces/
 apps/neko-workbench/evidence/
 apps/neko-workbench/*.zip
+
+# Local release and account files (never publish)
+*.p12
+*.pfx
+*.sqlite-wal
+*.sqlite-shm
+NEKOfuns.local.json
+Nekofans.local.json
+credentials.yaml
+credentials.yml
+**/recording-profile/
+**/raw-private/
+**/BUILD_RECEIPT.json
+**/APPLICATION_SHA256.json

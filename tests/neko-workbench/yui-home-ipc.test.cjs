@@ -21,7 +21,7 @@ test('仅可信主窗口可读写家园且重用独立本地存储', async t => 
   const blocks=(await handle({trusted:true},{action:'status'})).blocks;
   assert.ok(blocks.length > 35);
   assert.ok(blocks.some(b=>b.x===1&&b.y===2&&b.z===3&&b.material==='glass'));
-  assert.deepEqual(await fs.readdir(path.join(dir,'yui-home')), ['world.json']);
+  assert.deepEqual(await fs.readdir(path.join(dir,'our-home')), ['world.json']);
 });
 
 test('异步初始化期间身份失效不会执行写操作', async () => {

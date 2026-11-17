@@ -18,16 +18,24 @@ function claimWorkbenchInstance(app, userData) {
 }
 
 function queueEarlyInstanceNotifications(app) {
-  let pending = false;
-  const early = () => { pending = true; if (app.isReady?.()) app.focus?.({ steal: true }); };
+  let pending = null, launchUrl = null;
+  const early = (event, argv, cwd, data) => { pending = [event, argv, cwd, data]; if (app.isReady?.()) app.focus?.({ steal: true }); };
+  const earlyUrl = (event, url) => { event.preventDefault(); launchUrl = url; };
   app.on('second-instance', early);
+  app.on('open-url', earlyUrl);
+  const detach = () => { app.removeListener('second-instance', early); app.removeListener('open-url', earlyUrl); };
   return {
     forward() {
-      app.removeListener('second-instance', early);
+      detach();
       // The main process has now synchronously registered its listener.
-      if (pending) { pending = false; void app.whenReady().then(() => app.emit('second-instance', {}, [], process.cwd(), {})); }
+      if (pending) {
+        const notification = pending;
+        pending = null;
+        void app.whenReady().then(() => app.emit('second-instance', ...notification));
+      }
+      if (launchUrl) { app.emit('open-url', {preventDefault() {}}, launchUrl); launchUrl = null; }
     },
-    discard() { pending = false; app.removeListener('second-instance', early); },
+    discard() { pending = null; launchUrl = null; detach(); },
   };
 }
 

@@ -24,6 +24,16 @@ function catalogOrder(rootId,children){
   return ordered;
 }
 function actorKind(actor){return actor?.id==='main'?'main':actor?.kind==='task'?'task':'subagent';}
+function desktopHomeId(actor,actors){
+  const bySession=new Map(actors.filter(a=>a.sessionId).map(a=>[a.sessionId,a]));
+  const visited=new Set([actor?.sessionId]);let parent=actor?.parentSessionId;
+  while(parent&&!visited.has(parent)){
+    visited.add(parent);const owner=bySession.get(parent);if(!owner)break;
+    if(owner.kind==='task'&&owner.present)return owner.id;
+    parent=owner.parentSessionId;
+  }
+  return 'main';
+}
 function taskActorId(sessionId){if(typeof sessionId!=='string'||!sessionId.trim()||/[\x00-\x1f]/.test(sessionId))throw new TypeError('A task needs a real session id');return 'task-'+sessionId;}
 function rankOf(order){return new Map([...new Set(Array.isArray(order)?order:[])].map((id,index)=>[id,index]));}
 function eligible(actors,kind,rank){
@@ -109,5 +119,5 @@ function selectHelpers(actors,order,limit,now=Date.now(),options){
 function displayName(actor){return actor.nickname||actor.dshName||actor.label||actor.sessionId;}
 function nickname(value){const name=String(value??'').trim();if(Array.from(name).length>24||/[\r\n\x00-\x1f]/.test(name))throw new Error('名字请使用 24 字以内的单行文字。');return name;}
 module.exports={DEFAULT_LIMIT,DESKTOP_ROTATION_MS,RETURN_HOME_TIMEOUT_MS,beginReturnHome,expireReturnHomes,normalizeLimit,mergeCatalogOrder,catalogOrder,
-  actorKind,taskActorId,orderedTaskPets,orderedDesktopPets,selectDesktopPets,nextDesktopRefreshAt,
+  actorKind,desktopHomeId,taskActorId,orderedTaskPets,orderedDesktopPets,selectDesktopPets,nextDesktopRefreshAt,
   orderedHelpers,selectHelpers,displayName,nickname};

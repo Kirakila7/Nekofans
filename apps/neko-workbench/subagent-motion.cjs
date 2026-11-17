@@ -29,13 +29,12 @@ function stepToward(from, target, distance) {
 function createSubagentMotion({ now = Date.now, random = Math.random, getHome, getArea, getCursor = () => null,
   reducedMotion = () => false, isPaused = () => false, onPose = () => {}, onReturned = () => {}, onForeground = () => {},
   schedule = callback => setInterval(callback, FRAME_MS), unschedule = clearInterval } = {}) {
-  const records = new Map(), seen = new Map(); let timer = null, lastTick = now(), nextSlot = 0, layoutKey='', layout=null,lastClusters=0;
-  let layoutHome='',layoutGeometry=new Map();
+  const records = new Map(), seen = new Map(), layouts = new Map(); let timer = null, lastTick = now(), nextSlot = 0;
   const needsTick=()=>[...records.values()].some(r=>r.birth||r.returning||r.cluster||r.active&&r.explore);
   const boundsOf = w => w.getBounds?.() || { ...w.bounds, x: w.getPosition()[0], y: w.getPosition()[1] };
   function pose(record, phase, moving, direction = record.direction || -1, extra = {}) {
     const value = { phase, moving, direction, retire:record.retire!==false, ...extra };
-    if(record.cluster) value.clusterId=layout?.labels.get(record.id)??-1;
+    if(record.cluster) value.clusterId=record.layout?.labels.get(record.id)??-1;
     const key = JSON.stringify(value);
     if (record.pose !== key) { record.pose = key; record.direction = direction; onPose(record.id, value); }
   }
@@ -64,9 +63,9 @@ function createSubagentMotion({ now = Date.now, random = Math.random, getHome, g
       if(entry.fountain===false||entry.returning||reducedMotion())record.birth=null;
       if (!entry.active && !entry.returning) pose(record, 'resting', false);
     }
-    layoutKey='';
-    const home=getHome();
-    if(home)for(const record of records.values())if(record.birth?.start===null){
+    for(const cached of layouts.values())cached.key='';
+    for(const record of records.values())if(record.birth?.start===null){
+      const home=getHome(record.id);if(!home)continue;
       const area=getArea(home);record.point=fountainOrigin(boundsOf(record.window),record.body,home,area);
       record.window.setPosition(record.point.x,record.point.y,false);onForeground(record.id);
       pose(record,'spawning',false,record.direction,{progress:0,lean:0});
@@ -77,17 +76,22 @@ function createSubagentMotion({ now = Date.now, random = Math.random, getHome, g
   }
   function tick() {
     const time = now(), dt = Math.max(0, Math.min(.12, (time - lastTick) / 1000)); lastTick = time;
-    const home = getHome(), cursor = getCursor(), completed = [], peers=[...records.values()],swarm=peers.filter(r=>r.cluster);
-    if(home&&swarm.length) {
+    const cursor = getCursor(), completed = [], peers=[...records.values()],homes=new Map(),groups=new Map();
+    for(const record of peers){const home=getHome(record.id);homes.set(record.id,home);record.layout=null;if(!home||!record.cluster)continue;const key=home.anchorId||'main';if(!groups.has(key))groups.set(key,{home,swarm:[]});groups.get(key).swarm.push(record);}
+    for(const key of layouts.keys())if(!groups.has(key))layouts.delete(key);
+    for(const [groupId,{home,swarm}] of groups){
+      const cached=layouts.get(groupId)||{key:'',home:'',geometry:new Map(),layout:null,lastClusters:0};
       const key=JSON.stringify([home,...swarm.map(r=>[r.id,r.point.width,r.point.height,r.body])]);
-      if(key!==layoutKey){
+      if(key!==cached.key){
         const homeKey=JSON.stringify(home),geometry=new Map(swarm.map(r=>[r.id,JSON.stringify([r.point.width,r.point.height,r.body])]));
-        const preserve=homeKey===layoutHome&&[...geometry].every(([id,value])=>!layoutGeometry.has(id)||layoutGeometry.get(id)===value);
-        layout=clusterLayout(swarm,home,getArea(home),preserve?layout?.targets:null);layoutKey=key;layoutHome=homeKey;layoutGeometry=geometry;
+        const preserve=homeKey===cached.home&&[...geometry].every(([id,value])=>!cached.geometry.has(id)||cached.geometry.get(id)===value);
+        cached.layout=clusterLayout(swarm,home,getArea(home),preserve?cached.layout?.targets:null);cached.key=key;cached.home=homeKey;cached.geometry=geometry;
       }
-      if(time-lastClusters>=240){layout.labels=neighbourClusters(swarm).labels;lastClusters=time;}
+      if(time-cached.lastClusters>=240){cached.layout.labels=neighbourClusters(swarm).labels;cached.lastClusters=time;}
+      layouts.set(groupId,cached);for(const record of swarm)record.layout=cached.layout;
     }
     for (const record of records.values()) {
+      const home=homes.get(record.id),layout=record.layout;
       const w = record.window;
       if(w.isDestroyed()){records.delete(record.id);onPose(record.id,null);continue;}
       if (!w.isVisible() || (!record.active && !record.returning && !record.cluster)) continue;
@@ -161,9 +165,9 @@ function createSubagentMotion({ now = Date.now, random = Math.random, getHome, g
     const record = records.get(id); if (!record) return;
     record.point = boundsOf(record.window); record.birth=null;record.target = null; record.arrivedAt = null; record.until = now() + 3000;record.manualUntil=record.until;
   }
-  function dispose() { if (timer) unschedule(timer); timer = null; for (const id of records.keys()) onPose(id, null); records.clear();seen.clear();layout=null;layoutKey=''; }
+  function dispose() { if (timer) unschedule(timer); timer = null; for (const id of records.keys()) onPose(id, null); records.clear();seen.clear();layouts.clear(); }
   function replay(id) { const record = records.get(id); if (record?.pose) onPose(id, JSON.parse(record.pose)); }
-  function snapshot(){return [...records.values()].map(r=>({id:r.id,position:{x:r.point.x,y:r.point.y},target:layout?.targets.get(r.id),phase:r.pose?JSON.parse(r.pose).phase:null,clusterId:layout?.labels.get(r.id)??-1,spawning:!!r.birth}));}
+  function snapshot(){return [...records.values()].map(r=>({id:r.id,position:{x:r.point.x,y:r.point.y},target:r.layout?.targets.get(r.id),phase:r.pose?JSON.parse(r.pose).phase:null,clusterId:r.layout?.labels.get(r.id)??-1,spawning:!!r.birth}));}
   return Object.freeze({ sync, keepPosition, resumeFromDrag, replay, tick, dispose, snapshot });
 }
 

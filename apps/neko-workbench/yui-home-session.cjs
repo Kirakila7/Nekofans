@@ -8,6 +8,7 @@ const MATERIALS = Object.freeze([
   'red_wool', 'poppy', 'dandelion', 'bookshelf', 'glowstone',
 ]);
 const allowedMaterials = new Set(MATERIALS);
+const {validateHomeItems}=require('./our-home-scene.cjs');
 const clone = value => JSON.parse(JSON.stringify(value));
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
@@ -23,28 +24,20 @@ function createYuiHomeSession({empty = false} = {}) {
   const blocks = new Map();
   if (!empty) {
     const put = (x, y, z, material) => blocks.set(`${x},${y},${z}`, {x, y, z, material});
-    // A small starter house, intentionally open at the top for a clear view.
+    // The shared home starts with a floor only. Furniture comes from co-building.
     for (let x = -3; x <= 3; x++) for (let z = -2; z <= 2; z++) put(x, 0, z, 'oak_planks');
-    for (let y = 1; y <= 3; y++) {
-      for (let x = -3; x <= 3; x++) {
-        put(x, y, -2, y === 2 && Math.abs(x) === 1 ? 'glass' : 'oak_planks');
-        if (x !== 0 || y === 3) put(x, y, 2, 'oak_planks'); // Two-block door opening.
-      }
-      for (let z = -1; z <= 1; z++) for (const x of [-3, 3]) {
-        put(x, y, z, y === 2 && z === 0 ? 'glass' : 'oak_planks');
-      }
-    }
   }
   const listeners = new Set();
   let revision = 0;
   let camera = {azimuth: 40, elevation: 28, zoom: 1};
   let perspective = 'orbit';
-  let avatar = {mode: 'world', control: 'auto', position: {x: 6, y: 0.5, z: 4}, form: 'human'};
+  let avatar = {mode:'world',control:'auto',position:{x:0,y:0,z:2.5},form:'human',atHome:false,yaw:0,pitch:-10};
+  let items=[];
   let avatarRevision = 0;
 
   function state() {
     return clone({
-      ok: true, name: 'Yui 的家', storage: 'session', synced: false, revision,
+      ok: true, name: '我的小窝', storage: 'session', synced: false, revision,items,
       blocks: [...blocks.values()], building: false, paused: false, done: 0,
       total: 0, style: 'oak', camera, perspective, region: 'home', regionRevision: 0,
       avatar, avatarRevision, lastError: null, toolsConnected: false,
@@ -66,6 +59,20 @@ function createYuiHomeSession({empty = false} = {}) {
     if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('家园操作无效');
     switch (input.action) {
       case 'status': return state();
+      case 'furnish': items=validateHomeItems(input.items);return publish();
+      case 'return-home': avatar={...avatar,atHome:true,position:{x:0,y:0,z:2.5},yaw:0,pitch:-10};avatarRevision++;return publish();
+      case 'avatar_look': {
+        if(![input.yaw,input.pitch].every(Number.isFinite))throw Error('角色朝向无效');avatar={...avatar,yaw:((input.yaw%360)+360)%360,pitch:clamp(input.pitch,-55,45)};avatarRevision++;return publish();
+      }
+      case 'avatar_walk': {
+        if(![input.dx,input.dz].every(n=>Number.isFinite(n)&&Math.abs(n)<=1))throw Error('角色移动无效');const p=avatar.position,x=clamp(p.x+input.dx,-4.1,4.1),z=clamp(p.z+input.dz,-3.1,3.1);
+        const collision=items.some(o=>{if(o.kind==='rug'||o.y>1.35)return false;const r=o.rotation*Math.PI/180,dx=x-o.x,dz=z-o.z;return Math.abs(dx*Math.cos(r)-dz*Math.sin(r))<o.width/2+.15&&Math.abs(dx*Math.sin(r)+dz*Math.cos(r))<o.depth/2+.15;});if(!collision)avatar={...avatar,atHome:true,position:{x,y:0,z}};avatarRevision++;return publish();
+      }
+      case 'avatar_place': {
+        const {x,z}=input;if(![x,z].every(Number.isFinite)||Math.abs(x)>4.1||Math.abs(z)>3.1)throw Error('请把小鱼放在小窝地板上');
+        if(items.some(o=>{if(o.kind==='rug'||o.y>1.35)return false;const r=o.rotation*Math.PI/180,dx=x-o.x,dz=z-o.z;return Math.abs(dx*Math.cos(r)-dz*Math.sin(r))<o.width/2+.2&&Math.abs(dx*Math.sin(r)+dz*Math.cos(r))<o.depth/2+.2;}))throw Error('这里有家具，请换一个落脚点');
+        avatar={...avatar,atHome:true,position:{x,y:0,z}};avatarRevision++;return publish();
+      }
       case 'place': {
         const pos = coordinates(input);
         if (!allowedMaterials.has(input.material)) throw new Error('方块材料无效');
@@ -96,7 +103,7 @@ function createYuiHomeSession({empty = false} = {}) {
         return publish();
       }
       case 'perspective':
-        if (!['orbit', 'yui'].includes(input.mode)) throw new Error('视角无效');
+        if (!['orbit', 'yui','agent'].includes(input.mode)) throw new Error('视角无效');
         perspective = input.mode;
         return publish();
       case 'avatar':
@@ -104,12 +111,12 @@ function createYuiHomeSession({empty = false} = {}) {
         const value = input.position;
         const p = value?.position;
         if (!value || value.mode !== 'world' || !p || ![p.x, p.y, p.z].every(n => typeof n === 'number' && Number.isFinite(n)) || Math.abs(p.x) > 64 || Math.abs(p.z) > 64 || p.y < -1 || p.y > 64) throw new Error('角色位置无效');
-        avatar = {mode: 'world', control: value.control === 'manual' ? 'manual' : 'auto', position: {x: p.x, y: p.y, z: p.z}, form: value.form === 'cat' ? 'cat' : 'human'};
+        avatar = {...avatar,mode: 'world', control: value.control === 'manual' ? 'manual' : 'auto', position: {x: p.x, y: p.y, z: p.z}, form: value.form === 'cat' ? 'cat' : 'human',atHome:value.atHome===true,yaw:Number.isFinite(value.yaw)?value.yaw:avatar.yaw,pitch:Number.isFinite(value.pitch)?clamp(value.pitch,-55,45):avatar.pitch};
         avatarRevision++;
         return publish();
       }
       case 'avatar_reset':
-        avatar = {mode: 'world', control: 'auto', position: {x: 6, y: 0.5, z: 4}, form: 'human'};
+        avatar = {mode:'world',control:'auto',position:{x:0,y:0,z:2.5},form:'human',atHome:true,yaw:0,pitch:-10};
         avatarRevision++;
         return publish();
       default:

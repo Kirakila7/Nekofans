@@ -12,6 +12,13 @@ function desktopOptions(runtime,patchFile,environment){
       packageManager:{command:runtime.desktopExecutable,args:['--expose-internals',path.join(runtime.desktopResources,'runtime/primary-runtime/dependencies/pnpm/bin/pnpm.mjs')],
         env:{ELECTRON_RUN_AS_NODE:'1',DSH_DESKTOP_NODE_EXECUTABLE:runtime.desktopExecutable,PATH:path.join(runtime.desktopResources,'runtime/bin')+path.delimiter+(process.env.PATH||'')}}}};
 }
+// Let the official boot package create its standard desktop profile for a
+// genuinely new installation. Existing directories use the non-migrating
+// reader: even a damaged or partially created profile must not be replaced.
+function loadDesktopProfile(boot,runtime,cfg){
+  if(!fs.existsSync(cfg.profileDir))boot.initProfile(cfg.profileDir,boot.PROFILE_TEMPLATES.web.bundles);
+  return boot.loadProfileDirectory('dsh',cfg.profileDir,cfg.installAnchor);
+}
 // Match the official desktop host's ASAR-aware Office engine resolution.
 function officeResolution(root){
   const archive=path.dirname(root);if(path.basename(archive)!=='app.asar')return;
@@ -30,10 +37,10 @@ async function start(){
   const root=path.dirname(path.dirname(runtime.modulesDir)),load=createRequire(path.join(root,'package.json'));
   const moduleFor=name=>import(pathToFileURL(load.resolve(name)).href);
   officeResolution(root);
-  const {loadLayeredEnv,loadProfileDirectory,reportSkippedBundles}=await moduleFor('@deepseek-ai/dsh-app-boot');
+  const boot=await moduleFor('@deepseek-ai/dsh-app-boot');
   const {runProfile}=await moduleFor('@deepseek-ai/dsh/profile-boot');
-  const cfg=desktopOptions(runtime,process.argv[2],loadLayeredEnv('dsh'));
-  const profile=loadProfileDirectory('dsh',cfg.profileDir,cfg.installAnchor);reportSkippedBundles('dsh',profile);
+  const cfg=desktopOptions(runtime,process.argv[2],boot.loadLayeredEnv('dsh'));
+  const profile=loadDesktopProfile(boot,runtime,cfg);boot.reportSkippedBundles('dsh',profile);
   const {ctx}=await runProfile({...cfg.options,resolvedProfile:{profile,installAnchor:cfg.installAnchor}});
   const dependencies=await moduleFor('@deepseek-ai/dsh-tool-workspace-dependencies');
   await ctx.plugin(dependencies,{source:cfg.source,root:path.join(runtime.dshHomeDir,'dsh-runtimes/dsh-primary-runtime')});
@@ -43,4 +50,4 @@ async function start(){
   await ctx.plugin(office,{assetRoot:path.join(path.dirname(cfg.source),'office-skills'),node:path.join(cfg.source,'dependencies/node/bin/node'),cli:path.join(path.dirname(physical),'lib/cli.js')});
 }
 if(require.main===module)start().catch(error=>{console.error(error);process.exitCode=1;});
-module.exports={desktopOptions};
+module.exports={desktopOptions,loadDesktopProfile};

@@ -26,10 +26,10 @@ try{
   }});
   assert.deepEqual([...bridges.keys()].sort(),['nekoRoles','nekoWorkbench']);
   const bridge=bridges.get('nekoWorkbench'),roles=bridges.get('nekoRoles');
-  assert.deepEqual(Object.keys(bridge).sort(),['action','community','communityAccount','companion','divider','fish','fishQq','getAccounts','getState','home','lobby','nativeComposer','qqbot','screenShare','setAvatar','subscribe','subscribeCommunity','subscribeCommunityAccount','subscribeDivider','subscribeHome','subscribeLobby','subscribeNativeComposer','subscribeOffice','uploadAvatar','workspace']);assert(Object.isFrozen(bridge));
+  assert.deepEqual(Object.keys(bridge).sort(),['accountMenuLayer','action','community','communityAccount','communityLogin','companion','divider','fish','fishQq','gameHub','getAccounts','getState','home','lobby','nativeComposer','nekoSignIn','nekoSignInCancel','platform','qqbot','questions','screenShare','setAvatar','subscribe','subscribeCommunity','subscribeCommunityAccount','subscribeDivider','subscribeHome','subscribeLobby','subscribeNativeComposer','subscribeNekoAccount','subscribeOffice','subscribeQuestionEvents','subscribeVideoWindow','uploadAvatar','videoWindow','windowTheme','workspace']);assert(Object.isFrozen(bridge));
   assert.deepEqual(Object.keys(roles).sort(),['getState','selectRole','subscribe','updateRole','uploadAvatar']);assert(Object.isFrozen(roles));
 
-  bridge.getState();bridge.setAvatar('yui');bridge.uploadAvatar();bridge.action('neko-settings');bridge.home({action:'status'});
+  bridge.getState();bridge.setAvatar('yui');bridge.uploadAvatar();bridge.action('neko-settings');bridge.home({action:'status'});bridge.gameHub({action:'share',title:'游戏',roomUrl:'https://example.test/?room=abcdefghijklmnopqrstuvwx'});
   const patch={name:'自定义结衣',avatarId:'gemini'};
   roles.getState();roles.selectRole('bigfish');roles.updateRole('yui',patch);roles.uploadAvatar('claude');
   // Object payloads cross a VM realm; compare serialized values while retaining undefined call arguments.
@@ -40,12 +40,13 @@ try{
     ['workbench:call','upload-avatar',undefined],
     ['workbench:call','action','neko-settings'],
     ['workbench:home',{action:'status'}],
+    ['workbench:game-hub',{action:'share',title:'游戏',roomUrl:'https://example.test/?room=abcdefghijklmnopqrstuvwx'}],
     ['workbench:roles','state'],
     ['workbench:roles','select',{id:'bigfish'}],
     ['workbench:roles','update',{id:'yui',patch}],
     ['workbench:roles','upload',{id:'claude'}]
   ]);
-  assert.equal(calls[7][2].patch,patch,'update forwards the supplied patch without changing it');
+  assert.equal(calls.find(args=>args[0]==='workbench:roles'&&args[1]==='update')[2].patch,patch,'update forwards the supplied patch without changing it');
 
   const workbenchUpdates=[],roleUpdates=[],otherRoleUpdates=[];
   const stopWorkbench=bridge.subscribe(value=>workbenchUpdates.push(value));

@@ -12,5 +12,6 @@ test('pet motion bridge exposes only payloads, can unsubscribe, and keeps IPC in
   unsubscribe();assert.equal(listeners.has('pet:motion'),false);
   await bridge.call('motion-input',{active:true});await bridge.call('pass-through',{ignore:true});
   assert.equal(calls[0][0],'pet:call');assert.equal(calls[0][1],'motion-input');assert.equal(calls[1][1],'pass-through');
-  await assert.rejects(bridge.call('arbitrary-channel'),/未知桌宠操作/);assert.equal(calls.length,2);
+  await bridge.call('open-workbench');assert.equal(calls[2][1],'open-workbench');
+  await assert.rejects(bridge.call('arbitrary-channel'),/未知桌宠操作/);assert.equal(calls.length,3);
 });

@@ -78,6 +78,8 @@ export interface OpenMainChatOptions {
   onTurnSaved?: import("./service.ts").MainChatServiceOptions["onTurnSaved"];
   /** Disable local proposal/summary processing when a native engine owns memory. */
   localMemoryProcessing?: boolean;
+  /** Trusted host scene state, refreshed per turn; never saved as user history. */
+  environmentContext?: () => string;
 }
 
 export interface OpenedMainChat {
@@ -119,7 +121,7 @@ export function openMainChat(opts: OpenMainChatOptions): OpenedMainChat {
     const conversationId = conversations.latestConversationId(settings.personaId) ?? `main-${randomUUID()}`;
     summaries = new SqliteSummaryStore(join(dataDir, "memories.sqlite"), conversations);
     const service = new MainChatService({
-      persona: () => personas.get(settings.personaId),
+      persona: () => { const persona=personas.get(settings.personaId);let context='';try{context=opts.environmentContext?.()||'';}catch{}return context?{...persona,prompt:persona.prompt+'\n\n'+context.slice(0,18000)}:persona; },
       provider,
       conversations,
       memory: opts.localMemoryProcessing === false ? undefined : memory,

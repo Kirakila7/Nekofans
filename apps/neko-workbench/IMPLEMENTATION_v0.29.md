@@ -8,7 +8,7 @@
 
 | 文件 | 内容 |
 | --- | --- |
-| `lobby-config.cjs` | 解析 `NEKO_WORKBENCH_CHAT_URL`、`_CLIENT_ID`、`_AUTH_URL`、`_OAUTH_PORTS`，派生 `wss:`/`ws:` 地址。未设置地址时使用内置生产地址 `https://chat.nekotech.ai/`；显式设为空字符串时面板显示「频道服务未配置」。 |
+| `lobby-config.cjs` | 解析 `NEKO_WORKBENCH_CHAT_URL`、`_CLIENT_ID`、`_AUTH_URL`、`_OAUTH_PORTS`，派生 `wss:`/`ws:` 地址。频道服务默认 `https://chat.nekotech.ai`，可用环境变量覆盖或显式设空禁用。 |
 | `lobby-auth.cjs` | 社区账号 OAuth：PKCE（S256）+ state，`127.0.0.1` 一次性回调服务器（5 分钟内只接受一次 `GET /oauth/callback`），scope `openid offline profile`。刷新单飞，先保存轮换后的 refresh token 再使用新 access token；`invalid_grant` 清空回到未登录；登出尽力调用 revoke。access token 只在内存。 |
 | `lobby-client.cjs` | REST（Bearer，401 刷新后重试一次，历史 512KB 上限，错误码映射成固定中文）和 WebSocket（首帧 `auth`、心跳、全抖动退避重连、`last_event_seq` 补齐、按 `event_seq` 去重、`resync.required` 重载、按 `client_message_id` 重发 outbox、过期前 `auth.refresh`）。内存只保留最近 500 条消息，不落盘。 |
 | `lobby-frames.cjs` | 入站帧逐类型 schema 校验，未知类型和超过 64KB 的帧丢弃。 |
