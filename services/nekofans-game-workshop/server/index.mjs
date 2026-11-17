@@ -87,7 +87,7 @@ export function createApp({ directory = process.env.DATA_DIR || path.join(root, 
     const control = [...sockets].find(ws => ws.room === roomId && ws.player === player && ws.seatToken === token && ws.readyState === WebSocket.OPEN);
     const current = () => {
       const room = platform.snapshot(roomId);
-      return control?.readyState === WebSocket.OPEN && room.players.length === 2 && room.phase === 'playing' && room.version === view.version &&
+      return control?.readyState === WebSocket.OPEN && room.players.length === 2 && room.phase === 'playing' && !room.result && room.version === view.version &&
         onlinePlayers(roomId).every(Boolean) && (room.game.mode === 'shared' || room.turn === player) && platform.auth(roomId, token) === player;
     };
     if (!current()) reject(409, '对局已更新');
@@ -151,6 +151,12 @@ export function createApp({ directory = process.env.DATA_DIR || path.join(root, 
           const raw = Buffer.concat(chunks).toString('utf8');
           let input; try { input = JSON.parse(raw || '{}'); } catch { reject(400, 'JSON 格式有误'); }
           if ((match = url.pathname.match(/^\/api\/rooms\/([\w-]{12})\/agent-choice$/))) return await choose(req, res, match[1], input);
+          if (url.pathname === '/api/games/studio') {
+            const account = publisher(req);
+            if (!account) reject(401, '请先登录 N.E.K.O. 账号');
+            if (req.headers.origin !== publicOrigin) reject(403, '不允许的来源');
+            return json(res, 201, platform.publishStudio(input, account));
+          }
           if (url.pathname === '/api/games') {
             const account = publisher(req);
             if (account) {

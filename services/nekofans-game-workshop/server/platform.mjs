@@ -1,6 +1,7 @@
 import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
 import path from 'node:path';
+import { nextStudioNode, studioWorkshopHtml, validateStudioGame } from './studio-definition.mjs';
 
 const random = (bytes = 18) => randomBytes(bytes).toString('base64url');
 const hash = value => createHash('sha256').update(value).digest('hex');
@@ -31,22 +32,31 @@ export class GamePlatform {
     writeFileSync(file + '.tmp', encoded, { mode: 0o600 });
     renameSync(file + '.tmp', file);
   }
-  publish(input, account) {
+  publish(input, account, definition) {
     const title = String(input.title || '').trim();
     if (!title || title.length > 60) reject(400, '请填写 1–60 字的游戏名称');
     if (typeof input.html !== 'string' || !input.html.trim() || Buffer.byteLength(input.html) > 512 * 1024) reject(400, '请上传不超过 512 KB 的单文件 HTML');
     if (!['turns', 'shared'].includes(input.mode)) reject(400, '请选择轮流操作或共同操作');
     const content = input.mode + '\0' + title + '\0' + input.html;
-    const id = hash(account ? account.id + '\0' + content : content).slice(0, 24);
+    // Legacy HTML keeps its existing identity. Managed games include their
+    // rules, even when an identical HTML file was previously uploaded.
+    const identity = account ? account.id + '\0' + content : content;
+    const id = hash(definition ? JSON.stringify(['studio', identity, definition]) : identity).slice(0, 24);
     if (!this.games.has(id)) {
       if (this.games.size >= 300) reject(503, '作品数量达到内测上限，请联系服主');
-      this.games.set(id, { id, title, mode: input.mode, html: input.html, created: Date.now(), sdk: 1, ...(account ? { ownerId: account.id } : {}) });
+      this.games.set(id, { id, title, mode: input.mode, html: input.html, created: Date.now(), sdk: 1, ...(account ? { ownerId: account.id } : {}), ...(definition ? { definition } : {}) });
       try { this.save(); } catch (error) { this.games.delete(id); throw error; }
     }
     return this.gameInfo(id);
   }
+  publishStudio(input, account) {
+    const definition = validateStudioGame(input);
+    if (!definition) reject(422, '创造台游戏的规则或结局不完整，请修改后重试');
+    const html = studioWorkshopHtml(definition);
+    return this.publish({ title: definition.title, mode: 'turns', html }, account, definition);
+  }
   game(id) { const game = this.games.get(id); if (!game) reject(404, '作品不存在'); return game; }
-  gameInfo(id) { const { html, ownerId, ...info } = this.game(id); return info; }
+  gameInfo(id) { const { html, ownerId, definition, ...info } = this.game(id); return info; }
   projects(ownerId) {
     return [...this.games.values()].reverse()
       .filter(game => ownerId === undefined || game.ownerId === ownerId)
@@ -90,9 +100,21 @@ export class GamePlatform {
     if (player < 0) reject(401, '席位凭证无效');
     return player;
   }
+  studioPosition(room, definition) {
+    let index = 0;
+    for (const { action, player } of room.events) {
+      index = nextStudioNode(definition, index, action, player);
+      if (index === undefined) reject(500, '无法恢复这局创造台游戏');
+    }
+    return { index, node: definition.nodes[index] };
+  }
   snapshot(id) {
-    const room = this.room(id);
-    return { type: 'state', id, gameId: room.gameId, game: this.gameInfo(room.gameId), phase: room.phase ?? 'playing', seed: room.seed, players: room.seats.map(seat => ({ name: seat.name })), events: room.events, version: room.events.length, turn: this.turn(room) };
+    const room = this.room(id), { definition } = this.game(room.gameId);
+    const node = definition ? this.studioPosition(room, definition).node : null;
+    const result = node && Object.hasOwn(node, 'winner') ? { winner: node.winner } : null;
+    return { type: 'state', id, gameId: room.gameId, game: this.gameInfo(room.gameId), phase: room.phase ?? 'playing',
+      seed: room.seed, players: room.seats.map(seat => ({ name: seat.name })), events: room.events,
+      version: room.events.length, turn: node ? node.seat ?? null : this.turn(room), ...(result ? { result } : {}) };
   }
   configureRoom(id, player, message, online) {
     const room = this.room(id);
@@ -115,10 +137,20 @@ export class GamePlatform {
     if (typeof input.actionId !== 'string' || !/^[\w-]{8,80}$/.test(input.actionId)) reject(400, '操作编号无效');
     if (room.seats.length !== 2) reject(409, '等待另一位玩家加入');
     if (input.version !== room.events.length) reject(409, '棋局或游戏已更新，请重试');
-    if (game.mode === 'turns' && this.turn(room) !== player) reject(409, '等待对方操作');
     if (input.action === null || typeof input.action !== 'object' || Array.isArray(input.action) || Buffer.byteLength(JSON.stringify(input.action)) > 4096) reject(400, '游戏操作格式无效或过大');
     if (room.events.length >= 2000) reject(409, '这局操作次数达到内测上限，请新开一局');
-    const nextTurn = game.mode === 'turns' ? (input.endTurn === false ? player : 1 - player) : 0;
+    let nextTurn;
+    if (game.definition) {
+      const { index, node } = this.studioPosition(room, game.definition);
+      if (!node.choices) reject(409, '这局已经结束');
+      if (node.seat !== player) reject(409, '等待对方操作');
+      const next = nextStudioNode(game.definition, index, input.action, player);
+      if (next === undefined || input.endTurn === false) reject(422, '这一步不在当前可选操作中');
+      nextTurn = game.definition.nodes[next].seat ?? null;
+    } else {
+      if (game.mode === 'turns' && this.turn(room) !== player) reject(409, '等待对方操作');
+      nextTurn = game.mode === 'turns' ? (input.endTurn === false ? player : 1 - player) : 0;
+    }
     const previousUpdated = room.updated;
     room.events.push({ seq: room.events.length + 1, player, actionId: input.actionId, action: input.action, nextTurn });
     room.updated = Date.now();

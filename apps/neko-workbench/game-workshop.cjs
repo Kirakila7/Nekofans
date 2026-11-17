@@ -70,7 +70,10 @@ function createGameWorkshop({ origin = WORKSHOP_ORIGIN, communityOrigin = COMMUN
     if (response.status === 401) throw signInRequired();
     if (response.status === 404) throw error('not-found', '找不到这个作品或房间。');
     if (response.status === 409) throw error('room-full', '无法取得席位，这个房间可能已坐满。');
-    if (response.status === 422) throw error('invalid-html', '请选择已接入 Nekofans 联机接口的 HTML 文件。');
+    if (response.status === 422) {
+      if (path === '/api/games/studio') throw error('invalid-game', '创造台游戏的规则或结局不完整，请修改后重试。');
+      throw error('invalid-html', '请选择已接入 Nekofans 联机接口的 HTML 文件。');
+    }
     if (!response.ok) throw unavailable();
     const type = response.headers.get('content-type') || '';
     if (!type.startsWith('application/json')) throw unavailable();
@@ -143,6 +146,12 @@ function createGameWorkshop({ origin = WORKSHOP_ORIGIN, communityOrigin = COMMUN
     return { id: result.id, title, mode };
   }
 
+  async function publishStudio(definition) {
+    const { result } = await withPublisher(cookie => request('/api/games/studio', { body: definition, cookie }));
+    if (!GAME_ID.test(result?.id ?? '') || typeof result.title !== 'string' || result.mode !== 'turns') throw unavailable();
+    return { id: result.id, title: result.title, mode: result.mode };
+  }
+
   async function list() {
     const result = await withPublisher(async cookie => {
       const response = await request('/api/publisher', { cookie });
@@ -176,7 +185,7 @@ function createGameWorkshop({ origin = WORKSHOP_ORIGIN, communityOrigin = COMMUN
     });
   }
 
-  return Object.freeze({ origin, invalidate, parseRoom: value => parseWorkshopRoom(value, origin), publish, list, create, openRoom });
+  return Object.freeze({ origin, invalidate, parseRoom: value => parseWorkshopRoom(value, origin), publish, publishStudio, list, create, openRoom });
 }
 
 module.exports = { WORKSHOP_ORIGIN, workshopOrigin, parseWorkshopRoom, createGameWorkshop };

@@ -2,6 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {createGameStudio} from './game-studio.mjs';
+import {studioWorkshopHtml} from './studio-game.mjs';
 import {createRequire} from 'node:module';
 const {createCompanionAccountProvider}=createRequire(import.meta.url)('../../apps/neko-workbench/companion-account-provider.cjs');
 const {createCompanionAccountBridge}=createRequire(import.meta.url)('../../apps/neko-workbench/companion-account-bridge.cjs');
@@ -61,8 +62,7 @@ test('a validated AI draft becomes a workshop game with the same choices and out
  assert.equal(studio.workshopProject('missing'),null);
  const project=studio.workshopProject(draft.revisionId);
  assert.equal(project.title,game.title);
- assert.equal(project.mode,'turns');
- const source=project.html.match(/<script>([\s\S]*)<\/script>/)[1];
+ const source=studioWorkshopHtml(project).match(/<script>([\s\S]*)<\/script>/)[1];
  assert(!source.includes('<em>'));
  const elements=new Map(), makeElement=()=>({children:[],replaceChildren(...children){this.children=children;},addEventListener(){}});
  const document={getElementById(id){if (!elements.has(id))elements.set(id,makeElement());return elements.get(id);},createElement:makeElement};

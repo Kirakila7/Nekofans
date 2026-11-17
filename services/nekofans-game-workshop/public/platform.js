@@ -140,7 +140,7 @@ function randomId() { const bytes = new Uint8Array(16); crypto.getRandomValues(b
 function post(type, extra = {}) { if (frameReady) $('game-frame').contentWindow.postMessage({ nekofans: 1, channel, type, ...extra }, '*'); }
 function updateFrame() { if (snapshot && seat) post('snapshot', { state: snapshot, player: seat.player, connected: socket?.readyState === WebSocket.OPEN, agentActive: roomAgent.active }); }
 function submitGameAction(message) {
-  if (pending || socket?.readyState !== WebSocket.OPEN || !snapshot) { post('error', { error: '请等待同步完成' }); return false; }
+  if (pending || socket?.readyState !== WebSocket.OPEN || !snapshot || snapshot.result) { post('error', { error: '请等待同步完成' }); return false; }
   const text = JSON.stringify({ type: 'action', actionId: randomId(), version: snapshot.version, action: message.action, endTurn: message.endTurn !== false });
   if (text.length > 6000) { post('error', { error: '单次操作过大' }); return false; }
   pending = true;
@@ -155,7 +155,7 @@ const roomAgent = createRoomAgent({
     const connected = !stopped && socket?.readyState === WebSocket.OPEN;
     const playing = snapshot.phase === 'playing';
     return { id: seat.id, token: seat.token, player: seat.player, account: seat.community, phase: snapshot.phase, version: snapshot.version, connected,
-      canPlay: playing && connected && !pending && snapshot.players.length === 2 && snapshot.online.every(Boolean) && (snapshot.game.mode === 'shared' || snapshot.turn === seat.player) };
+      canPlay: playing && !snapshot.result && connected && !pending && snapshot.players.length === 2 && snapshot.online.every(Boolean) && (snapshot.game.mode === 'shared' || snapshot.turn === seat.player) };
   },
 });
 function showFrame() {
@@ -187,7 +187,12 @@ function renderRoom() {
   $('rooms-nav').setAttribute('aria-current', 'page');
   $('play-title').textContent = playing ? snapshot.game.title : '游戏房间';
   showProject(snapshot.game);
-  $('room-title').textContent = playing && snapshot.game.mode === 'turns' ? (snapshot.turn === seat.player ? '你的回合' : '对方回合') : '成员';
+  if (snapshot.result) {
+    const { winner } = snapshot.result;
+    $('room-title').textContent = winner === 'draw' ? '平局' : winner === seat.player ? '已结束 · 你赢了' : '已结束 · 好友获胜';
+  } else {
+    $('room-title').textContent = playing && snapshot.game.mode === 'turns' ? (snapshot.turn === seat.player ? '你的回合' : '对方回合') : '成员';
+  }
   $('room-count').textContent = snapshot.players.length + ' / 2';
   const waiting = snapshot.players.length < 2 ? '等待朋友加入' : everyoneOnline ? (host ? '' : '等待房主开局') : '等待玩家上线';
   $('room-start-hint').textContent = playing ? '' : waiting;
@@ -225,7 +230,7 @@ function renderRoom() {
   }
   $('players').replaceChildren(fragment);
   $('new-room').href = '/?game=' + gameId;
-  if (playing) { showFrame(); updateFrame(); roomAgent.wake(); }
+  if (playing) { showFrame(); updateFrame(); if (snapshot.result) roomAgent.stop(); else roomAgent.wake(); }
 }
 function connectionStatus(message) {
   $('status').textContent = message;

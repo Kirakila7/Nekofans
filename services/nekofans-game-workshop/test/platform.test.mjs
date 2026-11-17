@@ -171,3 +171,42 @@ test('SDK：Agent 读取本方动作并沿玩家路径提交，拒绝过期版�
   send('agent-view', { requestId:'other-turn' });
   assert.equal(emitted.at(-1).choices.length, 0);
 });
+
+test('创造台游戏由服务端校验走法，坏操作不消耗回合，重启仍保存胜负', () => {
+  const directory = mkdtempSync(path.join(tmpdir(), 'neko-managed-games-'));
+  try {
+    const p = new GamePlatform(directory);
+    const account = { id: '11111111-1111-4111-8111-111111111111', name: '甲' };
+    const definition = {
+      title: '孤灯海湾', description: '在涨潮前引导渡轮',
+      nodes: [
+        { seat: 0, text: '海上起雾', choices: [{ label: '点灯', next: 1 }] },
+        { seat: 1, text: '看到了灯', choices: [{ label: '返航', next: 2 }, { label: '保持位置', next: 3 }] },
+        { text: '平安靠岸', winner: 0 },
+        { text: '等到天亮', winner: 'draw' },
+      ],
+    };
+    const game = p.publishStudio(definition, account);
+    assert.equal(p.publishStudio(definition, account).id, game.id);
+    assert.equal(game.definition, undefined);
+    const a = p.create(game.id, '甲');
+    p.join(a.id, '乙');
+    p.configureRoom(a.id, 0, { type: 'start' }, [true, true]);
+    const valid = action(0, 0, { action: { type: 'choose', option: 0 } });
+    assert.throws(() => p.action(a.id, 1, valid), /等待对方/);
+    assert.throws(() => p.action(a.id, 0, { ...valid, action: { type: 'choose', option: 999 } }), /当前可选操作/);
+    assert.throws(() => p.action(a.id, 0, { ...valid, endTurn: false }), /当前可选操作/);
+    assert.equal(p.snapshot(a.id).version, 0);
+    assert.equal(p.snapshot(a.id).turn, 0);
+    assert.equal(p.action(a.id, 0, valid).turn, 1);
+    const winning = action(1, 1, { action: { type: 'choose', option: 0 } });
+    assert.deepEqual(p.action(a.id, 1, winning).result, { winner: 0 });
+    assert.equal(p.action(a.id, 1, winning).version, 2);
+    assert.throws(() => p.action(a.id, 0, action(2, 0)), /已经结束/);
+    const reopened = new GamePlatform(directory).snapshot(a.id);
+    assert.deepEqual(reopened.result, { winner: 0 });
+    assert.equal(reopened.turn, null);
+    assert.equal(reopened.version, 2);
+    assert.deepEqual(reopened.players.map(value => value.name), ['甲', '乙']);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});

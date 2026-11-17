@@ -58,7 +58,7 @@
         }
         lastVersion = room.version;
       }
-      const next = { player: message.player, players: room.players, online: room.online, turn: room.turn, version: room.version, seed: room.seed, mode: room.game.mode, connected: message.connected, ready: room.players.length === 2 && message.connected, isMyTurn: room.players.length === 2 && message.connected && (room.game.mode === 'shared' || room.turn === message.player), agentActive: message.agentActive === true };
+      const next = { player: message.player, players: room.players, online: room.online, turn: room.turn, version: room.version, seed: room.seed, mode: room.game.mode, connected: message.connected, ready: room.players.length === 2 && message.connected, isMyTurn: !room.result && room.players.length === 2 && message.connected && (room.game.mode === 'shared' || room.turn === message.player), agentActive: message.agentActive === true };
       if (lastAgentView && (next.version !== context.version || next.player !== context.player || next.connected !== context.connected ||
           next.isMyTurn !== context.isMyTurn || JSON.stringify(next.online) !== JSON.stringify(context.online))) lastAgentView = undefined;
       context = next;

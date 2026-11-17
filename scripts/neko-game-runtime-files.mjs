@@ -7,6 +7,7 @@ export const gameRuntimeFiles = new Set([
   'services/nekofans-game-hub/private-chess-room.mjs',
   'services/nekofans-game-hub/game-studio.mjs',
   'services/nekofans-game-hub/studio-game.mjs',
+  'services/nekofans-game-workshop/server/studio-definition.mjs',
   'services/nekofans-game-hub/private-game-worker.mjs',
   'services/nekofans-game-hub/private-relay.mjs',
   'services/nekofans-game-hub/private-chess-compiler.mjs',

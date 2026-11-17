@@ -1176,7 +1176,7 @@ async function handleWorkshop(request){
       case 'workshop-publish-draft':{
         const project=typeof request.revisionId==='string'&&privateGameStudio?.workshopProject(request.revisionId);
         if(!project)return {ok:false,status:'not-found',error:'找不到这次生成的稿件，请重新制作。'};
-        return {ok:true,project:await workshop.publish(project)};
+        return {ok:true,project:await workshop.publishStudio(project)};
       }
       case 'workshop-publish-html':return {ok:true,project:await workshop.publish(request.project)};
       case 'workshop-list':return {ok:true,projects:await workshop.list()};

@@ -8,6 +8,11 @@ const official = 'https://community.project-neko.cn';
 const owner = { id: '11111111-1111-4111-8111-111111111111', name: '红帽' };
 const guest = { id: '22222222-2222-4222-8222-222222222222', name: '蓝帽' };
 const project = { title: '小岛上的灯', html: '<script>NekofansGame.connect({})</script>', mode: 'turns' };
+const definition = { title: '雾岛来信', description: '两人一起引导渡轮', nodes: [
+  { seat: 0, text: '海上起雾', choices: [{ label: '点灯', next: 1 }] },
+  { seat: 1, text: '船长看见了光', choices: [{ label: '驶入港口', next: 2 }] },
+  { text: '渡轮靠岸', winner: 0 },
+] };
 
 test('desktop uses signed authorization through publish, library, create, and open invite', async t => {
   const { privateKey, publicKey } = generateKeyPairSync('ed25519');
@@ -42,7 +47,11 @@ test('desktop uses signed authorization through publish, library, create, and op
   assert.equal(saved.title, project.title);
   assert.deepEqual((await first.api.list()).map(x => x.id), [saved.id]);
   assert.deepEqual(await second.api.list(), []);
-  const room = await first.api.create(saved.id);
+  await assert.rejects(first.api.publishStudio({ ...definition, nodes: [] }), { status: 'invalid-game' });
+  const created = await first.api.publishStudio(definition);
+  assert.equal(created.title, definition.title);
+  assert.deepEqual((await first.api.list()).map(value => value.id), [created.id, saved.id]);
+  const room = await first.api.create(created.id);
   assert.deepEqual(Object.keys(room), ['inviteUrl']);
   assert.match(room.inviteUrl, /^https:\/\/workshop\.nekofans\.games\/\?room=[\w-]{12}$/);
   await first.api.openRoom(room.inviteUrl);

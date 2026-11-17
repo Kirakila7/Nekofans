@@ -1,5 +1,5 @@
 import { randomUUID, createHash } from 'node:crypto';
-import { validateStudioGame, studioPreview, studioWorkshopHtml } from './studio-game.mjs';
+import { validateStudioGame, studioPreview } from './studio-game.mjs';
 
 const authoringPrompt = [
   '你是 Nekofans 创造台。根据用户描述创作一款新的双人公开回合制小游戏，不套用已有棋类。',
@@ -50,7 +50,7 @@ export function createGameStudio({provider} = {}) {
   function workshopProject(id) {
     const revision = drafts.get(id);
     if (!revision) return null;
-    return { title: revision.game.title, mode: 'turns', html: studioWorkshopHtml(revision.game) };
+    return structuredClone(revision.game);
   }
   return Object.freeze({propose,inspect,workshopProject});
 }
