@@ -180,3 +180,22 @@ test('explicit shared DSH home reuses desktop plugins and credentials without re
   assert.equal(fs.readFileSync(file,'utf8'),original);assert(!fs.existsSync(path.join(runtime.dataDir,'dsh')));
   assert.throws(()=>resolveRuntimePaths({...f.options,env:{...env,NEKO_WORKBENCH_DSH_PROFILE:'../desktop'}}),/配置名称/);
 });
+
+test('fresh desktop profiles use the bundled template across DSH export versions', t => {
+  const f=fixture(t),profileDir=path.join(f.homeDir,'preview','profiles','desktop');
+  const {loadDesktopProfile}=require('../../apps/neko-workbench/dsh-shared-desktop-host.cjs');
+  const templates={web:{bundles:['official-web']}},cfg={profileDir,installAnchor:'/fixture/package.json'};
+  const calls=[];
+  const boot={
+    initProfile(dir,bundles){calls.push(bundles);fs.mkdirSync(dir,{recursive:true});},
+    loadProfileDirectory(...args){return args;},
+  };
+  assert.throws(()=>loadDesktopProfile(boot,{},cfg),/template is unavailable/);
+  assert(!fs.existsSync(profileDir));
+  assert.deepEqual(loadDesktopProfile(boot,{},cfg,templates),['dsh',profileDir,cfg.installAnchor]);
+  assert.deepEqual(calls,[templates.web.bundles]);
+  const marker=path.join(profileDir,'cordis.patch.yml');fs.writeFileSync(marker,'existing custom settings');
+  loadDesktopProfile(boot,{},cfg);
+  assert.equal(calls.length,1);
+  assert.equal(fs.readFileSync(marker,'utf8'),'existing custom settings');
+});

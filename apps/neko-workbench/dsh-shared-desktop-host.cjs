@@ -15,8 +15,11 @@ function desktopOptions(runtime,patchFile,environment){
 // Let the official boot package create its standard desktop profile for a
 // genuinely new installation. Existing directories use the non-migrating
 // reader: even a damaged or partially created profile must not be replaced.
-function loadDesktopProfile(boot,runtime,cfg){
-  if(!fs.existsSync(cfg.profileDir))boot.initProfile(cfg.profileDir,boot.PROFILE_TEMPLATES.web.bundles);
+function loadDesktopProfile(boot,runtime,cfg,templates=boot.PROFILE_TEMPLATES){
+  if(!fs.existsSync(cfg.profileDir)){
+    if(!Array.isArray(templates?.web?.bundles))throw Error('The bundled DSH web profile template is unavailable');
+    boot.initProfile(cfg.profileDir,templates.web.bundles);
+  }
   return boot.loadProfileDirectory('dsh',cfg.profileDir,cfg.installAnchor);
 }
 // Match the official desktop host's ASAR-aware Office engine resolution.
@@ -40,7 +43,8 @@ async function start(){
   const boot=await moduleFor('@deepseek-ai/dsh-app-boot');
   const {runProfile}=await moduleFor('@deepseek-ai/dsh/profile-boot');
   const cfg=desktopOptions(runtime,process.argv[2],boot.loadLayeredEnv('dsh'));
-  const profile=loadDesktopProfile(boot,runtime,cfg);boot.reportSkippedBundles('dsh',profile);
+  const templates=boot.PROFILE_TEMPLATES??(await moduleFor('@deepseek-ai/dsh-official-bundles')).PROFILE_TEMPLATES;
+  const profile=loadDesktopProfile(boot,runtime,cfg,templates);boot.reportSkippedBundles('dsh',profile);
   const {ctx}=await runProfile({...cfg.options,resolvedProfile:{profile,installAnchor:cfg.installAnchor}});
   const dependencies=await moduleFor('@deepseek-ai/dsh-tool-workspace-dependencies');
   await ctx.plugin(dependencies,{source:cfg.source,root:path.join(runtime.dshHomeDir,'dsh-runtimes/dsh-primary-runtime')});
