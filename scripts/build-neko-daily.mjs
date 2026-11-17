@@ -1,6 +1,7 @@
 import {cpSync,existsSync,mkdirSync,readFileSync,renameSync,writeFileSync,chmodSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
+import {gameRuntimeFiles} from './neko-game-runtime-files.mjs';
 import {dirname,join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
@@ -20,7 +21,7 @@ run('/usr/bin/ditto',['-x','-k',resolve(runtime),stage]);
 const app=join(stage,release.appName);renameSync(join(stage,'Electron.app'),app);
 const resources=join(app,'Contents/Resources'),destination=join(resources,'workbench');mkdirSync(destination,{recursive:true});
 const tracked=run('git',['ls-files','-z'],{cwd:root}).split('\0').filter(Boolean);
-const files=tracked.filter(p=>p.startsWith('apps/neko-workbench/')||p.startsWith('packages/')||p.startsWith('config/')||p.startsWith('services/neko-memory/')||p==='scripts/install-neko-daily.cjs');
+const files=tracked.filter(p=>p.startsWith('apps/neko-workbench/')||p.startsWith('packages/')||p.startsWith('config/')||p.startsWith('services/neko-memory/')||gameRuntimeFiles.has(p)||p==='scripts/install-neko-daily.cjs');
 const hashes={};for(const name of files){if(name.split('/').some(p=>['.venv','node_modules','.git'].includes(p))||name.startsWith('apps/neko-workbench/data/')||name.startsWith('apps/neko-workbench/workspaces/'))throw Error('Private runtime path in release: '+name);const source=join(root,name);if(!existsSync(source))throw Error('Missing tracked source: '+name);mkdirSync(dirname(join(destination,name)),{recursive:true});cpSync(source,join(destination,name),{verbatimSymlinks:true});hashes[name]=createHash('sha256').update(readFileSync(source)).digest('hex');}
 const entry=join(resources,'app');mkdirSync(entry,{recursive:true});cpSync(join(root,'apps/neko-workbench/trial-bootstrap.cjs'),join(entry,'bootstrap.cjs'));
 writeFileSync(join(entry,'package.json'),JSON.stringify({name:'neko-workbench-daily',version:release.version,main:'bootstrap.cjs'},null,2)+'\n');

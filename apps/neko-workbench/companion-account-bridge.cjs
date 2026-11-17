@@ -2,10 +2,12 @@
 // Uses the host's authenticated LLM service directly. No DSH agent, tool,
 // session, project directory, or generic session-event log is created.
 const {decodeAccountImages,accountImageContent}=require('./companion-account-images.cjs');
+const {gameNamespaces}=require('./game-account-contract.cjs');
 function createCompanionAccountBridge({ctx, route, createUserMessage, createAssistantMessage, loadImageDecoder, namespace='companion', timeoutMs=75000, cleanupTimeoutMs=5000}) {
   if (route?.provider!=='deepseek-account' || route?.model!=='deepseek-flash' || typeof createUserMessage!=='function' || typeof createAssistantMessage!=='function') throw Error('陪伴聊天账号路线无效。');
-  if (!['companion','lobby','proactive','memory'].includes(namespace)) throw Error('聊天账号用途无效。');
-  const validId=new RegExp('^'+namespace+'-[a-zA-Z0-9_-]{1,100}$');
+  if (!['companion','lobby','proactive','memory',...gameNamespaces].includes(namespace)) throw Error('聊天账号用途无效。');
+  // "game-player-" is a separate channel, not a request ID in "game-".
+  const validId=new RegExp('^'+namespace+'-'+(namespace==='game'?'(?!player-)':'')+'[a-zA-Z0-9_-]{1,100}$');
   let active=null, disposed=false, cleanupFailed=false, pendingCleanup=0;
   const seen=new Set();
   const cleanupError=()=>Error('陪伴聊天请求清理未确认，请重启工作台后检查。');
@@ -29,6 +31,7 @@ function createCompanionAccountBridge({ctx, route, createUserMessage, createAssi
     if(disposed||active)throw Error('陪伴聊天暂不可用，请稍后重试。');
     if(typeof requestId!=='string'||!validId.test(requestId)||typeof text!=='string'||!text.trim()||text.length>32000||typeof context!=='string'||context.length>64000||!Number.isSafeInteger(maxTokens)||maxTokens<1||maxTokens>32000)throw Error('聊天内容无效。');
     if(namespace==='lobby'&&(!Array.isArray(history)||history.length))throw Error('公共聊天不能附带私聊历史。');
+    if(gameNamespaces.includes(namespace)&&(!Array.isArray(history)||history.length||!Array.isArray(images)||images.length))throw Error('私密游戏请求不能附带历史或图片。');
     if(!Array.isArray(history)||history.length>50||history.some(x=>!x||!['user','assistant'].includes(x.role)||typeof x.text!=='string'||x.text.length>32000)||history.reduce((sum,x)=>sum+x.text.length,0)>64000)throw Error('聊天历史无效。');
     const decoded=decodeAccountImages([...history,{role:'user',text,images}],namespace),hasImages=decoded.some(m=>m.images.length);
     if(seen.has(requestId))throw Error('聊天请求已使用，请重试。');seen.add(requestId);
@@ -79,7 +82,13 @@ function createCompanionAccountBridge({ctx, route, createUserMessage, createAssi
       }
       const result=[...blocks.values()].join('');
       if(result.length>64000)throw Error('陪伴聊天回复格式异常。');
-      if(finish!=='stop'||!result.trim())throw Error('陪伴聊天未能完成，请检查账号或重试。');
+      if(finish!=='stop'||!result.trim()){
+        if(gameNamespaces.includes(namespace)){
+          const cause=['length','max_tokens','max-tokens'].includes(finish)?'输出达到上限':!result.trim()?'模型未返回文本':'其他结束状态';
+          throw Error('陪伴聊天未能完成：'+cause);
+        }
+        throw Error('陪伴聊天未能完成，请检查账号或重试。');
+      }
       return {text:result};
     } catch(error) {
       if(state.cancelled)throw Error(error?.message==='陪伴聊天超时，请重试。'?error.message:'陪伴聊天已取消。');
