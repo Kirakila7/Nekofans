@@ -1,6 +1,7 @@
 import http from 'node:http';
 import { createHash, randomBytes } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
+import { isIP } from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer, WebSocket } from 'ws';
@@ -9,7 +10,27 @@ import { createCommunitySeats, seatTarget } from './community-seats.mjs';
 import { agentInput, listTeammates, teammateRules } from './agent-choice.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-export function createApp({ directory = process.env.DATA_DIR || path.join(root, 'data'), publicOrigin = process.env.PUBLIC_ORIGIN, publishKey = process.env.PUBLISH_KEY, demo = process.env.ENABLE_DEMO === '1', community, chooseAgentAction, listAgentModels } = {}) {
+const loopbackAddresses = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+export async function productionConfig(env, expectedHostname) {
+  const httpsOrigin = (value, label) => {
+    let url;
+    try { url = new URL(value); } catch { throw new Error(`${label} 必须为 HTTPS 源地址`); }
+    if (url.protocol !== 'https:' || url.href !== `${url.origin}/`) throw new Error(`${label} 必须为 HTTPS 源地址`);
+    return url;
+  };
+  const publicOrigin = httpsOrigin(env.PUBLIC_ORIGIN, 'PUBLIC_ORIGIN');
+  const issuer = httpsOrigin(env.NEKO_GAME_COMMUNITY_ORIGIN, 'NEKO_GAME_COMMUNITY_ORIGIN');
+  if (expectedHostname && publicOrigin.origin !== `https://${expectedHostname.toLowerCase()}`) throw new Error('PUBLIC_ORIGIN 与安装域名不一致');
+  if (env.PUBLISH_KEY || env.ENABLE_DEMO === '1') throw new Error('正式环境必须关闭演示与管理员发布凭证');
+  if (env.HOST !== '127.0.0.1' || env.PORT !== '3088') throw new Error('正式环境须监听本地 127.0.0.1:3088');
+  if (!path.isAbsolute(env.DATA_DIR || '') || !path.isAbsolute(env.NEKO_GAME_COMMUNITY_PUBLIC_KEY || '')) throw new Error('正式环境须配置存档路径与社区公钥的绝对路径');
+  if (expectedHostname && env.DATA_DIR !== '/var/lib/nekofans-games') throw new Error('systemd 安装须使用 /var/lib/nekofans-games 存档目录');
+  const community = { issuer: issuer.origin, publicKey: await readFile(env.NEKO_GAME_COMMUNITY_PUBLIC_KEY) };
+  createCommunitySeats({ ...community, gameOrigin: publicOrigin.origin });
+  return { community, publicOrigin: publicOrigin.origin, directory: env.DATA_DIR, publishKey: null, demo: false, trustLocalProxy: true };
+}
+
+export function createApp({ directory = process.env.DATA_DIR || path.join(root, 'data'), publicOrigin = process.env.PUBLIC_ORIGIN, publishKey = process.env.PUBLISH_KEY, demo = process.env.ENABLE_DEMO === '1', community, chooseAgentAction, listAgentModels, trustLocalProxy = false } = {}) {
   if (publicOrigin) publicOrigin = new URL(publicOrigin).origin;
   const platform = new GamePlatform(directory), sockets = new Set(), buckets = new Map();
   const communitySeats = community && createCommunitySeats({ ...community, gameOrigin: publicOrigin });
@@ -45,6 +66,11 @@ export function createApp({ directory = process.env.DATA_DIR || path.join(root, 
   }
   const origin = req => publicOrigin || `http://${req.headers.host}`;
   const allowed = req => !req.headers.origin || req.headers.origin === origin(req);
+  function clientAddress(req) {
+    const peer = req.socket.remoteAddress;
+    const forwarded = req.headers['x-nekofans-client-ip'];
+    return trustLocalProxy && loopbackAddresses.has(peer) && typeof forwarded === 'string' && isIP(forwarded) ? forwarded : peer;
+  }
   const rate = (key, max = 120) => {
     const now = Date.now(); let bucket = buckets.get(key);
     if (!bucket || now - bucket.time > 60000) bucket = { time: now, n: 0 };
@@ -131,7 +157,7 @@ export function createApp({ directory = process.env.DATA_DIR || path.join(root, 
       }
       if (url.pathname.startsWith('/api/')) {
         if (!allowed(req)) reject(403, '不允许的来源');
-        if (!rate('http:' + req.socket.remoteAddress)) reject(429, '操作太快，请稍后再试');
+        if (!rate('http:' + clientAddress(req))) reject(429, '操作太快，请稍后再试');
         let match;
         if (req.method === 'GET' && (match = url.pathname.match(/^\/api\/rooms\/([\w-]{12})\/agent-options$/))) {
           const { accountId } = agentSeat(req, match[1]);
@@ -228,7 +254,7 @@ export function createApp({ directory = process.env.DATA_DIR || path.join(root, 
   const wss = new WebSocketServer({ noServer: true, maxPayload: 8192 });
   server.on('upgrade', (req, socket, head) => {
     const match = req.url?.match(/^\/api\/rooms\/([\w-]{12})\/socket$/);
-    if (!match || !allowed(req) || !rate('ws:' + req.socket.remoteAddress, 30)) { socket.end('HTTP/1.1 403 Forbidden\r\n\r\n'); return; }
+    if (!match || !allowed(req) || !rate('ws:' + clientAddress(req), 30)) { socket.end('HTTP/1.1 403 Forbidden\r\n\r\n'); return; }
     wss.handleUpgrade(req, socket, head, ws => {
       ws.alive = true; ws.on('pong', () => { ws.alive = true; });
       const timer = setTimeout(() => ws.close(1008, 'Authentication required'), 5000);
@@ -259,9 +285,17 @@ export function createApp({ directory = process.env.DATA_DIR || path.join(root, 
   return { server, platform, close: async () => { clearInterval(heartbeat); for (const ws of sockets) ws.terminate(); wss.close(); await new Promise(resolve => server.close(resolve)); } };
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const keyPath = process.env.NEKO_GAME_COMMUNITY_PUBLIC_KEY;
-  const community = keyPath ? { issuer: process.env.NEKO_GAME_COMMUNITY_ORIGIN || 'https://community.project-neko.cn', publicKey: await readFile(keyPath) } : undefined;
-  const app = createApp({ community }), port = Number(process.env.PORT || 3088), host = process.env.HOST || '127.0.0.1';
-  app.server.listen(port, host, () => console.log(`Nekofans 游戏工坊: http://${host}:${port}`));
-  for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => app.close().then(() => process.exit(0)));
+  if (process.argv[2] === '--check-production-config') {
+    if (process.env.NEKO_WORKSHOP_PRODUCTION !== '1') throw new Error('请设置 NEKO_WORKSHOP_PRODUCTION=1');
+    await productionConfig(process.env, process.argv[3]);
+    console.log('正式配置已通过本机检查');
+  } else {
+    const keyPath = process.env.NEKO_GAME_COMMUNITY_PUBLIC_KEY;
+    const options = process.env.NEKO_WORKSHOP_PRODUCTION === '1' ? await productionConfig(process.env) : {
+      community: keyPath ? { issuer: process.env.NEKO_GAME_COMMUNITY_ORIGIN || 'https://community.project-neko.cn', publicKey: await readFile(keyPath) } : undefined,
+    };
+    const app = createApp(options), port = Number(process.env.PORT || 3088), host = process.env.HOST || '127.0.0.1';
+    app.server.listen(port, host, () => console.log(`Nekofans 游戏工坊: http://${host}:${port}`));
+    for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => app.close().then(() => process.exit(0)));
+  }
 }

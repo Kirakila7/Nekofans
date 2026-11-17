@@ -1,6 +1,6 @@
 # Nekofans 游戏工坊 · 0.1.0
 
-核心流程：**DeepSeek / DSH 生成双人 HTML 游戏 → 发布作品 → 建立房间 → 把邀请链接发到聊天室 → 两个人各自在自己的设备上参与同一局。**
+核心流程：**创造台制作游戏或上传已有联机 HTML → 发布作品 → 建立房间 → 分享到聊天室 → 两人加入同一局。**
 
 这是一套独立游戏服务，不依赖国际象棋。支持「轮流操作」和「共同操作」两种模式；示例分别为井字棋和共同点灯。作品发布后内容固定，再次修改生成新链接，已经进行的房间继续使用原版本。
 
@@ -10,7 +10,7 @@
 - 访客昵称、两个独立席位、满员拒绝、服务端排序与轮次检查、重复操作去重、WebSocket 同步、断线恢复和磁盘保存。
 - SDK 自动注入游戏沙箱；两端按相同操作历史计算游戏状态。网页脚本不能读取宿主发布凭证、房间凭证或直接发起网络请求。
 - 生成提示词可直接交给 DeepSeek；输出必须调用 `NekofansGame.connect`。普通单机 HTML 不会自动变成联机游戏。
-- 服务端同步玩家操作与轮次，具体玩法和胜负规则由游戏 HTML 的 reducer 实现；当前是休闲游戏原型，不提供任意自定义规则的服务器作弊判定。
+- 创造台游戏由服务端校验操作、判定胜负并恢复结局。上传的联机 HTML 由游戏自身的 reducer 处理玩法，服务端同步排序和轮次。
 - 在独立工坊发布后，可以把**房间邀请链接**发到聊天室。工坊支持访客房间和 N.E.K.O. 账号房间。社区账号房间需要社区侧的游戏授权路由。
 
 ## 本地运行
@@ -72,6 +72,27 @@ npm run preview
 游戏票据有效期为 45 秒，只能用于发起请求的浏览器和指定作品或房间。公开房间链接只包含房间号。社区 OAuth 凭证只在社区域名内使用，游戏页面接收的房间状态只包含玩家显示名和对局数据。
 
 ## Ubuntu 24.04 部署
+
+### 社区账号正式入口
+
+1. 将工坊域名解析到主机。使用现有证书管理流程签发证书，或在 DNS 管理可用时使用 Certbot 的 DNS 验证。安装脚本读取 `/etc/letsencrypt/live/<工坊域名>/` 的 `fullchain.pem` 和 `privkey.pem`。保留既有棋局域名和站点配置。
+2. 社区服务接好以上授权路由后，把 Ed25519 **公钥**放到工坊主机，并确保 `nekofans-games` 服务用户可读。社区私钥只留在社区服务。
+3. 在主机建立权限为 `600` 的 `/etc/nekofans-games.env`，将目录及域名替换为实际配置：
+
+```dotenv
+NEKO_WORKSHOP_PRODUCTION=1
+HOST=127.0.0.1
+PORT=3088
+DATA_DIR=/var/lib/nekofans-games
+PUBLIC_ORIGIN=https://workshop.nekofans.games
+NEKO_GAME_COMMUNITY_ORIGIN=https://community.project-neko.cn
+NEKO_GAME_COMMUNITY_PUBLIC_KEY=/etc/nekofans-community-ed25519.pem
+```
+
+4. 在解包后的工坊源码目录运行 `sudo bash deploy/install.sh workshop.nekofans.games --production`，域名与 `PUBLIC_ORIGIN` 一致。新安装采用 HTTPS 和 HTTP 跳转。若已有同名站点，依据 `deploy/nginx-production.conf` 核对 HTTPS 和应用代理配置，尤其确保代理覆盖 `X-Nekofans-Client-IP`，避免把所有访客算成同一个限流地址。正式模式要求关闭演示与服主发布凭证。
+5. 从外网核对 `/healthz`，并检查 `/api/config` 返回 `communitySeats: true`、`publishEnabled: true`、`adminPublish: false` 和 `demo: false`。用两个真实账号通过桌面端完成创造、上传、分享、加入、完局与重连。配置检查只验证工坊本身，社区签发通过实际的登录授权确认。
+
+### 独立演示入口
 
 把本项目上传到服务器的独立目录，在该目录执行：
 
