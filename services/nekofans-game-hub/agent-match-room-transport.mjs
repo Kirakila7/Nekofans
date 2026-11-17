@@ -79,4 +79,3 @@ export function createRoomTransport({origin,roomId,seatTokens,fetchImpl=fetch}={
   if (!Array.isArray(seatTokens) || seatTokens.length !== 2 || seatTokens.some(token => typeof token !== 'string' || !/^[A-Za-z0-9_-]{24}$/.test(token)) || seatTokens[0] === seatTokens[1]) throw TypeError('two distinct seat credentials required');
   return createTransport({origin,roomId,credentials:Object.freeze({0:seatTokens[0],1:seatTokens[1]}),fetchImpl});
 }
-

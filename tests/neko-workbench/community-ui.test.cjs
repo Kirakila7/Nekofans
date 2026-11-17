@@ -101,7 +101,7 @@ test('community and B站 share an accessible action row before the visible role 
   assert.equal(bili.children[0].props['aria-hidden'], 'true');
   assert.equal(bili.children[0].props.focusable, 'false');
   const group = tree.children.find(node => node?.props?.className === 'neko-roles');
-  assert.deepEqual(Array.from(group.children.filter(node => node.props?.role), node => node.props.role.id), ['yui', 'bigfish']);
+  assert.deepEqual(Array.from(group.children.filter(node => node.props?.role), node => node.props.role.id), ['yui', 'bigfish', 'claude']);
   const entry = api.CommunityEntry({ snap: { preview: false, bridgeReady: true, pending: {} }, store: {} });
   assert.equal(entry.children[0].props['aria-hidden'], 'true');
   assert.equal(entry.children[0].props.focusable, 'false');

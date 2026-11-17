@@ -25,6 +25,7 @@ test('workbench lobby and game IPC require a trusted caller and delegate request
     ${routes}
   `;
   vm.runInNewContext(injected, { URL, dshWindow: host, dshLaunchUrl: 'http://127.0.0.1:59099/', ipcMain: { handle: (name, fn) => handlers.set(name, fn) },
+    parsePrivateRoomInvite: require('../../services/nekofans-game-hub/private-game-origin.cjs').parsePrivateRoomInvite,
     controllerCalls,readinessCalls,clipboard:{writeText:value=>clipboardWrites.push(value)}, require(name) {
       if (name.startsWith('../../services/nekofans-game-hub/')) return require(name);
       assert.equal(name, './game-hub-bridge.cjs');
@@ -117,6 +118,7 @@ test('before-quit disposes the lobby controller', () => {
     videoFloatController: { dispose: () => calls.push('video.dispose') },
     nativeComposerController: { dispose: () => calls.push('composer.dispose') },
     nativeDividerController: { dispose: () => calls.push('divider.dispose') },
+    workbenchCommunity: null,
     communityController: { dispose: () => calls.push('community.dispose') },
     communityAccount: { cancel: () => calls.push('community.cancel') },
     screenShare: { dispose: () => calls.push('screen.dispose') },

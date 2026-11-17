@@ -84,8 +84,8 @@ assert.ok(Object.isFrozen(exports.PRODUCT_BRAND))
 // --- avatars ----------------------------------------------------------------
 
 const IDS = ['yui', 'devcat', 'bigfish', 'claude', 'gemini']
-assert.deepEqual([...exports.AVATARS.map((a) => a.id)], ['yui', 'devcat', 'bigfish', 'gemini'])
-assert.deepEqual([...exports.AVATARS.map((a) => a.name)], ['YUi', '开发喵', '大肥鱼', 'Gemini小猫'])
+assert.deepEqual([...exports.AVATARS.map((a) => a.id)], IDS)
+assert.deepEqual([...exports.AVATARS.map((a) => a.name)], ['YUi', '开发喵', '大肥鱼', 'Claude娘', 'Gemini小猫'])
 assert.deepEqual([...exports.ACTION_NAMES], ['screen-share', 'neko-settings', 'open-neko', 'task-notes', 'connect-neko', 'connection-status', 'reconnect-workbench', 'open-community', 'open-bilibili'])
 for (const id of IDS) assert.match(exports.PLACEHOLDERS[id], /^data:image\/svg\+xml,/, `placeholder ${id}`)
 const art = exports.AVATAR_ART

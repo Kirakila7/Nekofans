@@ -323,7 +323,6 @@ function installNekoAccountHabitat(ctx, options) {
       element('strong', 'neh-provider-balance', effectiveSignedIn(snap) ? balanceLabel(snap) : '登录后查看钱包余额'),
       element('span', 'neh-provider-source', '官方充值钱包'));
     menuRecord.owned.append(heading);
-    menuRecord.owned.append(workbenchSettings());
     if (nekoSnapshot||typeof accountsBridge.nekoSignIn==='function'||typeof accountsBridge.communityLogin==='function')menuRecord.owned.append(nekoAccountCard());
     menuRecord.owned.append(dsh);
     if (focused) refresh.focus({ preventScroll: true });

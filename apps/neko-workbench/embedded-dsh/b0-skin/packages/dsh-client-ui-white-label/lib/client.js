@@ -3737,8 +3737,8 @@ function installWorkspaceShell(options = {}) {
   const codexPaused = () => layout?.codexAvailable === false;
   // Project retired engine UI into the current work surface without rewriting
   // saved engine selections, seat bindings, sessions or drafts.
-  const visibleLayout = value => value;
-  const visibleSeats = () => layout?.seats || [];
+  const visibleLayout = value => value?.officeMode === 'codex' ? {...value, officeMode:'dsh'} : value;
+  const visibleSeats = () => (layout?.seats || []).filter(seat => seat.provider !== 'codex');
   const isOfficeEdition = () => !socialFloatingOnly && layout?.workbenchEdition === 'office';
   const isDailyEdition = () => socialFloatingOnly || layout?.workbenchEdition === 'daily';
   let appliedEdition = null, dailyRoom = null, editionSaving = false;
@@ -4020,7 +4020,7 @@ function installWorkspaceShell(options = {}) {
     if (!startupOpen || disposed) return;
     startupRefresh.disabled = listLoading || startupOpening; startupContinue.disabled = startupOpening;
     startupProjects.setAttribute('aria-busy', String(listLoading || startupOpening));
-    const rows = (catalog?.sessions || []).filter(row => (row.title + ' ' + row.cwd + ' ' + row.provider).toLowerCase().includes(startupSearchText));
+    const rows = (catalog?.sessions || []).filter(row => row.provider !== 'codex' && (row.title + ' ' + row.cwd + ' ' + row.provider).toLowerCase().includes(startupSearchText));
     const groups = new Map();
     for (const row of rows) {
       const key = row.provider + ':' + row.cwd;
@@ -4066,7 +4066,7 @@ function installWorkspaceShell(options = {}) {
       return section;
     }));
     if (catalog?.nextDshOffset != null) startupProjects.appendChild(button('加载更多 DSH 会话', 'neko-startup__more', () => refreshCatalog(true, catalog.nextDshOffset)));
-    const unavailable = Object.entries(catalog?.providers || {}).filter(([, status]) => status !== 'ready' && status !== 'testing').map(([name]) => name.toUpperCase());
+    const unavailable = Object.entries(catalog?.providers || {}).filter(([name, status]) => name !== 'codex' && status !== 'ready' && status !== 'testing').map(([name]) => name.toUpperCase());
     const notices = [];
     if (startupOpening) notices.push(startupOpeningMessage);
     else if (startupError || catalogError) notices.push(startupError || catalogError);
@@ -4337,7 +4337,7 @@ function installWorkspaceShell(options = {}) {
   officeFooter.append(officeCaption, stopButton, sendButton); officeForm.append(officeInput, modelControls, modelsStatus, officeFooter);
   // Keep the legacy adapter detached; its local data remains owned by its
   // original engine, while the workbench presents DSH only.
-  panel.append(officeHeader, officeHistory, officeError, officeApprovals, officeForm); doc.body.appendChild(panel);
+  panel.append(officeHeader, officeHistory, officeError, officeApprovals, officeForm);
   officeInput.addEventListener('input', () => drafts.set(selectedId || 'new', officeInput.value));
   let officeSending = false, officeRenderKey = '', readVersion = 0;
   modelSelect.addEventListener('change', () => { rememberModelChoice(selectedId || 'new', { model: modelSelect.value || null, effort: null }); renderOffice(); });
@@ -4807,7 +4807,7 @@ function installWorkspaceShell(options = {}) {
     if (!layout) { renderStartup(); return; }
     const seat = visibleSeats().find(s => s.id === layout.activeSeatId);
     allButton.textContent = seat ? seat.name + ' 的工作项目' : '全部工作会话'; allButton.setAttribute('aria-pressed', String(!seat));
-    const rows = (catalog?.sessions || []).filter(s => (!seat || s.provider === seat.provider && (!seat.projectRoot || s.cwd === seat.projectRoot)) && (!searchText || (s.title + ' ' + s.cwd + ' ' + s.provider).toLowerCase().includes(searchText)));
+    const rows = (catalog?.sessions || []).filter(s => s.provider !== 'codex' && (!seat || s.provider === seat.provider && (!seat.projectRoot || s.cwd === seat.projectRoot)) && (!searchText || (s.title + ' ' + s.cwd + ' ' + s.provider).toLowerCase().includes(searchText)));
     const groups = new Map();
     for (const item of rows) { const key = item.provider + ':' + item.cwd; if (!groups.has(key)) groups.set(key, { provider: item.provider, cwd: item.cwd, sessions: [] }); groups.get(key).sessions.push(item); }
     const activeDshSession = layout.officeMode === 'dsh' ? nativeSelection()?.sessionId : null;
@@ -4847,7 +4847,7 @@ function installWorkspaceShell(options = {}) {
     if (catalog?.nextDshOffset != null) projectList.appendChild(button('加载更多 DSH 会话', 'neko-workspace-more', () => refreshCatalog(true, catalog.nextDshOffset)));
     projectList.scrollTop = scroll[0]; if (scroller) scroller.scrollTop = scroll[1];
     }
-    const unavailable = Object.entries(catalog?.providers || {}).filter(([, status]) => status !== 'ready' && status !== 'testing').map(([name]) => name.toUpperCase());
+    const unavailable = Object.entries(catalog?.providers || {}).filter(([name, status]) => name !== 'codex' && status !== 'ready' && status !== 'testing').map(([name]) => name.toUpperCase());
     refreshButton.setAttribute('aria-busy', String(listLoading)); projectList.setAttribute('aria-busy', String(listLoading || !!sidebarOpening));
     const notices = [];
     if (sidebarOpening) notices.push('正在打开会话…');
@@ -4999,7 +4999,7 @@ function installWorkspaceShell(options = {}) {
       const choice = button('', 'neko-office-choice neko-display-choice', async () => {
         if (checking) return;
         if (mode === 'office' && (chatInput.value.length || officeInput.value.length || [...drafts.values()].some(value => typeof value === 'string' && value.length) || sending || officeSending || lobby?.hasPendingDraft?.())) {
-          warning.textContent = '主 agent、Codex 或频道有未发送内容，请先处理草稿后再切换。';
+          warning.textContent = '主 agent 或频道有未发送内容，请先处理草稿后再切换。';
           return;
         }
         if (mode === 'office' && socialFloatingOnly && hasNativeComposerBridge) {
@@ -5057,7 +5057,7 @@ function installWorkspaceShell(options = {}) {
       const edit = el('form', 'neko-seat-editor');
       const nameLabel = el('label', '', '名称'), name = el('input'); name.value = seat.name; name.maxLength = 24; nameLabel.appendChild(name);
       const providerLabel = el('label', '', '执行平台'), provider = el('select');
-      for (const [value, label] of [['', '暂不绑定'], ['dsh', 'DSH'], ['codex', codexPaused() ? 'Codex · 测试中' : 'Codex']]) { const option = el('option', '', label); option.value = value; option.disabled = value === 'codex' && codexPaused() && seat.provider !== 'codex'; provider.appendChild(option); } provider.value = seat.provider || ''; providerLabel.appendChild(provider);
+      for (const [value, label] of [['', '暂不绑定'], ['dsh', 'DSH']]) { const option = el('option', '', label); option.value = value; option.disabled = value === 'codex' && codexPaused() && seat.provider !== 'codex'; provider.appendChild(option); } provider.value = seat.provider || ''; providerLabel.appendChild(provider);
       const projectLabel = el('label', '', '工作项目范围'), project = el('select'); const all = el('option', '', '全部项目'); all.value = ''; project.appendChild(all);
       for (const cwd of [...new Set((catalog?.projects || []).map(p => p.cwd).filter(Boolean))]) { const option = el('option', '', cwd); option.value = cwd; project.appendChild(option); } project.value = seat.projectRoot || ''; projectLabel.appendChild(project);
       const avatarLabel = el('label', '', '头像'), pick = el('select');
@@ -5089,21 +5089,6 @@ function installWorkspaceShell(options = {}) {
     }
     const found = options.locateSidebar?.(); const root = found?.root || found?.slot || doc.querySelector('[data-slot="sidebar"]');
     const rail = doc.querySelector('[data-neko-side-rail]'), theme = rail?.querySelector('.neko-side-rail__theme');
-    const space = rail?.querySelector('.neko-side-rail__space') || null;
-    if (space !== railSpace) {
-      stopRailWalking();
-      if (railSpace) { if (railSpaceBeforeAria === null) railSpace.removeAttribute('aria-hidden'); else railSpace.setAttribute('aria-hidden', railSpaceBeforeAria); resize?.unobserve?.(railSpace); }
-      railSpace = space; railSpaceBeforeAria = space?.getAttribute('aria-hidden') ?? null; lastRailSize = '';
-      if (space) { space.setAttribute('aria-hidden', 'false'); resize?.observe(space); }
-    }
-    if (space) {
-      railCompanion.setAttribute('data-neko-rail-roam', '');
-      if (railCompanion.parentNode !== space) space.appendChild(railCompanion);
-    } else {
-      railCompanion.removeAttribute('data-neko-rail-roam');
-      railCompanion.style.removeProperty('left'); railCompanion.style.removeProperty('top'); railCompanion.style.removeProperty('transition');
-      if (rail && railCompanion.parentNode !== rail) rail.prepend(railCompanion);
-    }
     if (theme && officeButton.parentNode !== theme) { if (!nativeMarks.has(theme)) nativeMarks.set(theme, new Map()); nativeMarks.get(theme).set('aria-hidden', theme.getAttribute('aria-hidden')); theme.setAttribute('aria-hidden', ''); theme.append(officeButton, gameStudioButton); }
     if (rail && railTop.parentNode !== rail) theme?.after(railTop);
     const mount = doc.querySelector('[data-neko-seat-mount]'); if (mount && seats.parentNode !== mount) mount.appendChild(seats);
@@ -6351,7 +6336,8 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
   function gameRoomFields(inviteUrl, notice) {
     const win=doc.defaultView;
     const state=el('p','neko-lobby-game-status','正在核对邀请并加入房间…');state.setAttribute('role','status');
-    const feedback=el('p','neko-lobby-game-status',notice);feedback.setAttribute('role','status');
+    const inviteStatus=el('p','neko-lobby-game-status',notice);inviteStatus.setAttribute('role','status');inviteStatus.hidden=!notice;
+    const feedback=el('p','neko-lobby-game-status');feedback.setAttribute('role','status');
     const controls=el('section','neko-lobby-game-room-controls');controls.hidden=true;
     const rule=el('input','neko-lobby-game-own-rule');rule.type='password';rule.autocomplete='off';rule.maxLength=80;
     const roleNote=el('p','neko-lobby-field__hint','女神只处理规则。本方主 Agent 只知道本方规则和公开棋局。');
@@ -6462,7 +6448,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     }
     const copyInvite=button('复制邀请链接','neko-lobby-game-copy-invite',async()=>{
       const result=await seatRequest('private-copy-invite');
-      if(!closed)feedback.textContent=result?.ok?'邀请链接已复制，朋友打开即可进入 Nekofans。':'未能复制邀请，请重试。';
+      if(!closed){inviteStatus.textContent=result?.ok?'邀请链接已复制，朋友打开即可进入 Nekofans。':'未能复制邀请，请重试。';inviteStatus.hidden=false;}
     });
     const friends=friendListDisclosure(async(friend,notice)=>{
       if(sendingInvite||view?.seat!==0||view.players!==1)return;
@@ -6472,7 +6458,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
         if(!closed)notice.textContent=({sent:'已邀请 '+friend.displayName+'。对方可在「游戏邀请」中加入。','room-full':'朋友已经入座。',forbidden:'无法邀请这位好友，请刷新列表。','sign-in-required':'请先连接 N.E.K.O. 账号。','account-changed':'账号已切换，请重新选择好友。'})[result?.status]||'邀请暂未确认，请稍后重试。';
       }finally{sendingInvite=false;}
     });
-    return {nodes:[state,copyInvite,...(friends?[friends.panel]:[]),controls,feedback,board],open,reloadFriends:friends?.reload,cleanup(){closed=true;clearTimeout(timer);friends?.cleanup();win.removeEventListener('message',fromBoard);},
+    return {nodes:[state,copyInvite,inviteStatus,...(friends?[friends.panel]:[]),controls,feedback,board],open,reloadFriends:friends?.reload,cleanup(){closed=true;clearTimeout(timer);friends?.cleanup();win.removeEventListener('message',fromBoard);},
       request:()=>view?{action:'share',title:view.game?.title||'双人国际象棋',roomUrl:inviteUrl}:'请先确认已加入房间。'};
   }
   function gameJoinFields(inviteUrl, enterRoom) {
@@ -6555,7 +6541,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
       }
       const copied=await callGame({action:'private-copy-invite',inviteUrl:url.value});
       gameState.textContent=copied.ok?'好友邀请已复制。':'房间已创建，可以手动复制邀请链接。';
-      if(copied.ok)await enterRoom(url.value,'好友邀请已复制，可发给对方。');
+      if(copied.ok)await enterRoom(url.value,'邀请链接已复制，可发给好友。');
     }
     const inviteFriend=button(inviteEnabled?'创建房间并邀请好友':'创建并复制好友邀请','neko-lobby-game-create-friend',async()=>{
       if(inviteFriend.disabled||inviteFriend.hidden)return;
@@ -6603,6 +6589,25 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     const relayBind=button('绑定原型房间','neko-lobby-game-prototype-bind',async()=>{const roomId=relayRoom.value.trim().toUpperCase(),origin=loopbackOrigin(relayOrigin.value.trim());if(!/^(?:[A-HJ-NP-Z2-9]{8}|R-[0-9A-F]{8})$/.test(roomId)){relayState.textContent='请输入原型房间码或剧情房间 r-xxxxxxxx。';return;}if(!origin){relayState.textContent='原型地址只允许本机回环地址。';return;}relayBind.disabled=true;try{const result=await callGame({action:'prototype-relay-bind',roomId,prototypeOrigin:origin});relayState.textContent=({bound:'已绑定房间 '+(result.roomId||roomId)+'。女神可读取双方规则，决策队友只读取本方规则。','room-not-found':'原型里找不到这个房间，请先在原型里创建房间。','prototype-unavailable':'无法连接本地原型，请确认已用上面的命令启动。','invalid-room':'请输入原型房间码或剧情房间 r-xxxxxxxx。','invalid-origin':'原型地址只允许本机回环地址。','account-unavailable':'请先登录 DeepSeek 工作台账号。','already-bound':'适配器已经绑定房间。',busy:'正在核对原型房间，请稍候。',locked:'已经发生过模型调用，不能改绑房间；请停止后重新启动。','not-running':'适配器未运行或已过期，请重新启动。',expired:'适配器未运行或已过期，请重新启动。'})[result.status]||'绑定未完成，请检查原型和适配器状态。';}finally{relayBind.disabled=false;}});
     const relayStatus=button('查看适配器状态','neko-lobby-game-prototype-status',async()=>{const result=await callGame({action:'prototype-relay-status'});if(result.ok===false){relayState.textContent='暂时无法读取适配器状态，请稍后重试。';return;}relayState.textContent='适配器：'+(result.status==='running'?'运行中':'未运行')+'，已绑定房间 '+(result.roomId||'-')+'，已调用 '+(Number.isFinite(result.calls)?result.calls:0)+'/'+(Number.isFinite(result.maxCalls)?result.maxCalls:0)+' 次。';});
     const relayStop=button('停止适配器','neko-lobby-game-prototype-stop',async()=>{let result;try{result=await callGame({action:'prototype-relay-stop'});}catch{result={ok:false};}if(result&&result.ok===false){relayState.textContent='停止未确认，请检查适配器状态或稍后重试。';return;}relayCommand.value='';relayCommand.hidden=true;relayWarning.hidden=true;relayState.textContent='已停止；启动命令立即失效。';});
+    const multiplayer=el('section','neko-game-multiplayer-template');
+    const multiplayerInfo=el('div','neko-game-multiplayer-info');
+    multiplayerInfo.append(
+      el('strong','','内置作品自动支持双人回合制'),
+      el('p','neko-lobby-field__hint','用其他 Coding Agent 做游戏？复制模板，让它添加联机模式，再到独立游戏工坊发布 HTML。')
+    );
+    const templateStatus=el('p','neko-lobby-field__hint');
+    templateStatus.setAttribute('role','status');
+    templateStatus.hidden=true;
+    const copyTemplate=button('复制 HTML 联机模板','neko-game-copy-template',async()=>{
+      if(copyTemplate.disabled)return;
+      copyTemplate.disabled=true;
+      try {
+        const result=await callGame({action:'copy-game-template'});
+        templateStatus.textContent=result.ok?'模板已复制，可以粘贴给 Coding Agent。':'复制失败，请重试。';
+        templateStatus.hidden=false;
+      } finally { copyTemplate.disabled=false; }
+    });
+    multiplayer.append(multiplayerInfo,copyTemplate,templateStatus);
     const prompt=el('textarea','neko-lobby-game-prompt');
     prompt.rows=3;prompt.maxLength=2000;prompt.setAttribute('aria-label','游戏制作要求');
     prompt.placeholder='比如：两个人争夺月球基地，轮流选择修理、探索或抢占资源。';
@@ -6658,7 +6663,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
       inviteFriend.textContent = inviteEnabled ? '创建房间并邀请好友' : '创建并复制好友邀请';
       publish.textContent = inviteEnabled ? '开房并邀请好友' : '开房并复制好友邀请';
     }
-    return {nodes:[field('描述你想玩的游戏',prompt,'创造台可以制作双人回合制游戏。'),draft,preview,gameState,resultActions,identityNote,samples,advanced],open,syncInviteAvailability,request:()=>null};
+    return {nodes:[multiplayer,field('描述你想玩的游戏',prompt,'创造台可以制作双人回合制游戏。'),draft,preview,gameState,resultActions,identityNote,samples,advanced],open,syncInviteAvailability,request:()=>null};
   }
   function catFields() {
     const settings = snap?.catSettings || {}, part = snap?.participation || {}, own = snap?.me?.cat;

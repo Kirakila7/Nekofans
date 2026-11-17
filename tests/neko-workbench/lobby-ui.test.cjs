@@ -69,6 +69,11 @@ function setup(t,{lobby=true,snap=snapshot(),respond,composer=true,home=false,of
 }
 const rowOf=(doc,n)=>doc.querySelector('.neko-lobby-message[data-id="'+mid(n)+'"]');
 const labelOf=(doc,n)=>rowOf(doc,n).querySelector('.neko-lobby-label').textContent;
+function openMessageMenu(doc, n) {
+ const avatar = rowOf(doc, n).querySelector('.neko-lobby-message-avatar');
+ avatar.dispatchEvent(new doc.defaultView.MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+ return doc.querySelector('.neko-lobby-message-menu');
+}
 test('one click in the office creates and shares a room before moving to the rule screen',{skip:DOM_SKIP},async t=>{
  const calls=[],inviteUrl='https://play.nekofans.games/?room=abcdefghijklmnopqrstuvwx';
  let confirmed=false;
@@ -390,11 +395,11 @@ test('频道 rail button opens the lobby in the sidebar, leaving the dock and wo
 
 test('opening and returning from the lobby keeps DSH available with a legacy saved engine selection',{skip:DOM_SKIP},async t=>{
  const {doc}=setup(t,{officeMode:'codex',projectUnavailableCodex:true});await tick();
- const native=doc.querySelector('main textarea');assert(doc.querySelector('.neko-office-panel').hidden);assert.equal(doc.body.dataset.nekoOfficeMode,'dsh');
+ const native=doc.querySelector('main textarea');assert.equal(doc.querySelector('.neko-office-panel'),null);assert.equal(doc.body.dataset.nekoOfficeMode,'dsh');
  doc.querySelector('.neko-lobby-switch').click();await tick();
- assert(doc.querySelector('.neko-office-panel').hidden);assert.equal(native.value,'native draft');assert(!doc.querySelector('main').hasAttribute('inert'));
+ assert.equal(doc.querySelector('.neko-office-panel'),null);assert.equal(native.value,'native draft');assert(!doc.querySelector('main').hasAttribute('inert'));
  doc.querySelector('.neko-lobby-back').click();await tick();
- assert(doc.querySelector('.neko-office-panel').hidden);assert.equal(doc.querySelector('main textarea'),native);assert.equal(native.value,'native draft');
+ assert.equal(doc.querySelector('.neko-office-panel'),null);assert.equal(doc.querySelector('main textarea'),native);assert.equal(native.value,'native draft');
 });
 
 test('message list: origin labels, own labels, badges by origin only, reply quote label, mentions, deleted, text-only rendering',{skip:DOM_SKIP},async t=>{

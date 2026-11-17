@@ -1,7 +1,6 @@
 import {cpSync,existsSync,mkdirSync,readFileSync,readdirSync,renameSync,writeFileSync,chmodSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
-import {gameRuntimeFiles} from './neko-game-runtime-files.mjs';
 import {dirname,join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {gameRuntimeFiles as gameServiceRuntimeFiles} from './neko-game-runtime-files.mjs';

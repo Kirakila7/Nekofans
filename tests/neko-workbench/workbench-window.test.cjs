@@ -9,7 +9,7 @@ test('Windows startup fits the selected display work area at any DPI and keeps n
     assert(r.minWidth<=r.width&&r.minHeight<=r.height);assert.equal(r.frame,true);assert.equal(r.autoHideMenuBar,true);
     assert.equal(r.titleBarStyle,'hidden');assert.equal(r.titleBarOverlay.height,36);
   }
-  assert.deepEqual(workbenchWindowOptions('darwin',{x:0,y:0,width:640,height:480}),{width:1100,height:780,minWidth:800,minHeight:560});
+  assert.deepEqual(workbenchWindowOptions('darwin',{x:0,y:0,width:640,height:480}),{width:640,height:480,minWidth:640,minHeight:480,x:0,y:0});
 });
 
 test('caption theme accepts only a boolean and leaves native controls in place',()=>{
