@@ -4,12 +4,14 @@ const appEntry=path.resolve(__dirname,'../../apps/neko-workbench/main.cjs');
 
 if(!process.argv.includes('--entry-harness')){
   const test=require('node:test'),{execFile}=require('node:child_process');
-  test('actual workbench main registers trusted IPC for settings, one chat/store path, memory and clean quit',async()=>{
-    await new Promise((resolve,reject)=>execFile(process.execPath,[__filename,'--entry-harness'],{timeout:15000,maxBuffer:2e6},(error,stdout,stderr)=>{
+  function runFixture(...args){
+    return new Promise((resolve,reject)=>execFile(process.execPath,[__filename,'--entry-harness',...args],{timeout:15000,maxBuffer:2e6},(error,stdout,stderr)=>{
       if(error)return reject(new Error(`${stdout}\n${stderr}`));
       try{assert.match(stdout,/workbench main IPC fixture passed/);resolve();}catch(err){reject(err);}
     }));
-  });
+  }
+  test('actual workbench main registers trusted IPC for settings, one chat/store path, memory and clean quit',()=>runFixture());
+  test('workbench discovers and binds an existing N.E.K.O. role through the settings window',()=>runFixture('--native-role-only'));
 }else{
   (async()=>{
     const fs=require('node:fs'),os=require('node:os'),Module=require('node:module'),{EventEmitter}=require('node:events'),{createServer}=require('node:http');
@@ -26,22 +28,54 @@ if(!process.argv.includes('--entry-harness')){
       static fromWebContents(contents){return windows.find(window=>window.webContents===contents);}
     }
     class Tray extends EventEmitter{setTitle(){}setToolTip(){}popUpContextMenu(){}}
-    const electron={app,BrowserWindow:Window,ipcMain:Object.assign(new EventEmitter(),{handle:(name,fn)=>handlers.set(name,fn)}),screen:{getPrimaryDisplay:()=>({workArea:{x:0,y:0,width:1440,height:1000}})},
+    const electron={app,BrowserWindow:Window,ipcMain:Object.assign(new EventEmitter(),{handle:(name,fn)=>handlers.set(name,fn),removeHandler:name=>handlers.delete(name)}),screen:{getPrimaryDisplay:()=>({workArea:{x:0,y:0,width:1440,height:1000}})},
       shell:{openExternal:()=>Promise.resolve(),openPath:()=>Promise.resolve()},Menu:{buildFromTemplate:template=>({template,popup(){menus.push(template);}}),setApplicationMenu(){}},Tray,
-      nativeImage:{createEmpty:()=>({})},dialog:{showErrorBox(){},showMessageBox:()=>Promise.resolve(),showOpenDialog:()=>Promise.resolve({canceled:true})},nativeTheme:{shouldUseDarkColors:false},
+      nativeImage:{createEmpty:()=>({}),createFromPath:()=>({isEmpty:()=>false})},dialog:{showErrorBox(){},showMessageBox:()=>Promise.resolve(),showOpenDialog:()=>Promise.resolve({canceled:true})},nativeTheme:{shouldUseDarkColors:false},
       safeStorage:{isEncryptionAvailable:()=>true,getSelectedStorageBackend:()=> 'keychain',encryptString:value=>Buffer.from('cipher:'+Buffer.from(value).toString('base64')),decryptString:bytes=>Buffer.from(bytes.toString().slice(7),'base64').toString()}};
     let runtime;
     const original=Module._load;Module._load=function(name,...args){if(name==='electron')return electron;if(name==='./main-chat-runtime.cjs'){const originalRuntime=original.call(this,name,...args);return {...originalRuntime,WorkbenchMainChat:class extends originalRuntime.WorkbenchMainChat{constructor(options){super({...options,memoryWorker:{request:async()=>{throw Error('fixture offline');},stop:async()=>{},close:async()=>{}}});runtime=this;}}};}return original.call(this,name,...args);};
     const wait=async predicate=>{for(let n=0;n<500;n++){if(await predicate())return;await new Promise(resolve=>setTimeout(resolve,10));}throw Error('fixture wait timed out');};
     const invoke=(window,method,params={})=>handlers.get('pet:call')({sender:window.webContents,senderFrame:window.webContents.mainFrame},method,params);
-    let requests=0;const server=createServer((req,res)=>{let body='';req.on('data',chunk=>body+=chunk);req.on('end',()=>{requests++;if(requests>1){assert.equal(JSON.parse(body).messages.at(-1).content,'故障回归');res.writeHead(503);res.end();return;}assert.equal(JSON.parse(body).messages.at(-1).content,'我喜欢红茶');res.writeHead(200,{'content-type':'text/event-stream'});res.end('data: '+JSON.stringify({choices:[{delta:{content:'我记住了。'}}]})+'\n\ndata: [DONE]\n\n');});});
+    let requests=0;
+    const roleOnly=process.argv.includes('--native-role-only'),sockets=[];
+    const roleBaseUrl='http://127.0.0.1:48911';
+    if(roleOnly){
+      globalThis.fetch=async(url,options)=>{
+        assert.equal(url,roleBaseUrl+'/api/characters');
+        assert.equal(options.method||'GET','GET');
+        return Response.json({'猫娘':{'旧角色':{},'另一只鱼':{}}});
+      };
+      globalThis.WebSocket=class extends EventTarget{
+        constructor(url){super();sockets.push(url);queueMicrotask(()=>{this.readyState=1;this.dispatchEvent(new Event('open'));});}
+        close(){this.readyState=3;this.dispatchEvent(new Event('close'));}
+      };
+    }
+    const server=createServer((req,res)=>{let body='';req.on('data',chunk=>body+=chunk);req.on('end',()=>{requests++;if(requests>1){assert.equal(JSON.parse(body).messages.at(-1).content,'故障回归');res.writeHead(503);res.end();return;}assert.equal(JSON.parse(body).messages.at(-1).content,'我喜欢红茶');res.writeHead(200,{'content-type':'text/event-stream'});res.end('data: '+JSON.stringify({choices:[{delta:{content:'我记住了。'}}]})+'\n\ndata: [DONE]\n\n');});});
     try{
-      await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});require(appEntry);
+      if(!roleOnly)await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});
+      require(appEntry);
       await wait(()=>windows.length>0&&handlers.has('pet:call'));const pet=windows[0];await wait(async()=>!!(await invoke(pet,'state')).mainChat?.ready);
       assert.equal((await invoke(pet,'state')).actors[0].chatBackend,'deepseek-account','an unconfigured installation defaults to the workbench account');
       assert.equal(fs.existsSync(path.join(temporary,'data/main-chat/app-config.json')),false,'the default does not write over user configuration');
       await invoke(pet,'menu');const menu=menus.at(-1),fish=menu.find(item=>item.label==='养鱼');assert(fish);const memoryOptions=fish.submenu.find(item=>item.label==='N.E.K.O. 记忆').submenu;assert(memoryOptions.some(item=>item.label==='记忆与模型设置…'));assert(!memoryOptions.some(item=>item.type==='radio'||item.type==='checkbox'));
       fish.submenu.find(item=>item.label==='聊天 API 设置…').click();const settings=windows.find(window=>window.options.title==='聊天 API 设置');assert(settings);
+      if(roleOnly){
+        await invoke(settings,'chat-open-neko-settings');
+        const picker=windows.find(window=>window.options.title==='接回 N.E.K.O. 角色');
+        const baseUrl=roleBaseUrl;
+        assert.deepEqual(await invoke(picker,'neko-list-characters',{baseUrl}),{baseUrl,names:['旧角色','另一只鱼']});
+        assert.equal((await invoke(pet,'state')).actors[0].chatBackend,'deepseek-account','discovery does not switch chat backends');
+        await assert.rejects(invoke(pet,'neko-list-characters',{baseUrl}),/请从 N.E.K.O. 聊天设置操作/);
+        await assert.rejects(invoke(picker,'neko-settings',{baseUrl,character:'大肥鱼'}),/选择已有/);
+        assert.equal(sockets.length,0);
+        await invoke(picker,'neko-settings',{baseUrl,character:'旧角色'});
+        assert.deepEqual(sockets,[baseUrl.replace('http:','ws:')+'/ws/'+encodeURIComponent('旧角色')]);
+        const saved=JSON.parse(fs.readFileSync(path.join(temporary,'data/state.json'),'utf8'));
+        assert.equal(saved.neko.character,'旧角色');
+        assert.equal(saved.neko.baseUrl,baseUrl);
+        assert.equal(saved.actors[0].chatBackend,'neko');
+        app.quit();await wait(()=>quit);console.log('workbench main IPC fixture passed');return;
+      }
       assert.equal((await invoke(settings,'chat-use-deepseek-account')).backend,'deepseek-account','the account backend may be selected explicitly');
       await assert.rejects(invoke(pet,'prompt',{id:'main',text:'未登录测试'}),/工作台账号状态暂不可用/);
       assert.equal((await runtime.history()).length,0,'preflight failure must not store a user message');

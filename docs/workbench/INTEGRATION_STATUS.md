@@ -10,6 +10,10 @@ The workbench's main process retains the seat credential. The bundled board rece
 
 The local story launcher can start and bind an explicitly configured project. Set `NEKO_STORY_PROJECT_DIR` to the absolute path of a trusted, compatible project containing `server.js` before launching the workbench. It is a separate development flow. The public multiplayer trial requires a configured relay. See [private chess trial](../../services/nekofans-game-hub/README.md) for setup, scope and verification.
 
+## Connecting an existing N.E.K.O. character
+
+Open **聊天 API 设置 → 接回 N.E.K.O. 已有角色**, start the local N.E.K.O. service, choose a discovered character, then select **绑定并连接**. The workbench saves the server address and character name locally, then uses that character's text session. If the role disappears from the service, choose it again after restoring or renaming it. Reconnecting never creates a character. Local message previews are kept separately by server and role. The original N.E.K.O. service owns character memory and its chat history. If another window takes over the character's socket, reconnect manually when ready.
+
 # Local integration 0.28.43-test.5 / build 88
 
 Windows test.5 uses the Bigfish icon in the notification area and uses the permitted owner-or-mention reply mode when a lobby disallows free speech. The saved trigger remains available in a channel that permits it. The targeted suite passed 158 checks. The separate rail placement assertion also fails on test.4.
