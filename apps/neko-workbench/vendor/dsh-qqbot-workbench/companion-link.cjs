@@ -9,12 +9,11 @@ function ownerBinding(config) {
       access.c2cAllow.length !== 1 || access.groupMode !== 'disabled' ||
       access.groupAllow?.length !== 0 || !/^[A-Za-z0-9_-]{8,256}$/.test(owner || '')) return null;
   const key = createHash('sha256').update(JSON.stringify([config.appId, config.appSecret, owner])).digest('hex');
-  return { owner, key };
+  return { owner, key, scope: [config.appId, owner] };
 }
 
-function createQQCompanionLink({ readConfig, readConsent, saveConsent, notify, timeoutMs = 120000 }) {
+function createQQCompanionLink({ readConfig, readConsent, saveConsent, claimReceipt, notify, timeoutMs = 120000 }) {
   let pending = null;
-  const seen = new Map();
 
   function binding() {
     try {
@@ -46,9 +45,13 @@ function createQQCompanionLink({ readConfig, readConsent, saveConsent, notify, t
       const text = typeof message.content === 'string' ? message.content.trim() : '';
       if (!text || text.length > 8000 || message.attachments?.length) return Promise.resolve('接续私聊目前只支持纯文字消息。');
       const messageId = message.messageId;
-      if (typeof messageId !== 'string' || !messageId || messageId.length > 512 || seen.has(messageId)) return Promise.resolve(null);
-      seen.set(messageId, true);
-      if (seen.size > 256) seen.delete(seen.keys().next().value);
+      if (typeof messageId !== 'string' || !messageId || messageId.length > 512) return Promise.resolve(null);
+      try {
+        if (!claimReceipt(paired.scope, messageId)) return Promise.resolve(null);
+      } catch {
+        // Do not fall through to the independent QQ agent on a store error.
+        return Promise.resolve('大肥鱼暂时无法保存 QQ 消息，请稍后重新发送。');
+      }
       if (pending) return Promise.resolve('大肥鱼正在回复，等她一下。');
       const id = randomUUID();
       return new Promise(resolve => {

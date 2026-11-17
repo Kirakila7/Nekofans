@@ -7,6 +7,7 @@ const { qqDiagnostics } = require('./diagnostics.cjs');
 const { createPrivatePairing } = require('./private-pairing.cjs');
 const {qqExperience}=require('../../channel-experiences.cjs');
 const { createQQCompanionLink } = require('./companion-link.cjs');
+const { claimQQCompanionReceipt } = require('./companion-receipts.cjs');
 const { writeAtomicStateFileSync } = require('../../atomic-state-file.cjs');
 const privatePairing = createPrivatePairing({ readConfig: config });
 const consentPath = () => path.join(profileRoot, 'companion-continuity');
@@ -17,6 +18,7 @@ function readCompanionConsent() {
 }
 const companion = createQQCompanionLink({ readConfig: config, readConsent: readCompanionConsent,
   saveConsent: key => writeAtomicStateFileSync(consentPath(), key || ''),
+  claimReceipt: (scope, id) => claimQQCompanionReceipt(path.join(profileRoot, 'companion-receipts.sqlite'), scope, id),
   notify: id => process.emit('neko-qqbot-companion', id) });
 const GUARD = Symbol.for('neko.qqbot.connection.guard');
 let context = null, entryId = null, entryContext = null, enabled = false, generation = 0;
