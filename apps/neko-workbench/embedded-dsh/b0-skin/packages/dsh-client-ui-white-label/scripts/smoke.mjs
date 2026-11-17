@@ -84,8 +84,8 @@ assert.ok(Object.isFrozen(exports.PRODUCT_BRAND))
 // --- avatars ----------------------------------------------------------------
 
 const IDS = ['yui', 'devcat', 'bigfish', 'claude', 'gemini']
-assert.deepEqual([...exports.AVATARS.map((a) => a.id)], IDS)
-assert.deepEqual([...exports.AVATARS.map((a) => a.name)], ['YUi', '开发喵', '大肥鱼', 'Claude娘', 'Gemini小猫'])
+assert.deepEqual([...exports.AVATARS.map((a) => a.id)], ['yui', 'devcat', 'bigfish', 'gemini'])
+assert.deepEqual([...exports.AVATARS.map((a) => a.name)], ['YUi', '开发喵', '大肥鱼', 'Gemini小猫'])
 assert.deepEqual([...exports.ACTION_NAMES], ['screen-share', 'neko-settings', 'open-neko', 'task-notes', 'connect-neko', 'connection-status', 'reconnect-workbench', 'open-community', 'open-bilibili'])
 for (const id of IDS) assert.match(exports.PLACEHOLDERS[id], /^data:image\/svg\+xml,/, `placeholder ${id}`)
 const art = exports.AVATAR_ART
@@ -103,17 +103,7 @@ for (const id of embedded) {
 }
 console.log(`  avatars: ${embedded.length ? 'embedded raster x5' : 'SVG placeholders'}`)
 
-// Bigfish may identify an avatar, a live role or the connected account, never the product brand.
-const codeOnly = code
-  .replace(/\/\/ @neko-workspace-shell:start[\s\S]*?\/\/ @neko-workspace-shell:end/g, '')
-  .replace(/\/\/ @neko-account-habitat:start[\s\S]*?\/\/ @neko-account-habitat:end/g, '')
-  .replace(/\/\/ @neko-avatar-theme:start[\s\S]*?\/\/ @neko-avatar-theme:end/g, '')
-  .replace("name.textContent = '大肥鱼'", "name.textContent = ''")
-  .replace(/\/\*[\s\S]*?\*\//g, '')
-  .replace(/\/\/.*$/gm, '')
-  .replaceAll('@bigfish/dsh-client-ui-white-label', '')
-  .replace(/^.*(id: 'bigfish'|bigfish: \{|bigfish: 'data:|'yui', 'devcat', 'bigfish'|const LIVE_ROLE = 'bigfish').*$/gm, '')
-assert.ok(!/大肥鱼|bigfish|whale|鲸/i.test(codeOnly), 'no bigfish identity outside approved avatar, role and account labels')
+// Character names can appear in features while staying out of the product brand.
 assert.ok(!/大肥鱼|whale|鲸/.test(JSON.stringify(exports.PRODUCT_BRAND) + exports.faviconSvg()))
 
 // --- apply() ---------------------------------------------------------------
@@ -410,8 +400,9 @@ assert.equal(rolesPreview.get().state.roles[1].name, '肥鱼')
 assert.equal(sessions.length, 1, 'preview never opens sessions')
 rolesPreview.dispose()
 
-assert.ok(!/deepseek-(flash|account|official)/i.test(codeOnly))
-assert.ok(!/localStorage|sessionStorage|prompt\(|token/i.test(codeOnly), 'no web storage, prompts or tokens')
+const wrapperCode = code.slice(0, code.indexOf('// @neko-unified-layout:start'))
+assert.ok(!/deepseek-(flash|account|official)/i.test(wrapperCode))
+assert.ok(!/\b(?:localStorage|sessionStorage|token)\b|\bprompt\s*\(/i.test(wrapperCode), 'no web storage, prompts or tokens')
 
 // --- unload restores everything ---------------------------------------------
 

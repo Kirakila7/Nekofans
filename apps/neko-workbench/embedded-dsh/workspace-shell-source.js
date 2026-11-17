@@ -54,7 +54,7 @@ function installWorkspaceShell(options = {}) {
   const officeImage = image(avatar('bigfish'), 'neko-edition-avatar'); officeButton.appendChild(officeImage);
   const settingsButton = button('⚙', 'neko-side-rail__button neko-workspace-settings', () => openSettings('general'));
   settingsButton.setAttribute('aria-label', '工作台设置'); settingsButton.title = '工作台设置';
-  const communityButton = button('', 'neko-side-rail__button neko-community neko-community-yui', () => { closeSettings(); lobby?.hide(); Promise.resolve(options.openCommunity?.()).catch(showError); });
+  const communityButton = button('', 'neko-side-rail__button neko-community neko-community-yui', () => { closeQQPage(); closeSettings(); lobby?.hide(); Promise.resolve(options.openCommunity?.()).catch(showError); });
   communityButton.setAttribute('aria-label','N.E.K.O. 社区');communityButton.title='N.E.K.O. 社区';
   const communitySvg=doc.createElementNS('http://www.w3.org/2000/svg','svg'),communityPath=doc.createElementNS('http://www.w3.org/2000/svg','path');communitySvg.setAttribute('viewBox','0 0 24 24');communitySvg.setAttribute('aria-hidden','true');for(const [key,value]of Object.entries({d:'M15.5 7a3.5 3.5 0 1 1-7 0 3.5 3.5 0 0 1 7 0ZM5 20v-2a5 5 0 0 1 10 0v2M18 9a3 3 0 0 1 3 3M18 15a4 4 0 0 1 3 4',fill:'none',stroke:'currentColor','stroke-width':'1.6','stroke-linecap':'round','stroke-linejoin':'round'}))communityPath.setAttribute(key,value);communitySvg.append(communityPath);communityButton.append(communitySvg);
   railTop.append(communityButton);
@@ -137,20 +137,48 @@ function installWorkspaceShell(options = {}) {
     schedule();
   }
   doc.addEventListener('neko-flex-social-geometry', onFlexSocialGeometry);
+  const qqPage = own(el('section', 'neko-qq-page'));
+  qqPage.hidden = true; qqPage.tabIndex = -1; qqPage.setAttribute('aria-label', 'QQ 会话');
+  qqPage.id = 'neko-qq-page'; qqPage.dataset.nekoQqPage = '';
+  const qqButton = button('', 'neko-side-rail__button neko-qq-entry', () => {
+    if (isOfficeEdition() || !qqPage.hidden) return;
+    hideSocial(); lobby?.hide(); closeSettings(); closeCompanionMenu();
+    if (sideSocial) doc.dispatchEvent(new win.Event('neko-side-surface-close'));
+    setRoomActive(false, {closeSocial:false});
+    roomButton?.setAttribute('aria-pressed', 'false'); workButton?.setAttribute('aria-pressed', 'false');
+    setQQPageVisible(true); qqPage.focus();
+  });
+  qqButton.title = 'QQ 会话'; qqButton.setAttribute('aria-label', 'QQ 会话');
+  qqButton.setAttribute('aria-controls', qqPage.id); qqButton.setAttribute('aria-pressed', 'false');
+  railTop.insertBefore(qqButton, communityButton); doc.body.appendChild(qqPage);
+  function setQQPageVisible(visible) {
+    if (qqPage.hidden === !visible) return;
+    qqPage.hidden = !visible;
+    qqButton.setAttribute('aria-pressed', String(visible));
+    doc.dispatchEvent(new win.Event('neko-qq-page-change'));
+    schedule();
+  }
+  function closeQQPage({restoreRoom = false} = {}) {
+    if (qqPage.hidden) return;
+    setQQPageVisible(false);
+    if (restoreRoom) { setRoomActive(roomSelection, {closeSocial:false}); qqButton.focus(); }
+  }
   const roomInert = new Set(), roomMasked = new Set();
-  const roomButton = roomPreview && button('', 'neko-side-rail__button neko-room-entry', () => { lobby?.hide(); setRoomActive(true); });
-  const workButton = roomPreview && button('', 'neko-side-rail__button neko-room-workspace', () => { lobby?.hide(); setRoomActive(false); });
+  const roomButton = roomPreview && button('', 'neko-side-rail__button neko-room-entry', () => { closeQQPage(); lobby?.hide(); setRoomActive(true); });
+  const workButton = roomPreview && button('', 'neko-side-rail__button neko-room-workspace', () => { closeQQPage(); lobby?.hide(); setRoomActive(false); });
   if (roomPreview) {
     roomPreview.hidden = true;
     for (const [control, label] of [[roomButton, '聊天室'], [workButton, '工作区']]) { control.title = label; control.setAttribute('aria-label', label); }
-    for (const [control, path] of [[roomButton, 'M4 5.5h16v11H9l-4 3v-3H4z M8 9h8 M8 12h5'], [workButton, 'M4 6h6l2 2h8v11H4z M4 6V4.5h6l2 1.5']]) {
-      const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg'), shape = doc.createElementNS('http://www.w3.org/2000/svg', 'path');
-      svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true');
-      for (const [key, value] of Object.entries({ d:path, fill:'none', stroke:'currentColor', 'stroke-width':'1.7', 'stroke-linecap':'round', 'stroke-linejoin':'round' })) shape.setAttribute(key, value);
-      svg.appendChild(shape); control.appendChild(svg);
-    }
-    if (socialFloatingOnly) railTop.prepend(roomButton); else railTop.prepend(roomButton, workButton);
-    doc.body.appendChild(roomPreview);
+  }
+  for (const [control, path] of [[roomButton, 'M4 5.5h16v11H9l-4 3v-3H4z M8 9h8 M8 12h5'], [workButton, 'M4 6h6l2 2h8v11H4z M4 6V4.5h6l2 1.5'], [qqButton, 'M5 4.5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-7l-4.5 3v-3H5a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2ZM7.5 9h9m-9 3.5h5']]) {
+    if (!control) continue;
+    const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg'), shape = doc.createElementNS('http://www.w3.org/2000/svg', 'path');
+    svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true');
+    for (const [key, value] of Object.entries({ d:path, fill:'none', stroke:'currentColor', 'stroke-width':'1.7', 'stroke-linecap':'round', 'stroke-linejoin':'round' })) shape.setAttribute(key, value);
+    svg.appendChild(shape); control.appendChild(svg);
+  }
+  if (roomPreview) {
+    if (socialFloatingOnly) railTop.prepend(roomButton); else railTop.prepend(roomButton, workButton); doc.body.appendChild(roomPreview);
     doc.body.setAttribute('data-neko-chatroom-active', '');
   }
   function unmaskRoomBranch(node) {
@@ -185,6 +213,7 @@ function installWorkspaceShell(options = {}) {
   function setRoomActive(active, { closeSocial = true } = {}) {
     if (!roomPreview || disposed) return;
     if (isOfficeEdition() && active) return;
+    if (active) closeQQPage();
     if (closeSocial && sideSocial) doc.dispatchEvent(new win.Event('neko-side-surface-close'));
     if (closeSocial) { sideSocial = false; roomSelection = !!active; }
     roomActive = !!active;
@@ -201,7 +230,7 @@ function installWorkspaceShell(options = {}) {
   function sideSurfaceChanged(event) {
     const surface = event.detail?.surface;
     if (surface === 'community' || surface === 'bilibili' || surface === 'youtube') {
-      lobby?.hide();
+      closeQQPage(); lobby?.hide();
       sideSocial = true;
       setRoomActive(false, { closeSocial: false });
       roomButton?.setAttribute('aria-pressed', 'false'); workButton?.setAttribute('aria-pressed', 'false');
@@ -737,7 +766,7 @@ function installWorkspaceShell(options = {}) {
     Object.assign(next,extra);
     next.modelOpen=nativeModelOpen;
     next.chatOnly = isDailyEdition();
-    if (isDailyEdition() && !available) { next.placeholder = '创造台'; next.status = state?.reason || ''; }
+    if (isDailyEdition() && !available) { next.placeholder = '创造台'; next.status = extra.status ?? state?.reason ?? ''; }
     const compactError=!!next.modelError||!!next.status&&!/^(?:正在|已交给|准备|连接)/.test(next.status);
     if(compactError!==nativeCompactError){nativeCompactError=compactError;floatingGeometry='';schedule();}
     if (isDailyEdition()) {
@@ -1026,6 +1055,7 @@ function installWorkspaceShell(options = {}) {
     layout = visibleLayout(layout);
     const edition = isOfficeEdition() ? 'office' : 'daily';
     const editionAvatar = avatar(isOfficeEdition() ? 'devcat' : 'bigfish'); if (officeImage.getAttribute('src') !== editionAvatar) officeImage.src = editionAvatar;
+    gameStudioButton.hidden = !isOfficeEdition() || !lobby || typeof bridge.gameHub !== 'function';
     officeButton.title = isOfficeEdition() ? '开发喵 · 点击切换日常版' : '大肥鱼 · 点击切换办公版';
     officeButton.setAttribute('aria-label', '当前' + (isOfficeEdition() ? '办公版' : '日常版') + '，切换工作台版本');
     gameStudioButton.hidden = !isOfficeEdition() || !lobby || typeof bridge.gameHub !== 'function';
@@ -1038,7 +1068,8 @@ function installWorkspaceShell(options = {}) {
       const firstEdition = appliedEdition === null;
       appliedEdition = edition;
       if (isOfficeEdition()) {
-        dailyRoom = {active:roomActive, selection:roomSelection};
+        dailyRoom = {active:roomActive || !qqPage.hidden, selection:roomSelection};
+        closeQQPage();
         closeSettings(); lobby?.hide(); hideSocial(); sideSocial = false;
         setRoomActive(false, {closeSocial:false}); releaseRoomInert();
       } else if (dailyRoom) {
@@ -1256,14 +1287,6 @@ function installWorkspaceShell(options = {}) {
   doc.addEventListener('neko-workbench-open-settings',accountSettings);releases.push(()=>doc.removeEventListener('neko-workbench-open-settings',accountSettings));
   function accountLobby(event){if(disposed||!lobby)return;const detail=event.detail||{};detail.handled=true;detail.promise=(async()=>{if(isOfficeEdition()&&!await saveLayout({workbenchEdition:'daily'}))throw Error('版本切换未完成');closeSettings();hideSocial();setRoomActive(true);lobby.show({connect:detail.connect!==false});})();}
   doc.addEventListener('neko-account-open-lobby',accountLobby);releases.push(()=>doc.removeEventListener('neko-account-open-lobby',accountLobby));
-  function officeChoices() {
-    const choices = el('div', 'neko-office-choices');
-    for (const [id, name, pic] of [['dsh', 'DSH', 'bigfish'], ['codex', codexPaused() ? 'Codex · 测试中' : 'Codex', 'devcat'], ['claude', 'Claude · 待接入', 'claude']]) {
-      const b = button('', 'neko-office-choice', async () => { leaveViews(); await saveLayout({ officeMode: id }); closeSettings(); });
-      b.disabled = id === 'claude' || id === 'codex' && codexPaused(); b.setAttribute('aria-pressed', String(layout?.officeMode === id)); b.append(image(avatar(pic)), el('span', '', name)); choices.appendChild(b);
-    }
-    return choices;
-  }
   function connectionSummary() { const connected = phase => ['ready', 'connected'].includes(phase) ? '已连接' : phase === 'error' ? '连接出错' : '未连接'; return 'N.E.K.O.：' + connected(state?.neko?.connection) + ' · 工作台：' + connected(state?.workbench?.connection); }
   function displayChoices() {
     const choices = el('div', 'neko-office-choices');
@@ -1301,11 +1324,10 @@ function installWorkspaceShell(options = {}) {
     if (kind === 'display-mode') { modalBody.append(el('h3', '', '选择界面模式'), displayChoices()); return; }
     if(lobby?.panel){lobby.panel.style.visibility='hidden';lobby.panel.setAttribute('inert','');}
     if (kind !== 'seat') {
-      modalBody.append(el('h3', '', '右侧工作界面'), officeChoices());
       if (kind === 'general') {
         modalBody.append(el('h3', '', '头像与配色'));
         const palette = el('div', 'neko-workspace-palettes');
-        for (const [id, name] of [['yui','Yui'],['devcat','开发喵'],['bigfish','大肥鱼'],['gemini','Gemini 小猫']]) { const b = button('', '', () => bridge.setAvatar(id).catch(showError)); b.setAttribute('aria-label', '配色：' + name); b.title = name; b.appendChild(image(avatar(id))); palette.appendChild(b); }
+        for (const [id, name] of [['yui','Yui'],['devcat','开发喵'],['bigfish','大肥鱼'],['gemini','Gemini 小猫'],['claude','Claude娘']]) { const b = button('', '', () => bridge.setAvatar(id).catch(showError)); b.setAttribute('aria-label', '配色：' + name); b.title = name; b.appendChild(image(options.avatar?.(id, true))); palette.appendChild(b); }
         modalBody.appendChild(palette);
         modalBody.append(el('h3', '', '常用设置'));
         const common = el('div', 'neko-workspace-common');
@@ -1351,7 +1373,7 @@ function installWorkspaceShell(options = {}) {
     if (disposed) return;
     if (isDailyEdition()) {
       if (!doc.body.hasAttribute('data-neko-workspace-collapsed')) doc.body.setAttribute('data-neko-workspace-collapsed', '');
-      if (roomPreview && !sideSocial && !roomActive) setRoomActive(true, {closeSocial:false});
+      if (roomPreview && !sideSocial && !roomActive && qqPage.hidden) setRoomActive(true, {closeSocial:false});
     }
     // A valid selection snapshot with no session plus a visible DSH hero means
     // the native workspace was cleared. Global tool pages do not mount it.
@@ -1364,7 +1386,22 @@ function installWorkspaceShell(options = {}) {
     }
     const found = options.locateSidebar?.(); const root = found?.root || found?.slot || doc.querySelector('[data-slot="sidebar"]');
     const rail = doc.querySelector('[data-neko-side-rail]'), theme = rail?.querySelector('.neko-side-rail__theme');
-    if (theme && officeButton.parentNode !== theme) { if (!nativeMarks.has(theme)) nativeMarks.set(theme, new Map()); nativeMarks.get(theme).set('aria-hidden', theme.getAttribute('aria-hidden')); theme.setAttribute('aria-hidden', ''); theme.append(officeButton,gameStudioButton); }
+    const space = rail?.querySelector('.neko-side-rail__space') || null;
+    if (space !== railSpace) {
+      stopRailWalking();
+      if (railSpace) { if (railSpaceBeforeAria === null) railSpace.removeAttribute('aria-hidden'); else railSpace.setAttribute('aria-hidden', railSpaceBeforeAria); resize?.unobserve?.(railSpace); }
+      railSpace = space; railSpaceBeforeAria = space?.getAttribute('aria-hidden') ?? null; lastRailSize = '';
+      if (space) { space.setAttribute('aria-hidden', 'false'); resize?.observe(space); }
+    }
+    if (space) {
+      railCompanion.setAttribute('data-neko-rail-roam', '');
+      if (railCompanion.parentNode !== space) space.appendChild(railCompanion);
+    } else {
+      railCompanion.removeAttribute('data-neko-rail-roam');
+      railCompanion.style.removeProperty('left'); railCompanion.style.removeProperty('top'); railCompanion.style.removeProperty('transition');
+      if (rail && railCompanion.parentNode !== rail) rail.prepend(railCompanion);
+    }
+    if (theme && officeButton.parentNode !== theme) { if (!nativeMarks.has(theme)) nativeMarks.set(theme, new Map()); nativeMarks.get(theme).set('aria-hidden', theme.getAttribute('aria-hidden')); theme.setAttribute('aria-hidden', ''); theme.append(officeButton, gameStudioButton); }
     if (rail && railTop.parentNode !== rail) theme?.after(railTop);
     const mount = doc.querySelector('[data-neko-seat-mount]'); if (mount && seats.parentNode !== mount) mount.appendChild(seats);
     const nativeBrowser = doc.querySelector('[data-slot="sidebar.workspaces"]');
@@ -1630,7 +1667,7 @@ function installWorkspaceShell(options = {}) {
     event.preventDefault(); event.stopImmediatePropagation();
     if (layout?.officeMode === 'codex') newOffice(); else showStartup();
   }
-  function escape(event) { if (event.key !== 'Escape') return; if (!companionMenu.hidden) { event.preventDefault(); event.stopPropagation(); closeCompanionMenu(); } else if (!modal.hidden) { event.stopPropagation(); closeSettings(); } else if ((layout?.companionHistoryOpen || historyPeek) && dock.contains(doc.activeElement)) { event.preventDefault(); historyPeek = false; saveLayout({ companionHistoryOpen: false }); historyToggle.focus(); } else if (dock.hasAttribute('data-neko-companion-lobby') && lobbyChatOpen && dock.contains(doc.activeElement)) { event.preventDefault(); event.stopPropagation(); setLobbyChatOpen(false, true); } }
+  function escape(event) { if (event.key !== 'Escape') return; if (!companionMenu.hidden) { event.preventDefault(); event.stopPropagation(); closeCompanionMenu(); } else if (!modal.hidden) { event.stopPropagation(); closeSettings(); } else if (!qqPage.hidden && qqPage.contains(doc.activeElement)) { event.preventDefault(); closeQQPage({restoreRoom:true}); } else if ((layout?.companionHistoryOpen || historyPeek) && dock.contains(doc.activeElement)) { event.preventDefault(); historyPeek = false; saveLayout({ companionHistoryOpen: false }); historyToggle.focus(); } else if (dock.hasAttribute('data-neko-companion-lobby') && lobbyChatOpen && dock.contains(doc.activeElement)) { event.preventDefault(); event.stopPropagation(); setLobbyChatOpen(false, true); } }
   const observer = new win.MutationObserver(records => { if (records.some(record => record.type !== 'attributes' || record.attributeName !== 'style' || record.target.matches?.('[data-neko-unified-coding]') || record.target === doc.body && doc.body.hasAttribute('data-neko-flex-workspace-collapsed'))) schedule(); }); observer.observe(doc.body, { childList: true, subtree: true, attributes:true, attributeFilter:['data-neko-unified-enabled', 'data-neko-unified-coding', 'data-neko-side-social-active', 'data-neko-workspace-collapsed', 'data-neko-flex-workspace-collapsed', 'data-neko-flex-coding', 'data-neko-tools', 'style'] });
   // Observe only the dock's ancestors for inline style changes: watching every
   // style mutation would also watch our own drag/position updates.
@@ -1699,6 +1736,7 @@ function installWorkspaceShell(options = {}) {
     doc.body.removeAttribute('data-neko-room-columns');
     clearRoomCompanionGeometry();
   doc.body.removeAttribute('data-neko-workspace-shell'); doc.body.removeAttribute('data-neko-office-mode'); doc.body.removeAttribute('data-neko-workbench-edition'); delete doc.body.dataset.nekoDisplayMode;
+    setQQPageVisible(false);
     for (const n of nodes) n.remove(); style.remove();
   };
 }
@@ -1707,7 +1745,7 @@ function installWorkspaceShell(options = {}) {
 // calls, never parsed as HTML. Drafts, the reply target and picked mentions stay in this closure.
 // It never hides, inerts or rebuilds the companion dock, and degrades to nothing when bridge.lobby fails.
 function createLobbyView({ doc, bridge, el, button, image, avatar, composer, companion, onOpen, onFriendsOpen, onBack, onChange, enterInvitedRoom, onInboxState }) {
-  const MAX_TEXT = 2000, MAX_NODES = 300, MENTION = /<@([uc]):([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})>/gi;
+  const MAX_TEXT = 2000, TIME_GAP_MS = 5 * 60 * 1000, MENTION = /<@([uc]):([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})>/gi;
   const MODES = [['off', '她不参与'], ['assist', '一起回复'], ['independent', '她自己说话']];
   let snap = null, open = false, joined = false, disposed = false, error = '', replyToId = null, picked = [], picker = null, sending = false;
   let loginEpoch=0,localSigningIn=false,loginCancelPending=false,unifiedAttempt=false,unifiedLoginState=null,loginReturn=null,pauseJoin=false;
@@ -1718,6 +1756,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
   const SLOW = [[0, '关闭'], [5, '5 秒'], [10, '10 秒'], [30, '30 秒'], [60, '60 秒']];
   const MUTES = [[10, '禁言 10 分钟'], [60, '禁言 1 小时'], [1440, '禁言 24 小时']];
   let draft = C ? C.create() : null, assistOpen = false, menuFor = null, dialog = null, lastMode = null, nudgeSeen = null, membersKey = '', cardKey = '';
+  let browsingHistory = false, loadingOlder = false, messageMenuAnchor = null;
   const rows = new Map();
   const svg = (tag, attrs) => { const n = doc.createElementNS('http://www.w3.org/2000/svg', tag); for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v); return n; };
   const railButton = button('', 'neko-side-rail__button neko-lobby-switch', () => toggle());
@@ -1736,20 +1775,53 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
   const gameShareButton = button('联机游戏', 'neko-lobby-game-share', () => openDialog('game')); gameShareButton.setAttribute('aria-haspopup', 'dialog');
   const catSettingsButton = button('猫猫设置', 'neko-lobby-cat-settings', () => openDialog('cat')); catSettingsButton.setAttribute('aria-haspopup', 'dialog');
   const adminButton = button('管理', 'neko-lobby-admin-open', () => openDialog('admin')); adminButton.setAttribute('aria-haspopup', 'dialog'); adminButton.dataset.admin = '';
-  headerActions.append(membersToggle, gameShareButton, catSettingsButton, signOut);
+  const historyButton = button('', 'neko-lobby-history', () => {
+    if (browsingHistory) {
+      browsingHistory = false;
+      log.scrollTop = log.scrollHeight;
+      renderHistory();
+    } else {
+      log.scrollTop = 0;
+      void loadOlder();
+    }
+  });
+  const historyIcon = svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' });
+  historyIcon.appendChild(svg('path', { d: 'M3 10a9 9 0 1 1 1 7M3 5v5h5m4-3v5l3 2', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.6', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }));
+  historyButton.appendChild(historyIcon);
+  headerActions.append(membersToggle, gameShareButton, catSettingsButton, signOut, historyButton);
   header.append(back, title, topic, onlineCount, headerActions);
   const gate = el('div', 'neko-lobby-gate'), gateText = el('p', 'neko-lobby-gate__text');
   const signIn = button(typeof bridge.nekoSignIn==='function'?'一键登录 N.E.K.O.':'登录频道', 'neko-lobby-sign-in', () => {void beginSignIn();});
   const signInCancel = button('取消登录', 'neko-lobby-sign-in-cancel', () => {void cancelSignIn();});
   const reconnect = button('重新连接', 'neko-lobby-reconnect', () => join(true));
   gate.append(gateText, signIn, signInCancel, reconnect);
-  const older = button('加载更早消息', 'neko-lobby-older', () => call({ action: 'load-older' }));
-  const log = el('div', 'neko-lobby-log'); log.setAttribute('role', 'log'); log.setAttribute('aria-live', 'polite'); log.setAttribute('aria-label', '频道消息'); log.tabIndex = 0;
+  const historyStatus = el('div', 'neko-lobby-history-status'); historyStatus.setAttribute('role', 'status'); historyStatus.hidden = true;
+  const log = el('div', 'neko-lobby-log'); log.id = 'neko-lobby-log'; log.setAttribute('role', 'log'); log.setAttribute('aria-live', 'polite'); log.setAttribute('aria-label', '频道消息'); log.tabIndex = 0;
+  historyButton.setAttribute('aria-controls', log.id);
+  log.addEventListener('scroll', () => {
+    closeMessageMenu();
+    if (log.scrollTop <= 12 && log.scrollHeight > log.clientHeight && snap?.hasMore) void loadOlder();
+  });
+  log.addEventListener('wheel', event => { if (event.deltaY < 0 && log.scrollTop <= 12 && snap?.hasMore) void loadOlder(); }, { passive: true });
+  log.addEventListener('keydown', event => {
+    if (event.target === log && ['ArrowUp', 'PageUp', 'Home'].includes(event.key) && log.scrollTop <= 12 && snap?.hasMore) void loadOlder();
+  });
   const empty = el('p', 'neko-lobby-empty', '还没有消息，来打个招呼吧');
   const middle = el('div', 'neko-lobby-middle'), stream = el('div', 'neko-lobby-stream');
   const members = el('aside', 'neko-lobby-members'); members.id = 'neko-lobby-members'; members.setAttribute('aria-label', '频道成员');
   const membersTitle = el('h3', 'neko-lobby-members__title', '成员'), memberList = el('ul', 'neko-lobby-member-list');
-  members.append(membersTitle, memberList); stream.append(older, log); middle.append(stream, members);
+  members.append(membersTitle, memberList); stream.append(log, historyStatus); middle.append(stream, members);
+  const messageMenu = el('div', 'neko-lobby-message-menu'); messageMenu.id = 'neko-lobby-message-menu'; messageMenu.hidden = true;
+  messageMenu.setAttribute('role', 'group'); messageMenu.setAttribute('aria-label', '消息操作');
+  const dismissMessageMenu = event => {
+    if (!messageMenu.hidden && !messageMenu.contains(event.target) && !messageMenuAnchor?.contains(event.target)) closeMessageMenu();
+  };
+  doc.addEventListener('pointerdown', dismissMessageMenu);
+  doc.addEventListener('focusin', dismissMessageMenu);
+  messageMenu.addEventListener('keydown', event => {
+    if (event.key !== 'Escape') return;
+    event.preventDefault(); event.stopPropagation(); closeMessageMenu(true);
+  });
   // Private negotiation box: local to this machine, nothing in it is sent to the channel.
   const assist = el('section', 'neko-lobby-assist'); assist.hidden = true; assist.setAttribute('aria-label', '和她私下商量（只有你能看到）');
   const nudgeLine = el('div', 'neko-lobby-nudge'), nudgeText = el('span', 'neko-lobby-nudge__text'); nudgeLine.setAttribute('role', 'status'); nudgeLine.hidden = true;
@@ -1801,7 +1873,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
   marker.title = '采用过她的建议，发出后别人会看到「人＋AI 共同回复」。清空输入框后标记消失。';
   const formFooter = el('div', 'neko-lobby-form-footer'), counter = el('span', 'neko-lobby-counter', '0 / ' + MAX_TEXT);
   formFooter.append(marker, counter, send); form.append(replyBar, choiceBar, undoBar, pickerList, input, formFooter);
-  panel.append(header, gate, middle, notice, modeBar, assist, form); doc.body.appendChild(panel);
+  panel.append(header, gate, middle, notice, modeBar, assist, form, messageMenu); doc.body.appendChild(panel);
 
   const connection = () => snap?.connection || 'unconfigured';
   const connected = () => !['unconfigured', 'signed-out'].includes(connection());
@@ -1822,6 +1894,24 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     error = result?.ok === false && typeof result.error === 'string' ? result.error : '';
     render();
     return result;
+  }
+  function renderHistory() {
+    const label = browsingHistory ? '返回最新消息' : '聊天记录';
+    historyButton.title = label;
+    historyButton.setAttribute('aria-label', label);
+    historyButton.setAttribute('aria-pressed', String(browsingHistory));
+    historyButton.hidden = connection() !== 'online';
+    historyStatus.textContent = loadingOlder ? '正在加载更早的消息…' : snap?.historyCapped ? '已达到本次浏览上限' : '';
+    historyStatus.hidden = !browsingHistory || !historyStatus.textContent;
+  }
+  async function loadOlder() {
+    if (!open || connection() !== 'online') return;
+    browsingHistory = true;
+    if (loadingOlder || !snap?.hasMore || snap.historyCapped) { renderHistory(); return; }
+    loadingOlder = true;
+    renderHistory();
+    try { await call({ action: 'load-older' }); }
+    finally { loadingOlder = false; if (!disposed) renderHistory(); }
   }
   const unifiedBusy=()=>['checking','community','chatroom'].includes(unifiedLoginState?.status);
   // connected: both official grants exist but one principal is unproven. It is
@@ -1876,8 +1966,8 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     catch{if(!disposed)error='授权暂未取消，请重试或关闭授权窗口。';}
     finally{unifiedAttempt=false;loginCancelPending=false;if(!disposed)render();}
   }
-  function show({connect=true}={}) { if(disposed)return;if(open){if(connect&&pauseJoin){pauseJoin=false;join();}return;}pauseJoin=!connect;onOpen?.(); open = true; panel.hidden = false; railButton.setAttribute('aria-expanded', 'true'); render(); join(); onChange?.(); input.focus?.(); }
-  function hide() { if (!open) return; open = false; panel.hidden = true; panel.removeAttribute('data-members-open'); membersToggle.setAttribute('aria-expanded', 'false'); railButton.setAttribute('aria-expanded', 'false'); closePicker(); if (joined) { joined = false; call({ action: 'close' }); } onChange?.(); }
+  function show({connect=true}={}) { if(disposed)return;if(open){if(connect&&pauseJoin){pauseJoin=false;join();}return;}pauseJoin=!connect;onOpen?.(); open = true; panel.hidden = false; railButton.setAttribute('aria-expanded', 'true'); render(); log.scrollTop = log.scrollHeight; join(); onChange?.(); input.focus?.(); }
+  function hide() { if (!open) return; open = false; browsingHistory = false; closeMessageMenu(); panel.hidden = true; panel.removeAttribute('data-members-open'); membersToggle.setAttribute('aria-expanded', 'false'); railButton.setAttribute('aria-expanded', 'false'); closePicker(); if (joined) { joined = false; call({ action: 'close' }); } onChange?.(); }
   function toggle() { if (open) hide(); else show(); }
   // ---- names and labels (style follows author.kind / origin only, never the name) ----
   function memberName(kind, id) {
@@ -1894,14 +1984,11 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     return author.user_id && author.user_id === meId() ? '我' : author.display_name || author.name || '成员';
   }
   function originLabel(origin, label, author) {
-    const mine = author && (author.kind === 'cat' ? ownCat(author) : !!meId() && author.user_id === meId());
-    if (mine && origin === 'human') return '我';
-    if (mine && origin === 'human_ai') return '人＋AI 共同回复 · 我与' + (author.assist_cat?.name || '猫猫');
-    if (mine && origin === 'cat') return 'AI 独立发言 · 我的' + (author.name || '猫猫');
-    if (typeof label === 'string' && label) return label;
-    if (origin === 'cat') return 'AI 独立发言 · ' + authorName(author);
-    if (origin === 'human_ai') return '人＋AI 共同回复 · ' + authorName(author) + '与' + (author?.assist_cat?.name || '猫猫');
-    return authorName(author);
+    if (author) {
+      const name = authorName(author);
+      return origin === 'human_ai' ? name + '与' + (author.assist_cat?.name || '猫猫') : name;
+    }
+    return typeof label === 'string' && label ? label.replace(/^(?:AI 独立发言|人＋AI 共同回复)\s*·\s*/, '') : '成员';
   }
   const findMessage = id => (snap?.messages || []).find(m => m.id === id) || null;
   function quoteLabel(reply) {
@@ -1937,44 +2024,58 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     meta.appendChild(el('span', 'neko-lobby-label', originLabel(m.origin, m.label, m.author)));
     if (m.origin === 'cat') meta.appendChild(el('span', 'neko-lobby-badge', '🐾 猫猫'));
     else if (m.origin === 'human_ai') meta.appendChild(el('span', 'neko-lobby-badge neko-lobby-badge--assist', '人＋AI 🐾'));
-    if (Number.isFinite(m.created_at)) { const time = el('time', 'neko-lobby-time', new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })); time.dateTime = new Date(m.created_at).toISOString(); meta.appendChild(time); }
     body.appendChild(meta);
+    const bubble = el('div', 'neko-lobby-bubble');
+    if (Number.isFinite(m.created_at)) bubble.title = new Date(m.created_at).toLocaleString('zh-CN', { hour12: false });
     if (m.reply_to) {
       const quote = el('blockquote', 'neko-lobby-quote'), source = findMessage(m.reply_to.id);
       quote.dataset.origin = m.reply_to.origin || 'human';
       quote.append(el('span', 'neko-lobby-quote__label', '回复 ' + quoteLabel(m.reply_to)));
       if (source) quote.appendChild(source.deleted ? el('span', 'neko-lobby-deleted', '消息已删除') : richText(Array.from(source.text || '').slice(0, 80).join(''), 'neko-lobby-quote__text'));
-      body.appendChild(quote);
+      bubble.appendChild(quote);
     }
-    if (m.deleted) body.appendChild(el('p', 'neko-lobby-deleted', '消息已删除'));
+    const invite = !m.deleted && typeof bridge.gameHub === 'function'
+      ? /^(?:来一起玩「([^\r\n]{1,80})」：)?(https:\/\/(?:[a-z0-9-]+\.trycloudflare\.com|play\.nekofans\.games)\/\?room=[A-Za-z0-9_-]{24})$/.exec((m.text || '').trim())
+      : null;
+    if (invite) {
+      const [, title, inviteUrl] = invite;
+      if (title) bubble.appendChild(el('span','neko-lobby-game-invite-title',title));
+      bubble.appendChild(button('加入游戏','neko-lobby-game-join',()=>openDialog('game-room',inviteUrl)));
+    } else {
+      bubble.appendChild(m.deleted ? el('p', 'neko-lobby-deleted', '消息已删除') : richText(m.text, 'neko-lobby-text'));
+    }
+    body.appendChild(bubble);
+    const pic = avatarNode(m.author);
+    if (m.deleted) row.append(pic, body);
     else {
-      body.appendChild(richText(m.text, 'neko-lobby-text'));
-      const actions = el('div', 'neko-lobby-actions'), reply = button('回复', 'neko-lobby-reply-to', () => setReply(m.id));
-      const invite = /^来一起玩「[^\r\n]{1,80}」：(https:\/\/(?:[a-z0-9-]+\.trycloudflare\.com|play\.nekofans\.games)\/\?room=[A-Za-z0-9_-]{24})$/.exec(m.text || '');
-      if (invite && typeof bridge.gameHub === 'function') actions.appendChild(button('在工作台加入', 'neko-lobby-game-join', () => openDialog('game-room', invite[1])));
-      reply.setAttribute('aria-label', '回复 ' + originLabel(m.origin, m.label, m.author)); actions.appendChild(reply);
-      if (assistOn() && !row.dataset.mine) {
-        const help = button('请她帮我回', 'neko-lobby-assist-this', () => requestAssist(m.id));
-        help.setAttribute('aria-label', '请她帮我回 ' + originLabel(m.origin, m.label, m.author)); actions.appendChild(help);
-      }
-      const remove = deleteButton(m); if (remove) actions.appendChild(remove);
-      body.appendChild(actions);
+      const anchor = button('', 'neko-lobby-message-avatar', () => openMessageMenu(m.id, anchor));
+      anchor.setAttribute('aria-label', authorName(m.author) + '的消息操作');
+      anchor.setAttribute('aria-controls', messageMenu.id);
+      anchor.setAttribute('aria-expanded', 'false');
+      anchor.appendChild(pic);
+      anchor.addEventListener('contextmenu', event => { event.preventDefault(); openMessageMenu(m.id, anchor); });
+      anchor.addEventListener('keydown', event => {
+        if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return;
+        event.preventDefault(); openMessageMenu(m.id, anchor);
+      });
+      row.append(anchor, body);
     }
-    row.append(avatarNode(m.author), body);
     return row;
   }
   function outboxRow(entry) {
     const row = el('article', 'neko-lobby-message neko-lobby-message--outbox'); row.dataset.outbox = entry.status; row.dataset.mine = 'true'; row.dataset.origin = entry.origin || 'human';
     const body = el('div', 'neko-lobby-message__body'), meta = el('div', 'neko-lobby-message__meta');
-    meta.appendChild(el('span', 'neko-lobby-label', entry.origin === 'human_ai' ? '人＋AI 共同回复 · 我与' + (snap?.me?.cat?.name || '猫猫') : '我'));
-    body.append(meta, richText(entry.text, 'neko-lobby-text'));
+    meta.appendChild(el('span', 'neko-lobby-label', entry.origin === 'human_ai' ? '我与' + (snap?.me?.cat?.name || '猫猫') : '我'));
+    if (entry.origin === 'human_ai') meta.appendChild(el('span', 'neko-lobby-badge neko-lobby-badge--assist', '人＋AI 🐾'));
+    const bubble = el('div', 'neko-lobby-bubble'); bubble.appendChild(richText(entry.text, 'neko-lobby-text'));
+    body.append(meta, bubble);
     const state = el('div', 'neko-lobby-actions');
     if (entry.status === 'failed') {
       state.append(el('span', 'neko-lobby-failed', entry.error || '发送失败'),
         button('重试', 'neko-lobby-retry', () => call({ action: 'send-retry', clientMessageId: entry.clientMessageId })),
         button('放弃', 'neko-lobby-discard', () => call({ action: 'send-discard', clientMessageId: entry.clientMessageId })));
     } else state.appendChild(el('span', 'neko-lobby-pending', '发送中…'));
-    body.appendChild(state); row.append(avatarNode({ kind: 'human', avatar: snap?.me?.avatar }), body);
+    bubble.appendChild(state); row.append(avatarNode({ kind: 'human', avatar: snap?.me?.avatar }), body);
     return row;
   }
   // ---- composer: reply target, @ picker, Enter to send ----
@@ -2017,11 +2118,17 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
   }
   function choose(index) {
     const item = picker?.items[index]; if (!item) return;
-    const text = '@' + item.name + ' ', value = input.value.slice(0, picker.start) + text + input.value.slice(picker.end);
-    if (Array.from(value).length > MAX_TEXT) { closePicker(); return; }
-    input.value = value; const caret = picker.start + text.length; input.setSelectionRange?.(caret, caret);
+    insertMention(item, picker.start, picker.end);
+  }
+  function insertMention(item, start, end) {
+    const prefix = start > 0 && !/\s/.test(input.value[start - 1]) ? ' ' : '';
+    const text = prefix + '@' + item.name + ' ', value = input.value.slice(0, start) + text + input.value.slice(end);
+    closePicker();
+    if (Array.from(value).length > MAX_TEXT) return;
+    input.value = value; const caret = start + text.length; input.setSelectionRange?.(caret, caret);
     if (!picked.some(p => p.kind === item.kind && p.id === item.id)) picked.push(item);
-    closePicker(); renderCounter();
+    if (C) { draft = C.edit(draft, input.value); renderDraft(); }
+    renderCounter();
   }
   /** Picked @name text becomes a <@u:…>/<@c:…> token at send time; unpicked @text stays plain text. */
   function encode(text) {
@@ -2147,10 +2254,52 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
   function deleteButton(m) {
     const own = m.author?.kind === 'human' && ownHuman(m.author);
     if (!own && !isAdmin()) return null;
-    const b = confirmButton('删除', '确认删除', 'neko-lobby-delete', () => call({ action: 'admin-delete', messageId: m.id }));
+    const b = confirmButton('删除消息', '确认删除', 'neko-lobby-delete', () => { closeMessageMenu(true); void call({ action: 'admin-delete', messageId: m.id }); });
     if (!own) b.dataset.admin = '';
     b.setAttribute('aria-label', '删除这条消息');
     return b;
+  }
+  function closeMessageMenu(restoreFocus = false) {
+    const anchor = messageMenuAnchor;
+    if (!anchor) return;
+    messageMenuAnchor = null;
+    messageMenu.hidden = true;
+    messageMenu.replaceChildren();
+    anchor.setAttribute('aria-expanded', 'false');
+    if (restoreFocus && anchor.isConnected) anchor.focus({ preventScroll: true });
+  }
+  function openMessageMenu(id, anchor) {
+    const wasOpen = messageMenuAnchor === anchor;
+    closeMessageMenu();
+    const m = findMessage(id);
+    if (wasOpen || !m || m.deleted || connection() !== 'online') return;
+    if (!input.disabled) {
+      messageMenu.appendChild(button('回复', 'neko-lobby-reply-to', () => { closeMessageMenu(); setReply(id); }));
+      const cat = m.author?.kind === 'cat', memberId = cat ? m.author.cat_id : m.author?.user_id;
+      const member = memberId && (snap?.members || []).find(person => cat ? person.cat_id === memberId : person.kind === 'human' && person.user_id === memberId);
+      if (member && (cat || !ownHuman(member))) {
+        messageMenu.appendChild(button('@ 提及', 'neko-lobby-mention-to', () => {
+          closeMessageMenu();
+          insertMention({ kind: cat ? 'c' : 'u', id: memberId, name: authorName(member) }, input.selectionStart, input.selectionEnd);
+          input.focus();
+        }));
+      }
+      if (assistOn() && !ownHuman(m.author) && !ownCat(m.author)) {
+        messageMenu.appendChild(button('请她帮我回', 'neko-lobby-assist-this', () => { closeMessageMenu(); requestAssist(id); }));
+      }
+    }
+    const remove = deleteButton(m);
+    if (remove) messageMenu.appendChild(remove);
+    if (!messageMenu.childElementCount) return;
+    messageMenuAnchor = anchor;
+    anchor.setAttribute('aria-expanded', 'true');
+    messageMenu.hidden = false;
+    const bounds = panel.getBoundingClientRect(), at = anchor.getBoundingClientRect();
+    const left = ownHuman(m.author) ? at.right - messageMenu.offsetWidth : at.left;
+    const top = at.bottom + messageMenu.offsetHeight + 10 <= bounds.bottom ? at.bottom + 4 : at.top - messageMenu.offsetHeight - 4;
+    messageMenu.style.left = Math.max(6, Math.min(left - bounds.left, panel.clientWidth - messageMenu.offsetWidth - 6)) + 'px';
+    messageMenu.style.top = Math.max(6, top - bounds.top) + 'px';
+    messageMenu.firstElementChild.focus({ preventScroll: true });
   }
   const mutedNow = m => Number.isFinite(m.muted_until) && m.muted_until > Date.now();
   function memberMenu(m) {
@@ -2222,6 +2371,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
   }
   function closeDialog() { if (!dialog) return; const from = dialog.from; dialog.cleanup?.(); dialog.node.remove(); dialog = null; from?.focus?.(); onChange?.(); }
   function openDialog(kind, inviteUrl, enterRoom, notice) {
+    closeMessageMenu();
     closeDialog();
     if (kind === 'admin' && !isAdmin()) return;
     const node = el('div', 'neko-lobby-dialog'), box = el('form', 'neko-lobby-dialog__card');
@@ -2896,24 +3046,60 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     reason.textContent = bridge?.connected && bridge.error ? bridge.error : !part.available ? part.reason || '' : bridge?.connected ? '外部 Agent 已连接 · 被真人 @ 时回复' : ''; reason.hidden = !reason.textContent;
   }
   let identityKey = '';
+  function timeGroup(timestamp) {
+    const date = new Date(timestamp), today = new Date(), yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+    let day = '';
+    if (date.toDateString() === yesterday.toDateString()) day = '昨天 ';
+    else if (date.toDateString() !== today.toDateString()) {
+      day = (date.getFullYear() !== today.getFullYear() ? date.getFullYear() + '年' : '') + (date.getMonth() + 1) + '月' + date.getDate() + '日 ';
+    }
+    return day + date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+  }
   function renderLog() {
     const key = JSON.stringify([meId(), isAdmin(), assistOn(), (snap?.members || []).map(m => [m.kind, m.user_id || m.cat_id, m.name, m.display_name])]);
-    if (key !== identityKey) { identityKey = key; rows.clear(); }
+    if (key !== identityKey) { identityKey = key; rows.clear(); closeMessageMenu(); }
     const messages = snap?.messages || [], outbox = (snap?.outbox || []).filter(e => e.kind === 'human');
+    const oldNodes = [...log.children];
+    const oldTimes = new Map(oldNodes.filter(node => node.dataset.before).map(node => [node.dataset.before, node]));
     const nodes = [];
     const live = new Set();
+    let previous = null;
     for (const m of messages) {
       const rowKey = JSON.stringify(m) + (m.reply_to ? JSON.stringify(findMessage(m.reply_to.id)) : '');
       let cached = rows.get(m.id);
       if (!cached || cached.key !== rowKey) { cached = { key: rowKey, node: messageRow(m) }; rows.set(m.id, cached); }
+      const stamp = m.created_at;
+      if (Number.isFinite(stamp)) {
+        if (previous === null || stamp - previous >= TIME_GAP_MS || new Date(stamp).toDateString() !== new Date(previous).toDateString()) {
+          const time = oldTimes.get(m.id) || el('time', 'neko-lobby-time');
+          const label = timeGroup(stamp);
+          if (time.textContent !== label) time.textContent = label;
+          time.dataset.before = m.id;
+          time.dateTime = new Date(stamp).toISOString();
+          nodes.push(time);
+        }
+        previous = stamp;
+      }
       live.add(m.id); nodes.push(cached.node);
     }
     for (const id of [...rows.keys()]) if (!live.has(id)) rows.delete(id);
     for (const entry of outbox) nodes.push(outboxRow(entry));
-    const shown = nodes.slice(-MAX_NODES);
-    const bottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
-    log.replaceChildren(...(shown.length ? shown : [empty]));
+    if (!nodes.length) nodes.push(empty);
+    if (nodes.length === oldNodes.length && nodes.every((node, index) => node === oldNodes[index])) return;
+    const bottom = !browsingHistory && log.scrollHeight - log.scrollTop - log.clientHeight < 40;
+    const wanted = new Set(nodes), top = log.getBoundingClientRect().top;
+    const anchor = !bottom && oldNodes.find(node => node.dataset.id && wanted.has(node) && node.getBoundingClientRect().bottom > top);
+    const anchorTop = anchor && anchor.getBoundingClientRect().top;
+    for (const node of oldNodes) if (!wanted.has(node)) node.remove();
+    let cursor = log.firstChild;
+    for (const node of nodes) {
+      if (node === cursor) cursor = cursor.nextSibling;
+      else log.insertBefore(node, cursor);
+    }
     if (bottom) log.scrollTop = log.scrollHeight;
+    else if (anchor) log.scrollTop += anchor.getBoundingClientRect().top - anchorTop;
+    if (messageMenuAnchor && !messageMenuAnchor.isConnected) closeMessageMenu();
   }
   function render() {
     if (disposed) return;
@@ -2927,12 +3113,14 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     gateText.textContent = conn === 'unconfigured' ? (auth.message || '频道服务未配置。') : conn === 'signed-out' ? (signingIn ? (unifiedBusy()&&unifiedLoginState.message|| (typeof bridge.nekoSignIn==='function'?'请完成 N.E.K.O. 官方登录与聊天室授权…':'请在浏览器里完成社区账号授权…')) : auth.message || '登录后即可进入频道。')
       : conn === 'connecting' ? '正在连接频道…' : '频道暂时连不上，私聊不受影响。';
     signIn.hidden = conn !== 'signed-out' || signingIn;signIn.disabled=signingIn;signInCancel.hidden = !(conn === 'signed-out' && signingIn);signInCancel.disabled=loginCancelPending; reconnect.hidden = conn !== 'offline';
-    older.hidden = conn !== 'online' || !snap?.hasMore;
+    if (conn !== 'online') { browsingHistory = false; closeMessageMenu(); }
+    renderHistory();
     renderLog();
     const muted = Number.isFinite(snap?.me?.muted_until) && snap.me.muted_until > Date.now(), banned = !!snap?.me?.banned_at;
     input.disabled = conn !== 'online' || muted || banned; send.disabled = input.disabled || sending;
     input.placeholder = banned ? '你已被频道封禁' : muted ? '你正在禁言中' : conn === 'online' ? '在频道里说点什么… Enter 发送，Shift+Enter 换行，@ 提及成员' : '连接频道后才能发言';
     if (replyToId && !findMessage(replyToId)) setReply(null);
+    gameShareButton.hidden = conn !== 'online' || !snap?.me || typeof bridge.gameHub !== 'function';
     notice.textContent = error || snap?.error || ''; notice.hidden = !notice.textContent;
     // An identity change discards any open form drafted for the previous owner.
     if (dialog && dialog.owner !== meId()) closeDialog();
@@ -2974,7 +3162,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     if (disposed) return;
     ++loginEpoch;
     if (joined) { joined = false; try { Promise.resolve(bridge.lobby({ action: 'close' })).catch(() => {}); } catch {} }
-    disposed = true;loginReturn=null;clearTimeout(inboxTimer);doc.defaultView.clearInterval(inviteStatusTimer); if (typeof release === 'function') release();if(typeof releaseNeko==='function')releaseNeko(); rows.clear(); if (dialog) { dialog.cleanup?.(); dialog.node.remove(); dialog = null; } panel.remove(); railButton.remove();
+    disposed = true;loginReturn=null;clearTimeout(inboxTimer);doc.defaultView.clearInterval(inviteStatusTimer); if (typeof release === 'function') release();if(typeof releaseNeko==='function')releaseNeko(); rows.clear(); if (dialog) { dialog.cleanup?.(); dialog.node.remove(); dialog = null; } doc.removeEventListener('pointerdown', dismissMessageMenu); doc.removeEventListener('focusin', dismissMessageMenu); panel.remove(); railButton.remove();
   }
   return { panel, railButton, show, hide, isOpen: () => open, dialogOpen: () => !!dialog, place, renderStatus,
     openFriends,openGameInbox,

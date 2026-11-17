@@ -46,7 +46,11 @@ test('room selector opens the private view, shares history, inserts emoji and pr
  const view=w.createFishDateView({doc:d,bridge,avatar:()=>png});const panel=w.createChatroomPreview(d,()=>png,{mountHome:async()=>()=>{},createFishDate:()=>view.panel,onDateVisibility:open=>view.setOpen(open)});d.body.append(panel);panel.setSplit(true);
  const choices=[...d.querySelectorAll('.neko-chatroom-preview__room')];assert.match(choices[1].textContent,/我的小窝/);assert.match(choices[2].textContent,/肥鱼有约.*和她谈心/);
  choices[2].click();view.update({backend:'deepseek-account',ready:true,messages:[],working:false});await new Promise(r=>setTimeout(r,30));assert.equal(panel.dataset.roomView,'date');assert(!view.panel.hidden);assert.match(view.panel.textContent,/桌面上之前的聊天/);
- const input=d.querySelector('.neko-fish-date__form input');assert.equal(input.type,'text');d.querySelector('[aria-label="插入 😊"]').click();assert.equal(input.value,'😊');
+ const input=d.querySelector('.neko-fish-date__form input');assert.equal(input.type,'text');
+ const picker=view.panel.querySelector('.neko-fish-date__picker');assert(picker.hidden);
+ view.panel.querySelector('[aria-label="表情包和 emoji"]').click();assert(!picker.hidden);
+ const smile=[...picker.querySelectorAll('button')].find(button=>button.getAttribute('aria-label')==='插入 😊');
+ assert(smile);smile.click();assert.equal(input.value,'😊');
  input.value='和她谈心';fail=true;d.querySelector('.neko-fish-date__form').dispatchEvent(new w.Event('submit',{cancelable:true}));await new Promise(r=>setTimeout(r,20));assert.equal(input.value,'和她谈心');assert.match(view.panel.textContent,/连接断开/);
  panel.showRooms();assert(view.panel.hidden);view.dispose();panel.disposeHome();
 });

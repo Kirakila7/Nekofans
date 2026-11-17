@@ -10,7 +10,8 @@ const vm = require('node:vm');
 // can each be driven independently, including out-of-order asynchronous replies.
 function fixture(options = {}) {
   let current, entry;
-  const listeners = new Set(), calls = [], scripts = [], modules = [], timers = new Map();
+  const listeners = new Set(), calls = [], scripts = [], modules = [], timers = new Map(), documentListeners = new Map();
+  let qqMount = null;
   let timerId = 0;
   const initial = options.initial || { selection: { fish: true, qqbot: false }, fish: { phase: 'paused', enabled: false }, qqbot: { phase: 'paused', enabled: false }, unified: false, overall: 'idle' };
   let saved = initial;
@@ -24,9 +25,11 @@ function fixture(options = {}) {
       return saved;
     },
     qqbot: options.qqbot || (async () => initial.qqbot),
+    companion: options.companion,
   };
   const window = { nekoWorkbench: bridge, __ModuleLoader__: { load(value) { entry = value; } }, addEventListener() {}, removeEventListener() {} };
-  const document = { body: {}, head: { appendChild(node) { scripts.push(node); } }, getElementById: () => ({}),
+  const document = { body: {}, querySelector: selector => selector === '[data-neko-qq-page]:not([hidden])' ? qqMount : null,
+    addEventListener(type, fn) { documentListeners.set(type, fn); }, removeEventListener(type) { documentListeners.delete(type); }, head: { appendChild(node) { scripts.push(node); } }, getElementById: () => ({}),
     createElement(tag) { return { tag, remove() { scripts.splice(scripts.indexOf(this), 1); } }; } };
   const React = {
     Fragment: Symbol('fragment'),
@@ -55,6 +58,7 @@ function fixture(options = {}) {
       }
     },
   };
+  React.useLayoutEffect = React.useEffect;
   function OfficialPanel() {}
   const sandbox = { window, document,
     fetch: options.fetch || (async () => ({ ok: true, json: async () => ({ config: {}, state: initial.fish }) })),
@@ -85,7 +89,8 @@ function fixture(options = {}) {
     return owner;
   }
   return { api, mount, bridge, calls, scripts, modules, timers, listeners, OfficialPanel,
-    emit(value) { for (const listener of listeners) listener(value); } };
+    emit(value) { for (const listener of listeners) listener(value); },
+    navigateQQ(mount) { qqMount = mount; documentListeners.get('neko-qq-page-change')?.(); } };
 }
 function nodes(node) { return node && typeof node === 'object' ? [node, ...(node.children || []).flatMap(nodes)] : []; }
 function visibleNodes(node) {
@@ -274,4 +279,29 @@ test('automatic B站 QR is cancelled on pause, rejects the late QR, and can rest
   assert.equal(requests.filter(item => item.url.endsWith('/start')).length, 2);
   assert.ok(find(owner, node => node.type === 'img'));
   owner.unmount();
+});
+
+test('QQ history mounts in the sidebar page, loads only the scoped route and stops refreshing on exit',async()=>{
+  const calls=[];
+  const f=fixture({companion:async request=>{
+    calls.push(request.action);
+    return [{id:'q1',role:'user',createdAt:1000,text:'手机发来的消息'},
+      {id:'q2',role:'assistant',createdAt:2000,text:'接着聊'}];
+  }});
+  const launcher=f.mount(f.api.FishLauncher);await launcher.settle();open(launcher);
+  assert.equal(tab(launcher,'QQ 会话'),undefined);
+  assert.equal(find(launcher,node=>node.type===f.api.QQChatPage),undefined);
+  f.navigateQQ({});
+  assert(find(launcher,node=>node.type===f.api.QQChatPage));
+  const page=f.mount(f.api.QQChatPage,{state:{connected:true}});
+  await page.settle();
+  assert.equal(find(page,node=>node.props.role==='log').props['aria-label'],'QQ 私聊消息');
+  assert.match(text(page.tree),/手机发来的消息/);
+  assert.match(text(page.tree),/接着聊/);
+  assert.deepEqual(calls,['qq-history']);
+  assert.equal(f.timers.size,1);
+  f.navigateQQ(null);
+  assert.equal(find(launcher,node=>node.type===f.api.QQChatPage),undefined);
+  page.unmount();launcher.unmount();
+  assert.equal(f.timers.size,0);
 });

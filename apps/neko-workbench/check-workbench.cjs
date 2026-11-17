@@ -36,6 +36,7 @@ try{
   const recorded=calls.map(args=>args.map(value=>value&&typeof value==='object'?JSON.parse(JSON.stringify(value)):value));
   assert.deepEqual(recorded,[
     ['workbench:call','state',undefined],
+    ['workbench:call','feedback',{action:'status'}],
     ['workbench:call','avatar','yui'],
     ['workbench:call','upload-avatar',undefined],
     ['workbench:call','action','neko-settings'],

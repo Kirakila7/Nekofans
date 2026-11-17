@@ -287,6 +287,34 @@ test('mode-set updates settings and notifies cat', async () => {
   assert.equal(snap.catSettings.independentTrigger, 'owner_or_mention');
 });
 
+test('saving independent mode in a restricted lobby uses the permitted reply mode', async t => {
+  const dir = await fs.promises.mkdtemp(os.tmpdir() + '/lobby-restore-');
+  t.after(() => fs.promises.rm(dir, { recursive: true, force: true }));
+  await fs.promises.writeFile(dir + '/cat.json', JSON.stringify({
+    ...defaultSettings(), mode: 'independent', independentTrigger: 'free',
+  }));
+  const registrations = [];
+  const { controller, clock } = setup({ dataDir: dir, provider: fakeProvider(), onClient(client) {
+    client.setChannel({ id: CH, name: '大厅', cats_enabled: true, cat_free_mode_allowed: false });
+    const putCat = client.rest.putCat;
+    client.rest.putCat = input => {
+      registrations.push(input);
+      if (input.replyMode === 'free') throw new Error('cat_mode_not_allowed');
+      return putCat(input);
+    };
+  } });
+  t.after(() => controller.dispose());
+  await controller.request({ action: 'sign-in' });
+  await controller.request({ action: 'open' });
+  await clock.advance(100);
+  assert.deepEqual(registrations, []);
+  assert.equal((await controller.request({ action: 'cat-save' })).ok, true);
+  const snap = controller.snapshot();
+  assert.deepEqual(registrations.map(({enabled,replyMode}) => [enabled,replyMode]), [[true,'owner_or_mention']]);
+  assert.equal(snap.catSettings.independentTrigger, 'free');
+  assert.equal(snap.participation.available, true);
+});
+
 test('admin actions require is_admin', async () => {
   const { controller, clock } = setup();
   await controller.request({ action: 'sign-in' });

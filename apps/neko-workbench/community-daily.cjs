@@ -4,6 +4,11 @@ const {atomicBytes}=require('./main-chat-secret.cjs');
 const dayOf=time=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(time);
 const digest=value=>crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const DEFAULT_STYLE='温暖自然，像和朋友分享生活，简短不夸张';
+const RETRYABLE_PUBLICATION = {
+ daily_login_required:'社区授权已失效或账号已切换，请重新登录后重试',
+ daily_not_submitted:'未能验证社区账号，本次未发帖，请稍后重试',
+ daily_post_forbidden:'社区拒绝了此账号的发帖请求，请检查社区发帖权限后重试',
+};
 function dailySettings(value={}){
  if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).some(k=>!['sendTime','style'].includes(k)))throw Error('社区日常设置无效');
  const sendTime=value.sendTime??'20:00',style=value.style??DEFAULT_STYLE;
@@ -21,7 +26,7 @@ function createCommunityDaily({dataDir,getIdentity,getInteractions,generate,publ
  const file=path.join(dataDir,'community-daily.json');let state={version:1,enabled:false,ownerId:null,receipts:[],...dailySettings()},error='',running=false,disposed=false,epoch=0,timer,aborter,lastAttempt=0;
  try{const raw=JSON.parse(fs.readFileSync(file,'utf8'));if(raw.version!==1||typeof raw.enabled!=='boolean'||!Array.isArray(raw.receipts)||raw.receipts.length>90||raw.receipts.some(r=>!r||typeof r.day!=='string'||typeof r.ownerId!=='string'||!['sending','published','uncertain'].includes(r.status))||raw.enabled&&typeof raw.ownerId!=='string')throw Error('invalid journal');state={...raw,...dailySettings({sendTime:raw.sendTime,style:raw.style})};}catch(e){if(e.code!=='ENOENT')error='社区日常记录不可读，自动分享保持关闭';}
  const save=()=>{fs.mkdirSync(dataDir,{recursive:true});atomicBytes(file,Buffer.from(JSON.stringify(state,null,2)+'\n'));};
- const status=()=>({enabled:state.enabled,sendTime:state.sendTime,style:state.style,generating:running,error,today:state.receipts.find(r=>r.day===dayOf(now())&&r.ownerId===getIdentity()?.userId)?.status||'none'});
+ const status=()=>{const ownerId=getIdentity()?.userId;return {enabled:state.enabled,connected:!!ownerId,sendTime:state.sendTime,style:state.style,generating:running,error,today:state.receipts.find(r=>r.day===dayOf(now())&&r.ownerId===ownerId)?.status||'none'};};
  const interrupt=()=>{const active=!!aborter;epoch++;aborter?.abort();return active;};
  function saveSettings(patch){
   if(disposed)throw Error('社区日常已关闭');
@@ -57,6 +62,10 @@ function createCommunityDaily({dataDir,getIdentity,getInteractions,generate,publ
    const result=await publish({identity,title:`大肥鱼的今日小记 · ${day}`,body,signal:controller.signal,assertCurrent:()=>{if(!current())throw Error('daily_cancelled');}});
    receipt.status='published';receipt.postId=result.id;save();error='';
   }catch(e){
+   if(receipt&&Object.hasOwn(RETRYABLE_PUBLICATION,e?.code)){
+    const previous=state.receipts;state.receipts=previous.filter(r=>r!==receipt);
+    try{save();error=RETRYABLE_PUBLICATION[e.code];return;}catch{state.receipts=previous;}
+   }
    if(receipt){receipt.status='uncertain';try{save();}catch{}error='本次发布结果待核对，今天不会自动重复发送';}
    else if(!controller.signal.aborted)error='社区日常暂未发布，请检查账号、模型或今日互动内容';
   }finally{controller.abort();if(aborter===controller)aborter=null;running=false;}

@@ -4,11 +4,11 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
 const source=fs.readFileSync(path.join(__dirname,'../../apps/neko-workbench/main.cjs'),'utf8');
 const start=source.indexOf('async function openDsh(){'),end=source.indexOf('\nfunction editMemory()',start);
-function fixture({hidden=false,minimized=false,loading=false,workbenchOnly=false}={}){
+function fixture({hidden=false,minimized=false,loading=false,workbenchOnly=false,opening=null}={}){
   const calls=[];const main={id:'main'};
   const pet={visible:!hidden,isMinimized:()=>minimized,restore(){minimized=false;calls.push('restore');},showInactive(){this.visible=true;calls.push('pet-show');},webContents:{isLoading:()=>loading}};
   const host={isDestroyed:()=>false,show(){calls.push('workbench-show');},focus(){calls.push('workbench-focus');}};
-  const context={workbenchOnly,state:{actors:[main]},dshWindow:host,createPetWindow(actor){assert.equal(actor,main);calls.push('pet-create');return pet;},app:{focus(){}}};
+  const context={workbenchOnly,state:{actors:[main]},dshWindow:host,dshWindowOpening:opening,createPetWindow(actor){assert.equal(actor,main);calls.push('pet-create');return pet;},app:{focus(){}}};
   vm.createContext(context);vm.runInContext(source.slice(start,end)+';globalThis.open=openDsh;',context);
   return {context,pet,calls};
 }
@@ -23,4 +23,16 @@ test('a loading pet waits for its existing did-finish-load display handler',asyn
 });
 test('workbench-only visual QA does not create or reveal desktop pets',async()=>{
   const f=fixture({hidden:true,workbenchOnly:true});await f.context.open();assert.deepEqual(f.calls,['workbench-show','workbench-focus']);
+});
+test('reopening a workbench waits for its in-flight startup page',async()=>{
+  let finishOpening;
+  const opening=new Promise(resolve=>{finishOpening=resolve;});
+  const f=fixture({opening});
+  let opened=false;
+  const reopen=f.context.open().then(()=>{opened=true;});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(opened,false);
+  finishOpening();
+  await reopen;
+  assert.equal(opened,true);
 });

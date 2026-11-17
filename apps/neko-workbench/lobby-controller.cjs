@@ -13,7 +13,7 @@ const { randomUUID } = require('node:crypto');
 const { writeAtomicStateFileSync } = require('./atomic-state-file.cjs');
 const { resolveChatConfig } = require('./lobby-config.cjs');
 const { createLobbyAuth, SAFE_ERROR: AUTH_ERRORS } = require('./lobby-auth.cjs');
-const { createLobbyClient, SAFE_ERROR: CLIENT_ERRORS } = require('./lobby-client.cjs');
+const { createLobbyClient, SAFE_ERROR: CLIENT_ERRORS, WS_LIMITS } = require('./lobby-client.cjs');
 const { createLobbyAvatars, hueAvatar, isSnapshotAvatar } = require('./lobby-avatars.cjs');
 const { createLobbyCat, ERRORS: CAT_ERRORS, LIMITS: CAT_LIMITS } = require('./lobby-cat.cjs');
 const { createLobbyExperience } = require('./lobby-experience.cjs');
@@ -27,7 +27,6 @@ const MUTE_MINUTES = Object.freeze([10, 60, 1440, 10080]);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const NAME = /^[^\p{Cc}\p{Cf}\p{Zl}\p{Zp}]{1,32}$/u;
 const AVATAR_KEY = /^[A-Za-z0-9_-]{1,64}$/;   // same as lobby-frames / PUT /me/cat
-const SNAPSHOT_MESSAGES = 200;
 const DEFAULT_PERSONA_ID = 'bigfish';
 const DEFAULT_CAT_NAME = '大肥鱼';
 
@@ -416,8 +415,9 @@ function buildController(deps) {
       loading: conn === 'online' && !me,
       me: meView(),
       channel: projectChannel(snap?.channel),
-      messages: (snap?.messages || []).slice(-SNAPSHOT_MESSAGES).map(m => projectMessage(avatars, m)),
+      messages: (snap?.messages || []).slice(-WS_LIMITS.MAX_MESSAGES).map(m => projectMessage(avatars, m)),
       hasMore: !!snap?.hasMore,
+      historyCapped: !!snap?.hasMore && snap.messages.length >= WS_LIMITS.MAX_MESSAGES,
       members: (snap?.members || []).map(m => projectMember(avatars, m)),
       outbox: (snap?.outbox || []).map(e => ({ clientMessageId: e.clientMessageId, kind: e.kind, status: e.status, error: e.error,
         retryAfterMs: e.retryAfterMs, text: e.text, replyToId: e.replyToId, origin: e.origin, assistCatId: e.assistCatId })),
@@ -509,7 +509,8 @@ function buildController(deps) {
         &&!(Number.isFinite(me.muted_until)&&me.muted_until>now())&&channel?.cats_enabled!==false&&!own?.admin_disabled;
       const name=profile?(settings.name||own?.name||persona().name):(own?.name||settings.name||persona().name);
       const avatarKey=profile&&settings.avatarKey!=='default'?settings.avatarKey:own?.avatar_key||(settings.avatarKey!=='default'?settings.avatarKey:'bigfish');
-      const replyMode=externalAgent ? 'mention' : settings.independentTrigger;
+      const replyMode=externalAgent ? 'mention' : settings.independentTrigger==='free' && channel?.cat_free_mode_allowed!==true
+        ? 'owner_or_mention' : settings.independentTrigger;
       if(own&&own.enabled===enabled&&own.reply_mode===replyMode&&(!profile||own.name===name&&own.avatar_key===avatarKey))return true;
       try{
         const updated=await client.rest.putCat({name,avatarKey,replyMode,enabled});

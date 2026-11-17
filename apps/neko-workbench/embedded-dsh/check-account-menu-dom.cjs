@@ -63,9 +63,9 @@ async function run() {
   assert.equal(card.querySelector('.neh-service-summary span').textContent, '工作台账号');
   assert.equal(card.querySelector('.neh-wallet').textContent, '暂不可读取');
   assert.equal(card.querySelector('.neh-empty-world').textContent, '未登录');
-  assert.match(card.querySelector('.neh-menu-help').textContent, /下方登录按钮/);
+  assert.match(card.querySelector(':scope > .neh-menu-help').textContent, /下方登录按钮/);
   assert.equal(reads, 0, 'signed-out account never requests a balance');
-  assert.deepEqual([...menu.querySelectorAll('button[role="menuitem"]')], originalButtons);
+  assert.deepEqual([...menu.querySelectorAll('button[role="menuitem"]:not([data-neko-workbench-settings])')], originalButtons);
   nativeAccount.click(); assert.equal(nativeClicks, 1, 'native login handler is preserved');
   assert.equal(trigger.querySelector('.neh-launcher').outerHTML, beforeOpening, 'expanding the menu keeps the launcher unchanged');
 
@@ -88,22 +88,43 @@ async function run() {
   assert.equal(signedInCard.querySelector('.neh-wallet').textContent, 'CNY 余额 ¥8.80');
   assert.equal(signedInCard.querySelector('.neh-source').textContent, '官方充值钱包');
   assert.ok(signedInCard.querySelector('.neh-pet-poster'), 'real habitat slot remains available in reduced-motion mode');
-  assert.match(signedInCard.querySelector('.neh-menu-help').textContent, /设置中管理/);
-  assert.deepEqual([...menu.querySelectorAll('button[role="menuitem"]')], originalButtons);
+  assert.match(signedInCard.querySelector(':scope > .neh-menu-help').textContent, /设置中管理/);
+  assert.deepEqual([...menu.querySelectorAll('button[role="menuitem"]:not([data-neko-workbench-settings])')], originalButtons);
   nativeAccount.click(); assert.equal(nativeClicks, 2, 'native sign-out handler is preserved');
   assert.equal(reads, 1, 'one read from the fixture projection supplies its displayed balance');
 
   nativeAccount.querySelector('span').textContent = '其他操作';
   await flush();
   assert.equal(menu.querySelector('.neh-menu-card'), null, 'an unrelated menu is left untouched');
-  assert.deepEqual([...menu.querySelectorAll('button[role="menuitem"]')], originalButtons);
+  assert.deepEqual([...menu.querySelectorAll('button[role="menuitem"]:not([data-neko-workbench-settings])')], originalButtons);
   stop();
   assert.match(login.querySelector('p').textContent, /DeepSeek/, 'disposing restores the native dialog text');
   assert.equal(trigger.getAttribute('aria-label'), '原生账号');
   assert.equal(trigger.querySelector('.neh-launcher'), null);
   assert.equal(document.getElementById('neko-account-habitat-style'), null);
-  assert.deepEqual([...menu.querySelectorAll('button[role="menuitem"]')], originalButtons);
-  dom.window.close();
+  assert.deepEqual([...menu.querySelectorAll('button[role="menuitem"]:not([data-neko-workbench-settings])')], originalButtons);
+  nativeAccount.querySelector('span').textContent = '退出';
+  const accountCalls = [];
+  const stopUnified = sandbox.installNekoAccountHabitat(ctx, {
+    document, window, cssText: css,
+    accountsBridge: { getAccounts: async options => {
+      accountCalls.push(options);
+      return {
+        neko: { community: { status: 'signed-in' }, lobby: { status: 'signed-out' } },
+        codex: { status: 'signed-in', quota: { status: 'ready', buckets: [{ name: 'Codex', percent: 93 }] } },
+      };
+    } },
+  });
+  try {
+    await flush();
+    await flush();
+    const unifiedCard = menu.querySelector('.neh-menu-card');
+    assert(unifiedCard, 'the native account menu shows the unified card');
+    assert.match(unifiedCard.textContent, /N\.E\.K\.O\./);
+    assert(accountCalls.length > 0, 'the account menu reads the community projection');
+    assert(accountCalls.every(options => options.includeQuota === false), 'the menu never requests Codex quotas');
+    assert.doesNotMatch(unifiedCard.textContent + trigger.getAttribute('aria-label'), /Codex|93%/i);
+  } finally { stopUnified(); dom.window.close(); }
   console.log('PASS account habitat DOM: signed-out/native login, signed-in/native sign-out, sample balance, preserved launcher, menu detection and cleanup');
 }
 run().catch(error => { console.error(error); process.exitCode = 1; });

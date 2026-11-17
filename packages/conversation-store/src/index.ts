@@ -22,6 +22,7 @@ function toMessage(row: Row): ChatMessage {
     role: row["role"] as ChatMessage["role"],
     text: row["text"] as string,
     createdAt: Number(row["created_at"]),
+    ...(row["source"] === "qq" ? { source: "qq" } : {}),
   };
 }
 
@@ -31,11 +32,12 @@ function sameMessage(a: ChatMessage, b: ChatMessage): boolean {
     a.conversationId === b.conversationId &&
     a.role === b.role &&
     a.text === b.text &&
-    a.createdAt === b.createdAt
+    a.createdAt === b.createdAt &&
+    a.source === b.source
   );
 }
 
-const SELECT_COLUMNS = "id, persona_id, conversation_id, role, text, created_at";
+const SELECT_COLUMNS = "id, persona_id, conversation_id, role, text, created_at, source";
 
 export class SqliteConversationStore implements ConversationStore {
   private readonly db: DatabaseSync;
@@ -44,6 +46,9 @@ export class SqliteConversationStore implements ConversationStore {
   constructor(dbPath: string) {
     this.db = new DatabaseSync(dbPath);
     this.db.exec(SCHEMA_SQL);
+    if (!this.db.prepare("PRAGMA table_info(messages)").all().some(column => column.name === "source")) {
+      this.db.exec("ALTER TABLE messages ADD COLUMN source TEXT CHECK (source IS NULL OR source = 'qq')");
+    }
   }
 
   async append(message: ChatMessage): Promise<void> {
@@ -59,8 +64,8 @@ export class SqliteConversationStore implements ConversationStore {
     }
     this.db
       .prepare(
-        `INSERT INTO messages (id, persona_id, conversation_id, role, text, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO messages (id, persona_id, conversation_id, role, text, created_at, source)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         message.id,
@@ -69,26 +74,28 @@ export class SqliteConversationStore implements ConversationStore {
         message.role,
         message.text,
         message.createdAt,
+        message.source ?? null,
       );
   }
 
-  async recent(personaId: PersonaId, conversationId: string, limit: number): Promise<ChatMessage[]> {
+  async recent(personaId: PersonaId, conversationId: string, limit: number, source?: ChatMessage["source"]): Promise<ChatMessage[]> {
     if (!Number.isInteger(limit) || limit <= 0) return [];
     const rows = this.db
       .prepare(
         `SELECT ${SELECT_COLUMNS} FROM messages
-         WHERE persona_id = ? AND conversation_id = ?
+         WHERE persona_id = ? AND conversation_id = ? AND (? IS NULL OR source = ?)
          ORDER BY seq DESC LIMIT ?`,
       )
-      .all(personaId, conversationId, limit);
+      .all(personaId, conversationId, source ?? null, source ?? null, limit);
     return rows.reverse().map(toMessage);
   }
 
-  async pageBefore(personaId: string, conversationId: string, beforeId: string, limit: number): Promise<ChatMessage[]> {
+  async pageBefore(personaId: string, conversationId: string, beforeId: string, limit: number, source?: ChatMessage["source"]): Promise<ChatMessage[]> {
     if(!Number.isInteger(limit)||limit<1||limit>200)throw new Error('Invalid page size');
-    const position=this.db.prepare('SELECT seq FROM messages WHERE persona_id = ? AND conversation_id = ? AND id = ?').get(personaId,conversationId,beforeId);
+    const filter = source ?? null;
+    const position=this.db.prepare('SELECT seq FROM messages WHERE persona_id = ? AND conversation_id = ? AND id = ? AND (? IS NULL OR source = ?)').get(personaId,conversationId,beforeId,filter,filter);
     if(!position)throw new Error('Message is not in this conversation');
-    return this.db.prepare(`SELECT ${SELECT_COLUMNS} FROM messages WHERE persona_id = ? AND conversation_id = ? AND seq < ? ORDER BY seq DESC LIMIT ?`).all(personaId,conversationId,position.seq,limit).reverse().map(toMessage);
+    return this.db.prepare(`SELECT ${SELECT_COLUMNS} FROM messages WHERE persona_id = ? AND conversation_id = ? AND seq < ? AND (? IS NULL OR source = ?) ORDER BY seq DESC LIMIT ?`).all(personaId,conversationId,position.seq,filter,filter,limit).reverse().map(toMessage);
   }
   async before(personaId: string, conversationId: string, beforeId: string, afterId: string | null, limit: number): Promise<ChatMessage[]> {
     if (!Number.isInteger(limit) || limit <= 0 || limit > 256) throw new Error("Invalid archive page size.");

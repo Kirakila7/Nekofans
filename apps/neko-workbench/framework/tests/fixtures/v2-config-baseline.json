@@ -170,8 +170,8 @@
     "config/persona.bigfish.json": "a1ff89e64dcf4093fe3c9e206509652c4f14447bfdcb8c2847ce38cec061a8f4",
     "config/skin.bigfish.json": "4dfa0c17a310de5735a01232ab69044e8657ab466ec4311040a63531abb8e054",
     "src/contracts.ts": "6be406ffb16816073c3b336fd303f40f94fee6764c2e5c841ea8e01fd7b47e08",
-    "src/memory-contracts.ts": "26f84de09bc2ae60038cbe76af66628b8d4383a52cc5d64059fa3290ab2ea006",
-    "reference/memory-hub.mjs": "e495875b947d8d264f41ed0f820213fe83ce23b259250dbc033398a9bf5636e5",
+    "src/memory-contracts.ts": "88b5366b6e3f3559d170346fb1fe6b05787152131cda89243707a41c028fdcd4",
+    "reference/memory-hub.mjs": "2cf30eb1813a3f4e5f19030967a1ccad7136b5a027bc0f26e3a56e36a8920ec0",
     "tests/memory-hub.test.mjs": "1ddb3e0cf5014c7ca7e8a6e9a24008b6abb75248577544ef5112b79fc84a8672"
   }
 }

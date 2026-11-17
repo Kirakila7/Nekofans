@@ -1,6 +1,7 @@
 // Conversation store tests: ordering, limit, idempotent append, restart
 // recovery and persona isolation. The database lives in a temp dir.
 import { after, before, test } from "node:test";
+import { DatabaseSync } from "node:sqlite";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -80,4 +81,24 @@ test("restart recovery: history and latest conversation survive reopen", async (
   // Appends after reopen continue the order.
   await store.append(msg("r2a", "bigfish", "c3", "after restart", 1));
   assert.deepEqual((await store.recent("bigfish", "c3", 10)).map((m) => m.text), ["before restart", "after restart"]);
+});
+
+test("a legacy database opens in place and QQ pages exclude desktop messages", async () => {
+  const legacyPath = join(tempDir, "legacy.sqlite");
+  const legacy = new DatabaseSync(legacyPath);
+  legacy.exec("CREATE TABLE messages (seq INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL UNIQUE, persona_id TEXT NOT NULL, conversation_id TEXT NOT NULL, role TEXT NOT NULL, text TEXT NOT NULL, created_at INTEGER NOT NULL) STRICT");
+  legacy.prepare("INSERT INTO messages (id, persona_id, conversation_id, role, text, created_at) VALUES (?, ?, ?, ?, ?, ?)").run("old-u", "bigfish", "qq-view", "user", "旧桌面消息", 1000);
+  legacy.close();
+  const migrated = new SqliteConversationStore(legacyPath);
+  try {
+    for (const [id, text, source] of [
+      ["qq-u", "手机消息", "qq"], ["desktop-u", "新桌面消息", undefined], ["qq-a", "大肥鱼回复", "qq"],
+    ] as const) {
+      await migrated.append({ ...msg(id, "bigfish", "qq-view", text), ...(source ? {source} : {}) });
+    }
+    assert.deepEqual((await migrated.recent("bigfish", "qq-view", 4)).map(row=>row.id),["old-u","qq-u","desktop-u","qq-a"]);
+    assert.deepEqual((await migrated.recent("bigfish", "qq-view", 2, "qq")).map(row=>row.id),["qq-u","qq-a"]);
+    assert.deepEqual((await migrated.pageBefore("bigfish","qq-view","qq-a",40,"qq")).map(row=>row.id),["qq-u"]);
+    await assert.rejects(migrated.pageBefore("bigfish","qq-view","desktop-u",40,"qq"),/not in this conversation/);
+  } finally { migrated.close(); }
 });

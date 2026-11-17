@@ -1,6 +1,7 @@
 {
   "version": "0.28.43",
   "build": "90",
+  "windowsDshVersion": "0.2.2-rc.1",
   "appName": "Nekofans.app",
   "bundleIdentifier": "cn.neko.workbench.trial",
   "repository": "Kirakila7/Nekofans",

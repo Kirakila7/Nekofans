@@ -21,7 +21,7 @@ test('v2 app persona, memory, fish and chat configuration values are preserved',
   assert.equal(addition.dualMemoryIntegration, 'planned');
 });
 
-test('v2 memory contracts, executable reference, original tests, persona and skin are byte-identical', () => {
+test('memory contracts, executable reference, original tests, persona and skin match the pinned fixtures', () => {
   for (const [path, expected] of Object.entries(baseline.unchangedFiles)) {
     const bytes = readFileSync(new URL(path, root));
     assert.equal(createHash('sha256').update(bytes).digest('hex'), expected, path);

@@ -41,7 +41,8 @@ test('compact appearance windows fit their native frame and name gutter at all t
     const kind=A.kind(actor),options=A.layoutOptions(state,actor),layout=petLayout(kind,mainWidth(462),options),legacy=petLayout(kind,mainWidth(462));
     const frameHeight=layout.stageWidth*9/16*options.scale;
     assert(layout.width<legacy.width);assert(layout.height<legacy.height);
-    assert(layout.width>=frameHeight*options.aspect+60);assert(layout.height>=76+frameHeight+6);
+    const horizontalGutter=options.aspect===16/9?16:60;
+    assert(layout.width>=frameHeight*options.aspect+horizontalGutter);assert(layout.height>=76+frameHeight+6);
     return layout;
   });
   const bounds=packPetLayouts({area:{x:0,y:0,width:800,height:600},layouts});

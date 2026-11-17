@@ -1,6 +1,7 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),path=require('node:path'),fs=require('node:fs'),os=require('node:os');
 const {once}=require('node:events'),{request}=require('node:http');
+const {setTimeout:delay}=require('node:timers/promises');
 const {createPrivateGameRuntime}=require('../../apps/neko-workbench/private-game-runtime.cjs');
 const {createPrivateAgentSession}=require('../../apps/neko-workbench/private-agent-session.cjs');
 const root=path.resolve(__dirname,'../..'),origin='https://fixture.trycloudflare.com';
@@ -10,7 +11,7 @@ test('two local workbenches join by invitation, submit private rules and switch 
  const safeStorage={isEncryptionAvailable:()=>true,getSelectedStorageBackend:()=> 'keychain',encryptString:s=>Buffer.from('encrypted:'+s),decryptString:b=>b.toString().slice(10)};
  let base;
  const seenTokens=new Set();let joins=0;
- const fetchImpl=(url,opts={})=>new Promise((resolve,reject)=>{if(url.endsWith('/join'))joins++;if(opts.headers?.authorization)seenTokens.add(opts.headers.authorization.slice(7));const req=request(base+new URL(url).pathname,{method:opts.method||'GET',headers:{...opts.headers,host:new URL(origin).host}},res=>{const chunks=[];res.on('data',c=>chunks.push(c));res.on('end',()=>resolve(new Response(Buffer.concat(chunks),{status:res.statusCode,headers:res.headers})));});req.on('error',reject);if(opts.body)req.write(opts.body);req.end();});
+ const fetchImpl=(url,opts={})=>new Promise((resolve,reject)=>{if(url.endsWith('/join'))joins++;if(opts.headers?.authorization)seenTokens.add(opts.headers.authorization.slice(7));const req=request(new URL(new URL(url).pathname+new URL(url).search,base),{method:opts.method||'GET',headers:{...opts.headers,host:new URL(origin).host}},res=>{const chunks=[];res.on('data',c=>chunks.push(c));res.on('end',()=>resolve(new Response(Buffer.concat(chunks),{status:res.statusCode,headers:res.headers})));});req.on('error',reject);if(opts.body)req.write(opts.body);req.end();});
  const accountRequests=[[],[]];
  const rpcFor=i=>async(method,input)=>{
   if(['game-account-status','game-player-account-status'].includes(method))return {status:'signed-in'};
@@ -24,7 +25,10 @@ test('two local workbenches join by invitation, submit private rules and switch 
  const server=createPrivateTrial({publicOrigin:origin,publicKey:await runtimes[0].publicKey()});server.listen(0,'127.0.0.1');await once(server,'listening');base=`http://127.0.0.1:${server.address().port}`;
  t.after(async()=>{await Promise.all(runtimes.map(x=>x.stop()));await new Promise(resolve=>server.close(resolve));dirs.forEach(d=>fs.rmSync(d,{recursive:true,force:true}));});
  const created=await runtimes[0].create({url:origin}),inviteUrl=created.inviteUrl;
- assert.equal(created.status,'created');assert.equal(runtimes[0].status().connected,true);
+ assert.equal(created.status,'created');
+ const deadline=Date.now()+3000;
+ while(!runtimes[0].status().connected&&Date.now()<deadline)await delay(20);
+ assert.equal(runtimes[0].status().connected,true,'the room publisher connects in the background');
  for(const bad of [created.ownerUrl,inviteUrl+'&seat=hidden',inviteUrl.replace('https://','http://')])assert.equal((await runtimes[1].openOwnSeat({inviteUrl:bad})).status,'invalid-invite');
  assert.equal(joins,0);
  assert.equal((await runtimes[0].readSeatView({inviteUrl})).players,1);
