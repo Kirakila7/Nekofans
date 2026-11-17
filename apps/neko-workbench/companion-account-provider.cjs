@@ -1,11 +1,12 @@
 'use strict';
 const { randomUUID } = require('node:crypto');
+const {gameNamespaces,assertGameAccountInput}=require('./game-account-contract.cjs');
 
 // Adapter from the existing main-chat pipeline to the workbench-owned account
 // bridge. The bridge must enforce privacy and tool restrictions independently.
 function createCompanionAccountProvider(rpc, { namespace = 'companion' } = {}) {
   if (typeof rpc !== 'function') throw new TypeError('Account bridge is required');
-  if (!['companion', 'lobby', 'proactive', 'memory'].includes(namespace)) throw new TypeError('Account namespace is invalid');
+  if (!['companion', 'lobby', 'proactive', 'memory', ...gameNamespaces].includes(namespace)) throw new TypeError('Account namespace is invalid');
   const method = suffix => namespace + '-account-' + suffix;
   return {
     // The status RPC reads the existing account owner; it never prepares a model call.
@@ -17,6 +18,7 @@ function createCompanionAccountProvider(rpc, { namespace = 'companion' } = {}) {
     },
     async *stream(input) {
       const messages = Array.isArray(input.messages) ? input.messages : [];
+      assertGameAccountInput(namespace,input);
       if (namespace === 'lobby' && (messages.length !== 1 || messages[0]?.conversationId !== 'lobby'
         || ['memories', 'summaries', 'memoryContext'].some(key => input[key]?.length))) throw Error('Public account context is invalid');
       const last = messages.at(-1);
