@@ -19,6 +19,12 @@ const baseCommit=value('--base-source-commit');
 const dshApp=value('--dsh-app'),dshInstaller=value('--dsh-installer'),dshExpected=value('--dsh-installer-sha256'),dshLicenses=value('--dsh-license-dir');
 const retainedManifestPath=value('--retain-manifest'),reuseDshFrom=value('--reuse-dsh-from');
 const manifestOnly=args.includes('--manifest-only');
+const isolatedPreview=args.includes('--isolated-preview');
+if(isolatedPreview){
+  release.appName='Nekofans 游戏预览.app';
+  release.productName='Nekofans 游戏预览';
+  release.bundleIdentifier+='.game-preview';
+}
 if(manifestOnly&&(!retainedManifestPath||baseCommit))throw Error('Manifest-only build requires a retained manifest and no base commit');
 if([dshApp,dshInstaller,dshExpected,dshLicenses].some(Boolean)&&![dshApp,dshInstaller,dshExpected,dshLicenses].every(Boolean))throw Error('DSH packaging requires --dsh-app, --dsh-installer, --dsh-installer-sha256 and --dsh-license-dir');
 if(reuseDshFrom&&dshApp)throw Error('Choose either a verified installed DSH bundle or the original installer inputs');
@@ -26,6 +32,10 @@ if(baseCommit&&!/^[0-9a-f]{40}$/.test(baseCommit))throw Error('Invalid base sour
 if(!runtime||!output)throw Error('Usage: node scripts/build-neko-daily.mjs --electron-zip <official cached runtime.zip> --output <new staging directory>');
 if(process.platform!=='darwin'||process.arch!=='arm64')throw Error('The current daily build targets darwin-arm64.');
 const stage=resolve(output);if(existsSync(stage))throw Error('Refusing to overwrite an existing release directory.');mkdirSync(stage,{recursive:true});
+const officialDshDownloads=new Map([
+  ['0.2.1-rc.3','https://download.deepseek.com/dsh-desk/bin/mac-arm64/deepseek-harness-0.2.1-rc.3-mac-arm64.dmg'],
+  ['0.2.2-rc.2','https://download.deepseek.com/dsh-desk/bin/mac-arm64/deepseek-harness-0.2.2-rc.2-mac-arm64.zip'],
+]);
 run('/usr/bin/ditto',['-x','-k',resolve(runtime),stage]);
 const app=join(stage,release.appName);renameSync(join(stage,'Electron.app'),app);
 const resources=join(app,'Contents/Resources'),destination=join(resources,'workbench');mkdirSync(destination,{recursive:true});
@@ -60,8 +70,8 @@ const hashes={},sourceChanges=[],baseHashes=new Map((baseEntries||[]).map(x=>[x.
 const entry=join(resources,'app');mkdirSync(entry,{recursive:true});cpSync(join(root,'apps/neko-workbench/trial-bootstrap.cjs'),join(entry,'bootstrap.cjs'));
 writeFileSync(join(entry,'package.json'),JSON.stringify({name:'neko-workbench-daily',version:release.version,main:'bootstrap.cjs'},null,2)+'\n');
 run('/usr/bin/plutil',['-replace','CFBundleIdentifier','-string',release.bundleIdentifier,join(app,'Contents/Info.plist')]);
-for(const [key,text] of [['CFBundleName','Nekofans'],['CFBundleDisplayName','Nekofans'],['CFBundleShortVersionString',release.version],['CFBundleVersion',release.build]])run('/usr/bin/plutil',['-replace',key,'-string',text,join(app,'Contents/Info.plist')]);
-run('/usr/bin/plutil',['-insert','CFBundleURLTypes','-json',JSON.stringify([{CFBundleURLName:release.bundleIdentifier+'.game-invite',CFBundleURLSchemes:['nekofans']}]),join(app,'Contents/Info.plist')]);
+for(const [key,text] of [['CFBundleName',release.productName],['CFBundleDisplayName',release.productName],['CFBundleShortVersionString',release.version],['CFBundleVersion',release.build]])run('/usr/bin/plutil',['-replace',key,'-string',text,join(app,'Contents/Info.plist')]);
+if(!isolatedPreview)run('/usr/bin/plutil',['-insert','CFBundleURLTypes','-json',JSON.stringify([{CFBundleURLName:release.bundleIdentifier+'.game-invite',CFBundleURLSchemes:['nekofans']}]),join(app,'Contents/Info.plist')]);
 // The app icon is a separately generated asset, included and hashed explicitly
 // because a new local asset may not be present in the base commit's tree.
 const iconSource=join(root,'apps/neko-workbench/assets/nekofuns-bigfish.icns');
@@ -73,17 +83,18 @@ if(dshApp){
   const appPath=resolve(dshApp),installerSha256=createHash('sha256').update(readFileSync(resolve(dshInstaller))).digest('hex');
   if(!/^[0-9a-f]{64}$/.test(dshExpected)||installerSha256!==dshExpected)throw Error('DSH installer checksum mismatch');
   const version=run('/usr/libexec/PlistBuddy',['-c','Print CFBundleShortVersionString',join(appPath,'Contents/Info.plist')]).trim();
-  if(version!=='0.2.1-rc.3')throw Error('Unsupported DSH version: '+version);
+  const source=officialDshDownloads.get(version);
+  if(!source)throw Error('Unsupported DSH version: '+version);
   run('/usr/bin/codesign',['--verify','--deep','--strict',appPath]);
   const target=join(resources,'dsh-runtime','DeepSeek Harness.app');mkdirSync(dirname(target),{recursive:true});run('/usr/bin/ditto',[appPath,target]);
   const targetNotices=join(resources,'third-party-notices','deepseek-harness');mkdirSync(targetNotices,{recursive:true});
   for(const name of ['LICENSE','THIRD_PARTY_NOTICES.md']){const source=join(resolve(dshLicenses),name);if(!existsSync(source))throw Error('Missing DSH notice: '+name);cpSync(source,join(targetNotices,name));}
-  embeddedDsh={version,source:'https://download.deepseek.com/dsh-desk/bin/mac-arm64/deepseek-harness-0.2.1-rc.3-mac-arm64.dmg',installerSha256,license:'MIT; see bundled third-party notices'};
+  embeddedDsh={version,source,installerSha256,license:'MIT; see bundled third-party notices'};
 }
 if(reuseDshFrom){
   const prior=resolve(reuseDshFrom),priorResources=join(prior,'Contents/Resources'),priorManifest=JSON.parse(readFileSync(join(priorResources,'WORKBENCH_BUILD.json'),'utf8'));
   const previous=priorManifest.embeddedDsh,appPath=join(priorResources,'dsh-runtime','DeepSeek Harness.app');
-  if(priorManifest.repository!==release.repository||previous?.version!=='0.2.1-rc.3'||!/^https:\/\/download\.deepseek\.com\//.test(previous.source||'')||!/^[0-9a-f]{64}$/.test(previous.installerSha256||''))throw Error('Installed DSH provenance is not verified');
+  if(priorManifest.repository!==release.repository||!previous||!officialDshDownloads.has(previous.version)||previous.source!==officialDshDownloads.get(previous.version)||!/^[0-9a-f]{64}$/.test(previous.installerSha256||''))throw Error('Installed DSH provenance is not verified');
   run('/usr/bin/codesign',['--verify','--deep','--strict',appPath]);
   const version=run('/usr/libexec/PlistBuddy',['-c','Print CFBundleShortVersionString',join(appPath,'Contents/Info.plist')]).trim();
   if(version!==previous.version)throw Error('Installed DSH version does not match its manifest');
@@ -92,7 +103,7 @@ if(reuseDshFrom){
   for(const name of ['LICENSE','THIRD_PARTY_NOTICES.md'])cpSync(join(priorResources,'third-party-notices','deepseek-harness',name),join(targetNotices,name));
   embeddedDsh={...previous,reusedFrom:'verified installed application'};
 }
-const manifest={...release,sourceCommit:manifestOnly?previousManifest.sourceCommit:baseCommit||run('git',['rev-parse','HEAD'],{cwd:root}).trim(),...(manifestOnly?{sourceState:'canonical working tree compared with installed manifest; base commit unavailable',sourceChanges,referenceManifestSha256:createHash('sha256').update(readFileSync(resolve(retainedManifestPath))).digest('hex')}:baseCommit?{sourceState:sourceChanges.length?'base commit plus working-tree modifications':'base commit',sourceChanges}:{}),runtimeArchiveSha256:createHash('sha256').update(readFileSync(runtime)).digest('hex'),appIcon:{source:'apps/neko-workbench/assets/nekofuns-bigfish.icns',sha256:createHash('sha256').update(readFileSync(iconSource)).digest('hex')},...(embeddedDsh?{embeddedDsh}:{}),files:hashes};
+const manifest={...release,...(isolatedPreview?{isolatedPreview:true}:{}),sourceCommit:manifestOnly?previousManifest.sourceCommit:baseCommit||run('git',['rev-parse','HEAD'],{cwd:root}).trim(),...(manifestOnly?{sourceState:'canonical working tree compared with installed manifest; base commit unavailable',sourceChanges,referenceManifestSha256:createHash('sha256').update(readFileSync(resolve(retainedManifestPath))).digest('hex')}:baseCommit?{sourceState:sourceChanges.length?'base commit plus working-tree modifications':'base commit',sourceChanges}:{}),runtimeArchiveSha256:createHash('sha256').update(readFileSync(runtime)).digest('hex'),appIcon:{source:'apps/neko-workbench/assets/nekofuns-bigfish.icns',sha256:createHash('sha256').update(readFileSync(iconSource)).digest('hex')},...(embeddedDsh?{embeddedDsh}:{}),files:hashes};
 writeFileSync(join(resources,'WORKBENCH_BUILD.json'),JSON.stringify(manifest,null,2)+'\n');
 for(const attr of ['com.apple.FinderInfo','com.apple.ResourceFork'])spawnSync('/usr/bin/xattr',['-dr',attr,app]);
 // Electron archives may contain helpers whose signatures require rebuilding.
@@ -100,6 +111,11 @@ for(const attr of ['com.apple.FinderInfo','com.apple.ResourceFork'])spawnSync('/
 // bundle lives under Resources and must retain its original signature.
 if(embeddedDsh){const frameworks=join(app,'Contents/Frameworks');for(const name of readdirSync(frameworks).filter(n=>n.endsWith('.framework')||n.endsWith('.app'))){const item=join(frameworks,name),check=spawnSync('/usr/bin/codesign',['--verify','--deep','--strict',item],{encoding:'utf8'});if(check.status!==0)run('/usr/bin/codesign',['--force','--deep','--sign','-',item]);}}
 run('/usr/bin/codesign',['--force',...(embeddedDsh?[]:['--deep']),'--sign','-',app]);run('/usr/bin/codesign',['--verify','--deep','--strict',app]);
+if(isolatedPreview){
+  writeFileSync(join(stage,'预览说明.txt'),'直接打开 '+release.appName+'。游戏预览使用独立的工作区和登录状态。\n候选构建：'+manifest.sourceCommit+'\n');
+  console.log(JSON.stringify({app,version:release.version,build:release.build,files:files.length,sourceCommit:manifest.sourceCommit,isolatedPreview}));
+  process.exit(0);
+}
 const installer=join(stage,'安装日常版.command');writeFileSync(installer,'#!/bin/zsh\nset -e\nNEKO_INSTALL_DIR="${0:A:h}"\nexec env ELECTRON_RUN_AS_NODE=1 "$NEKO_INSTALL_DIR/'+release.appName+'/Contents/MacOS/Electron" "$NEKO_INSTALL_DIR/'+release.appName+'/Contents/Resources/workbench/scripts/install-neko-daily.cjs"\n');chmodSync(installer,0o755);
 writeFileSync(join(stage,'安装说明.txt'),'Nekofans '+release.version+'（build '+release.build+'）\n\n请先退出旧工作台，双击“安装日常版.command”。安装到个人 Applications 中同一个应用位置，保留存档，并准备原生记忆组件。\n'+(embeddedDsh?'已内置 DSH，无需单独安装 DeepSeek Harness。':'需要先安装 DeepSeek Harness。')+'记忆环境需要 uv 和 Python 3.11，安装可能从官方包源下载锁定依赖。\n完成后打开 '+release.appName+'。只使用这一份日常版；QA 目录为开发验证用途。\n\n源码：'+release.repository+'\n基线提交：'+manifest.sourceCommit+'\n');
 console.log(JSON.stringify({app,version:release.version,build:release.build,files:files.length,sourceCommit:manifest.sourceCommit}));
