@@ -9,6 +9,7 @@ const TICKET_TTL = 45;
 
 export function seatTarget(operation, target) {
   if (typeof target !== 'string') return false;
+  if (operation === 'publish') return target === 'workshop';
   if (operation === 'create') return /^[a-f0-9]{24}$/.test(target);
   return operation === 'join' && /^[\w-]{12}$/.test(target);
 }
@@ -48,7 +49,8 @@ export function createCommunitySeatAuthorizer({ issuer, gameOrigin, privateKey, 
     const input = HEADER + '.' + Buffer.from(JSON.stringify(claims)).toString('base64url');
     const ticket = input + '.' + sign(null, Buffer.from(input), key).toString('base64url');
     const location = new URL('/', gameOrigin);
-    location.searchParams.set(operation === 'join' ? 'room' : 'game', target);
+    if (operation === 'publish') location.searchParams.set('publish', '1');
+    else location.searchParams.set(operation === 'join' ? 'room' : 'game', target);
     location.hash = new URLSearchParams({ communitySeat: ticket }).toString();
     return { status: 200, location: location.href };
   };

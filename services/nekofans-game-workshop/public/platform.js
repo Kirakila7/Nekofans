@@ -7,12 +7,14 @@ const communityTicket = new URLSearchParams(location.hash.slice(1)).get('communi
 if (communityTicket) history.replaceState(null, '', location.pathname + location.search);
 let gameId = params.get('game'), game, seat, snapshot, socket, reconnect, stopped = false, pending = false, frameReady = false, channel;
 let projects = [];
-let publishEnabled = false;
+let publishEnabled = false, adminPublish = false, communityEnabled = false;
+let publisher = { signedIn: false };
+const publicationReturn = params.get('publish') === '1';
 let toastTimer;
 function toast(text) { $('toast').textContent = text; $('toast').classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => $('toast').classList.remove('show'), 4500); }
 async function api(url, body, key) {
   const response = await fetch(url, body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json', ...(key ? { Authorization: 'Bearer ' + key } : {}) }, body: JSON.stringify(body) });
-  const result = await response.json(); if (!response.ok) throw new Error(result.error); return result;
+  const result = await response.json(); if (!response.ok) throw Object.assign(new Error(result.error), { status: response.status }); return result;
 }
 async function copy(text) {
   try { await navigator.clipboard.writeText(text); toast('已复制，可以发到聊天室了'); }
@@ -45,6 +47,10 @@ function openSeat(value) {
 async function startCommunity() {
   communityEntry.disabled = true;
   try {
+    if (publisher.signedIn) {
+      try { return openSeat(await api('/api/publisher/seat', seatTarget())); }
+      catch (error) { if (error.status !== 401) throw error; }
+    }
     const { url } = await api('/api/community/seat/start', seatTarget());
     location.assign(url);
   } catch (error) {
@@ -99,7 +105,7 @@ async function loadProjects() {
 }
 function homeView() {
   if (roomId || gameId) return;
-  const view = location.hash === '#rooms' ? 'rooms' : location.hash === '#publish' && publishEnabled ? 'publish' : 'projects';
+  const view = location.hash === '#rooms' ? 'rooms' : (location.hash === '#publish' || !location.hash && publicationReturn) && publishEnabled ? 'publish' : 'projects';
   for (const name of ['projects', 'rooms', 'publish']) {
     $(name).hidden = name !== view;
     if (name === view) $(name + '-nav').setAttribute('aria-current', 'page');
@@ -266,17 +272,55 @@ $('enter-room').onclick = async () => {
 };
 $('copy-invite').onclick = () => copy(`${location.origin}/?room=${seat.id}`);
 $('html-file').onchange = () => { const file = $('html-file').files[0]; $('file-name').textContent = file?.name || '选择 HTML'; if (!$('game-title').value && file) $('game-title').value = file.name.replace(/\.html?$/i, ''); };
+function showPublisher(account) {
+  publisher = account;
+  $('publisher-account').hidden = !communityEnabled;
+  $('publisher-name').textContent = account.signedIn ? '发布账号 · ' + (account.name || 'N.E.K.O. 玩家') : '连接社区账号后就能上传作品。';
+  $('publisher-login').hidden = account.signedIn;
+  $('publisher-logout').hidden = !account.signedIn;
+  $('publish-key-field').hidden = account.signedIn || !adminPublish || communityEnabled;
+  $('publish-form').hidden = !account.signedIn && (communityEnabled || !adminPublish);
+  $('my-projects').hidden = !account.signedIn;
+  $('my-project-list').replaceChildren(...(account.projects ?? []).map(project => {
+    const item = document.createElement('li'), link = document.createElement('a');
+    link.href = '/?game=' + project.id;
+    link.textContent = project.title;
+    item.append(link);
+    return item;
+  }));
+}
+const publishTarget = { operation: 'publish', target: 'workshop' };
+$('publisher-login').onclick = async () => {
+  $('publisher-login').disabled = true;
+  try {
+    const { url } = await api('/api/community/seat/start', publishTarget);
+    location.assign(url);
+  } catch (error) {
+    toast(error.message);
+    $('publisher-login').disabled = false;
+  }
+};
+$('publisher-logout').onclick = async () => {
+  try {
+    showPublisher(await api('/api/publisher/logout', {}));
+    $('published').hidden = true;
+  } catch (error) { toast(error.message); }
+};
 $('publish-form').onsubmit = async event => {
   event.preventDefault(); const file = $('html-file').files[0]; if (!file || file.size > 512 * 1024) return toast('请选择不超过 512 KB 的 HTML 文件');
   $('publish-button').disabled = true;
   try {
     const html = await file.text();
-    if (!html.includes('NekofansGame.connect')) return toast('这个 HTML 还没有联机接口。先复制提示词，让 DeepSeek 为它加入双人联机模板。');
+    if (!/\bNekofansGame\s*\.\s*connect\s*\(/u.test(html)) return toast('这个 HTML 还没有联机接口。先复制提示词，让 DeepSeek 为它加入双人联机模板。');
     const published = await api('/api/games', { title: $('game-title').value, mode: $('game-mode').value, html }, $('publish-key').value);
     const link = location.origin + '/?game=' + published.id;
     $('published').hidden = false; $('published-link').textContent = link; $('published-link').href = link; $('open-game').href = link; $('copy-game').onclick = () => copy(link); toast('已发布');
     void loadProjects().catch(() => {});
-  } catch (error) { toast(error.message); } finally { $('publish-button').disabled = false; }
+    if (publisher.signedIn) showPublisher(await api('/api/publisher'));
+  } catch (error) {
+    if (error.status === 401 && communityEnabled) showPublisher({ signedIn: false });
+    toast(error.message);
+  } finally { $('publish-button').disabled = false; }
 };
 $('copy-prompt').onclick = async () => { try { const response = await fetch('/generation-guide.md'); await copy(await response.text()); } catch { toast('提示词读取失败，请重试'); } };
 $('demo').onclick = async () => { try { const demo = await api('/api/demo', {}); location.href = '/?game=' + demo.id; } catch (error) { toast(error.message); } };
@@ -284,6 +328,15 @@ try {
   const config = await api('/api/config'); $('demo').hidden = !config.demo;
   roomAgent.configure(config.gameAgent === true);
   publishEnabled = config.publishEnabled;
+  adminPublish = config.adminPublish;
+  communityEnabled = config.communitySeats;
+  if (communityEnabled) {
+    if (publicationReturn && communityTicket) {
+      try { showPublisher(await api('/api/community/seat', { ...publishTarget, ticket: communityTicket })); }
+      catch (error) { showPublisher(await api('/api/publisher')); toast(error.message); }
+      history.replaceState(null, '', '/#publish');
+    } else showPublisher(await api('/api/publisher'));
+  } else showPublisher(publisher);
   $('publish-nav').hidden = !publishEnabled;
   homeView();
   await loadProjects().catch(() => { $('project-empty').textContent = '暂时无法加载项目，请刷新重试。'; });

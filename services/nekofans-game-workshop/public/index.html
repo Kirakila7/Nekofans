@@ -11,7 +11,7 @@
 <body>
   <header class="topbar">
     <a class="brand" href="/" aria-label="Nekofans 游戏工坊"><span class="logo" aria-hidden="true">✦</span>Nekofans</a>
-    <nav aria-label="游戏工坊"><a id="projects-nav" href="/#projects">项目</a><a id="rooms-nav" href="/#rooms">房间</a><a id="publish-nav" href="/#publish" hidden>发布</a></nav>
+    <nav aria-label="游戏工坊"><a id="projects-nav" href="/#projects">项目</a><a id="rooms-nav" href="/#rooms">房间</a><a id="publish-nav" href="/#publish" hidden>上传游戏</a></nav>
     <div class="header-status" role="status" hidden><span id="status"></span></div>
   </header>
 
@@ -31,17 +31,26 @@
     </section>
 
     <section class="publish panel" id="publish" hidden>
-      <div class="section-title"><h1>发布项目</h1><button id="copy-prompt" class="secondary">复制联机模板</button></div>
+      <div class="section-title"><h1>上传游戏</h1><button id="copy-prompt" class="secondary">复制联机模板</button></div>
+      <div id="publisher-account" hidden>
+        <p id="publisher-name" role="status"></p>
+        <button id="publisher-login" type="button" class="primary">连接 N.E.K.O. 账号</button>
+        <button id="publisher-logout" type="button" class="secondary" hidden>退出发布账号</button>
+      </div>
       <form id="publish-form">
         <div class="upload-box"><input id="html-file" type="file" accept=".html,.htm,text/html" required><label for="html-file"><span class="upload-icon" aria-hidden="true">↥</span><strong id="file-name">选择 HTML</strong><small>最大 512 KB</small></label></div>
         <div class="publish-fields">
           <label>项目名称<input id="game-title" maxlength="60" required></label>
           <label>联机方式<select id="game-mode"><option value="turns">轮流操作</option><option value="shared">共同操作</option></select></label>
-          <label>服主发布凭证<input id="publish-key" type="password" autocomplete="off" required></label>
+          <label id="publish-key-field" hidden>服主发布凭证<input id="publish-key" type="password" autocomplete="off"></label>
           <button class="primary" id="publish-button">发布</button>
         </div>
       </form>
-      <div id="published" hidden><a id="published-link"></a><div><button id="copy-game" class="secondary">复制链接</button><a id="open-game" class="primary">打开项目</a></div></div>
+      <div id="published" hidden><a id="published-link"></a><div><button id="copy-game" class="secondary">复制链接</button><a id="open-game" class="primary">用这个作品开房</a></div></div>
+      <section id="my-projects" hidden aria-labelledby="my-projects-title">
+        <h2 id="my-projects-title">我的作品</h2>
+        <ul id="my-project-list"></ul>
+      </section>
     </section>
   </main>
 

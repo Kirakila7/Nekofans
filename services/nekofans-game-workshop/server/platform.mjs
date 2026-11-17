@@ -31,22 +31,27 @@ export class GamePlatform {
     writeFileSync(file + '.tmp', encoded, { mode: 0o600 });
     renameSync(file + '.tmp', file);
   }
-  publish(input) {
+  publish(input, account) {
     const title = String(input.title || '').trim();
     if (!title || title.length > 60) reject(400, '请填写 1–60 字的游戏名称');
     if (typeof input.html !== 'string' || !input.html.trim() || Buffer.byteLength(input.html) > 512 * 1024) reject(400, '请上传不超过 512 KB 的单文件 HTML');
     if (!['turns', 'shared'].includes(input.mode)) reject(400, '请选择轮流操作或共同操作');
-    const id = hash(input.mode + '\0' + title + '\0' + input.html).slice(0, 24);
+    const content = input.mode + '\0' + title + '\0' + input.html;
+    const id = hash(account ? account.id + '\0' + content : content).slice(0, 24);
     if (!this.games.has(id)) {
       if (this.games.size >= 300) reject(503, '作品数量达到内测上限，请联系服主');
-      this.games.set(id, { id, title, mode: input.mode, html: input.html, created: Date.now(), sdk: 1 });
+      this.games.set(id, { id, title, mode: input.mode, html: input.html, created: Date.now(), sdk: 1, ...(account ? { ownerId: account.id } : {}) });
       try { this.save(); } catch (error) { this.games.delete(id); throw error; }
     }
     return this.gameInfo(id);
   }
   game(id) { const game = this.games.get(id); if (!game) reject(404, '作品不存在'); return game; }
-  gameInfo(id) { const { html, ...info } = this.game(id); return info; }
-  projects() { return [...this.games.keys()].reverse().map(id => this.gameInfo(id)); }
+  gameInfo(id) { const { html, ownerId, ...info } = this.game(id); return info; }
+  projects(ownerId) {
+    return [...this.games.values()].reverse()
+      .filter(game => ownerId === undefined || game.ownerId === ownerId)
+      .map(game => this.gameInfo(game.id));
+  }
   room(id) { const room = this.rooms.get(id); if (!room) reject(404, '房间不存在或已经过期'); return room; }
   create(gameId, name, account) {
     this.game(gameId);

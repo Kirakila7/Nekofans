@@ -1,4 +1,5 @@
 import http from 'node:http';
+import { createHash, randomBytes } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -14,6 +15,34 @@ export function createApp({ directory = process.env.DATA_DIR || path.join(root, 
   const communitySeats = community && createCommunitySeats({ ...community, gameOrigin: publicOrigin });
   const agentEnabled = Boolean(communitySeats && typeof chooseAgentAction === 'function');
   const agentRequests = new Map();
+  const publishers = new Map();
+  const publisherTtl = 8 * 60 * 60 * 1000;
+  const sessionCookie = 'neko_workshop_publisher';
+  const sessionDigest = token => createHash('sha256').update(token).digest('hex');
+  function publisherSessionKey(req) {
+    const token = req.headers.cookie?.split(';').map(value => value.trim())
+      .find(value => value.startsWith(sessionCookie + '='))?.slice(sessionCookie.length + 1);
+    return /^[A-Za-z0-9_-]{43}$/.test(token || '') ? sessionDigest(token) : null;
+  }
+  function publisher(req) {
+    const session = publishers.get(publisherSessionKey(req));
+    return session?.expires > Date.now() ? session.account : null;
+  }
+  function publisherCookie(token, maxAge) {
+    return `${sessionCookie}=${token}; Max-Age=${maxAge}; Path=/api; HttpOnly; SameSite=Lax${publicOrigin.startsWith('https:') ? '; Secure' : ''}`;
+  }
+  function endPublisher(req) {
+    publishers.delete(publisherSessionKey(req));
+  }
+  function startPublisher(req, account) {
+    endPublisher(req);
+    const now = Date.now();
+    for (const [key, session] of publishers) if (session.expires <= now) publishers.delete(key);
+    if (publishers.size >= 2048) reject(503, '授权繁忙，请稍后再试');
+    const token = randomBytes(32).toString('base64url');
+    publishers.set(sessionDigest(token), { account: { id: account.id, name: account.name }, expires: now + publisherTtl });
+    return publisherCookie(token, publisherTtl / 1000);
+  }
   const origin = req => publicOrigin || `http://${req.headers.host}`;
   const allowed = req => !req.headers.origin || req.headers.origin === origin(req);
   const rate = (key, max = 120) => {
@@ -31,6 +60,14 @@ export function createApp({ directory = process.env.DATA_DIR || path.join(root, 
     state.online = onlinePlayers(id);
     const encoded = JSON.stringify(state);
     for (const ws of sockets) if (ws.room === id && ws.readyState === WebSocket.OPEN) ws.send(encoded);
+  }
+  function joinAccountRoom(id, account) {
+    const seat = platform.join(id, undefined, account);
+    for (const ws of sockets) {
+      if (ws.room === id && ws.player === seat.player) ws.close(4001, 'Seat restored on another device');
+    }
+    broadcast(id);
+    return seat;
   }
   function agentSeat(req, roomId) {
     if (!agentEnabled) reject(404, '这个工坊尚未连接游戏 Agent');
@@ -81,7 +118,7 @@ export function createApp({ directory = process.env.DATA_DIR || path.join(root, 
     try {
       const url = new URL(req.url, 'http://localhost');
       if (url.pathname === '/healthz') return json(res, 200, { ok: true });
-      if (url.pathname === '/api/config') return json(res, 200, { publishEnabled: !!publishKey, demo, communitySeats: Boolean(communitySeats),
+      if (url.pathname === '/api/config') return json(res, 200, { publishEnabled: Boolean(publishKey || communitySeats), adminPublish: Boolean(publishKey), demo, communitySeats: Boolean(communitySeats),
         ...(agentEnabled ? { gameAgent: true } : {}),
         ...(communitySeats && community.label ? { accountSeatLabel: community.label } : {}) });
       const playMatch = url.pathname.match(/^\/play\/([a-f0-9]{24})$/);
@@ -101,6 +138,10 @@ export function createApp({ directory = process.env.DATA_DIR || path.join(root, 
           const catalog = await listAgentModels?.({ accountId }) || { models: [{ id: 'default', label: '默认模型' }] };
           return json(res, 200, { ...catalog, teammates: listTeammates() });
         }
+        if (req.method === 'GET' && url.pathname === '/api/publisher') {
+          const account = publisher(req);
+          return json(res, 200, account ? { signedIn: true, name: account.name, projects: platform.projects(account.id) } : { signedIn: false });
+        }
         if (req.method === 'GET' && url.pathname === '/api/games') return json(res, 200, { projects: platform.projects() });
         if (req.method === 'GET' && (match = url.pathname.match(/^\/api\/games\/([a-f0-9]{24})$/))) return json(res, 200, platform.gameInfo(match[1]));
         if (req.method === 'GET' && (match = url.pathname.match(/^\/api\/rooms\/([\w-]{12})$/))) return json(res, 200, { community: Boolean(platform.room(match[1]).community) });
@@ -111,8 +152,14 @@ export function createApp({ directory = process.env.DATA_DIR || path.join(root, 
           let input; try { input = JSON.parse(raw || '{}'); } catch { reject(400, 'JSON 格式有误'); }
           if ((match = url.pathname.match(/^\/api\/rooms\/([\w-]{12})\/agent-choice$/))) return await choose(req, res, match[1], input);
           if (url.pathname === '/api/games') {
-            if (!publishKey) reject(503, '服主尚未启用作品发布');
-            if (!safeEqual(req.headers.authorization, 'Bearer ' + publishKey)) reject(401, '发布凭证不正确');
+            const account = publisher(req);
+            if (account) {
+              if (req.headers.origin !== publicOrigin) reject(403, '不允许的来源');
+              if (typeof input?.html !== 'string' || !/\bNekofansGame\s*\.\s*connect\s*\(/u.test(input.html)) reject(422, '请上传已接入 Nekofans 联机接口的 HTML');
+              return json(res, 201, platform.publish(input, account));
+            }
+            if (!publishKey && !communitySeats) reject(503, '服主尚未启用作品发布');
+            if (!publishKey || !safeEqual(req.headers.authorization, 'Bearer ' + publishKey)) reject(401, '请先登录 N.E.K.O. 账号');
             return json(res, 201, platform.publish(input));
           }
           if (url.pathname === '/api/demo') {
@@ -120,13 +167,28 @@ export function createApp({ directory = process.env.DATA_DIR || path.join(root, 
             const html = await readFile(path.join(root, 'examples', 'two-player.html'), 'utf8');
             return json(res, 200, platform.publish({ title: '一起落一颗星 · 双人井字棋', mode: 'turns', html }));
           }
+          if (url.pathname === '/api/publisher/logout') {
+            if (!communitySeats || req.headers.origin !== publicOrigin) reject(403, '不允许的来源');
+            endPublisher(req);
+            res.setHeader('Set-Cookie', publisherCookie('', 0));
+            return json(res, 200, { signedIn: false });
+          }
+          if (url.pathname === '/api/publisher/seat') {
+            if (!communitySeats || req.headers.origin !== publicOrigin) reject(403, '不允许的来源');
+            const account = publisher(req);
+            if (!account) reject(401, '请先连接 N.E.K.O. 账号');
+            const { operation, target } = input ?? {};
+            if (operation !== 'create' && operation !== 'join' || !seatTarget(operation, target)) reject(400, '游戏或房间无效');
+            if (operation === 'create') return json(res, 201, platform.create(target, undefined, account));
+            return json(res, 200, joinAccountRoom(target, account));
+          }
           if (url.pathname === '/api/community/seat/start' || url.pathname === '/api/community/seat') {
             if (!communitySeats) reject(503, '社区账号入座暂不可用');
             if (req.headers.origin !== publicOrigin) reject(403, '不允许的来源');
             const { operation, target } = input ?? {};
             if (!seatTarget(operation, target)) reject(400, '游戏或房间无效');
             if (operation === 'create') platform.game(target);
-            else if (!platform.room(target).community) reject(409, '这个房间使用访客入座');
+            else if (operation === 'join' && !platform.room(target).community) reject(409, '这个房间使用访客入座');
             if (url.pathname.endsWith('/start')) {
               const flow = communitySeats.start(operation, target);
               if (!flow) reject(503, '社区授权繁忙，请稍后再试');
@@ -136,11 +198,12 @@ export function createApp({ directory = process.env.DATA_DIR || path.join(root, 
             const account = communitySeats.claim(input.ticket, req.headers.cookie, operation, target);
             if (!account) reject(401, '社区授权已失效，请重新入座');
             res.setHeader('Set-Cookie', account.cookie);
+            if (operation === 'publish') {
+              res.setHeader('Set-Cookie', [account.cookie, startPublisher(req, account)]);
+              return json(res, 200, { signedIn: true, name: account.name, projects: platform.projects(account.id) });
+            }
             if (operation === 'create') return json(res, 201, platform.create(target, undefined, account));
-            const seat = platform.join(target, undefined, account);
-            for (const ws of sockets) if (ws.room === seat.id && ws.player === seat.player) ws.close(4001, 'Seat restored on another device');
-            broadcast(target);
-            return json(res, 200, seat);
+            return json(res, 200, joinAccountRoom(target, account));
           }
           if (url.pathname === '/api/rooms') return json(res, 201, platform.create(input.gameId, input.name));
           if ((match = url.pathname.match(/^\/api\/rooms\/([\w-]{12})\/join$/))) { const seat = platform.join(match[1], input.name); broadcast(match[1]); return json(res, 200, seat); }
