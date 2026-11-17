@@ -2,7 +2,7 @@ import {cpSync,existsSync,mkdirSync,readFileSync,writeFileSync,renameSync,readdi
 import {spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {gameRuntimeFiles} from './neko-game-runtime-files.mjs';
-import {dirname,join,resolve,relative,isAbsolute} from 'node:path';
+import {dirname,join,resolve,relative,isAbsolute,sep} from 'node:path';
 import {packageWindowsInstaller} from './windows-installer.mjs';
 
 const run=(command,args,options={})=>{const r=spawnSync(command,args,{encoding:'utf8',windowsHide:true,maxBuffer:8*1024*1024,...options});if(r.status!==0)throw Error(r.stderr||r.stdout||r.error?.message||'Build command failed');return r.stdout;};
@@ -30,8 +30,14 @@ export async function buildWindowsDaily({root,release,args}){
   const electron=required('--electron-dir'),node=required('--node-dir');
   const dshResources=value('--dsh-resources')?resolve(value('--dsh-resources')):null;
   if(release.windowsDshVersion&&!dshResources)throw Error('Windows release requires --dsh-resources for DSH '+release.windowsDshVersion);
+  const dshExtractor=dshResources?resolve(value('--dsh-extractor-dir')||join(process.env.ProgramFiles||'C:/Program Files','7-Zip')):null;
+  if(existsSync(output))throw Error('Refusing to overwrite existing output');
+  for(const input of [root,sourceRoot,electron,node,dshResources,dshExtractor].filter(Boolean)){
+    const rel=relative(input,output);
+    if(!isAbsolute(rel)&&rel!=='..'&&!rel.startsWith('..'+sep))throw Error('Output must be outside input trees');
+  }
+  for(const file of [join(electron,'electron.exe'),join(node,'node.exe')])if(!existsSync(file))throw Error('Missing runtime: '+file);
   let bundledDsh=null;
-  let dshExtractor=null;
   if(dshResources){
     for(const name of ['app.asar','app.asar.unpacked','runtime/primary-runtime','runtime/office-skills'])if(!existsSync(join(dshResources,name)))throw Error('Incomplete bundled DSH: '+name);
     const inspect='process.stdout.write(require(process.argv[1]).readWindowsDshVersion(process.argv[2]))';
@@ -41,12 +47,8 @@ export async function buildWindowsDaily({root,release,args}){
       if(expected&&version!==expected)throw Error('Bundled DSH is '+version+' but the build requires '+expected);
     }
     bundledDsh={version};
-    dshExtractor=resolve(value('--dsh-extractor-dir')||join(process.env.ProgramFiles||'C:/Program Files','7-Zip'));
     for(const file of ['7z.exe','7z.dll','License.txt'])if(!existsSync(join(dshExtractor,file)))throw Error('DSH updater requires 7-Zip. Pass --dsh-extractor-dir with 7z.exe, 7z.dll and License.txt');
   }
-  if(existsSync(output))throw Error('Refusing to overwrite existing output');
-  for(const file of [join(electron,'electron.exe'),join(node,'node.exe')])if(!existsSync(file))throw Error('Missing runtime: '+file);
-  for(const input of [root,sourceRoot,electron,node]){const rel=relative(input,output);if(!isAbsolute(rel)&&rel!=='..'&&!rel.startsWith('..\\'))throw Error('Output must be outside input trees');}
   const dir=join(output,'application');mkdirSync(dir,{recursive:true});
   cpSync(electron,dir,{recursive:true,filter:src=>!src.endsWith('default_app.asar')&&!/\.(?:log|dmp|dpapi|sqlite)$/i.test(src)});
   renameSync(join(dir,'electron.exe'),join(dir,'NEKOfuns.exe'));

@@ -56,34 +56,61 @@ function createDshUpdateStore(dataDir) {
     return versionParts(entry?.version) && /^engine-[a-zA-Z0-9]{6}$/.test(entry.directory || '')
       ? path.join(root, entry.directory, 'engine', 'resources') : null;
   }
-  function select(bundledVersion) {
-    const pointer = read();
-    const selected = resources(pointer);
-    if (!selected || !isNewer(pointer.version, bundledVersion)) return null;
+  function checkedResources(entry) {
+    const selected = resources(entry);
+    if (!selected) return null;
     try {
       if (!fs.existsSync(path.join(selected, 'runtime/primary-runtime')) ||
           !fs.existsSync(path.join(selected, 'app.asar.unpacked')) ||
-          readWindowsDshVersion(selected) !== pointer.version) return null;
+          readWindowsDshVersion(selected) !== entry.version) return null;
     } catch { return null; }
-    return { resources: selected, version: pointer.version, trial: pointer.verified !== true };
+    return selected;
+  }
+  function select(bundledVersion) {
+    const active = read();
+    if (!isNewer(active.version, bundledVersion)) return null;
+    const selected = checkedResources(active);
+    if (selected) return { resources: selected, version: active.version, trial: active.verified !== true };
+    const previous = checkedResources(active.previous);
+    return previous && isNewer(active.previous.version, bundledVersion)
+      ? { resources: previous, version: active.previous.version, trial: false } : null;
   }
   function confirm(version) {
     const active = read();
-    if (active.version === version && !active.verified) write({ ...active, verified: true });
+    if (active.version !== version) return false;
+    if (active.verified !== true) write({ ...active, verified: true });
+    return true;
   }
   function rollback(version) {
     const active = read();
     if (active.version !== version || active.verified) return false;
-    write(resources(active.previous) ? { ...active.previous, verified: true } : {});
+    write(checkedResources(active.previous) ? { ...active.previous, verified: true } : {});
     return true;
   }
   function activate(version, directory, currentVersion) {
     const active = read();
-    const previous = active.version === currentVersion && active.verified
-      ? { version: active.version, directory: active.directory } : undefined;
+    const current = active.verified === true && active.version === currentVersion ? active : active.previous;
+    const previous = current?.version === currentVersion && checkedResources(current)
+      ? { version: current.version, directory: current.directory } : undefined;
     write({ version, directory, previous, verified: false });
   }
   return { root, resources, read, select, confirm, rollback, activate };
+}
+
+async function loadTrialPage(window, url) {
+  const contents = window.webContents;
+  let status;
+  const recordStatus = (_event, _url, statusCode) => { status = statusCode; };
+  contents.on('did-navigate', recordStatus);
+  try {
+    await window.loadURL(url.href);
+    if (window.isDestroyed() || new URL(contents.getURL()).origin !== url.origin ||
+        !Number.isInteger(status) || status < 200 || status >= 400) {
+      throw Error('DSH 更新后的工作台页面未正常加载。');
+    }
+  } finally {
+    contents.removeListener('did-navigate', recordStatus);
+  }
 }
 
 async function fetchOfficial(url, timeout) {
@@ -162,4 +189,4 @@ async function installDshUpdate({ store, release, currentVersion, extractor, pro
   }
 }
 
-module.exports = { createDshUpdateStore, checkDshUpdate, installDshUpdate, isNewer, parseFeed };
+module.exports = { createDshUpdateStore, checkDshUpdate, installDshUpdate, loadTrialPage, isNewer, parseFeed };
