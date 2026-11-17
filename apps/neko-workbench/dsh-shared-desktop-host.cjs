@@ -48,10 +48,13 @@ async function start(){
   const {ctx}=await runProfile({...cfg.options,resolvedProfile:{profile,installAnchor:cfg.installAnchor}});
   const dependencies=await moduleFor('@deepseek-ai/dsh-tool-workspace-dependencies');
   await ctx.plugin(dependencies,{source:cfg.source,root:path.join(runtime.dshHomeDir,'dsh-runtimes/dsh-primary-runtime')});
-  const office=await moduleFor('@deepseek-ai/dsh-skill-office');
-  const manifest=load.resolve('@deepseek-ai/libreoffice-kit/package.json');
-  const physical=manifest.includes('.asar/')?manifest.replace('.asar/','.asar.unpacked/'):manifest;
-  await ctx.plugin(office,{assetRoot:path.join(path.dirname(cfg.source),'office-skills'),node:path.join(cfg.source,'dependencies/node/bin/node'),cli:path.join(path.dirname(physical),'lib/cli.js')});
+  // Newer official web profiles already provide Office skills.
+  if(!ctx.skills?.layers?.global?.providers?.get('dsh-office')){
+    const office=await moduleFor('@deepseek-ai/dsh-skill-office');
+    const manifest=load.resolve('@deepseek-ai/libreoffice-kit/package.json');
+    const physical=manifest.includes('.asar/')?manifest.replace('.asar/','.asar.unpacked/'):manifest;
+    await ctx.plugin(office,{assetRoot:path.join(path.dirname(cfg.source),'office-skills'),node:path.join(cfg.source,'dependencies/node/bin/node'),cli:path.join(path.dirname(physical),'lib/cli.js')});
+  }
 }
 if(require.main===module)start().catch(error=>{console.error(error);process.exitCode=1;});
 module.exports={desktopOptions,loadDesktopProfile};
