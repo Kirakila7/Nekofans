@@ -2,13 +2,15 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
+const {createMainAgentWindows}=require('../../apps/neko-workbench/main-agent-windows.cjs');
 const source=fs.readFileSync(path.join(__dirname,'../../apps/neko-workbench/main.cjs'),'utf8');
 const start=source.indexOf('async function openDsh(){'),end=source.indexOf('\nfunction editMemory()',start);
 function fixture({hidden=false,minimized=false,loading=false,workbenchOnly=false}={}){
   const calls=[];const main={id:'main'};
-  const pet={visible:!hidden,isMinimized:()=>minimized,restore(){minimized=false;calls.push('restore');},showInactive(){this.visible=true;calls.push('pet-show');},webContents:{isLoading:()=>loading}};
+  const pet={visible:!hidden,isDestroyed:()=>false,isMinimized:()=>minimized,restore(){minimized=false;calls.push('restore');},showInactive(){this.visible=true;calls.push('pet-show');},webContents:{isLoading:()=>loading}};
   const host={isDestroyed:()=>false,show(){calls.push('workbench-show');},focus(){calls.push('workbench-focus');}};
-  const context={workbenchOnly,state:{actors:[main]},dshWindow:host,createPetWindow(actor){assert.equal(actor,main);calls.push('pet-create');return pet;},app:{focus(){}}};
+  const mainAgent=createMainAgentWindows({getPet:()=>pet,actions:{}});
+  const context={workbenchOnly,state:{actors:[main]},dshWindow:host,createPetWindow(actor){assert.equal(actor,main);calls.push('pet-create');return pet;},app:{focus(){}},mainAgent};
   vm.createContext(context);vm.runInContext(source.slice(start,end)+';globalThis.open=openDsh;',context);
   return {context,pet,calls};
 }

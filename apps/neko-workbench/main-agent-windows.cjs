@@ -121,6 +121,7 @@ function createMainAgentWindows({
         catch (error) { actions.onError(error); }
       }
     });
+    window.webContents.once('did-finish-load', () => window.webContents.send('main-agent:state', snapshot()));
     void loadLocalFile(window, {view: 'main-agent-guide'}).then(() => {
       if (!window.isDestroyed() && pet.isVisible()) window.showInactive();
     }).catch(error => {
@@ -142,6 +143,7 @@ function createMainAgentWindows({
     });
     settingsWindow = window;
     window.once('closed', () => { settingsWindow = null; });
+    window.webContents.once('did-finish-load', () => window.webContents.send('main-agent:state', snapshot()));
     void loadLocalFile(window, {view: 'main-agent-settings', tab}).then(() => {
       if (!window.isDestroyed()) window.show();
     }).catch(error => {

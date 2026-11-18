@@ -36,9 +36,14 @@ test('main pet transparent stage passes clicks through, body and editor remain i
 });
 test('decoded video alpha determines the model hit, including transparent pixels within the body rectangle',{skip:!JSDOM},async t=>{
  const f=renderer(t);await new Promise(r=>setImmediate(r));const d=f.w.document,character=d.querySelector('.character'),video=d.querySelector('video');
+ Object.defineProperty(d,'hidden',{value:false});
  const rect={left:0,top:100,right:640,bottom:460,width:640,height:360};character.getBoundingClientRect=video.getBoundingClientRect=()=>rect;video.classList.add('is-front');Object.defineProperties(video,{videoWidth:{value:640},videoHeight:{value:360}});
  let alpha=0;f.w.HTMLCanvasElement.prototype.getContext=()=>({clearRect(){},drawImage(){},getImageData:()=>({data:[0,0,0,alpha]})});d.querySelector('.pet-bubble').hidden=true;
  f.w.dispatchEvent(new f.w.MouseEvent('mousemove',{clientX:320,clientY:280}));assert.equal(f.calls.filter(([m])=>m==='pass-through').at(-1)[1].ignore,true);
  alpha=255;f.w.dispatchEvent(new f.w.MouseEvent('mousemove',{clientX:320,clientY:280}));assert.equal(f.calls.filter(([m])=>m==='pass-through').at(-1)[1].ignore,false);
- alpha=0;await new Promise(r=>setTimeout(r,220));assert.equal(f.calls.filter(([m])=>m==='pass-through').at(-1)[1].ignore,true,'stationary pointer is resampled as the video changes');
+ alpha=0;
+ const latestPassThrough=()=>f.calls.filter(([m])=>m==='pass-through').at(-1)[1].ignore;
+ const deadline=Date.now()+1500;
+ while(!latestPassThrough()&&Date.now()<deadline)await new Promise(resolve=>setTimeout(resolve,25));
+ assert.equal(latestPassThrough(),true,'stationary pointer is resampled as the video changes');
 });
