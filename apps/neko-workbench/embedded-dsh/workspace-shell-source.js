@@ -2852,6 +2852,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
       if(busy)return;
       busy=true;actions.setAttribute('aria-busy','true');
       signedIn.hidden=true;status.textContent=progress[request.action];
+      status.scrollIntoView?.({block:'nearest'});
       try{
         const result=await workshopCall(request);
         report(result,text);
@@ -2905,7 +2906,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
       finally{uploadButton.disabled=false;}
     });
     upload.append(el('summary','','上传游戏'),field('联机 HTML 文件',file),field('作品名称',title),field('联机方式',mode),uploadButton);
-    actions.append(caption,create,room,myProjects,library,upload,status,signedIn);
+    actions.append(caption,status,signedIn,create,room,myProjects,library,upload);
     return {node:actions,publish:revisionId=>perform({action:'workshop-publish-draft',revisionId},
       result=>select(result.project),'作品已发布，可以开房。')};
   }
@@ -2914,7 +2915,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     const url = el('input', 'neko-lobby-game-url'); url.type = 'url'; url.setAttribute('aria-label', '游戏邀请链接'); url.placeholder = 'https://…/?room=…';
     const server = el('input','neko-lobby-game-server'); server.type='url'; server.setAttribute('aria-label','游戏服务器'); server.placeholder='https://play.nekofans.games';
 
-    const gameState=el('p','neko-lobby-game-status','好友打开邀请后可直接进入 Nekofans，也可以在浏览器游玩。');gameState.setAttribute('role','status');
+    const gameState=el('p','neko-lobby-game-status',workshop?'':'好友打开邀请后可直接进入 Nekofans，也可以在浏览器游玩。');gameState.setAttribute('role','status');
     const gamePicker=el('select','neko-lobby-game-picker');gamePicker.setAttribute('aria-label','选择示例游戏');
     const chess=el('option','','双人国际象棋');chess.value='chess';gamePicker.append(chess);
     const identityNote=el('p','neko-lobby-field__hint','女神负责中立处理规则，本方主 Agent 使用你选定的桌面伙伴。');
@@ -3045,7 +3046,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     const prompt=el('textarea','neko-lobby-game-prompt');
     prompt.rows=3;prompt.maxLength=2000;prompt.setAttribute('aria-label','游戏制作要求');
     prompt.placeholder='比如：两个人争夺月球基地，轮流选择修理、探索或抢占资源。';
-    const preview=el('section','neko-lobby-game-room-controls');preview.hidden=true;
+    const preview=el('section','neko-lobby-game-room-controls neko-game-draft-preview');preview.hidden=true;
     const gameName=el('h3'),description=el('p'),opening=el('p'),choices=el('ul');
     let revisionId;
     const draft=button('制作游戏','neko-lobby-game-draft',async()=>{
@@ -3104,7 +3105,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
       inviteFriend.textContent = inviteEnabled ? '创建房间并邀请好友' : '创建并复制好友邀请';
       publish.textContent = inviteEnabled ? '开房并邀请好友' : '开房并复制好友邀请';
     }
-    return {nodes:[multiplayer,field('描述你想玩的游戏',prompt,'创造台可以制作双人回合制游戏。'),draft,preview,...(workshop?[workshop.node]:[]),gameState,resultActions,identityNote,samples,advanced],open,syncInviteAvailability,request:()=>null};
+    return {nodes:[field('描述你想玩的游戏',prompt,'创造台可以制作双人回合制游戏。'),draft,gameState,preview,...(workshop?[workshop.node]:[]),multiplayer,resultActions,identityNote,samples,advanced],open,syncInviteAvailability,request:()=>null};
   }
   function catFields() {
     const settings = snap?.catSettings || {}, part = snap?.participation || {}, own = snap?.me?.cat;
