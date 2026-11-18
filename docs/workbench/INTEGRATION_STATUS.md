@@ -4,6 +4,8 @@
 
 The creation desk saves validated game revisions in the current workbench profile. The local draft list opens the latest revision of each draft branch for editing, playtesting, or publication. Creating another game leaves the earlier drafts available. Reopening and playtesting do not contact the model or workshop. Local storage preserves the generated draft in the current session when a write fails. Community authorization for live publication and joining remains pending.
 
+The creation desk checks DeepSeek sign-in before generation. Signed-out users can open the native account menu and return to their typed description or revision. Signing in leaves generation under the user's control. Draft browsing and playtesting stay available.
+
 ## macOS daily build 94: keep office sessions visible during layout (2026-11-11)
 
 Office restores the native DSH session list before measuring the sidebar. Resize and scroll updates leave the list visible, preventing the entrance animation from restarting on every layout pass. Daily mode still hides the native list while its own surfaces are active.

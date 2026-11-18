@@ -1743,6 +1743,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
   const SLOW = [[0, '关闭'], [5, '5 秒'], [10, '10 秒'], [30, '30 秒'], [60, '60 秒']];
   const MUTES = [[10, '禁言 10 分钟'], [60, '禁言 1 小时'], [1440, '禁言 24 小时']];
   let draft = C ? C.create() : null, assistOpen = false, menuFor = null, dialog = null, lastMode = null, nudgeSeen = null, membersKey = '', cardKey = '';
+  let studioLoginDraft;
   let browsingHistory = false, loadingOlder = false, messageMenuAnchor = null;
   const rows = new Map();
   const hasWorkshop=typeof bridge.gameWorkshop==='function';
@@ -3064,6 +3065,19 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     const prompt=el('textarea','neko-lobby-game-prompt');
     prompt.rows=3;prompt.maxLength=2000;prompt.setAttribute('aria-label','游戏制作要求');
     prompt.placeholder='比如：两个人争夺月球基地，轮流选择修理、探索或抢占资源。';
+    const loginDraft=studioLoginDraft;studioLoginDraft=undefined;
+    const accountHint=el('div','neko-game-draft-account-hint');accountHint.hidden=true;
+    const accountText=el('p','neko-lobby-field__hint','制作或修改游戏需要登录 DeepSeek。已保存的草稿可以直接试玩。');
+    accountText.setAttribute('role','status');
+    const accountButton=button('打开账号菜单','neko-game-draft-account',()=>{
+      if(draft.disabled||testingDraft||publishToWorkshop?.disabled)return;
+      const launcher=doc.querySelector('[data-slot="settings.launcher"] button[data-signed-out="true"]');
+      if(!launcher){gameState.textContent='请从左侧「账号与设置」登录 DeepSeek，再回到创造台。';return;}
+      studioLoginDraft={text:prompt.value,revisionId};
+      closeDialog();
+      launcher.focus();if(launcher.getAttribute('aria-expanded')!=='true')launcher.click();
+    });
+    accountHint.append(accountText,accountButton);
     const preview=el('section','neko-lobby-game-room-controls neko-game-draft-preview');preview.hidden=true;
     const gameName=el('h3'),description=el('p'),opening=el('p'),choices=el('ul');
     const trialStatus=el('p','neko-lobby-game-status');trialStatus.setAttribute('role','status');
@@ -3071,7 +3085,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     const draftLibrary=el('details','neko-game-local-drafts');draftLibrary.hidden=true;
     const draftList=el('div','neko-game-local-draft-list');
     draftLibrary.append(el('summary','','本机草稿'),draftList);
-    let revisionId,testingDraft=false;
+    let revisionId,testingDraft=false,authoringStarted=false;
     const draftStorageError='本机草稿暂时无法读取，请检查工作台的本地存储。';
     function showDraft(result, message){
       revisionId=result.revisionId;
@@ -3083,15 +3097,19 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
       prompt.value='';prompt.placeholder='想怎么修改这款游戏？';draft.textContent='修改游戏';
       gameState.textContent=result.saved===false?'草稿暂时无法保存。请在这次会话中继续编辑，或检查本地存储后再试。':message;
     }
-    async function openLocalDraft(id){
+    async function openLocalDraft(id, restoredPrompt){
       if(draft.disabled||testingDraft||publishToWorkshop?.disabled)return;
       draft.disabled=true;
+      if(restoredPrompt!==undefined)prompt.disabled=true;
       try{
         const result=await callGame({action:'open-game-draft',revisionId:id});
         if(!preview.isConnected)return;
         if(result?.status==='draft'&&result.preview)showDraft(result,'已打开本机草稿。可以继续修改、试玩或发布。');
         else gameState.textContent=result?.status==='draft-storage-unavailable'?draftStorageError:'找不到这份本机草稿。';
-      }finally{draft.disabled=false;publish.disabled=!revisionId;}
+      }finally{
+        draft.disabled=false;publish.disabled=!revisionId;
+        if(restoredPrompt!==undefined){prompt.disabled=false;prompt.value=restoredPrompt;prompt.focus();}
+      }
     }
     async function refreshLocalDrafts(){
       const result=await callGame({action:'list-game-drafts'});
@@ -3144,16 +3162,22 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     const draft=button('制作游戏','neko-lobby-game-draft',async()=>{
       if(draft.disabled)return;
       if(!prompt.value.trim()){prompt.focus();return;}
+      authoringStarted=true;
       draft.disabled=publish.disabled=true;
       gameState.textContent='创造台正在设计玩法和结局…';
       try{
         const result=await callGame({action:'draft-game',prompt:prompt.value,revisionId});
+        if(!prompt.isConnected)return;
         if(result?.status!=='draft'||!result.preview){
+          if(result?.status==='draft-sign-in-required')accountHint.hidden=false;
           gameState.textContent=({'invalid-proposal':'这次生成的玩法没通过检查。可以简化描述后重试。',
+            'draft-sign-in-required':'登录后回到创造台，刚才输入的描述会保留。',
+            'draft-account-unavailable':'暂时无法读取 DeepSeek 账号状态。请检查连接后再试。',
             'draft-storage-unavailable':draftStorageError,busy:'创造台正在制作另一份草稿，请等它完成。',
             limit:'本机草稿版本已到上限。现有草稿仍可试玩和发布。'})[result?.status]||'暂时没能完成制作，请检查 DeepSeek 账号后重试。';
           return;
         }
+        accountHint.hidden=true;
         showDraft(result,workshop?'草稿已生成。可以试玩或修改，满意后发布到游戏工坊。':'游戏已做好，可以试玩、修改或开房邀请朋友。');
         if(workshop)void refreshLocalDrafts();
       }finally{draft.disabled=false;publish.disabled=!revisionId;}
@@ -3185,7 +3209,14 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     samples.append(el('summary','','试玩示例'),field('示例游戏',gamePicker),inviteFriend,create);
     if(workshop)advanced.append(el('p','neko-lobby-field__hint','使用原来的秘密规则棋局服务建房'),publish);
     async function open(){
-      if(workshop)void refreshLocalDrafts();
+      if(loginDraft?.revisionId)void openLocalDraft(loginDraft.revisionId,loginDraft.text);
+      else if(loginDraft)prompt.value=loginDraft.text;
+      if(workshop){
+        void refreshLocalDrafts();
+        void callGame({action:'draft-account-status'}).then(result=>{
+          if(prompt.isConnected&&!authoringStarted&&result?.status==='signed-out')accountHint.hidden=false;
+        });
+      }
       const {games,teammateName}=await callGame({action:'private-games'})||{};
       if(!gamePicker.isConnected)return;
       if(Array.isArray(games)&&games.length){
@@ -3197,7 +3228,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
       inviteFriend.textContent = inviteEnabled ? '创建房间并邀请好友' : '创建并复制好友邀请';
       publish.textContent = inviteEnabled ? '开房并邀请好友' : '开房并复制好友邀请';
     }
-    return {nodes:[field('描述你想玩的游戏',prompt,'创造台可以制作双人回合制游戏。'),draftActions,gameState,preview,...(workshop?[draftLibrary,workshop.node]:[]),multiplayer,resultActions,identityNote,samples,advanced],open,syncInviteAvailability,request:()=>null};
+    return {nodes:[field('描述你想玩的游戏',prompt,'创造台可以制作双人回合制游戏。'),accountHint,draftActions,gameState,preview,...(workshop?[draftLibrary,workshop.node]:[]),multiplayer,resultActions,identityNote,samples,advanced],open,syncInviteAvailability,request:()=>null};
   }
   function catFields() {
     const settings = snap?.catSettings || {}, part = snap?.participation || {}, own = snap?.me?.cat;

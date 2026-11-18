@@ -860,3 +860,37 @@ test('the studio opens a saved draft, modifies its revision, and starts a differ
  prompt.value='云岛赛跑';draft.click();await tick();
  assert.deepEqual(generated,['r-old',undefined]);
 });
+
+test('the studio preserves a pending edit while the player signs in to DeepSeek',{skip:DOM_SKIP},async t=>{
+ const generated=[];
+ let account='signed-out';
+ const stored={status:'draft',revisionId:'r-old',preview:{title:'雾岛灯塔',description:'引导渡轮',opening:'灯还没亮',choices:['点灯']}};
+ const {doc}=setup(t,{workbenchEdition:'office',gameWorkshop:async()=>({}),gameHub:async request=>{
+   switch(request.action){
+     case 'draft-account-status': return {status:account};
+     case 'list-game-drafts': return {status:'ready',revisions:[{revisionId:stored.revisionId,title:stored.preview.title,createdAt:1730000000000}]};
+     case 'open-game-draft': assert.equal(request.revisionId,stored.revisionId);return stored;
+     case 'draft-game': generated.push(structuredClone(request));return stored;
+     default: return {};
+   }
+ }});
+ const settings=doc.createElement('div'),launcher=doc.createElement('button');
+ settings.dataset.slot='settings.launcher';launcher.dataset.signedOut='true';settings.append(launcher);doc.body.append(settings);
+ let menuOpened=0;launcher.addEventListener('click',()=>{menuOpened++;});
+ const studio=()=>doc.querySelector('.neko-office-game-studio').click();
+ const prompt=()=>doc.querySelector('.neko-lobby-game-prompt');
+ await tick();studio();await tick();
+ assert.equal(doc.querySelector('.neko-game-draft-account-hint').hidden,false);
+ doc.querySelector('.neko-game-open-local-draft').click();await tick();
+ prompt().value='灯塔改成蓝色';
+ doc.querySelector('.neko-game-draft-account').click();
+ assert.equal(menuOpened,1);assert.equal(prompt(),null);
+ account='signed-in';launcher.dataset.signedOut='false';
+ studio();await tick();
+ assert.equal(prompt().value,'灯塔改成蓝色');
+ assert.match(doc.querySelector('.neko-game-draft-preview').textContent,/雾岛灯塔/);
+ assert.equal(doc.querySelector('.neko-game-draft-account-hint').hidden,true);
+ assert.deepEqual(generated,[]);
+ doc.querySelector('.neko-lobby-game-draft').click();await tick();
+ assert.deepEqual(generated,[{action:'draft-game',prompt:'灯塔改成蓝色',revisionId:'r-old'}]);
+});

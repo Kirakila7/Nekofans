@@ -1168,6 +1168,15 @@ function gameWorkshop(){
     openPage:workshopWindow.open,
   });
 }
+async function studioAccountStatus(){
+  if(state.connection==='ready'){
+    try{
+      const {status}=await rpc('game-studio-account-status');
+      if(status==='signed-in'||status==='signed-out')return status;
+    }catch{}
+  }
+  return 'unavailable';
+}
 function gameStudio(){
   return privateGameStudio??=import(pathToFileURL(path.join(base,'../../services/nekofans-game-hub/game-studio.mjs')).href)
     .then(({createGameStudio})=>createGameStudio({
@@ -1270,8 +1279,11 @@ ipcMain.handle('workbench:game-hub',async(event,request)=>{
     return {ok:room.status==='created',status:room.status,inviteUrl:room.inviteUrl};
   }
   if(request?.action==='draft-game'){
+    const status=await studioAccountStatus();
+    if(status!=='signed-in')return {status:status==='signed-out'?'draft-sign-in-required':'draft-account-unavailable'};
     return (await gameStudio()).propose({prompt:request.prompt,revisionId:request.revisionId});
   }
+  if(request?.action==='draft-account-status')return {status:await studioAccountStatus()};
   if(request?.action==='playtest-draft'){
     return (await gameStudio()).playtest(request.revisionId,request.moves);
   }

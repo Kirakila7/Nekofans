@@ -514,6 +514,8 @@ body[data-neko-workspace-shell] .neko-chatroom-preview::before { content:''; pos
 .neko-game-draft-preview ul[data-playtest]:not([hidden]) { display:grid; gap:6px; list-style:none; padding:0; }
 .neko-game-draft-preview .neko-game-draft-choice { width:100%; text-align:start; }
 .neko-game-draft-actions { display:flex; gap:8px; }
+.neko-game-draft-account-hint:not([hidden]) { display:flex; flex-wrap:wrap; align-items:center; gap:6px 12px; }
+.neko-game-draft-account-hint p { flex:1 1 250px; margin:0; }
 .neko-game-draft-actions .neko-lobby-game-draft { flex:1; }
 .neko-game-local-drafts:not([hidden]) { padding:10px 12px; border:1px solid var(--nws-border); border-radius:12px; }
 .neko-game-local-drafts summary { cursor:pointer; }
