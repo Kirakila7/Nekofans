@@ -1941,9 +1941,13 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     const pending=loginReturn;if(!pending?.terminal||pending.navigating||disposed)return;
     loginReturn=null;pauseJoin=!(pending.terminal.lobbyAvailable===true||loginUsable(pending.terminal.status));
     if(!loginUsable(pending.terminal.status))error=pending.terminal.error||pending.terminal.message||error;
-    if(pending.relayStarted){const detail={connect:!pauseJoin,returnFocus:input};doc.dispatchEvent(new doc.defaultView.CustomEvent('neko-account-open-lobby',{detail}));if(!detail.handled)show({connect:!pauseJoin});else Promise.resolve(detail.promise).catch(()=>{if(!disposed){error='聊天室暂未恢复，请重新打开';render();}});}
+    let restored;
+    if(pending.relayStarted){const detail={connect:!pauseJoin,returnFocus:input};doc.dispatchEvent(new doc.defaultView.CustomEvent('neko-account-open-lobby',{detail}));if(!detail.handled)show({connect:!pauseJoin});else restored=detail.promise;}
     else if(!pauseJoin&&open)join();
     render();
+    if(restored||pending.afterLogin)Promise.resolve(restored).then(()=>{
+      if(loginUsable(pending.terminal.status)&&pending.isCurrent()&&unifiedLoginState?.flowId===pending.flowId&&loginUsable(unifiedLoginState.status))return pending.afterLogin?.();
+    }).catch(()=>{if(!disposed){error='聊天室暂未恢复，请重新打开';render();}});
   }
   function observeUnifiedLogin(flow){
     if(disposed||!flow||typeof flow!=='object')return;
@@ -1962,14 +1966,14 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     }
     render();
   }
-  async function beginSignIn(){
+  async function beginSignIn(afterLogin){
     if(disposed||localSigningIn||loginCancelPending||unifiedBusy())return;
     const epoch=++loginEpoch,isCurrent=()=>!disposed&&epoch===loginEpoch;localSigningIn=true;unifiedAttempt=false;error='';render();
     try{
       if(typeof bridge.nekoSignIn==='function'){
         unifiedAttempt=true;const result=await bridge.nekoSignIn({source:'lobby'});if(!isCurrent())return;if(result?.ok===false)throw Error(result.error||'N.E.K.O. 登录未能完成，请重试。');
         const flow=result?.state;
-        if(flow?.source==='lobby'&&Number.isSafeInteger(flow.flowId))loginReturn={flowId:flow.flowId,relayStarted:false,navigating:false,terminal:null};
+        if(flow?.source==='lobby'&&Number.isSafeInteger(flow.flowId))loginReturn={flowId:flow.flowId,relayStarted:false,navigating:false,terminal:null,afterLogin,isCurrent};
         observeUnifiedLogin(unifiedLoginState?.flowId===flow?.flowId&&loginRank(unifiedLoginState?.status)>=loginRank(flow?.status)?unifiedLoginState:flow);
         await call({action:'state'});
       }else await call({action:'sign-in'});
@@ -2060,17 +2064,20 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
       const [, title, inviteUrl] = candidate;
       if (title) bubble.appendChild(el('span','neko-lobby-game-invite-title',title));
       const status=el('span','neko-lobby-game-status');status.setAttribute('role','status');status.hidden=true;
-      const joinGame=button('加入游戏','neko-lobby-game-join',async()=>{
+      async function joinInvitation(){
         if(!workshopInvite){openDialog('game-room',inviteUrl);return;}
+        if(joinGame.disabled)return;
         joinGame.disabled=true;
         signIn.hidden=true;status.textContent='正在打开游戏房间…';status.hidden=false;
         try{
           const result=await openWorkshopInvite(inviteUrl);
           signIn.hidden=result?.status!=='sign-in-required';
           status.textContent=result?.ok?'已在 Nekofans 打开房间。':result?.error||'暂时无法加入游戏。';
+          if(!result?.ok&&!status.isConnected&&!disposed){error=status.textContent;render();}
         }finally{joinGame.disabled=false;}
-      });
-      const signIn=button('连接社区账号','neko-lobby-game-connect',()=>void beginSignIn());signIn.hidden=true;
+      }
+      const joinGame=button('加入游戏','neko-lobby-game-join',joinInvitation);
+      const signIn=button('连接社区账号并加入','neko-lobby-game-connect',()=>void beginSignIn(joinInvitation));signIn.hidden=true;
       bubble.append(joinGame,signIn,status);
     } else {
       bubble.appendChild(m.deleted ? el('p', 'neko-lobby-deleted', '消息已删除') : richText(m.text, 'neko-lobby-text'));
@@ -2400,7 +2407,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     group.dataset.value = current; group.append(...buttons);
     return group;
   }
-  function closeDialog() { if (!dialog) return; const from = dialog.from; dialog.cleanup?.(); dialog.node.remove(); dialog = null; from?.focus?.(); onChange?.(); }
+  function closeDialog(accountChanged = false) { if (!dialog) return; const from = dialog.from; dialog.cleanup?.(accountChanged); dialog.node.remove(); dialog = null; from?.focus?.(); onChange?.(); }
   function openDialog(kind, inviteUrl, enterRoom, notice) {
     closeMessageMenu();
     closeDialog();
@@ -2412,7 +2419,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     const invite = kind === 'game-invite';
     const friends = kind === 'friends', inbox=kind==='game-inbox', contacts=friends||inbox;
     const game = studio || invite || kind === 'game' || kind === 'game-room';
-    const heading = el('h2', 'neko-lobby-dialog__title', inbox?'游戏邀请':friends ? 'N.E.K.O. 好友' : kind === 'cat' ? '猫猫设置' : studio ? '创造台 · 游戏制作' : invite || kind === 'game' ? '加入棋局' : kind === 'game-room' ? '秘密规则棋局' : '频道管理'); heading.id = 'neko-lobby-dialog-title'; node.setAttribute('aria-labelledby', heading.id);
+    const heading = el('h2', 'neko-lobby-dialog__title', inbox?'游戏邀请':friends ? 'N.E.K.O. 好友' : kind === 'cat' ? '猫猫设置' : studio ? '创造台 · 游戏制作' : invite || kind === 'game' ? '加入游戏' : kind === 'game-room' ? '秘密规则棋局' : '频道管理'); heading.id = 'neko-lobby-dialog-title'; node.setAttribute('aria-labelledby', heading.id);
     const status = el('p', 'neko-lobby-dialog__error'); status.setAttribute('role', 'status'); status.hidden = true;
     const save = el('button', 'neko-lobby-dialog-save', '保存'); save.type = 'submit';
     if(contacts)save.hidden=true;
@@ -2808,26 +2815,37 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     const invite=el('input','neko-lobby-game-url');invite.type='url';
     invite.setAttribute('aria-label','游戏邀请链接');invite.placeholder='粘贴朋友发来的邀请链接';
     const status=el('p','neko-lobby-game-status');status.setAttribute('role','status');
-    const signIn=button('连接社区账号','neko-workshop-sign-in',()=>void beginSignIn());signIn.hidden=true;
+    let dismissed=false;
+    const signIn=button('连接社区账号并加入','neko-workshop-sign-in',()=>{
+      const target=invite.value.trim();
+      if(isWorkshopInvite(target))void beginSignIn(()=>{
+        if(!dismissed&&invite.value.trim()===target)return joinInvitation(target);
+      });
+    });signIn.hidden=true;
     if(inviteUrl){invite.value=inviteUrl;invite.readOnly=true;}
-    const join=button('加入游戏','neko-lobby-game-open-room',async()=>{
-      if(!invite.value.trim()){invite.focus();return;}
+    async function joinInvitation(target){
+      if(join.disabled)return;
+      if(!target){invite.focus();return;}
       join.disabled=true;
       signIn.hidden=true;status.textContent='正在打开游戏房间…';
       try{
-        const opened=await openWorkshopInvite(invite.value.trim());
+        const opened=await openWorkshopInvite(target);
         if(opened){
           signIn.hidden=opened.status!=='sign-in-required';
-          status.textContent=opened.ok?'已打开房间。':opened.error||'暂时无法加入房间。';return;
+          status.textContent=opened.ok?'已打开房间。':opened.error||'暂时无法加入房间。';
+          if(!opened.ok&&!status.isConnected&&!disposed){error=status.textContent;render();}
+          return;
         }
-        if(!enterRoom){openDialog('game-room',invite.value.trim());return;}
-        if(!await enterRoom(invite.value))status.textContent='未能进入聊天室，请重试。';
+        if(!enterRoom){openDialog('game-room',target);return;}
+        if(!await enterRoom(target))status.textContent='未能进入聊天室，请重试。';
       }finally{join.disabled=false;}
-    });
+    }
+    const join=button('加入游戏','neko-lobby-game-open-room',()=>void joinInvitation(invite.value.trim()));
     invite.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();join.click();}});
     const studio=hasWorkshop?button('制作或上传游戏','neko-workshop-open-studio',
       ()=>openDialog('game-studio',null,enterInvitedRoom)):null;
-    return {nodes:[field('邀请链接',invite,'使用朋友发给你的游戏房间链接。'),join,...(studio?[studio]:[]),status,signIn],request:()=>null};
+    return {nodes:[field('邀请链接',invite,'使用朋友发给你的游戏房间链接。'),join,...(studio?[studio]:[]),status,signIn],
+      cleanup(accountChanged){if(!accountChanged)dismissed=true;},request:()=>null};
   }
   function workshopProjectFields() {
     const actions=el('section','neko-lobby-game-room-controls neko-workshop-project-actions');
@@ -3273,7 +3291,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     gameShareButton.hidden = conn !== 'online' || !snap?.me || typeof bridge.gameHub !== 'function';
     notice.textContent = error || snap?.error || ''; notice.hidden = !notice.textContent;
     // An identity change discards any open form drafted for the previous owner.
-    if (dialog && dialog.owner !== meId()) closeDialog();
+    if (dialog && dialog.owner !== meId()) closeDialog(true);
     // Admin controls exist in the DOM only for admins (not merely hidden).
     if (isAdmin()) { if (!adminButton.isConnected) headerActions.insertBefore(adminButton, signOut); } else { adminButton.remove(); if (dialog?.kind === 'admin') closeDialog(); }
     catSettingsButton.hidden = conn !== 'online' || !snap?.me;

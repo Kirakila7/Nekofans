@@ -751,3 +751,58 @@ test('game hub publishes a generated project and shares an invite that opens in 
  await tick();
  assert.deepEqual(calls.at(-1),{action:'workshop-open-room',inviteUrl});
 });
+
+for(const outcome of ['signed-in','canceled'])test('chatroom invitation resumes only after the matching successful login: '+outcome,{skip:DOM_SKIP},async t=>{
+ const origin='https://workshop.nekofans.games',inviteUrl=origin+'/?room=abcdefghijkl',attempts=[];
+ const messages=[msg(32,human(ZS,'好友'),'human','好友','来一起玩「雾岛灯塔」：'+inviteUrl)];
+ let signedIn=false;
+ const f=setup(t,{snap:snapshot({messages}),gameHub:async()=>({}),
+   unifiedLogin:{signIn:async()=>({ok:true,state:{status:'community',source:'lobby',flowId:20}}),cancel:async()=>({ok:true})},
+   gameWorkshop:async request=>{
+     if(request.action==='workshop-config')return {ok:true,origin};
+     if(request.action==='workshop-open-room'){
+       attempts.push(request.inviteUrl);
+       return signedIn?{ok:true}:{ok:false,status:'sign-in-required',error:'请先连接社区账号'};
+     }
+     return {ok:false};
+   },
+ });
+ await tick();f.doc.querySelector('.neko-lobby-switch').click();await tick();
+ rowOf(f.doc,32).querySelector('.neko-lobby-game-join').click();await tick();
+ const signIn=rowOf(f.doc,32).querySelector('.neko-lobby-game-connect');
+ assert(!signIn.hidden);signIn.click();await tick();
+ assert.equal(f.calls.community,1);assert.deepEqual(attempts,[inviteUrl]);
+ f.publishLogin({status:'signed-in',source:'lobby',flowId:19});await tick();
+ assert.deepEqual(attempts,[inviteUrl]);
+ signedIn=outcome==='signed-in';
+ const terminal={status:outcome,source:'lobby',flowId:20};
+ f.publishLogin(terminal);await tick();f.publishLogin(terminal);await tick();
+ assert.deepEqual(attempts,signedIn?[inviteUrl,inviteUrl]:[inviteUrl]);
+ if(signedIn)assert.match(rowOf(f.doc,32).querySelector('.neko-lobby-game-status').textContent,/已在 Nekofans 打开房间/);
+});
+
+test('a pasted game invite survives a first account sign-in and opens the same room',{skip:DOM_SKIP},async t=>{
+ const origin='https://workshop.nekofans.games',inviteUrl=origin+'/?room=mnopqrstuvwx',attempts=[];
+ let signedIn=false;
+ const f=setup(t,{snap:loggedOut(),gameHub:async()=>({}),
+   unifiedLogin:{signIn:async()=>({ok:true,state:{status:'community',source:'lobby',flowId:21}}),cancel:async()=>({ok:true})},
+   gameWorkshop:async request=>{
+     if(request.action==='workshop-config')return {ok:true,origin};
+     if(request.action==='workshop-open-room'){
+       attempts.push(request.inviteUrl);
+       return signedIn?{ok:true}:{ok:false,status:'sign-in-required'};
+     }
+     return {ok:false};
+   },
+ });
+ await tick();f.doc.querySelector('.neko-lobby-switch').click();await tick();
+ f.doc.querySelector('.neko-lobby-game-share').click();
+ const dialog=f.doc.querySelector('[data-dialog="game"]');
+ dialog.querySelector('.neko-lobby-game-url').value=inviteUrl;
+ dialog.querySelector('.neko-lobby-game-open-room').click();await tick();
+ dialog.querySelector('.neko-workshop-sign-in').click();await tick();
+ assert.deepEqual(attempts,[inviteUrl]);
+ signedIn=true;f.push(snapshot());assert(!dialog.isConnected);
+ f.publishLogin({status:'signed-in',source:'lobby',flowId:21});await tick();
+ assert.deepEqual(attempts,[inviteUrl,inviteUrl]);
+});
