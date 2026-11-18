@@ -835,3 +835,28 @@ test('the studio previews both sides of an unpublished draft and can restart or 
  assert.deepEqual(moves,[[],[0],[0,0],[]]);
  doc.querySelector('.neko-workshop-publish').click();await tick();assert.deepEqual(published,['r-draft']);
 });
+
+test('the studio opens a saved draft, modifies its revision, and starts a different game',{skip:DOM_SKIP},async t=>{
+ const generated=[];
+ let stored={status:'draft',revisionId:'r-old',preview:{title:'雾岛灯塔',description:'引导渡轮',opening:'灯还没亮',choices:['点灯']}};
+ const f=setup(t,{workbenchEdition:'office',gameWorkshop:async()=>({}),gameHub:async request=>{
+   if(request.action==='list-game-drafts')return {status:'ready',revisions:[{revisionId:stored.revisionId,title:stored.preview.title,createdAt:1730000000000}]};
+   if(request.action==='open-game-draft'){assert.equal(request.revisionId,stored.revisionId);return stored;}
+   if(request.action==='draft-game'){
+     generated.push(request.revisionId);
+     return stored={...stored,revisionId:'r-'+generated.length,preview:{...stored.preview,title:request.prompt}};
+   }
+   return {};
+ }});
+ const {doc}=f;
+ await tick();doc.querySelector('.neko-office-game-studio').click();await tick();
+ const library=doc.querySelector('.neko-game-local-drafts');assert(!library.hidden);library.open=true;
+ library.querySelector('.neko-game-open-local-draft').click();await tick();
+ assert.match(doc.querySelector('.neko-game-draft-preview').textContent,/雾岛灯塔/);
+ const prompt=doc.querySelector('.neko-lobby-game-prompt'),draft=doc.querySelector('.neko-lobby-game-draft');
+ prompt.value='蓝色灯塔';draft.click();await tick();
+ assert.match(library.textContent,/蓝色灯塔/);
+ doc.querySelector('.neko-game-new-draft').click();assert(doc.querySelector('.neko-game-draft-preview').hidden);
+ prompt.value='云岛赛跑';draft.click();await tick();
+ assert.deepEqual(generated,['r-old',undefined]);
+});

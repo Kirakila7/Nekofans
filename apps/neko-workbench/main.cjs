@@ -1168,13 +1168,20 @@ function gameWorkshop(){
     openPage:workshopWindow.open,
   });
 }
+function gameStudio(){
+  return privateGameStudio??=import(pathToFileURL(path.join(base,'../../services/nekofans-game-hub/game-studio.mjs')).href)
+    .then(({createGameStudio})=>createGameStudio({
+      provider:createCompanionAccountProvider(rpc,{namespace:'game-studio'}),
+      draftFile:path.join(data,'game-studio-drafts.json'),
+    }));
+}
 async function handleWorkshop(request){
   try{
     const workshop=gameWorkshop();
     switch(request.action){
       case 'workshop-config':return {ok:true,origin:workshop.origin};
       case 'workshop-publish-draft':{
-        const project=typeof request.revisionId==='string'&&privateGameStudio?.workshopProject(request.revisionId);
+        const project=typeof request.revisionId==='string'&&(await gameStudio()).workshopProject(request.revisionId);
         if(!project)return {ok:false,status:'not-found',error:'找不到这次生成的稿件，请重新制作。'};
         return {ok:true,project:await workshop.publishStudio(project)};
       }
@@ -1257,18 +1264,19 @@ ipcMain.handle('workbench:game-hub',async(event,request)=>{
     return {ok:room.status==='created',status:room.status,inviteUrl:room.inviteUrl};
   }
   if(request?.action==='publish-game'){
-    const revision=typeof request.revisionId==='string'&&privateGameStudio?.inspect(request.revisionId);
+    const revision=typeof request.revisionId==='string'&&(await gameStudio()).inspect(request.revisionId);
     if(!revision)return {ok:false,status:'not-found'};
     const room=await gameRuntime().create({url:request.url,gameId:gameCatalog.STUDIO_GAME,definition:revision.game});
     return {ok:room.status==='created',status:room.status,inviteUrl:room.inviteUrl};
   }
   if(request?.action==='draft-game'){
-    if(!privateGameStudio){const {createGameStudio}=await import(pathToFileURL(path.join(base,'../../services/nekofans-game-hub/game-studio.mjs')).href);privateGameStudio=createGameStudio({provider:createCompanionAccountProvider(rpc,{namespace:'game-studio'})});}
-    return privateGameStudio.propose({prompt:request.prompt,revisionId:request.revisionId});
+    return (await gameStudio()).propose({prompt:request.prompt,revisionId:request.revisionId});
   }
   if(request?.action==='playtest-draft'){
-    return privateGameStudio?.playtest(request.revisionId,request.moves)??{status:'not-found'};
+    return (await gameStudio()).playtest(request.revisionId,request.moves);
   }
+  if(request?.action==='list-game-drafts')return (await gameStudio()).listDrafts();
+  if(request?.action==='open-game-draft')return (await gameStudio()).openDraft(request.revisionId);
   throw Error('未知游戏房间操作');
 });
 ipcMain.handle('workbench:community',async(event,request)=>{

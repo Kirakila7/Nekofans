@@ -1,6 +1,9 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {createGameStudio} from './game-studio.mjs';
 import {studioWorkshopHtml} from './studio-game.mjs';
 import {createRequire} from 'node:module';
@@ -89,4 +92,46 @@ test('a validated AI draft becomes a workshop game with the same choices and out
  assert.equal(elements.get('status').textContent,'你赢了');
  assert.deepEqual(studio.playtest(draft.revisionId,[0,0]),{status:'finished',text:elements.get('scene').textContent,winner:1});
  assert.deepEqual(studio.workshopProject(draft.revisionId),project);
+});
+
+test('local drafts reopen after restart, keeping private revisions and publisher input intact',async t=>{
+ const directory=mkdtempSync(join(tmpdir(),'nekofans-studio-'));
+ t.after(()=>rmSync(directory,{recursive:true,force:true}));
+ const draftFile=join(directory,'drafts.json'),calls=[];
+ const original={title:'渡轮',description:'两人轮流引导渡轮',nodes:[
+   {text:'灯塔还没亮',seat:0,choices:[{label:'点灯',next:1}]},
+   {text:'船长看到了灯',seat:1,choices:[{label:'靠岸',next:2}]},
+   {text:'回到港口',winner:1},
+ ]};
+ const provider={async *stream({messages}){calls.push(JSON.parse(messages[0].text));
+   yield {type:'delta',text:JSON.stringify({...original,title:calls.length===1?'渡轮':'新版渡轮'})};yield {type:'complete'};}};
+ const initial=createGameStudio({provider,draftFile});
+ const first=await initial.propose({prompt:'做一局轮渡'});
+ const resumed=createGameStudio({provider,draftFile});
+ assert.deepEqual(resumed.openDraft(first.revisionId),first);
+ assert.deepEqual(resumed.workshopProject(first.revisionId),original);
+ assert.equal(resumed.playtest(first.revisionId,[0,0]).winner,1);
+ assert.equal(calls.length,1,'reopening and playing make no model requests');
+ const amended=await resumed.propose({prompt:'改一下标题',revisionId:first.revisionId});
+ assert.deepEqual(calls[1].previousDraft,original);
+ const next=createGameStudio({provider,draftFile});
+ assert.deepEqual(next.listDrafts().revisions.map(({revisionId,title})=>({revisionId,title})),[{revisionId:amended.revisionId,title:'新版渡轮'}]);
+ assert.equal(next.inspect(first.revisionId).game.title,'渡轮');
+ assert.equal(next.inspect(amended.revisionId).parent,first.revisionId);
+
+ const saved=readFileSync(draftFile);
+ writeFileSync(draftFile,'{"version":1,"revisions":[{"id":"broken"}]}');
+ const invalid=createGameStudio({provider,draftFile});
+ assert.equal(invalid.listDrafts().status,'draft-storage-unavailable');
+ assert.deepEqual(await invalid.propose({prompt:'做一个新游戏'}),{status:'draft-storage-unavailable'});
+ assert.equal(calls.length,2);
+ assert.equal(readFileSync(draftFile,'utf8'),'{"version":1,"revisions":[{"id":"broken"}]}');
+ writeFileSync(draftFile,saved);
+ assert.deepEqual(createGameStudio({provider,draftFile}).openDraft(amended.revisionId),amended);
+
+ const blockedFile=join(directory,'blocked.json'),volatile=createGameStudio({provider,draftFile:blockedFile});
+ mkdirSync(blockedFile);
+ const unsaved=await volatile.propose({prompt:'制作另一份草稿'});
+ assert.equal(unsaved.saved,false);
+ assert.deepEqual(volatile.openDraft(unsaved.revisionId),unsaved);
 });
