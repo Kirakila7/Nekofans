@@ -927,7 +927,8 @@ function createPetWindow(a,geometry){
     broadcast();catMotion.replay(a.id);
     if(!workbenchOnly&&(isMain?!mainAgent.isHidden():a.present))w.showInactive();
     if(!isMain)keepMainInFront(a.id);
-    else if(!workbenchOnly&&!quitting&&process.env.PET_OPEN_WORKBENCH!=='1'&&state.preferences.mainAgent.guide.status==='pending'){
+    // The Windows launcher opens the workbench alongside the desktop pet.
+    else if(!workbenchOnly&&!quitting&&state.preferences.mainAgent.guide.status==='pending'){
       try{mainAgent.openGuide();}catch(error){notice(a,error.message);broadcast();}
     }
   });

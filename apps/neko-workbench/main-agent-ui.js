@@ -291,11 +291,11 @@
         host.querySelector(`[data-action="${guide ? 'guide-next' : 'name'}"]`).click();
       }
     });
-    const stopState = api.onState(next => { if (!busy) { data = next; render(); } });
+    // The main process supplies the initial snapshot after the file URL commits.
+    const stopState = api.onState(next => { if (!busy || !data) { data = next; render(); } });
     const stopTab = api.onTab(next => { if (Object.hasOwn(tabs,next)) { tab = next; render(); } });
-    window.addEventListener('focus',() => { if (!busy) void run('read'); });
+    window.addEventListener('focus',() => { if (data && !busy) void run('read'); });
     window.addEventListener('unload',() => { stopState(); stopTab(); },{once:true});
-    void run('read');
   }
 
   window.MainAgentUI = {mount, quickActions, gestureReply};

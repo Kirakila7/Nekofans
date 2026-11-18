@@ -101,7 +101,8 @@ test('before-quit disposes the lobby controller', () => {
   const ctx = {
     app: { on: (name, fn) => quitHandlers.set(name, fn), quit: () => calls.push('app.quit') },
     shutdownComplete: false, shutdownStarted: false, quitting: false,
-    channelLife: { dispose() {} }, communityDaily: { dispose() {} }, dshLoginBrowser: { dispose() {} },
+    channelLife: { dispose() {} }, mainAgent: { dispose: () => calls.push('mainAgent.dispose') },
+    communityDaily: { dispose() {} }, dshLoginBrowser: { dispose() {} },
     questionRelay: { dispose() {} }, petQuestionController: { dispose() {} },
     lobbyController: { dispose: () => calls.push('lobby.dispose') },
     unifiedNekoLogin: { dispose: () => calls.push('unified.dispose') },
@@ -125,7 +126,7 @@ test('before-quit disposes the lobby controller', () => {
   assert(quitHandlers.has('before-quit'));
   const event = { preventDefault: () => calls.push('prevent') };
   quitHandlers.get('before-quit')(event);
-  assert.deepEqual(calls.slice(0, 11), ['prevent', 'unified.dispose', 'sso.dispose', 'home.dispose', 'video.dispose', 'composer.dispose', 'divider.dispose', 'community.dispose', 'community.cancel', 'lobby.dispose', 'screen.dispose'],
+  assert.deepEqual(calls.slice(0, 12), ['prevent', 'mainAgent.dispose', 'unified.dispose', 'sso.dispose', 'home.dispose', 'video.dispose', 'composer.dispose', 'divider.dispose', 'community.dispose', 'community.cancel', 'lobby.dispose', 'screen.dispose'],
     'lobby.dispose (which persists the open experience segment) runs before quit completes');
   assert(calls.includes('game.forget'));assert(calls.includes('game.stop'));
   assert(calls.includes('story.stop'));assert(!calls.includes('relay.stop'));

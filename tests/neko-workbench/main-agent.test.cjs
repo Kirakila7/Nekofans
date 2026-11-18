@@ -9,7 +9,7 @@ const {createMainAgentWindows} = require('../../apps/neko-workbench/main-agent-w
 
 class Window extends EventEmitter {
   bounds = {x: -422, y: 400, width: 340, height: 280};
-  webContents = {isLoading: () => false, send: () => {}};
+  webContents = Object.assign(new EventEmitter(), {isLoading: () => false, send: () => {}});
   destroyed = false;
   visible = true;
   getBounds() { return this.bounds; }
