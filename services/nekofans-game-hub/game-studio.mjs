@@ -1,5 +1,6 @@
 import { randomUUID, createHash } from 'node:crypto';
 import { validateStudioGame, studioPreview } from './studio-game.mjs';
+import { nextStudioNode } from '../nekofans-game-workshop/server/studio-definition.mjs';
 
 const authoringPrompt = [
   '你是 Nekofans 创造台。根据用户描述创作一款新的双人公开回合制小游戏，不套用已有棋类。',
@@ -52,5 +53,19 @@ export function createGameStudio({provider} = {}) {
     if (!revision) return null;
     return structuredClone(revision.game);
   }
-  return Object.freeze({propose,inspect,workshopProject});
+  function playtest(revisionId, moves) {
+    const game = drafts.get(revisionId)?.game;
+    if (!game) return { status: 'not-found' };
+    if (!Array.isArray(moves) || moves.length >= game.nodes.length) return { status: 'invalid' };
+    let index = 0;
+    for (const option of moves) {
+      const next = nextStudioNode(game, index, { type: 'choose', option }, game.nodes[index].seat);
+      if (next === undefined) return { status: 'invalid' };
+      index = next;
+    }
+    const node = game.nodes[index];
+    if (node.choices) return { status: 'turn', text: node.text, seat: node.seat, choices: node.choices.map(choice => choice.label) };
+    return { status: 'finished', text: node.text, winner: node.winner };
+  }
+  return Object.freeze({propose,inspect,workshopProject,playtest});
 }

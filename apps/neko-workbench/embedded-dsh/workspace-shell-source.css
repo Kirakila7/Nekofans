@@ -511,6 +511,8 @@ body[data-neko-workspace-shell] .neko-chatroom-preview::before { content:''; pos
 .neko-game-draft-preview { padding:12px; border:1px solid var(--nws-border); border-radius:12px; }
 .neko-game-draft-preview :is(h3,p,ul),.neko-lobby-dialog[data-dialog="game-studio"] .neko-lobby-game-status { margin:0; }
 .neko-game-draft-preview ul { padding-inline-start:20px; }
+.neko-game-draft-preview ul[data-playtest]:not([hidden]) { display:grid; gap:6px; list-style:none; padding:0; }
+.neko-game-draft-preview .neko-game-draft-choice { width:100%; text-align:start; }
 .neko-lobby-dialog[data-dialog="game-studio"] .neko-lobby-game-status:empty { display:none; }
 .neko-game-multiplayer-template { display:flex; align-items:center; flex-wrap:wrap; gap:8px 12px; padding:12px; border:1px solid var(--nws-border); border-radius:12px; background:var(--nws-hover); }
 .neko-game-multiplayer-info { flex:1 1 230px; }

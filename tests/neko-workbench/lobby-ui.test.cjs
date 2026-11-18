@@ -806,3 +806,32 @@ test('a pasted game invite survives a first account sign-in and opens the same r
  f.publishLogin({status:'signed-in',source:'lobby',flowId:21});await tick();
  assert.deepEqual(attempts,[inviteUrl,inviteUrl]);
 });
+
+test('the studio previews both sides of an unpublished draft and can restart or publish it',{skip:DOM_SKIP},async t=>{
+ const moves=[],published=[];
+ const states=[{status:'turn',text:'潮水涨了',seat:0,choices:['点灯']},
+   {status:'turn',text:'船长看到灯塔',seat:1,choices:['靠岸']},{status:'finished',text:'渡轮安全靠岸',winner:1}];
+ const f=setup(t,{workbenchEdition:'office',gameHub:async request=>{
+   if(request.action==='draft-game')return {status:'draft',revisionId:'r-draft',preview:{title:'灯塔',description:'引导渡轮',opening:'潮水涨了',choices:['点灯']}};
+   if(request.action==='playtest-draft'){
+     assert.equal(request.revisionId,'r-draft');moves.push(Array.from(request.moves));return states[request.moves.length];
+   }
+   return {};
+ },gameWorkshop:async request=>{
+   if(request.action==='workshop-publish-draft'){published.push(request.revisionId);return {ok:true,project:{title:'灯塔'}};}
+   return {};
+ }});
+ const {doc}=f;
+ await tick();doc.querySelector('.neko-office-game-studio').click();
+ doc.querySelector('.neko-lobby-game-prompt').value='做一个引导渡轮的游戏';doc.querySelector('.neko-lobby-game-draft').click();await tick();
+ const play=doc.querySelector('.neko-game-draft-playtest');
+ const preview=doc.querySelector('.neko-game-draft-preview');
+ assert.equal(moves.length,0);
+ play.click();await tick();assert.match(preview.textContent,/玩家 1 的回合/);
+ preview.querySelector('.neko-game-draft-choice').click();await tick();assert.match(preview.textContent,/玩家 2 的回合/);
+ preview.querySelector('.neko-game-draft-choice').click();await tick();assert.match(preview.textContent,/试玩结束 · 玩家 2 获胜/);
+ assert.equal(published.length,0);
+ play.click();await tick();assert.match(preview.textContent,/玩家 1 的回合/);
+ assert.deepEqual(moves,[[],[0],[0,0],[]]);
+ doc.querySelector('.neko-workshop-publish').click();await tick();assert.deepEqual(published,['r-draft']);
+});

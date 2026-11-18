@@ -3066,7 +3066,38 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     prompt.placeholder='比如：两个人争夺月球基地，轮流选择修理、探索或抢占资源。';
     const preview=el('section','neko-lobby-game-room-controls neko-game-draft-preview');preview.hidden=true;
     const gameName=el('h3'),description=el('p'),opening=el('p'),choices=el('ul');
-    let revisionId;
+    const trialStatus=el('p','neko-lobby-game-status');trialStatus.setAttribute('role','status');
+    const trialStart=button('本机试玩草稿','neko-game-draft-playtest',()=>void playtest([]));
+    let revisionId,testingDraft=false;
+    async function playtest(moves){
+      if(!revisionId||testingDraft||draft.disabled)return;
+      const id=revisionId;
+      testingDraft=true;trialStart.disabled=true;
+      const controls=[...choices.querySelectorAll('button')];
+      controls.forEach(control=>{control.disabled=true;});
+      try{
+        const result=await callGame({action:'playtest-draft',revisionId:id,moves});
+        if(!preview.isConnected||revisionId!==id)return;
+        if(!['turn','finished'].includes(result?.status)){
+          trialStatus.textContent='暂时无法继续试玩，请重新开始。';return;
+        }
+        opening.textContent=result.text;
+        choices.dataset.playtest='';choices.hidden=result.status==='finished';
+        trialStart.textContent='重新试玩';
+        if(result.status==='finished'){
+          trialStatus.textContent=result.winner==='draw'?'试玩结束 · 平局':'试玩结束 · 玩家 '+(result.winner+1)+' 获胜';
+          choices.replaceChildren();trialStart.focus();return;
+        }
+        trialStatus.textContent='本机试玩 · 玩家 '+(result.seat+1)+' 的回合';
+        choices.replaceChildren(...result.choices.map((label,option)=>{
+          const item=el('li');item.append(button(label,'neko-game-draft-choice',()=>void playtest([...moves,option])));return item;
+        }));
+        choices.querySelector('button')?.focus();
+      }finally{
+        testingDraft=false;trialStart.disabled=false;
+        if(revisionId===id)controls.forEach(control=>{control.disabled=false;});
+      }
+    }
     const draft=button('制作游戏','neko-lobby-game-draft',async()=>{
       if(draft.disabled)return;
       if(!prompt.value.trim()){prompt.focus();return;}
@@ -3081,9 +3112,10 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
         revisionId=result.revisionId;
         const {title,description:summary,opening:scene,choices:actions}=result.preview;
         gameName.textContent=title;description.textContent=summary;opening.textContent=scene;
+        trialStatus.textContent='';trialStart.textContent='本机试玩草稿';choices.hidden=false;delete choices.dataset.playtest;
         choices.replaceChildren(...actions.map(action=>el('li','',action)));
         preview.hidden=false;publish.hidden=false;prompt.value='';prompt.placeholder='想怎么修改这款游戏？';
-        draft.textContent='修改游戏';gameState.textContent=workshop?'草稿已生成。可以继续修改，满意后发布到游戏工坊。':'游戏已做好，可以修改或开房邀请朋友。';
+        draft.textContent='修改游戏';gameState.textContent=workshop?'草稿已生成。可以试玩或修改，满意后发布到游戏工坊。':'游戏已做好，可以试玩、修改或开房邀请朋友。';
       }finally{draft.disabled=false;publish.disabled=!revisionId;}
     });
     const publish=button(inviteEnabled?'开房并邀请好友':'开房并复制好友邀请','neko-lobby-game-publish',async()=>{
@@ -3105,7 +3137,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
       try{await workshop.publish(revisionId);}
       finally{publishToWorkshop.disabled=false;}
     }):null;
-    preview.append(gameName,description,opening,choices,publishToWorkshop||publish);
+    preview.append(gameName,description,opening,trialStatus,choices,trialStart,publishToWorkshop||publish);
     const advanced=el('details','neko-lobby-game-advanced');
     advanced.append(el('summary','','高级设置'),field('游戏服务器',server),pairing,publicKey,connect,field('自己的席位配对码',pairCode,'已在浏览器入座时使用。'),pairSeat,field('本地原型房间码',relayRoom),field('本地原型地址',relayOrigin),relayHeading,relayState,storyStart,storyBlack,storyHost,relayStop,relayStart,relayBind,relayStatus,relayCommand,relayWarning);
     const samples=el('details','neko-lobby-game-studio');

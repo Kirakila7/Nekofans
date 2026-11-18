@@ -1266,6 +1266,9 @@ ipcMain.handle('workbench:game-hub',async(event,request)=>{
     if(!privateGameStudio){const {createGameStudio}=await import(pathToFileURL(path.join(base,'../../services/nekofans-game-hub/game-studio.mjs')).href);privateGameStudio=createGameStudio({provider:createCompanionAccountProvider(rpc,{namespace:'game-studio'})});}
     return privateGameStudio.propose({prompt:request.prompt,revisionId:request.revisionId});
   }
+  if(request?.action==='playtest-draft'){
+    return privateGameStudio?.playtest(request.revisionId,request.moves)??{status:'not-found'};
+  }
   throw Error('未知游戏房间操作');
 });
 ipcMain.handle('workbench:community',async(event,request)=>{
