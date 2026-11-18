@@ -79,6 +79,8 @@ if(view==='chat-settings'){
       catch {document.getElementById('saved').textContent='保存失败，请再试一次';}
     });
   };
+} else if (view === 'main-agent-settings' || view === 'main-agent-guide') {
+  window.MainAgentUI.mount(host, view === 'main-agent-guide', query.get('tab'), window.pet.agent);
 } else {
   host.innerHTML = '<main class="pet"><div class="pet-bubble is-whisper" role="status" hidden></div><button class="character" type="button"><video class="pet-video" autoplay muted playsinline aria-hidden="true"></video><video class="pet-video" autoplay muted playsinline aria-hidden="true"></video></button><form class="chat" hidden><span class="chat-whale" aria-hidden="true"><svg viewBox="0 0 40 32" fill="none"><path d="M12 20C5 21 2 17 3 13C7 13 10 14 12 17C11 12 13 9 17 9C19 13 17 17 15 19" fill="#7EBCE5"/><path d="M12 19C12 12 19 9 26 11C34 12 38 17 36 23C34 29 20 29 15 25C13 24 12 22 12 19Z" fill="#78B8E3"/><path d="M16 23C21 27 30 27 34 23" stroke="#DFF3FF" stroke-width="3" stroke-linecap="round"/><path d="M23 21C23 24 20 25 19 23" fill="#509CCC"/><circle cx="31" cy="17" r="1.3" fill="#385B7C"/><path d="M25 7V4M22 6L20 4M28 6L30 3" stroke="#8EC9EC" stroke-width="1.7" stroke-linecap="round"/></svg></span><span class="chat-water" aria-hidden="true"><svg viewBox="0 0 72 12" fill="none"><path d="M1 5C7 0 13 0 19 5S31 10 37 5S49 0 55 5S67 10 73 5M1 11C7 6 13 6 19 11S31 16 37 11S49 6 55 11S67 16 73 11" stroke="#8CC3E8" stroke-width="1.2"/></svg></span><input type="text" autocomplete="off" spellcheck="false" maxlength="30000"></form></main>';
   const character = host.querySelector('.character');
@@ -126,6 +128,55 @@ if(view==='chat-settings'){
   stopReply.addEventListener('click',()=>{stopReply.setAttribute('aria-busy','true');stopReply.disabled=true;window.pet.call('chat-cancel').catch(()=>showBubble('停止回复未完成，请重试')).finally(()=>{stopReply.removeAttribute('aria-busy');stopReply.disabled=false;});});
   let shownNotice,shownReply;
   const actor = () => state?.actors.find(a=>a.id===actorId);
+  const prefs = () => actorId === 'main' ? state?.preferences?.mainAgent : null;
+  const quick = window.MainAgentUI?.quickActions(host.querySelector('.pet'), id => {
+    window.pet.agent.call('shortcut', {id}).catch(error => showBubble(error.message));
+  });
+  let quickHideTimer, dwellTimer, singleClickTimer, lastGesture = 0, gestureAudio;
+  function dismissQuick() {
+    clearTimeout(dwellTimer);
+    clearTimeout(quickHideTimer);
+    quickHideTimer = setTimeout(() => {
+      if (!quick?.element.matches(':hover, :focus-within')) quick?.show(false);
+    }, 240);
+  }
+  function gesture(id) {
+    const settings = prefs(), a = actor();
+    if (!settings || !a || a.active || inputVisible || Date.now() - lastGesture < 1800) return;
+    lastGesture = Date.now();
+    character.classList.remove('agent-gesture');
+    void character.offsetWidth;
+    character.classList.add('agent-gesture');
+    if (!settings.muted && id === 'poke' && typeof AudioContext === 'function') {
+      try {
+        gestureAudio ||= new AudioContext();
+        const oscillator = gestureAudio.createOscillator(), gain = gestureAudio.createGain();
+        const now = gestureAudio.currentTime;
+        oscillator.frequency.setValueAtTime(440, now);
+        oscillator.frequency.exponentialRampToValueAtTime(660, now + .09);
+        gain.gain.setValueAtTime(.026, now);
+        gain.gain.exponentialRampToValueAtTime(.001, now + .13);
+        oscillator.connect(gain).connect(gestureAudio.destination);
+        oscillator.start(now);
+        oscillator.stop(now + .14);
+      } catch {}
+    }
+    const reply = window.MainAgentUI?.gestureReply(settings,id);
+    if (reply) {
+      showBubble(reply);
+      passThrough();
+    }
+  }
+  function activateSingle() {
+    const action = prefs()?.single || 'chat';
+    if (action === 'chat') setInput(!inputVisible);
+    if (action === 'poke') gesture('poke');
+  }
+  const practicingWorkbench = () => prefs()?.guide?.status === 'pending' && prefs().guide.step === 7;
+  window.addEventListener('unload', () => {
+    for (const timer of [quickHideTimer, dwellTimer, singleClickTimer]) clearTimeout(timer);
+    void gestureAudio?.close().catch(() => {});
+  }, {once: true});
   const speechLifetime=installSpeechLifetime({feedback,bubble,getActor:actor,getDuration:()=>state?.preferences?.petSpeechDurationMs,onExpire:()=>passThrough()});
   window.addEventListener('unload',()=>speechLifetime.dispose(),{once:true});
   let ignoredMouse=null,lastHover=null;
@@ -134,6 +185,7 @@ if(view==='chat-settings'){
     let ignore=false;
     if(!dragStart){
       const targets=[];if(!bubble.hidden&&!inputVisible)targets.push(bubble);if(inputVisible&&!form.hidden)targets.push(form);
+      if (quick && !quick.element.hidden) targets.push(quick.element);
       const inControl=event&&targets.some(node=>{const r=node.getBoundingClientRect();return event.clientX>=r.left&&event.clientX<=r.right&&event.clientY>=r.top&&event.clientY<=r.bottom;});
       ignore=!event||!inControl&&!modelHit(event);
     }
@@ -150,7 +202,7 @@ if(view==='chat-settings'){
       const m=media.getBoundingClientRect(),scale=Math.min(m.width/nw,m.height/nh),width=nw*scale,height=nh*scale;
       let px=event.clientX-m.left-(m.width-width)/2,py=event.clientY-m.top-(m.height-height)/2;
       if(px<0||py<0||px>=width||py>=height)return false;
-      let flipX=false,flipY=false;for(let node=media;node&&node!==character.parentElement;node=node.parentElement){const matrix=getComputedStyle(node).transform.match(/^matrix\(([^)]+)\)$/);if(matrix){const v=matrix[1].split(',').map(Number);if(v[0]<0)flipX=!flipX;if(v[3]<0)flipY=!flipY;}}
+      let flipX=prefs()?.mirror===true,flipY=false;for(let node=media;node&&node!==character.parentElement;node=node.parentElement){const matrix=getComputedStyle(node).transform.match(/^matrix\(([^)]+)\)$/);if(matrix){const v=matrix[1].split(',').map(Number);if(v[0]<0)flipX=!flipX;if(v[3]<0)flipY=!flipY;}}
       if(flipX)px=width-px;if(flipY)py=height-py;
       hitContext.clearRect(0,0,1,1);hitContext.drawImage(media,Math.min(nw-1,Math.floor(px/scale)),Math.min(nh-1,Math.floor(py/scale)),1,1,0,0,1,1);
       return hitContext.getImageData(0,0,1,1).data[3]>12;
@@ -230,6 +282,8 @@ if(view==='chat-settings'){
     const effectiveWidth=Number(a.stageWidth)||stageWidth;host.querySelector('.pet').style.setProperty('--pet-size',effectiveWidth+'px');host.querySelector('.pet').style.setProperty('--stage-width',effectiveWidth+'px');
     const tier=a.id==='main'?'主角色':a.kind==='task'?'任务':'帮手';tierTag.textContent=Array.from(a.name||'').slice(0,3).join('');tierTag.title=a.name+' · '+tier+(a.pinned?' · 常驻':'')+(a.dshName&&a.nickname?'\nDSH：'+a.dshName:'');tierTag.setAttribute('aria-label',tier+' · '+a.name);
     const appearanceId=window.PetAppearance.selected(state,a);host.querySelector('.pet').dataset.appearance=appearanceId;host.querySelector('.pet').dataset.media=String(appearanceId!==window.PetAppearance.ORIGINAL);
+    character.dataset.agentMirror = String(prefs()?.mirror === true);
+    quick?.update(prefs()?.shortcuts || [], prefs()?.muted === true);
     host.querySelector('.pet').style.setProperty('--appearance-scale',String(window.PetAppearance.scaleFor(state,a)));
     host.querySelector('.pet').style.setProperty('--frame-aspect',String(window.PetAppearance.frameAspect(state,a)));
     renderAnimation(a);
@@ -268,36 +322,54 @@ if(view==='chat-settings'){
   window.pet.onInput(()=>setInput(true));
   window.pet.call('state').then(render);
   function trackHover(event){
+    const wasOver = overCharacter;
     overCharacter=modelHit(event);
     if(overCharacter)scheduleInspector();else hideInspector();
+    if (overCharacter && prefs() && !inputVisible && !dragStart) {
+      clearTimeout(quickHideTimer);
+      quick?.show(true);
+      if (!wasOver) dwellTimer = setTimeout(() => { if (overCharacter) gesture('pet'); }, 1400);
+    } else if (wasOver) dismissQuick();
   }
   character.addEventListener('pointerenter',trackHover);
-  character.addEventListener('pointerleave',()=>{overCharacter=false;hideInspector();});
-  window.addEventListener('blur',()=>{overCharacter=false;hideInspector();});
+  character.addEventListener('pointerleave',()=>{overCharacter=false;hideInspector();dismissQuick();});
+  character.addEventListener('focus',()=>{if(prefs()&&!inputVisible)quick?.show(true);});
+  character.addEventListener('blur',dismissQuick);
+  quick?.element.addEventListener('pointerleave',dismissQuick);
+  quick?.element.addEventListener('focusout',dismissQuick);
+  window.addEventListener('blur',()=>{overCharacter=false;hideInspector();dismissQuick();});
   character.addEventListener('pointerdown',event=>{
     hideInspector();
     if(event.button!==0)return;
     if(!modelHit(event))return;
+    clearTimeout(dwellTimer);
     dragStart={x:event.screenX,y:event.screenY};lastPointer=dragStart;dragged=false;
     character.setPointerCapture(event.pointerId);
   });
   character.addEventListener('pointermove',event=>{
     trackHover(event);
     if(!dragStart)return;
-    if(!dragged&&Math.hypot(event.screenX-dragStart.x,event.screenY-dragStart.y)>5){dragged=true;feedback.dragState.active=true;feedback.playOnce(window.PetShared.pick(feedback.animations.drag,feedback.anim));}
+    if(!dragged&&Math.hypot(event.screenX-dragStart.x,event.screenY-dragStart.y)>5){clearTimeout(singleClickTimer);quick?.show(false);dragged=true;feedback.dragState.active=true;feedback.playOnce(window.PetShared.pick(feedback.animations.drag,feedback.anim));}
     if(dragged){window.pet.call('move',{dx:event.screenX-lastPointer.x,dy:event.screenY-lastPointer.y});lastPointer={x:event.screenX,y:event.screenY};}
   });
   character.addEventListener('pointerup',async()=>{
     if(!dragStart)return;
     dragStart=null;
-    if(dragged){lastDragEndedAt=Date.now();feedback.dragState.active=false;dragged=false;overCharacter=false;hideInspector();resumeAnimation();await window.pet.call('move-end');}
-    else setInput(!inputVisible);
+    if(dragged){lastDragEndedAt=Date.now();feedback.dragState.active=false;dragged=false;overCharacter=false;hideInspector();resumeAnimation();await window.pet.call('move-end');gesture('drop');}
+    else if (prefs() && (prefs().double !== 'none' || practicingWorkbench())) {
+      clearTimeout(singleClickTimer);
+      singleClickTimer = setTimeout(activateSingle, 400);
+    } else activateSingle();
   });
   character.addEventListener('pointercancel',()=>{const wasDragged=dragged;dragStart=null;dragged=false;overCharacter=false;hideInspector();feedback.dragState.active=false;resumeAnimation();if(wasDragged)window.pet.call('move-end').catch(()=>{});});
-  character.addEventListener('click',event=>{if(event.detail===0)setInput(!inputVisible);});
+  character.addEventListener('click',event=>{if(event.detail===0)activateSingle();});
   character.addEventListener('dblclick',event=>{
     if(event.button!==0||Date.now()-lastDragEndedAt<400)return;
-    event.preventDefault();setInput(false);
+    event.preventDefault();clearTimeout(singleClickTimer);
+    const action = practicingWorkbench() ? 'workbench' : prefs()?.double || 'workbench';
+    if (action === 'none') return;
+    if (action === 'chat') { setInput(true); return; }
+    setInput(false);quick?.show(false);
     window.pet.call('open-workbench').catch(error=>showBubble(error.message));
   });
   document.addEventListener('contextmenu',event=>{event.preventDefault();hideInspector();window.pet.call('menu');});
