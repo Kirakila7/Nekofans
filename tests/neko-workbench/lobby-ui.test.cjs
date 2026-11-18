@@ -704,6 +704,8 @@ test('local home and lobby retain independent navigation and home stage',{skip:D
 
 test('game hub publishes a generated project and shares an invite that opens in Nekofans',{skip:DOM_SKIP},async t=>{
  const origin='https://workshop.nekofans.games',inviteUrl=origin+'/?room=abcdefghijkl',calls=[];
+ let finishPublishing;
+ const publishing=new Promise(resolve=>{finishPublishing=resolve;});
  const docFixture=setup(t,{workbenchEdition:'office',
    gameHub:async request=>request.action==='draft-game'?{status:'draft',revisionId:'revision-1',
      preview:{title:'雾岛灯塔',description:'两人轮流探险',opening:'涨潮前',choices:['点亮灯塔']}}:{},
@@ -711,7 +713,7 @@ test('game hub publishes a generated project and shares an invite that opens in 
      calls.push(structuredClone(request));
      switch(request.action){
        case 'workshop-config':return {ok:true,origin};
-       case 'workshop-publish-draft':return {ok:true,project:{id:'game-fixture',title:'雾岛灯塔'}};
+       case 'workshop-publish-draft':return publishing;
        case 'workshop-create':return {ok:true,inviteUrl};
        default:return {ok:true};
      }
@@ -724,6 +726,8 @@ test('game hub publishes a generated project and shares an invite that opens in 
  doc.querySelector('.neko-lobby-game-draft').click();
  await tick();
  doc.querySelector('.neko-workshop-publish').click();
+ assert.match(doc.querySelector('.neko-workshop-project-actions [role=status]').textContent,/正在发布作品/);
+ finishPublishing({ok:true,project:{id:'game-fixture',title:'雾岛灯塔'}});
  await tick();
  assert.equal(doc.querySelector('.neko-workshop-picked-game').textContent,'雾岛灯塔');
  doc.querySelector('.neko-workshop-create').click();

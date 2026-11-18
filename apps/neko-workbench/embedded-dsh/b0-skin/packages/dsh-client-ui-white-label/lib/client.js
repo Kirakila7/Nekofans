@@ -5766,11 +5766,11 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
       const joinGame=button('加入游戏','neko-lobby-game-join',async()=>{
         if(!workshopInvite){openDialog('game-room',inviteUrl);return;}
         joinGame.disabled=true;
+        signIn.hidden=true;status.textContent='正在打开游戏房间…';status.hidden=false;
         try{
           const result=await openWorkshopInvite(inviteUrl);
-          if(result?.status==='sign-in-required')signIn.hidden=false;
+          signIn.hidden=result?.status!=='sign-in-required';
           status.textContent=result?.ok?'已在 Nekofans 打开房间。':result?.error||'暂时无法加入游戏。';
-          status.hidden=false;
         }finally{joinGame.disabled=false;}
       });
       const signIn=button('连接社区账号','neko-lobby-game-connect',()=>void beginSignIn());signIn.hidden=true;
@@ -6511,13 +6511,18 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     const invite=el('input','neko-lobby-game-url');invite.type='url';
     invite.setAttribute('aria-label','游戏邀请链接');invite.placeholder='粘贴朋友发来的邀请链接';
     const status=el('p','neko-lobby-game-status');status.setAttribute('role','status');
+    const signIn=button('连接社区账号','neko-workshop-sign-in',()=>void beginSignIn());signIn.hidden=true;
     if(inviteUrl){invite.value=inviteUrl;invite.readOnly=true;}
     const join=button('加入游戏','neko-lobby-game-open-room',async()=>{
       if(!invite.value.trim()){invite.focus();return;}
       join.disabled=true;
+      signIn.hidden=true;status.textContent='正在打开游戏房间…';
       try{
         const opened=await openWorkshopInvite(invite.value.trim());
-        if(opened){status.textContent=opened.ok?'已打开房间。':opened.error||'暂时无法加入房间。';return;}
+        if(opened){
+          signIn.hidden=opened.status!=='sign-in-required';
+          status.textContent=opened.ok?'已打开房间。':opened.error||'暂时无法加入房间。';return;
+        }
         if(!enterRoom){openDialog('game-room',invite.value.trim());return;}
         if(!await enterRoom(invite.value))status.textContent='未能进入聊天室，请重试。';
       }finally{join.disabled=false;}
@@ -6525,7 +6530,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     invite.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();join.click();}});
     const studio=hasWorkshop?button('制作或上传游戏','neko-workshop-open-studio',
       ()=>openDialog('game-studio',null,enterInvitedRoom)):null;
-    return {nodes:[field('邀请链接',invite,'使用朋友发给你的游戏房间链接。'),join,...(studio?[studio]:[]),status],request:()=>null};
+    return {nodes:[field('邀请链接',invite,'使用朋友发给你的游戏房间链接。'),join,...(studio?[studio]:[]),status,signIn],request:()=>null};
   }
   function workshopProjectFields() {
     const actions=el('section','neko-lobby-game-room-controls neko-workshop-project-actions');
@@ -6534,6 +6539,12 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     const signedIn=button('连接社区账号','neko-workshop-sign-in',()=>void beginSignIn());
     signedIn.hidden=true;
     let project=null,inviteUrl='',busy=false;
+    const progress={
+      'workshop-publish-draft':'正在发布作品…','workshop-publish-html':'正在上传作品…',
+      'workshop-list':'正在读取我的作品…','workshop-create':'正在创建房间…',
+      'workshop-open-room':'正在打开游戏房间…','workshop-share-room':'正在发送聊天室邀请…',
+      'workshop-copy-room':'正在复制邀请链接…',
+    };
     function report(result, text){
       if(!actions.isConnected)return;
       signedIn.hidden=result?.status!=='sign-in-required';
@@ -6543,6 +6554,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     async function perform(request, done, text){
       if(busy)return;
       busy=true;actions.setAttribute('aria-busy','true');
+      signedIn.hidden=true;status.textContent=progress[request.action];
       try{
         const result=await workshopCall(request);
         report(result,text);
@@ -6567,7 +6579,11 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     );
     const library=el('div','neko-workshop-my-projects');
     const myProjects=button('我的作品','neko-workshop-library',()=>void perform({action:'workshop-list'},result=>{
-      library.replaceChildren(...result.projects.map(item=>button(item.title,'neko-workshop-project',()=>select(item))));
+      library.replaceChildren(...result.projects.map(item=>button(item.title,'neko-workshop-project',()=>{
+        if(busy)return;
+        select(item);status.textContent='已选择作品，可以开房。';
+      })));
+      if(!result.projects.length)status.textContent='还没有作品。可以用创造台制作，或上传联机 HTML。';
     },'选择作品后可以开新房。'));
     const upload=el('details','neko-workshop-upload');
     const file=el('input');file.type='file';file.accept='.html,.htm,text/html';file.setAttribute('aria-label','联机 HTML 文件');
@@ -6751,7 +6767,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
         gameName.textContent=title;description.textContent=summary;opening.textContent=scene;
         choices.replaceChildren(...actions.map(action=>el('li','',action)));
         preview.hidden=false;publish.hidden=false;prompt.value='';prompt.placeholder='想怎么修改这款游戏？';
-        draft.textContent='修改游戏';gameState.textContent='游戏已做好，可以修改或开房邀请朋友。';
+        draft.textContent='修改游戏';gameState.textContent=workshop?'草稿已生成。可以继续修改，满意后发布到游戏工坊。':'游戏已做好，可以修改或开房邀请朋友。';
       }finally{draft.disabled=false;publish.disabled=!revisionId;}
     });
     const publish=button(inviteEnabled?'开房并邀请好友':'开房并复制好友邀请','neko-lobby-game-publish',async()=>{

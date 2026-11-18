@@ -84,3 +84,16 @@ test('workshop invitation only accepts a room on the configured origin', () => {
     assert.equal(parseWorkshopRoom(input), null);
   }
 });
+
+test('a workshop without community authorization reports unavailability before asking the player to sign in', async t => {
+  const app = createApp({ directory: null });
+  await new Promise(resolve => app.server.listen(0, '127.0.0.1', resolve));
+  t.after(() => app.close());
+  const origin = `http://127.0.0.1:${app.server.address().port}`;
+  for (const identity of [{ status: 'signed-out' }, { status: 'signed-in', userId: owner.id }]) {
+    const api = createGameWorkshop({ origin, getAccount: () => identity,
+      getTicket: () => assert.fail('no community sign-in or ticket needed'),
+    });
+    await assert.rejects(api.publishStudio(definition), { status: 'community-unavailable' });
+  }
+});

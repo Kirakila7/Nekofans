@@ -9,6 +9,7 @@ const PUBLISHER_COOKIE = 'neko_workshop_publisher';
 const error = (status, message) => Object.assign(new Error(message), { status });
 const signInRequired = () => error('sign-in-required', '请先在 Nekofans 连接 N.E.K.O. 社区账号，再继续。');
 const unavailable = () => error('unavailable', '游戏工坊暂时无法连接，请稍后重试。');
+const communityUnavailable = () => error('community-unavailable', '游戏工坊暂未开放社区授权。你仍可在创造台制作和修改游戏。');
 
 function workshopOrigin(value = WORKSHOP_ORIGIN) {
   const target = new URL(value);
@@ -70,6 +71,10 @@ function createGameWorkshop({ origin = WORKSHOP_ORIGIN, communityOrigin = COMMUN
     if (response.status === 401) throw signInRequired();
     if (response.status === 404) throw error('not-found', '找不到这个作品或房间。');
     if (response.status === 409) throw error('room-full', '无法取得席位，这个房间可能已坐满。');
+    if (response.status === 503 && path === '/api/community/seat/start') {
+      const { result } = await request('/api/config');
+      if (result?.communitySeats === false) throw communityUnavailable();
+    }
     if (response.status === 422) {
       if (path === '/api/games/studio') throw error('invalid-game', '创造台游戏的规则或结局不完整，请修改后重试。');
       throw error('invalid-html', '请选择已接入 Nekofans 联机接口的 HTML 文件。');
@@ -104,6 +109,8 @@ function createGameWorkshop({ origin = WORKSHOP_ORIGIN, communityOrigin = COMMUN
 
   async function currentSession() {
     if (!owner()) {
+      const { result } = await request('/api/config');
+      if (result?.communitySeats === false) throw communityUnavailable();
       await getTicket({ op: 'workshop-identity' });
       if (!owner()) throw signInRequired();
     }
