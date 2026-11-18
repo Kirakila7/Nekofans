@@ -6,6 +6,8 @@ The creation desk saves validated game revisions in the current workbench profil
 
 The creation desk checks DeepSeek sign-in before generation. Signed-out users can open the native account menu and return to their typed description or revision. Signing in leaves generation under the user's control. Draft browsing and playtesting stay available.
 
+A workshop invitation preserves the room when the channel cannot send. An unconfirmed delivery points users to the original message in the chat outbox. The room and copy actions remain available.
+
 ## macOS daily build 94: keep office sessions visible during layout (2026-11-11)
 
 Office restores the native DSH session list before measuring the sidebar. Resize and scroll updates leave the list visible, preventing the entrance animation from restarting on every layout pass. Daily mode still hides the native list while its own surfaces are active.

@@ -752,6 +752,33 @@ test('game hub publishes a generated project and shares an invite that opens in 
  assert.deepEqual(calls.at(-1),{action:'workshop-open-room',inviteUrl});
 });
 
+test('a workshop room can retry an unsent invitation while ambiguous delivery keeps the original link',{skip:DOM_SKIP},async t=>{
+ const origin='https://workshop.nekofans.games',inviteUrl=origin+'/?room=abcdefghijkl',sent=[],copied=[];
+ const {doc}=setup(t,{workbenchEdition:'office',gameHub:async()=>({}),gameWorkshop:async request=>{
+   switch(request.action){
+     case 'workshop-config':return {ok:true,origin};
+     case 'workshop-list':return {ok:true,projects:[{id:'game-fixture',title:'雾岛灯塔'}]};
+     case 'workshop-create':return {ok:true,inviteUrl};
+     case 'workshop-share-room':
+       sent.push(request.inviteUrl);return {ok:false,status:sent.length===1?'not-sent':'delivery-unknown'};
+     case 'workshop-copy-room':copied.push(request.inviteUrl);return {ok:true};
+     default:return {ok:false};
+   }
+ }});
+ await tick();doc.querySelector('.neko-office-game-studio').click();await tick();
+ doc.querySelector('.neko-workshop-library').click();await tick();
+ doc.querySelector('.neko-workshop-project').click();
+ doc.querySelector('.neko-workshop-create').click();await tick();
+ const share=doc.querySelector('.neko-workshop-share'),status=doc.querySelector('.neko-workshop-project-actions [role=status]');
+ share.click();await tick();
+ assert.match(status.textContent,/邀请还没发出/);assert.equal(share.disabled,false);
+ share.click();await tick();
+ assert.match(status.textContent,/重试原消息/);assert.equal(share.disabled,true);
+ share.click();await tick();assert.deepEqual(sent,[inviteUrl,inviteUrl]);
+ doc.querySelector('.neko-workshop-copy').click();await tick();
+ assert.deepEqual(copied,[inviteUrl]);assert.equal(share.textContent,'发送结果待确认');
+});
+
 for(const outcome of ['signed-in','canceled'])test('chatroom invitation resumes only after the matching successful login: '+outcome,{skip:DOM_SKIP},async t=>{
  const origin='https://workshop.nekofans.games',inviteUrl=origin+'/?room=abcdefghijkl',attempts=[];
  const messages=[msg(32,human(ZS,'好友'),'human','好友','来一起玩「雾岛灯塔」：'+inviteUrl)];

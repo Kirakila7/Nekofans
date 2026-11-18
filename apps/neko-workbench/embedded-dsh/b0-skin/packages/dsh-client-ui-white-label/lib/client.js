@@ -6568,7 +6568,9 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
       if(!actions.isConnected)return;
       signedIn.hidden=result?.status!=='sign-in-required';
       status.textContent=result?.ok?text:result?.error||
-        (result?.status==='delivery-unknown'?'没有收到确认，请在聊天室查看消息。':'暂时无法完成，请稍后重试。');
+        ({'delivery-unknown':'发送结果还没确认。请在聊天室查看邀请，或重试原消息。',
+          'not-sent':'邀请还没发出。房间已保留，检查聊天室登录和连接后，可以重试或复制链接。'})[result?.status]||
+        '暂时无法完成，请稍后重试。';
     }
     async function perform(request, done, text){
       if(busy)return;
@@ -6579,6 +6581,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
         const result=await workshopCall(request);
         report(result,text);
         if(actions.isConnected&&result?.ok)done?.(result);
+        return result;
       }finally{busy=false;actions.removeAttribute('aria-busy');}
     }
     function select(value){
@@ -6587,14 +6590,22 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     }
     const create=button('用这个作品开房','neko-workshop-create',()=>{
       if(project)void perform({action:'workshop-create',gameId:project.id},result=>{
-        inviteUrl=result.inviteUrl;room.hidden=false;create.hidden=true;
+        inviteUrl=result.inviteUrl;share.disabled=false;share.textContent='分享到聊天室';room.hidden=false;create.hidden=true;
       },'房间已创建，可以分享给朋友。');
     });
     create.hidden=true;
     const room=el('div','neko-workshop-room-actions');room.hidden=true;
+    const share=button('分享到聊天室','neko-workshop-share',async()=>{
+      if(share.disabled||busy||!inviteUrl)return;
+      share.disabled=true;
+      const result=await perform({action:'workshop-share-room',inviteUrl,title:project?.title},null,'房间邀请已发到聊天室。');
+      if(result?.ok)share.textContent='已分享到聊天室';
+      else if(result?.status==='delivery-unknown')share.textContent='发送结果待确认';
+      else share.disabled=false;
+    });
     room.append(
       button('打开房间','neko-workshop-open',()=>void perform({action:'workshop-open-room',inviteUrl},null,'已打开房间。')),
-      button('分享到聊天室','neko-workshop-share',()=>void perform({action:'workshop-share-room',inviteUrl,title:project?.title},null,'房间邀请已发到聊天室。')),
+      share,
       button('复制链接','neko-workshop-copy',()=>void perform({action:'workshop-copy-room',inviteUrl},null,'已复制邀请链接。'))
     );
     const library=el('div','neko-workshop-my-projects');
