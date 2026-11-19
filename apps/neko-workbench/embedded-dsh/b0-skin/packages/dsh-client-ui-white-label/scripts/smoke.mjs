@@ -2,7 +2,7 @@
  * Offline smoke test for the white-label bundle (no dependencies, no DSH).
  *
  * Verifies the loader wrapper/id, exports, product identity (Nekofans; the
- * 大肥鱼 name appears only as one of five avatars), slots, title rewrite,
+ * 大肥鱼 name identifies a character rather than the product), slots, title rewrite,
  * favicon, scoped hero CSS, avatar assets (placeholder or embedded), bridge
  * state sanitizing, the store against a fake window.nekoWorkbench (set,
  * upload, cancel, actions, errors, subscribe), and unload restore.
@@ -83,16 +83,17 @@ assert.ok(Object.isFrozen(exports.PRODUCT_BRAND))
 
 // --- avatars ----------------------------------------------------------------
 
-const IDS = ['yui', 'devcat', 'bigfish', 'claude', 'gemini']
-assert.deepEqual([...exports.AVATARS.map((a) => a.id)], IDS)
-assert.deepEqual([...exports.AVATARS.map((a) => a.name)], ['YUi', '开发喵', '大肥鱼', 'Claude娘', 'Gemini小猫'])
+const DAILY_IDS = ['yui', 'devcat', 'bigfish', 'gemini']
+const ASSET_IDS = [...DAILY_IDS, 'claude']
+assert.deepEqual(Array.from(exports.AVATARS, (avatar) => avatar.id), DAILY_IDS)
+assert.deepEqual(Array.from(exports.AVATARS, (avatar) => avatar.name), ['YUi', '开发喵', '大肥鱼', 'Gemini小猫'])
+assert.equal(exports.sanitizeState({ avatar: { builtinId: 'claude' } }).avatar.builtinId, 'claude', 'saved office avatar remains valid in daily')
 assert.deepEqual([...exports.ACTION_NAMES], ['screen-share', 'neko-settings', 'open-neko', 'task-notes', 'connect-neko', 'connection-status', 'reconnect-workbench', 'open-community', 'open-bilibili'])
-for (const id of IDS) assert.match(exports.PLACEHOLDERS[id], /^data:image\/svg\+xml,/, `placeholder ${id}`)
+for (const id of ASSET_IDS) assert.match(exports.PLACEHOLDERS[id], /^data:image\/svg\+xml,/, `placeholder ${id}`)
 const art = exports.AVATAR_ART
 const embedded = Object.keys(art)
-assert.ok(embedded.length === 0 || embedded.length === 5, 'all five avatars embedded or none')
+if (embedded.length) assert.deepEqual(embedded.toSorted(), ASSET_IDS.toSorted(), 'daily and office avatar art is embedded together')
 for (const id of embedded) {
-  assert.ok(IDS.includes(id))
   assert.match(art[id], /^data:image\/(webp|png);base64,/, `${id} uses an embedded raster`)
   const bytes = Buffer.from(art[id].split(',')[1], 'base64')
   assert.ok(bytes.length > 0 && bytes.length <= 200 * 1024, `${id} within 200 KB`)
@@ -101,7 +102,7 @@ for (const id of embedded) {
     assert.equal(bytes.toString('ascii', 8, 12), 'WEBP')
   }
 }
-console.log(`  avatars: ${embedded.length ? 'embedded raster x5' : 'SVG placeholders'}`)
+console.log(`  avatars: ${embedded.length ? `embedded raster x${embedded.length}` : 'SVG placeholders'}`)
 
 // Bigfish may identify an avatar, a live role or the connected account, never the product brand.
 const codeOnly = code
@@ -112,6 +113,8 @@ const codeOnly = code
   .replace(/\/\*[\s\S]*?\*\//g, '')
   .replace(/\/\/.*$/gm, '')
   .replaceAll('@bigfish/dsh-client-ui-white-label', '')
+  .replace(/^\s*function visibleAvatarId\(id\) \{ return id === 'claude' && !nekoOfficeEdition\(\) \? 'bigfish' : id \}\s*$/gm, '')
+  .replace(/^\s*if \(id === 'claude' && !nekoOfficeEdition\(\)\) id = 'bigfish'\s*$/gm, '')
   .replace(/^.*(id: 'bigfish'|bigfish: \{|bigfish: 'data:|'yui', 'devcat', 'bigfish'|const LIVE_ROLE = 'bigfish').*$/gm, '')
 assert.ok(!/大肥鱼|bigfish|whale|鲸/i.test(codeOnly), 'no bigfish identity outside approved avatar, role and account labels')
 assert.ok(!/大肥鱼|whale|鲸/.test(JSON.stringify(exports.PRODUCT_BRAND) + exports.faviconSvg()))
