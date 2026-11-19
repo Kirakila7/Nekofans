@@ -199,6 +199,7 @@ const mainAgent = createMainAgentWindows({
   isQuitting: () => quitting, reduceMotion: () => nativeTheme.shouldUseReducedMotion === true,
   actions: {
     chat: () => showInput(), chatSettings: editChatSettings,
+    nativeMenu: pet => { if (pet && !pet.isDestroyed()) mainMenu().popup({window:pet}); },
     memory: editChatMemory, visits: openVisits, workbench: openDsh, import: importPetAppearance,
     onError: error => {notice(state.actors[0],error.message || '桌宠操作未完成');broadcast();},
     canRoam: () => !workbenchOnly && !draggingPets.has('main') && !motionInputs.has('main')
@@ -1118,7 +1119,12 @@ ipcMain.handle('pet:call',async(event,method,p={})=>{
   if(method==='chat-cancel'){if(senderId!=='main'||!usesMainChatService(mainChatRuntime?.backend))throw new Error('请从主角色聊天操作');return cancelMainChat();}
   if(method==='rename'){const a=state.actors.find(a=>a.id===renameId);if(!a||a.id==='main')throw new Error('请从子代理右键菜单修改名字。');a.nickname=nickname(p.name);a.name=displayName(a);update();setTimeout(()=>{if(!sender.isDestroyed())sender.close();},100);return true;}
   if(method==='settings'){if(sender!==settingsWindow)throw new Error('请从主角色右键菜单打开设置。');const n=Number(p.helperLimit);if(!Number.isInteger(n)||n<1||n>32)throw new Error('请输入 1～32 的整数。');if(!setHelperLimit(n))throw new Error('上限不能少于已常驻的 '+pinnedCount()+' 只角色。');return true;}
-  if(method==='menu'){const a=state.actors.find(a=>a.id===senderId);if(a)(senderId==='main'?mainMenu():childMenu(a)).popup({window:sender});return true;}
+  if(method==='menu'){
+    const a=state.actors.find(a=>a.id===senderId);
+    if(senderId==='main')mainAgent.openMenu({keyboard:p.keyboard===true});
+    else if(a)childMenu(a).popup({window:sender});
+    return true;
+  }
   if(method==='open-task'){const a=state.actors.find(a=>a.id===senderId);if(a?.kind!=='task')throw new Error('请从任务角色打开对应会话');await openTaskSession(a);return true;}
   if(method==='move'){if(senderId){draggingPets.add(senderId);const [x,y]=sender.getPosition();sender.setPosition(x+Math.round(Math.max(-500,Math.min(500,p.dx||0))),y+Math.round(Math.max(-500,Math.min(500,p.dy||0))));}return true;}
   if(method==='move-end'){if(senderId){draggingPets.delete(senderId);catMotion.resumeFromDrag(senderId);const [x,y]=sender.getPosition();state.positions[senderId]={x,y};save();}return true;}

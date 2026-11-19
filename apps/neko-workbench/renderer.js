@@ -69,6 +69,8 @@ if(view==='chat-settings'){
       catch {document.getElementById('saved').textContent='保存失败，请再试一次';}
     });
   };
+} else if (view === 'main-agent-menu') {
+  window.MainAgentUI.mountMenu(host,window.pet.agent,query.get('keyboard')==='1');
 } else if (view === 'main-agent-settings' || view === 'main-agent-guide') {
   window.MainAgentUI.mount(host, view === 'main-agent-guide', query.get('tab'), window.pet.agent);
 } else {
@@ -362,7 +364,23 @@ if(view==='chat-settings'){
     setInput(false);quick?.show(false);
     window.pet.call('open-workbench').catch(error=>showBubble(error.message));
   });
-  document.addEventListener('contextmenu',event=>{event.preventDefault();hideInspector();window.pet.call('menu');});
+  function openPetMenu(keyboard) {
+    hideInspector();
+    clearTimeout(dwellTimer);
+    clearTimeout(singleClickTimer);
+    quick?.show(false);
+    void window.pet.call('menu',{keyboard}).catch(error=>showBubble(error.message));
+  }
+  document.addEventListener('contextmenu',event=>{
+    event.preventDefault();
+    openPetMenu(event.button===0);
+  });
+  character.addEventListener('keydown',event=>{
+    if(event.key==='ContextMenu'||event.key==='F10'&&event.shiftKey){
+      event.preventDefault();
+      openPetMenu(true);
+    }
+  });
   input.addEventListener('keydown',event=>{
     if(event.isComposing||event.keyCode===229)return;
     if(event.key==='Escape'){event.preventDefault();setInput(false);}
