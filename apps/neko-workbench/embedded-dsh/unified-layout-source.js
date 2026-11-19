@@ -4,6 +4,7 @@ function installUnifiedLayout(options = {}) {
   const doc = options.document || document, win = options.window || window;
   const bridge = options.bridge || win.nekoWorkbench;
   const windowsHost = bridge?.platform === 'win32';
+  let canLinkDesktop = typeof bridge?.communityAccount === 'function' && typeof bridge?.getAccounts !== 'function';
   let floatingComposerRect = null;
   if (!doc?.body || typeof bridge?.workspace !== 'function' || typeof bridge?.community !== 'function' || doc.querySelector('[data-neko-unified-style]')) return () => {};
   const rail = doc.querySelector('[data-neko-side-rail]');
@@ -286,7 +287,7 @@ function installUnifiedLayout(options = {}) {
     }
   }
   function accountAction(slot) {
-    if (disposed || placements.get(slot) !== 'community' || panels[slot].node.hidden || typeof bridge.communityAccount !== 'function') return;
+    if (disposed || !canLinkDesktop || placements.get(slot) !== 'community' || panels[slot].node.hidden) return;
     const ticket = ++accountRevision;
     if (accountPending) {
       accountPending = false;
@@ -503,7 +504,7 @@ function installUnifiedLayout(options = {}) {
     p.play.hidden = p.share.hidden = site !== 'bilibili';
     p.youtubeInput.hidden = p.youtubeOpen.hidden = p.youtubeShorts.hidden = site !== 'youtube';
     p.leave.hidden = !!layout.flex?.enabled && slot !== 'side';
-    p.account.hidden = site !== 'community' || typeof bridge.communityAccount !== 'function';
+    p.account.hidden = site !== 'community' || !canLinkDesktop;
     const boundsStyle = { left: `${Math.round(rect.x)}px`, top: `${Math.round(rect.y)}px`, width: `${Math.round(rect.width)}px`, height: `${Math.round(rect.height)}px` };
     for (const [key, value] of Object.entries(boundsStyle)) if (p.node.style[key] !== value) p.node.style[key] = value;
     const borderlessCommunity = site === 'community' && doc.body.hasAttribute('data-neko-daily-compact');
@@ -976,6 +977,13 @@ function installUnifiedLayout(options = {}) {
     if (typeof state.canShare === 'boolean') p.share.disabled = !state.canShare;
     if (typeof state.canPlayOfficial === 'boolean') p.play.disabled = !state.canPlayOfficial || !!state.isOfficialPlayer;
   });
+  if (typeof bridge.getAccounts === 'function' && typeof bridge.communityAccount === 'function') {
+    void Promise.resolve().then(() => bridge.getAccounts({})).then(value => {
+      if (disposed) return;
+      canLinkDesktop = value?.neko?.lobby?.deployment !== 'nekofans';
+      schedule();
+    }).catch(() => {});
+  }
   if (typeof bridge.subscribeCommunityAccount === 'function') unsubscribeAccount = bridge.subscribeCommunityAccount(paintAccount);
   const unsubscribeVideoWindow=typeof bridge.subscribeVideoWindow==='function'?bridge.subscribeVideoWindow(state=>{if(doc.body.hasAttribute('data-neko-daily-compact'))sceneButton.setAttribute('aria-pressed',String(!!state?.open));}):null;
   if(doc.body.hasAttribute('data-neko-daily-compact')){sceneButton.title='打开视频浮窗';sceneButton.setAttribute('aria-label','打开视频浮窗');}

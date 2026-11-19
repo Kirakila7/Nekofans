@@ -140,6 +140,7 @@ async function run() {
     menu = await view(app,'main-agent-menu');
     await menu.waitForFunction(() => document.activeElement?.dataset.menuAction === 'settings');
     await menu.locator('[data-menu-action=close]').click();
+    await waitFor(() => menu.isClosed(),'keyboard menu closed');
     await clickPet(pet,'menu');
     menu = await view(app,'main-agent-menu');
     await menu.locator('[data-menu-action=chat]').click();
@@ -148,6 +149,18 @@ async function run() {
     if (process.env.NEKO_ULTRA_QA_DSH_MODULES) {
       const workbench = await waitFor(() => app.windows().find(page => /^http:\/\/(127\.0\.0\.1|localhost)[:/]/.test(page.url())),'bundled workbench');
       await workbench.waitForFunction(() => !!window.nekoWorkbench?.getState);
+      if (process.env.NEKO_WORKBENCH_CHAT_DEPLOYMENT === 'nekofans') {
+        const deployment = await workbench.evaluate(async () => {
+          const account = await window.nekoWorkbench.getAccounts();
+          const channel = await window.nekoWorkbench.lobby({action:'state'});
+          return [account.neko.lobby.deployment,channel.state.deployment];
+        });
+        assert.deepEqual(deployment,['nekofans','nekofans']);
+        await workbench.getByRole('button',{name:'聊天室',exact:true}).click({timeout:8000});
+        await workbench.getByRole('button',{name:'打开公共聊天室',exact:true}).click({timeout:8000});
+        await workbench.getByRole('button',{name:'登录 Nekofans',exact:true}).waitFor({timeout:8000});
+        console.log('NEKOFANS_CHAT_PASS: native workbench shows the independent sign-in route');
+      }
     }
 
     await app.close();

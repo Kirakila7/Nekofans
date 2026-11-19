@@ -4,9 +4,13 @@
 // default; the environment can override it or explicitly disable it with an
 // empty value. Error text never echoes the configured value.
 const { OFFICIAL_AUTH_ORIGIN } = require('./community-config.cjs');
+const { createHash } = require('node:crypto');
+const path = require('node:path');
 
 const DEFAULT_CHAT_URL = 'https://chat.nekotech.ai';
 const DEFAULT_CHAT_CLIENT_ID = 'neko-chat-desktop-prod';
+const NEKOFANS_CHAT_URL = 'https://chat.nekofans.games';
+const NEKOFANS_AUTH_URL = 'https://auth.nekofans.games';
 const CHAT_CLIENT_ID_PATTERN = /^neko-chat-desktop-[a-z]+$/;
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]']);
 const MAX_OAUTH_PORTS = 8;
@@ -104,19 +108,50 @@ function chatChannelSocketUrl(config, channelId) {
 // Throws (with fixed text) on an invalid configuration; the lobby controller
 // catches it so the private companion chat is never affected.
 function resolveChatConfig(env = process.env) {
+  const deployment = env.NEKO_WORKBENCH_CHAT_DEPLOYMENT || 'official';
+  if (!['official', 'nekofans'].includes(deployment)) throw new Error('频道部署配置无效');
+  const own = deployment === 'nekofans';
   const chatUrl = resolveChatUrl(env.NEKO_WORKBENCH_CHAT_URL === undefined
-    ? DEFAULT_CHAT_URL : env.NEKO_WORKBENCH_CHAT_URL);
-  if (!chatUrl) return Object.freeze({ configured: false });
+    ? (own ? NEKOFANS_CHAT_URL : DEFAULT_CHAT_URL) : env.NEKO_WORKBENCH_CHAT_URL);
+  if (!chatUrl) return Object.freeze({ configured: false, ...(own && { deployment }) });
+  const authOverride = env.NEKO_WORKBENCH_CHAT_AUTH_URL;
+  const authUrl = resolveChatAuthUrl(own && (authOverride == null || authOverride === '') ? NEKOFANS_AUTH_URL : authOverride, chatUrl);
+  if (own) {
+    const chat = new URL(chatUrl), auth = new URL(authUrl);
+    const isNekofans = url => url.protocol === 'https:'
+      && (url.hostname === 'nekofans.games' || url.hostname.endsWith('.nekofans.games'));
+    if (chat.search || chat.hash || !(isNekofans(chat) && isNekofans(auth) || isLoopbackUrl(chat) && isLoopbackUrl(auth))) {
+      throw new Error('Nekofans 聊天室与授权需使用 nekofans.games 下的 HTTPS 地址，或同时使用本机联调地址');
+    }
+  }
   return Object.freeze({
     configured: true,
     chatUrl,
     wsUrl: chatSocketBase(chatUrl),
-    authUrl: resolveChatAuthUrl(env.NEKO_WORKBENCH_CHAT_AUTH_URL, chatUrl),
+    authUrl,
     clientId: resolveChatClientId(env.NEKO_WORKBENCH_CHAT_CLIENT_ID),
     oauthPorts: resolveChatOAuthPorts(env.NEKO_WORKBENCH_CHAT_OAUTH_PORTS),
+    ...(own && { deployment }),
   });
+}
+
+function chatDeployment(config) {
+  if (config.deployment === 'nekofans') return 'nekofans';
+  if (!config.configured || (config.chatUrl === DEFAULT_CHAT_URL + '/' && config.authUrl === OFFICIAL_AUTH_ORIGIN
+    && config.clientId === DEFAULT_CHAT_CLIENT_ID)) return 'official';
+  return 'custom';
+}
+
+function lobbyDataDirectory(dataDir, config) {
+  if (!config.configured) return null;
+  const deployment = chatDeployment(config);
+  if (deployment === 'official') return path.join(dataDir, 'lobby');
+  const namespace = createHash('sha256').update(JSON.stringify([
+    deployment, config.chatUrl, config.authUrl, config.clientId,
+  ])).digest('hex').slice(0, 32);
+  return path.join(dataDir, 'lobby-deployments', deployment + '-' + namespace);
 }
 
 module.exports = { OFFICIAL_AUTH_ORIGIN, DEFAULT_CHAT_URL, DEFAULT_CHAT_CLIENT_ID, CHAT_CLIENT_ID_PATTERN, LOOPBACK_HOSTS,
   resolveChatUrl, resolveChatClientId, resolveChatAuthUrl, resolveChatOAuthPorts,
-  chatSocketBase, chatChannelSocketUrl, resolveChatConfig };
+  chatSocketBase, chatChannelSocketUrl, resolveChatConfig, chatDeployment, lobbyDataDirectory };

@@ -21,6 +21,7 @@ test('workbench lobby and game IPC require a trusted caller and delegate request
     const screenShare = { hide: () => {} };
     const communityController = { action: async () => ({}) };
     const unifiedNekoLogin = { cancel: () => {} };
+    const projectLobby = value => ({ ...value, deployment:'nekofans' });
     const mainChatRuntime = { refreshLobbyAccount: async value => { readinessCalls.push(value); } };
     ${routes}
   `;
@@ -32,6 +33,7 @@ test('workbench lobby and game IPC require a trusted caller and delegate request
 
   const result = await handlers.get('workbench:lobby')(caller, { action: 'state' });
   assert.equal(result.ok, true);
+  assert.equal(result.state.deployment,'nekofans');
   assert.deepEqual(controllerCalls, [{ action: 'state' }]);
   assert.equal(readinessCalls.length,1,'state verifies the selected account without making a model call');
 

@@ -1,0 +1,14 @@
+# Apply after upstream docker-compose.yml and docker-compose.prod.yml.
+name: nekofans-games-chat
+services:
+  db:
+    container_name: !reset null
+  redis:
+    container_name: !reset null
+  api:
+    container_name: !reset null
+    image: nekofans-games-chat-api
+    env_file: !override
+      - ${NEKOFANS_CHAT_ENV_FILE:?Set the absolute path of the Nekofans production env file}
+    ports: !override
+      - "127.0.0.1:${NEKOFANS_CHAT_API_PORT:-18091}:8080"

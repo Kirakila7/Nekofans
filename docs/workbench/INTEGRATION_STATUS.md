@@ -1,5 +1,11 @@
 # Local integration 0.28.41 / build 77
 
+## Ultra 自建 Nekofans 聊天室
+
+- `NEKO_WORKBENCH_CHAT_DEPLOYMENT=nekofans` 选择独立的 Nekofans 账号授权与频道。配置分别指向 `auth.nekofans.games` 和 `chat.nekofans.games`，本地凭据、频道设置和公共经历按部署隔离。官方路线沿用原来的登录和资料目录。
+- 并行部署复用 N.E.K.O.Chat 后端，使用独立 Compose 项目和空数据卷。配置见 [自建聊天室](NEKOFANS_GAMES_CHAT.md)。
+- 本机合成账号通过实际 HTTP 回调、PKCE、本机 WebSocket、双向消息、重连和退出的联调。生产域名、正式 Auth 和用户资料服务需在部署环境验收。
+
 ## Ultra 桌宠右键与新手引导
 
 - 主桌宠右键弹出带图标的操作面板。悬停快捷按钮与右键面板共享选择，精简模式只列出已选快捷动作，主 Agent 设置和更多操作使用固定入口。设置预览与桌面面板使用同一套内容。

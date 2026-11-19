@@ -117,9 +117,10 @@ test('desktop identity IPC rejects remote and subframe callers and requires an o
   const host = { webContents: contents, isDestroyed: () => false }, controller = { isOpen: true };
   const validation = source.slice(source.indexOf('function isWorkbenchOrigin'), source.indexOf('function rolesState'));
   const route = between(source, "ipcMain.handle('workbench:community-account'", "ipcMain.handle('workbench:roles'");
-  vm.runInNewContext(validation + route, { URL, dshWindow: host, dshLaunchUrl: contents.mainFrame.url,
+  const context = { URL, dshWindow: host, dshLaunchUrl: contents.mainFrame.url, lobbyDeployment:'official',
     ipcMain: { handle: (name, fn) => handlers.set(name, fn), on: () => {} }, communityController: controller,
-    communityAccount: { action: async action => { calls.push(action); return { status: 'available' }; } } });
+    communityAccount: { action: async action => { calls.push(action); return { status: 'available' }; } } };
+  vm.runInNewContext(validation + route, context);
   const handle = handlers.get('workbench:community-account'), event = { sender: contents, senderFrame: contents.mainFrame };
   assert.equal((await handle(event, 'connect')).status, 'available');
   for (const invalid of [{ sender: {}, senderFrame: contents.mainFrame }, { sender: contents, senderFrame: { url: contents.mainFrame.url } }]) await assert.rejects(handle(invalid, 'connect'), /工作台/);
@@ -134,4 +135,9 @@ test('desktop identity IPC rejects remote and subframe callers and requires an o
   host.isDestroyed = () => true;
   await assert.rejects(handle(event, 'cancel'), /工作台/);
   assert.deepEqual(calls, ['connect', 'cancel'], 'rejected callers never reach the identity controller');
+  host.isDestroyed = () => false;
+  controller.isOpen = true;
+  context.lobbyDeployment = 'nekofans';
+  await assert.rejects(handle(event,'connect'),/独立账号/);
+  assert.deepEqual(calls,['connect','cancel'],'independent mode cannot invoke the local identity bridge');
 });
