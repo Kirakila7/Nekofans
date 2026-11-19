@@ -257,11 +257,11 @@ const flush = () => act(async () => { await new Promise((r) => setTimeout(r, 5))
 // --- hero gallery + scoped CSS -----------------------------------------------
 
 const picks = $$('.neko-hero-pick')
-assert.equal(picks.length, 5)
-assert.deepEqual(picks.map((p) => p.textContent), ['YUi', '开发喵', '大肥鱼', 'Claude娘', 'Gemini小猫'])
+const dailyPortraits = ['YUi', '开发喵', '大肥鱼', 'Gemini小猫']
+assert.deepEqual(picks.map((p) => p.textContent), dailyPortraits)
 assert.equal($('.neko-gallery__row').getAttribute('role'), 'radiogroup')
 assert.equal(picks[0].getAttribute('aria-checked'), 'true')
-assert.deepEqual(picks.map((p) => p.tabIndex), [0, -1, -1, -1, -1], 'roving tab stop')
+assert.deepEqual(picks.map((p) => p.tabIndex), [0, -1, -1, -1], 'roving tab stop')
 const css = $('style[id$=":style"]').textContent
 const headlineSel = 'div:has(> span > .neko-gallery, > span > * > .neko-gallery)'
 assert.ok(css.includes(headlineSel))
@@ -290,12 +290,12 @@ assert.equal(trigger.getAttribute('aria-expanded'), 'true')
 let picker = $('.neko-picker')
 assert.ok(picker && picker.getAttribute('role') === 'dialog')
 assert.equal(trigger.getAttribute('aria-controls'), picker.id)
-assert.equal($$('.neko-picker .neko-tile').length, 5)
+assert.equal($$('.neko-picker .neko-tile').length, dailyPortraits.length)
 assert.equal(document.activeElement, $('.neko-tile[aria-pressed="true"]'), 'focus moves to the selected tile')
 assert.ok(live.size > baseline, 'listeners while open')
 await click($$('.neko-picker .neko-tile')[3])
 await flush()
-assert.deepEqual(calls.at(-1), ['setAvatar', 'claude'])
+assert.deepEqual(calls.at(-1), ['setAvatar', 'gemini'])
 assert.equal($$('.neko-picker .neko-tile')[3].getAttribute('aria-pressed'), 'true')
 await click($('.neko-picker__upload'))
 await flush()
@@ -314,6 +314,29 @@ await act(async () => { $('#composer').dispatchEvent(new window.Event('pointerdo
 await flush()
 assert.equal($('.neko-picker'), null, 'outside pointerdown closes')
 
+// Office adds Claude after Gemini. Navigation and rendering must use the same list.
+await act(async () => {
+  document.body.setAttribute('data-neko-workbench-edition', 'office')
+  for (const fn of subs) fn({...state})
+})
+assert.deepEqual($$('.neko-hero-pick').map((p) => p.textContent), [...dailyPortraits, 'Claude娘'])
+const gemini = $$('.neko-hero-pick')[3]
+gemini.focus()
+await key(gemini, 'End')
+await flush()
+assert.deepEqual(calls.at(-1), ['setAvatar', 'claude'], 'End selects the last visible office portrait')
+assert.equal(document.activeElement, $$('.neko-hero-pick')[4])
+await act(async () => {
+  document.body.setAttribute('data-neko-workbench-edition', 'daily')
+  for (const fn of subs) fn({...state})
+})
+assert.deepEqual($$('.neko-hero-pick').map((p) => p.textContent), dailyPortraits)
+assert.equal(state.avatar.builtinId, 'claude', 'changing edition preserves the saved avatar')
+assert.equal($$('.neko-hero-pick')[2].getAttribute('aria-checked'), 'true', 'daily displays the saved office choice as 大肥鱼')
+await key($$('.neko-hero-pick')[2], 'End')
+await flush()
+assert.deepEqual(calls.at(-1), ['setAvatar', 'gemini'], 'End selects the last visible daily portrait')
+
 // Native push updates both seats.
 await act(async () => {
   state = { ...state, avatar: { builtinId: 'custom', customDataUrl: 'data:image/png;base64,iVBORw0KGgo=' } }
@@ -324,7 +347,7 @@ assert.ok($$('.neko-hero-pick').every((p) => p.getAttribute('aria-checked') === 
 assert.equal($$('.neko-hero-pick')[0].tabIndex, 0)
 await click(trigger)
 await flush()
-assert.equal($$('.neko-picker .neko-tile').length, 6, 'custom tile appears')
+assert.equal($$('.neko-picker .neko-tile').length, dailyPortraits.length + 1, 'custom tile appears')
 await key(document.activeElement, 'Escape')
 await flush()
 
@@ -475,12 +498,12 @@ const css2 = $('style[id$=":style"]').textContent
 assert.match(css2, /nav\[data-neko-tools="folded"\] \{ display: none !important; \}/)
 
 const rows = $$('.neko-role')
-assert.deepEqual(rows.map((r) => r.querySelector('.neko-role__name').textContent), ['Yui', '大肥鱼', 'Claude小姐'])
-assert.deepEqual(rows.map((r) => r.dataset.enabled), ['false', 'true', 'false'])
-assert.deepEqual(rows.map((r) => (r.querySelector('.neko-role__tag') || {}).textContent || ''), ['未接入', '', '未接入'])
+assert.deepEqual(rows.map((r) => r.querySelector('.neko-role__name').textContent), ['Yui', '大肥鱼'])
+assert.deepEqual(rows.map((r) => r.dataset.enabled), ['false', 'true'])
+assert.deepEqual(rows.map((r) => (r.querySelector('.neko-role__tag') || {}).textContent || ''), ['未接入', ''])
 assert.equal($$('.neko-role__tools').length, 1, 'only the live role has tools')
 assert.ok(rows[1].querySelector('.neko-role__tools'))
-assert.equal($$('.neko-role__settings').length, 3, 'every role has settings')
+assert.equal($$('.neko-role__settings').length, 2, 'every visible role has settings')
 assert.equal($$('button button').length, 0, 'no nested buttons')
 assert.equal(rows[1].dataset.active, 'true')
 
@@ -597,8 +620,9 @@ assert.equal(live.size, baseline, 'no listeners left after tools close')
 
 // Role settings: rename + builtin avatar + PNG upload; global avatar untouched.
 const globalSrc = $('.neko-avatar-btn img').getAttribute('src')
-const claudeRow = () => $('.neko-role[data-role="claude"]')
-await click(claudeRow().querySelector('.neko-role__settings'))
+const globalChanges = calls.filter((c) => c[0] === 'setAvatar').length
+const yuiRow = () => $('.neko-role[data-role="yui"]')
+await click(yuiRow().querySelector('.neko-role__settings'))
 await flush()
 const rp = $('.neko-role-panel')
 assert.ok(rp)
@@ -606,25 +630,25 @@ assert.match(rp.textContent, /未接入/)
 const input = rp.querySelector('input')
 assert.equal(document.activeElement, input)
 const setValue = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
-await act(async () => { setValue.call(input, '  克劳德  '); input.dispatchEvent(new window.Event('input', { bubbles: true })) })
+await act(async () => { setValue.call(input, '  小唯  '); input.dispatchEvent(new window.Event('input', { bubbles: true })) })
 await act(async () => { rp.querySelector('form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })) })
 await flush()
-assert.deepEqual(roleCalls.at(-1), ['updateRole', 'claude', { name: '克劳德' }])
-assert.equal(claudeRow().querySelector('.neko-role__name').textContent, '克劳德')
-await click($$('.neko-role-panel .neko-tile')[4])
+assert.deepEqual(roleCalls.at(-1), ['updateRole', 'yui', { name: '小唯' }])
+assert.equal(yuiRow().querySelector('.neko-role__name').textContent, '小唯')
+await click($$('.neko-role-panel .neko-tile')[3])
 await flush()
-assert.deepEqual(roleCalls.at(-1), ['updateRole', 'claude', { avatarId: 'gemini' }])
+assert.deepEqual(roleCalls.at(-1), ['updateRole', 'yui', { avatarId: 'gemini' }])
 await click($('.neko-role-panel .neko-picker__upload'))
 await flush()
-assert.deepEqual(roleCalls.at(-1), ['uploadAvatar', 'claude'])
-assert.equal(claudeRow().querySelector('.neko-role__img').getAttribute('src'), 'data:image/png;base64,iVBORw0KGgo=')
-assert.equal($$('.neko-role-panel .neko-tile').length, 6, 'custom tile appears for the role')
-assert.equal(claudeRow().dataset.enabled, 'false', 'customizing does not connect the role')
+assert.deepEqual(roleCalls.at(-1), ['uploadAvatar', 'yui'])
+assert.equal(yuiRow().querySelector('.neko-role__img').getAttribute('src'), 'data:image/png;base64,iVBORw0KGgo=')
+assert.equal($$('.neko-role-panel .neko-tile').length, dailyPortraits.length + 1, 'custom tile appears for the role')
+assert.equal(yuiRow().dataset.enabled, 'false', 'customizing does not connect the role')
 assert.equal($('.neko-avatar-btn img').getAttribute('src'), globalSrc, 'global avatar unchanged')
 await key(document.activeElement, 'Escape')
 await flush()
 assert.equal($('.neko-role-panel'), null)
-assert.equal(calls.filter((c) => c[0] === 'setAvatar').length, 3, 'roles never call nekoWorkbench.setAvatar')
+assert.equal(calls.filter((c) => c[0] === 'setAvatar').length, globalChanges, 'roles never call nekoWorkbench.setAvatar')
 
 // A native new-session React render may replace its button. The old node
 // restores cleanly and the next original node keeps its own click handler.
