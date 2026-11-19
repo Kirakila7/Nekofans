@@ -320,6 +320,26 @@ test('sign-in state: unconfigured and signed-out gates; signing in joins the lob
 });
 
 const loggedOut=()=>snapshot({connection:'signed-out',auth:{status:'signed-out',signingIn:false},me:null,messages:[],members:[],channel:null});
+test('Nekofans account opens and cancels direct authorization without a community relay',{skip:DOM_SKIP},async t=>{
+ const separate={...loggedOut(),deployment:'nekofans'};
+ let release;
+ const f=setup(t,{snap:separate,unifiedLogin:{signIn:()=>assert.fail('official login'),cancel:()=>assert.fail('official cancel')},
+  respond:r=>r.action==='sign-in'?new Promise(resolve=>release=resolve):null});
+ await tick();
+ const detail={signIn:true};
+ f.doc.dispatchEvent(new f.w.CustomEvent('neko-account-open-lobby',{detail}));
+ await tick();
+ assert.equal(f.doc.querySelector('.neko-lobby-sign-in').textContent,'登录 Nekofans');
+ assert.equal(f.calls.lobby.filter(r=>r.action==='sign-in').length,1);
+ assert.equal(f.calls.community,0);
+ f.doc.querySelector('.neko-lobby-sign-in-cancel').click();
+ await tick();
+ assert.equal(f.calls.lobby.filter(r=>r.action==='sign-in-cancel').length,1);
+ release({ok:false,state:separate,error:'已取消'});
+ await detail.promise;
+ assert.equal(f.calls.community,0);
+ assert.equal(f.doc.querySelector('.neko-lobby-sign-in').hidden,false);
+});
 test('verified community login authorizes in place and joins only after the matching unified completion',{skip:DOM_SKIP},async t=>{
  let started=0;const f=setup(t,{snap:loggedOut(),unifiedLogin:{signIn:async request=>{assert.deepEqual(JSON.parse(JSON.stringify(request)),{source:'lobby'});started++;return {ok:true,state:{status:'chatroom',source:'lobby',flowId:11}};},cancel:async()=>({ok:true})}});await tick();f.doc.querySelector('.neko-lobby-switch').click();await tick();const input=f.doc.querySelector('.neko-lobby-form textarea');input.value='我的频道草稿';const panel=f.doc.querySelector('.neko-lobby-panel');
  const login=f.doc.querySelector('.neko-lobby-sign-in');login.click();login.click();await tick();assert.equal(started,1);assert.equal(f.calls.community,0);assert(!panel.hidden);assert(f.doc.querySelector('.neko-lobby-sign-in').hidden);

@@ -39,16 +39,6 @@ if(view==='chat-settings'){
   document.title='聊天 API 设置';window.addEventListener('unload',window.WorkbenchChatUI.mountSettings(host,window.pet),{once:true});
 }else if(view==='chat-memory'){
   document.title='鱼的记忆';window.addEventListener('unload',window.WorkbenchChatUI.mountMemory(host,window.pet),{once:true});
-}else if(view==='neko-settings'){
-  document.title='N.E.K.O. 聊天';
-  host.innerHTML='<form class="settings-form neko-settings"><label for="neko-url">N.E.K.O. 服务地址</label><input id="neko-url" type="url" required placeholder="http://127.0.0.1:48911"><label for="neko-character">聊天角色</label><input id="neko-character" type="text" list="neko-characters" placeholder="默认使用独立大肥鱼角色"><datalist id="neko-characters"></datalist><p>沿用 N.E.K.O. 的角色与记忆，使用现有单行聊天框。</p><button type="submit">连接</button><span role="status"></span></form>';
-  let loaded=false;const url=document.getElementById('neko-url'),character=document.getElementById('neko-character'),message=host.querySelector('[role=status]');
-  function renderSettings(next){state=next;if(!loaded){url.value=state.neko.baseUrl;character.value=state.neko.character||'';loaded=true;}
-    const list=document.getElementById('neko-characters');list.replaceChildren(...(state.neko.characters||[]).map(name=>{const item=document.createElement('option');item.value=name;return item;}));
-    message.textContent=state.neko.connection==='ready'?'已连接 '+state.neko.character:state.neko.connection==='connecting'?'连接中…':state.neko.error||'请先启动 N.E.K.O.';
-  }
-  window.pet.onState(renderSettings);window.pet.call('state').then(renderSettings);
-  host.querySelector('form').onsubmit=event=>{event.preventDefault();void submitting(event.currentTarget,async()=>{try{await window.pet.call('neko-settings',{baseUrl:url.value,character:character.value});}catch(error){message.textContent=error.message;}});};
 }else if(view==='rename'){
   document.title='修改名字';
   host.innerHTML='<form class="settings-form rename-form"><label for="pet-name">给她起个名字</label><input id="pet-name" type="text" maxlength="48" autocomplete="off" spellcheck="false"><p>留空就跟随 DSH 的名字。</p><button type="submit">保存</button><span role="status"></span></form>';
@@ -79,6 +69,8 @@ if(view==='chat-settings'){
       catch {document.getElementById('saved').textContent='保存失败，请再试一次';}
     });
   };
+} else if (view === 'main-agent-menu') {
+  window.MainAgentUI.mountMenu(host,window.pet.agent,query.get('keyboard')==='1');
 } else if (view === 'main-agent-settings' || view === 'main-agent-guide') {
   window.MainAgentUI.mount(host, view === 'main-agent-guide', query.get('tab'), window.pet.agent);
 } else {
@@ -172,7 +164,7 @@ if(view==='chat-settings'){
     if (action === 'chat') setInput(!inputVisible);
     if (action === 'poke') gesture('poke');
   }
-  const practicingWorkbench = () => prefs()?.guide?.status === 'pending' && prefs().guide.step === 7;
+  const practicingWorkbench = () => prefs()?.guide?.status === 'pending' && prefs().guide.step === 6;
   window.addEventListener('unload', () => {
     for (const timer of [quickHideTimer, dwellTimer, singleClickTimer]) clearTimeout(timer);
     void gestureAudio?.close().catch(() => {});
@@ -297,12 +289,12 @@ if(view==='chat-settings'){
     const preview=window.PetContext.preview(a);for(const field of inspector.querySelectorAll('dd'))field.textContent=preview[field.dataset.field];
     input.setAttribute('aria-label','给'+a.name+'发消息');
     const mainChatService=a.id==='main'&&['chat-api','deepseek-account'].includes(a.chatBackend);
-    input.title=a.id==='main'?(a.chatBackend==='deepseek-account'?'DeepSeek 账号聊天 · 大肥鱼':a.chatBackend==='chat-api'?'独立聊天 API · 大肥鱼':'N.E.K.O. · '+(state.neko.character||'等待连接')):a.name+(a.task?'\n任务：'+a.task:'');
+    input.title=a.id==='main'?(a.chatBackend==='deepseek-account'?'DeepSeek 账号聊天 · 大肥鱼':'独立聊天 API · 大肥鱼'):a.name+(a.task?'\n任务：'+a.task:'');
     input.maxLength=mainChatService?8000:30000;
     stopReply.hidden=!(mainChatService&&busy(a));form.classList.toggle('can-stop',!stopReply.hidden);
     input.readOnly=a.id!=='main'&&a.mode!=='continuable';
     const shortName=Array.from(a.name).slice(0,12).join('')+(Array.from(a.name).length>12?'…':'');
-    input.placeholder=a.id==='main'?(busy(a)?'正在回复，可点右侧停止':a.chatBackend==='deepseek-account'?'和大肥鱼聊聊，回车发送':a.chatBackend==='chat-api'?(state.mainChat?.hasKey&&state.mainChat?.settings?.model?'和大肥鱼聊聊，回车发送':'右键 → 聊天 API 设置'):state.neko.connection==='ready'?'和'+state.neko.character+'说点什么，回车发送':'N.E.K.O. 未连接，右键设置'):input.readOnly?'只读子任务，在 DSH 查看':busy(a)?((a.work?.task||a.task)?.slice(0,25)||'正在做，稍等一下…'):shortName+'：发消息，回车发送';
+    input.placeholder=a.id==='main'?(busy(a)?'正在回复，可点右侧停止':a.chatBackend==='deepseek-account'?'和大肥鱼聊聊，回车发送':a.chatBackend==='chat-api'?(state.mainChat?.hasKey&&state.mainChat?.settings?.model?'和大肥鱼聊聊，回车发送':'右键 → 聊天 API 设置'):'请在聊天设置中选择聊天方式'):input.readOnly?'只读子任务，在 DSH 查看':busy(a)?((a.work?.task||a.task)?.slice(0,25)||'正在做，稍等一下…'):shortName+'：发消息，回车发送';
     if(a.id==='main'&&(mainChatService||a.screenReply)){
       hideInspector();bubble.tabIndex=0;bubble.title='最近回复，可滚动查看全文';apiReplyPresenter.render(a);
     }else if(a.kind==='task'){
@@ -372,7 +364,23 @@ if(view==='chat-settings'){
     setInput(false);quick?.show(false);
     window.pet.call('open-workbench').catch(error=>showBubble(error.message));
   });
-  document.addEventListener('contextmenu',event=>{event.preventDefault();hideInspector();window.pet.call('menu');});
+  function openPetMenu(keyboard) {
+    hideInspector();
+    clearTimeout(dwellTimer);
+    clearTimeout(singleClickTimer);
+    quick?.show(false);
+    void window.pet.call('menu',{keyboard}).catch(error=>showBubble(error.message));
+  }
+  document.addEventListener('contextmenu',event=>{
+    event.preventDefault();
+    openPetMenu(event.button===0);
+  });
+  character.addEventListener('keydown',event=>{
+    if(event.key==='ContextMenu'||event.key==='F10'&&event.shiftKey){
+      event.preventDefault();
+      openPetMenu(true);
+    }
+  });
   input.addEventListener('keydown',event=>{
     if(event.isComposing||event.keyCode===229)return;
     if(event.key==='Escape'){event.preventDefault();setInput(false);}

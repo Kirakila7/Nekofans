@@ -247,7 +247,12 @@ function installNekoAccountHabitat(ctx, options) {
     return own.promise;
   }
   function nekoLabel(value) { return ({'signed-in':'已登录','signed-out':'未登录',checking:'检测中',authorizing:'授权中',unknown:'待打开社区',unavailable:'暂不可读取',unconfigured:'未连接'})[value?.status] || '暂不可读取'; }
-  function nekoSummary() { return nekoSnapshot ? '，N.E.K.O. 社区 '+nekoLabel(nekoSnapshot.community)+'，聊天室 '+nekoLabel(nekoSnapshot.lobby) : ''; }
+  function independentChat() { return ['nekofans','custom'].includes(nekoSnapshot?.lobby?.deployment); }
+  function nekoSummary() {
+    if (!nekoSnapshot) return '';
+    if (independentChat()) return '，聊天室 '+nekoLabel(nekoSnapshot.lobby);
+    return '，N.E.K.O. 社区 '+nekoLabel(nekoSnapshot.community)+'，聊天室 '+nekoLabel(nekoSnapshot.lobby);
+  }
   function nekoFlowBusy() { return ['checking','community','chatroom'].includes(nekoSnapshot?.login?.status); }
   function closeAccountMenu() { if (launcher?.element.getAttribute('aria-expanded') === 'true') launcher.element.click(); }
   function afterMenuClosed(callback) { closeAccountMenu(); win.setTimeout(() => { if (!stopped) callback(); }, 0); }
@@ -277,6 +282,41 @@ function installNekoAccountHabitat(ctx, options) {
     try{await accountsBridge.nekoSignInCancel();}catch{if(!stopped)nekoActionError='授权暂未取消，请重试或关闭授权窗口。';}
     finally{if(epoch===nekoActionEpoch){nekoCancelPending=false;if(!stopped){render();void refreshNekoAccount(true);}}}
   }
+  function openLobbyFromAccount(event, signIn = false) {
+    event.preventDefault();
+    event.stopPropagation();
+    afterMenuClosed(() => {
+      const detail={returnFocus:launcher?.element,signIn};
+      doc.dispatchEvent(new win.CustomEvent('neko-account-open-lobby',{detail}));
+      if (!detail.handled) {
+        doc.querySelector('.neko-room-entry')?.click();
+        doc.querySelector('button[aria-label="打开公共聊天室"]')?.click();
+      } else void Promise.resolve(detail.promise).catch(() => {
+        if (!stopped) { nekoActionError='聊天室暂未打开，请重试。'; render(); }
+      });
+    });
+  }
+  function independentChatCard() {
+    const lobby=nekoSnapshot.lobby;
+    const own=lobby.deployment==='nekofans';
+    const label=own?'Nekofans 账号':'聊天室账号';
+    const card=element('section','neh-provider-card neh-neko-account');
+    card.setAttribute('aria-label',label);
+    const ready=lobby.status==='signed-in';
+    card.append(providerStatus(label,nekoLabel(lobby),ready));
+    const action=element('button','neh-account-refresh neh-neko-primary',ready?'进入聊天室':own?'登录 Nekofans':'登录频道');
+    action.type='button';
+    action.dataset.nekoLogin='lobby';
+    action.disabled=['unconfigured','unavailable','authorizing'].includes(lobby.status);
+    action.addEventListener('click',event=>openLobbyFromAccount(event,!ready));
+    card.append(action);
+    if (nekoActionError) {
+      const note=element('p','neh-neko-auth-note',nekoActionError);
+      note.setAttribute('role','alert');
+      card.append(note);
+    }
+    return card;
+  }
   function nekoAccountCard() {
     const card=element('section','neh-provider-card neh-neko-account');card.setAttribute('aria-label','N.E.K.O. 账号与聊天室授权');
     const community=nekoSnapshot?.community,lobby=nekoSnapshot?.lobby,ready=community?.status==='signed-in'&&lobby?.status==='signed-in',reconnect=!ready&&['error','canceled'].includes(nekoSnapshot?.login?.status),busy=nekoActionPending||nekoCancelPending||nekoFlowBusy();
@@ -285,7 +325,7 @@ function installNekoAccountHabitat(ctx, options) {
     const actions=element('div','neh-neko-actions'),login=element('button','neh-account-refresh neh-neko-primary',busy?'正在授权…':ready?'打开社区':reconnect?'重新连接 N.E.K.O.':community?.status==='signed-in'?'连接聊天室':'一键登录 N.E.K.O.');login.type='button';login.dataset.nekoLogin='account';login.disabled=busy;login.setAttribute('aria-busy',String(busy));
     login.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();if(ready)afterMenuClosed(()=>{void openNekoCommunity(false).catch(()=>{nekoActionError='社区暂未打开，请重试。';render();});});else void startNekoLogin();});actions.append(login);
     if((nekoActionPending||nekoCancelPending||nekoFlowBusy())&&typeof accountsBridge.nekoSignInCancel==='function'){const cancel=element('button','neh-account-refresh',nekoCancelPending?'正在取消…':'取消授权');cancel.type='button';cancel.dataset.nekoLogin='cancel';cancel.disabled=nekoCancelPending;cancel.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();void cancelNekoLogin();});actions.append(cancel);}
-    if(lobby?.status==='signed-in'){const open=element('button','neh-account-refresh','进入聊天室');open.type='button';open.dataset.nekoLogin='lobby';open.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();afterMenuClosed(()=>{const detail={returnFocus:launcher?.element};doc.dispatchEvent(new win.CustomEvent('neko-account-open-lobby',{detail}));if(!detail.handled){doc.querySelector('.neko-room-entry')?.click();doc.querySelector('button[aria-label="打开公共聊天室"]')?.click();}});});actions.append(open);}
+    if(lobby?.status==='signed-in'){const open=element('button','neh-account-refresh','进入聊天室');open.type='button';open.dataset.nekoLogin='lobby';open.addEventListener('click',event=>openLobbyFromAccount(event));actions.append(open);}
     if(lobby?.status==='signed-in'&&typeof accountsBridge.nekoSignIn==='function'){const reauthorize=element('button','neh-account-refresh','重新授权聊天室');reauthorize.type='button';reauthorize.dataset.nekoLogin='reauthorize';reauthorize.disabled=busy;reauthorize.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();void startNekoLogin({reauthorize:true});});actions.append(reauthorize);}
     card.append(actions);
     const flow=nekoSnapshot?.login,message=nekoActionError||(nekoCancelPending?'正在取消本次授权…':nekoActionPending&&!nekoFlowBusy()?'正在打开 N.E.K.O. 登录…':flow?.error||flow?.message||(!ready?'登录后继续完成聊天室授权，首次可能需要确认。':''));
@@ -304,7 +344,7 @@ function installNekoAccountHabitat(ctx, options) {
     clearOwned(menuRecord.owned);
     const heading = element('div', 'neh-menu-heading');
     const refresh = element('button', 'neh-account-refresh', '刷新');
-    refresh.type = 'button'; refresh.dataset.nekoAccountRefresh = ''; refresh.setAttribute('aria-label', '刷新 DSH、N.E.K.O. 和聊天室登录状态');
+    refresh.type = 'button'; refresh.dataset.nekoAccountRefresh = ''; refresh.setAttribute('aria-label', independentChat()?'刷新 DSH 和聊天室登录状态':'刷新 DSH、N.E.K.O. 和聊天室登录状态');
     refresh.addEventListener('click', event => {
       event.preventDefault(); event.stopPropagation(); reader.refresh(); refreshNekoAccount(true);
     });
@@ -315,8 +355,9 @@ function installNekoAccountHabitat(ctx, options) {
       element('span', 'neh-provider-source', '官方充值钱包'));
     menuRecord.owned.append(heading);
     menuRecord.owned.append(workbenchSettings());
-    if (nekoSnapshot||typeof accountsBridge.nekoSignIn==='function'||typeof accountsBridge.communityLogin==='function')menuRecord.owned.append(nekoAccountCard());
-    menuRecord.owned.append(dsh, element('p', 'neh-menu-help', 'DSH 沿用本机工作账号；N.E.K.O. 登录与聊天室授权会自动衔接。'));
+    if (nekoSnapshot) menuRecord.owned.append(independentChat()?independentChatCard():nekoAccountCard());
+    menuRecord.owned.append(dsh);
+    if (nekoSnapshot&&!independentChat())menuRecord.owned.append(element('p', 'neh-menu-help', 'DSH 沿用本机工作账号；N.E.K.O. 登录与聊天室授权会自动衔接。'));
     if (focused) refresh.focus({ preventScroll: true });
     else if(focusedLogin)[...menuRecord.owned.querySelectorAll('[data-neko-login]')].find(button=>button.dataset.nekoLogin===focusedLogin&&!button.disabled)?.focus({preventScroll:true});
   }
@@ -554,7 +595,7 @@ function installNekoAccountHabitat(ctx, options) {
     if (doc.visibilityState !== 'hidden') refreshNekoAccount();
   }, Math.max(15000, options.pollIntervalMs || 60000));
   if(typeof accountsBridge?.subscribeNekoAccount==='function')releases.push(accountsBridge.subscribeNekoAccount(value=>{nekoRevision++;nekoSnapshot=value;if(['checking','community','chatroom','signed-in','connected','canceled'].includes(value?.login?.status))nekoActionError='';render();void relayAccountLogin(value?.login).catch(()=>{if(!stopped){nekoActionError='N.E.K.O. 登录页面未能打开，请重试。';render();}});}));
-  if(typeof accountsBridge?.subscribeLobby==='function')releases.push(accountsBridge.subscribeLobby(value=>{nekoRevision++;nekoSnapshot={...(nekoSnapshot||{community:{status:'unknown'}}),lobby:{status:value?.auth?.status||'unavailable'}};render();}));
+  if(typeof accountsBridge?.subscribeLobby==='function')releases.push(accountsBridge.subscribeLobby(value=>{nekoRevision++;nekoSnapshot={...(nekoSnapshot||{community:{status:'unknown'}}),lobby:{status:value?.auth?.status||'unavailable',deployment:value?.deployment||nekoSnapshot?.lobby?.deployment}};render();}));
   sync();
   refreshNekoAccount();
   return () => {

@@ -8,12 +8,21 @@ function createMainAgentWindows({
 }) {
   let settingsWindow;
   let guideWindow;
+  let menuWindow;
   let roamOrigin;
   let hidden = false;
 
   const prefs = () => getState().preferences.mainAgent;
   const main = () => getState().actors.find(actor => actor.id === 'main');
   const labelFor = id => preferences.shortcuts[id][0];
+
+  function menuModel() {
+    const {shortcuts, compactMenu, muted, guide} = prefs();
+    const ids = compactMenu ? shortcuts : [...new Set([...shortcuts, 'chat', 'workbench', 'dress'])];
+    return {items: ids.map(id => ({
+      id, label: id === 'sound' ? (muted ? '开启音效' : '静音') : labelFor(id),
+    })), canContinue: guide.status !== 'finished'};
+  }
 
   function snapshot() {
     const state = getState();
@@ -30,7 +39,10 @@ function createMainAgentWindows({
       custom: custom ? {label: custom.name, source: custom.stillDataUrl || custom.dataUrl} : null,
       scale: appearance.scaleFor(state, actor),
       followsDefaultSize: !Number.isFinite(actor.appearanceScale),
-      ready: state.mainChat?.ready === true || state.neko?.connection === 'ready',
+      menu: menuModel(),
+      chatConfigured: state.mainChat?.backend === 'chat-api' && state.mainChat.hasKey === true
+        && !!state.mainChat.settings?.baseUrl && !!state.mainChat.settings?.model,
+      chatBackend: state.mainChat?.backend ?? null,
     };
   }
 
@@ -120,6 +132,7 @@ function createMainAgentWindows({
         try { saveGuide('paused'); }
         catch (error) { actions.onError(error); }
       }
+      planRoam();
     });
     window.webContents.once('did-finish-load', () => window.webContents.send('main-agent:state', snapshot()));
     void loadLocalFile(window, {view: 'main-agent-guide'}).then(() => {
@@ -127,6 +140,48 @@ function createMainAgentWindows({
     }).catch(error => {
       if (!window.isDestroyed()) window.destroy();
       actions.onError(error);
+    });
+  }
+
+  function openMenu({keyboard = false} = {}) {
+    const pet = getPet();
+    if (!pet || pet.isDestroyed() || !pet.isVisible()) return;
+    if (menuWindow && !menuWindow.isDestroyed()) {
+      if (!menuWindow.webContents.isLoading()) menuWindow.focus();
+      return;
+    }
+    const bounds = pet.getBounds();
+    const point = keyboard ? {x: bounds.x + Math.round(bounds.width / 2), y: bounds.y + Math.round(bounds.height / 2)}
+      : screen.getCursorScreenPoint();
+    const area = screen.getDisplayNearestPoint(point).workArea;
+    const width = Math.min(300, area.width);
+    const height = Math.min(116 + Math.ceil(menuModel().items.length / 3) * 64, area.height);
+    const below = point.y + 8;
+    const x = Math.max(area.x, Math.min(point.x - 12, area.x + area.width - width));
+    const bottom = area.y + area.height - height;
+    const y = Math.max(area.y, Math.min(bottom, below <= bottom ? below : point.y - height - 8));
+    const window = new BrowserWindow({
+      ...options(), x, y, width, height, title: '大肥鱼的快捷菜单',
+      transparent: true, frame: false, resizable: false, hasShadow: false,
+      skipTaskbar: true, fullscreenable: false, alwaysOnTop: true,
+    });
+    menuWindow = window;
+    window.setAlwaysOnTop(true, 'floating');
+    window.setVisibleOnAllWorkspaces(true, {visibleOnFullScreen: true});
+    const dismiss = () => { if (!window.isDestroyed()) window.close(); };
+    window.once('blur', dismiss);
+    pet.once('hide', dismiss);
+    pet.once('closed', dismiss);
+    window.once('closed', () => {
+      menuWindow = undefined;
+      pet.removeListener('hide', dismiss);
+      pet.removeListener('closed', dismiss);
+    });
+    void loadLocalFile(window, {view: 'main-agent-menu', keyboard: keyboard ? '1' : '0'}).then(() => {
+      if (!window.isDestroyed()) window.show();
+    }).catch(() => {
+      dismiss();
+      if (!pet.isDestroyed() && pet.isVisible()) actions.nativeMenu(pet);
     });
   }
 
@@ -165,7 +220,6 @@ function createMainAgentWindows({
 
   const runShortcut = {
     chat: actions.chat,
-    voice: actions.voice,
     dress: () => openSettings('appearance'),
     workbench: openWorkbench,
     memory: actions.memory,
@@ -197,6 +251,21 @@ function createMainAgentWindows({
     const fromSettings = sender === settingsWindow;
     const fromGuide = sender === guideWindow;
     const fromPet = sender === getPet();
+    if (sender === menuWindow) {
+      const menu = menuModel();
+      if (method === 'read') return menu;
+      if (method === 'close') { sender.close(); return true; }
+      if (method !== 'menu-action') throw Error('未知右键菜单操作');
+      const id = payload.id;
+      if (!menu.items.some(item => item.id === id) && !['settings','more'].includes(id)
+          && !(id === 'guide' && menu.canContinue)) throw Error('未知右键菜单操作');
+      sender.close();
+      if (id === 'settings') openSettings();
+      else if (id === 'more') actions.nativeMenu(getPet());
+      else if (id === 'guide') openGuide();
+      else await Promise.resolve().then(runShortcut[id]).catch(actions.onError);
+      return true;
+    }
     if (fromPet && method === 'shortcut' && prefs().shortcuts.includes(payload.id)) {
       await runShortcut[payload.id]();
       return true;
@@ -205,7 +274,7 @@ function createMainAgentWindows({
     if (method === 'read') return snapshot();
     if (method === 'edit') {
       const guideFields = {name: ['name'], personality: ['personality'], roaming: ['roam'],
-        responses: ['response', 'gestures'], shortcuts: ['shortcuts']};
+        responses: ['single', 'response', 'gestures'], shortcuts: ['shortcuts']};
       if (fromGuide && !guideFields[preferences.guideSteps[prefs().guide.step]]?.includes(payload.key)) throw Error('这一步不能修改此设置');
       edit(payload.key, payload.value);
     } else if (method === 'appearance' && fromSettings) {
@@ -218,8 +287,8 @@ function createMainAgentWindows({
       await actions.import(main(), sender);
     } else if (method === 'chat-settings') {
       actions.chatSettings();
-    } else if (method === 'voice-settings') {
-      actions.voice();
+    } else if (method === 'walk-preview' && fromGuide && preferences.guideSteps[prefs().guide.step] === 'roaming') {
+      if (prefs().roam === 'still' || !roamOnce({preview:true})) throw Error('现在不方便走动，等我一小会儿。');
     } else if (method === 'guide-open' && fromSettings) {
       sender.hide();
       openGuide({restart: payload.restart === true});
@@ -241,37 +310,48 @@ function createMainAgentWindows({
   }
 
   let roamTimer;
+  function roamOnce({preview = false} = {}) {
+    const pet = getPet();
+    if (!pet || pet.isDestroyed() || !pet.isVisible() || (!preview && guideWindow) || menuWindow
+        || reduceMotion() || !actions.canRoam()) return false;
+    const bounds = pet.getBounds();
+    const cursor = screen.getCursorScreenPoint();
+    const near = cursor.x >= bounds.x - 35 && cursor.x <= bounds.x + bounds.width + 35
+      && cursor.y >= bounds.y - 35 && cursor.y <= bounds.y + bounds.height + 35;
+    if (near && !preview) return false;
+    const area = screen.getDisplayMatching(bounds).workArea;
+    if (!roamOrigin || roamOrigin.y !== bounds.y || Math.abs(bounds.x - roamOrigin.lastX) > 2) {
+      roamOrigin = {x: bounds.x, y: bounds.y, lastX: bounds.x};
+    }
+    const step = bounds.x >= roamOrigin.x ? -24 : 24;
+    const maxX = Math.max(area.x, area.x + area.width - bounds.width);
+    const clamp = x => Math.max(area.x, Math.min(maxX, x));
+    let x = clamp(bounds.x + step);
+    if (x === bounds.x) x = clamp(bounds.x - step);
+    if (x === bounds.x) return false;
+    pet.setPosition(x, bounds.y);
+    roamOrigin.lastX = x;
+    return true;
+  }
+
   function planRoam() {
     clearTimeout(roamTimer);
     const delay = {occasional: 90000, often: 30000}[prefs().roam];
     if (!delay || isQuitting()) return;
     roamTimer = setTimeout(() => {
       roamTimer = undefined;
-      const pet = getPet();
-      if (pet && !pet.isDestroyed() && pet.isVisible() && !guideWindow && !reduceMotion() && actions.canRoam()) {
-        const bounds = pet.getBounds();
-        const cursor = screen.getCursorScreenPoint();
-        const near = cursor.x >= bounds.x - 35 && cursor.x <= bounds.x + bounds.width + 35
-          && cursor.y >= bounds.y - 35 && cursor.y <= bounds.y + bounds.height + 35;
-        if (!near) {
-          const area = screen.getDisplayMatching(bounds).workArea;
-          if (!roamOrigin || roamOrigin.y !== bounds.y || Math.abs(bounds.x - roamOrigin.lastX) > 2) {
-            roamOrigin = {x: bounds.x, y: bounds.y, lastX: bounds.x};
-          }
-          const step = bounds.x >= roamOrigin.x ? -24 : 24;
-          const x = Math.max(area.x, Math.min(area.x + area.width - bounds.width, bounds.x + step));
-          pet.setPosition(x, bounds.y);
-          roamOrigin.lastX = x;
-        }
-      }
+      roamOnce();
       planRoam();
     }, delay);
   }
 
   return {
-    call, openGuide, openSettings, compactItems, openWorkbench, planRoam, showPet,
+    call, openGuide, openSettings, openMenu, compactItems, openWorkbench, planRoam, showPet,
     isHidden: () => hidden,
-    dispose: () => clearTimeout(roamTimer),
+    dispose: () => {
+      clearTimeout(roamTimer);
+      menuWindow?.close();
+    },
   };
 }
 

@@ -323,7 +323,7 @@ function buildController(deps) {
     try {
       let communityUrl;
       try { communityUrl = resolveCommunityUrl(env.NEKO_WORKBENCH_COMMUNITY_URL); } catch { communityUrl = undefined; }
-      avatars = make.avatars({ communityUrl, fetchImpl: deps.fetchImpl || globalThis.fetch, now, onChange: guard(() => schedulePublish()) });
+      avatars = make.avatars({ communityUrl:deps.avatarOrigin ?? communityUrl, fetchImpl: deps.fetchImpl || globalThis.fetch, now, onChange: guard(() => schedulePublish()) });
     } catch { avatars = null; }
   }
   if (client) {
@@ -339,7 +339,7 @@ function buildController(deps) {
       });
     } catch { cat = null; initError = ERR.init; }
   }
-  if (client && pendingFile) {
+  if (client && pendingFile && deps.sharedExperience !== false) {
     try {
       experience = make.experience({ file: pendingFile, getProvider: provider, now, newId, timers,
         onError:()=>{lastError='大厅待处理记忆无法保存';schedulePublish();},

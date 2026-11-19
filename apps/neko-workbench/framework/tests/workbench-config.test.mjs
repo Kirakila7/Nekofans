@@ -83,12 +83,11 @@ test('account pets follow real connections; CNY/USD wallet is read-only and unkn
   assert.ok(workbench.accounts.security.frontendSecretFieldsForbidden.includes('credentialRef'));
 });
 
-test('all six workbench options keep existing native action IDs', () => {
+test('workbench options keep supported native action IDs', () => {
   assert.deepEqual(workbench.options.map(option => [option.id, option.nativeAction]), [
-    ['nekoSettings', 'neko-settings'], ['openNeko', 'open-neko'], ['taskNotes', 'task-notes'],
-    ['connect', 'connect-neko'], ['status', 'connection-status'], ['reconnect', 'reconnect-workbench'],
+    ['nekoSettings', 'neko-settings'], ['taskNotes', 'task-notes'],
+    ['status', 'connection-status'], ['reconnect', 'reconnect-workbench'],
   ]);
-  assert.equal(workbench.options.find(option => option.id === 'connect').explicitUserActionOnly, true);
   assert.equal(workbench.globalTools.perRolePluginRuntime, false);
   assert.equal(workbench.globalTools.preserveOriginalNodesAndEvents, true);
 });

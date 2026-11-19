@@ -1,5 +1,5 @@
 /* The guide and settings use the same type, border and controls as Bigfish's bubble. */
-.agent-settings-body,.agent-guide-body {
+.agent-settings-body,.agent-guide-body,.agent-menu-body {
   color-scheme: light dark;
   --agent-paper: light-dark(#fffefa,#25333f);
   --agent-bubble: light-dark(#fff,#26313d);
@@ -16,7 +16,7 @@
   font: 16px/1.55 var(--agent-font);
   background: transparent;
 }
-.agent-settings-body #app,.agent-guide-body #app { width: 100%;height: 100%; }
+.agent-settings-body #app,.agent-guide-body #app,.agent-menu-body #app { width: 100%;height: 100%; }
 .agent-settings *, .agent-guide * { box-sizing: border-box; }
 .agent-settings h1,.agent-settings h2,.agent-settings h3,.agent-guide h1 { margin: 0; font-weight: 400; }
 .agent-settings h1 { font-size: 22px; }
@@ -24,13 +24,14 @@
 .agent-settings h3 { margin: 13px 0 8px; font-size: 16px; }
 .agent-settings p,.agent-guide p { margin: 5px 0 9px; }
 .agent-settings small,.agent-guide small { display: block; color: var(--agent-muted); font-size: 13px; }
-.agent-settings button,.agent-settings input,.agent-settings select,.agent-guide button,.agent-guide input {
+.agent-settings button,.agent-settings input,.agent-settings select,.agent-guide button,.agent-guide input,.agent-guide select,.agent-context button {
   color: inherit;
   font: inherit;
 }
-.agent-settings button,.agent-guide button,.agent-quick button { cursor: pointer; }
+.agent-settings button,.agent-guide button,.agent-quick button,.agent-context button { cursor: pointer; }
 .agent-settings button:focus-visible,.agent-settings input:focus-visible,.agent-settings select:focus-visible,
-.agent-guide button:focus-visible,.agent-guide input:focus-visible,.agent-quick button:focus-visible {
+.agent-guide button:focus-visible,.agent-guide input:focus-visible,.agent-guide select:focus-visible,
+.agent-quick button:focus-visible,.agent-context button:focus-visible {
   outline: 2px solid light-dark(#437794,#a2cce7);
   outline-offset: 2px;
 }
@@ -47,7 +48,7 @@
   background: var(--agent-select,light-dark(#edf3f6,#354e62));
   color: var(--agent-ink,light-dark(#496476,#e5edf4));
 }
-.agent-icon:disabled { opacity: .42; cursor: default; }
+.agent-icon:disabled,.agent-button:disabled { opacity: .42; cursor: default; }
 .agent-button {
   display: inline-flex;
   align-items: center;
@@ -112,7 +113,7 @@
 .agent-row:last-child { border-bottom: 0; }
 .agent-row small { overflow-wrap: anywhere; }
 .agent-row select { max-width: 52%; }
-.agent-settings :is(input:not([type=checkbox]),select),.agent-guide input[data-name] {
+.agent-settings :is(input:not([type=checkbox]),select),.agent-guide :is(input[data-name],select) {
   border: 1px solid var(--agent-border);
   border-radius: 9px;
   padding: 5px 8px;
@@ -186,9 +187,39 @@
 .agent-model-stage :is(video,img) { max-width: 100%; max-height: 160px; object-fit: contain; transform: scale(var(--model-scale)) scaleX(var(--model-facing)); transform-origin: center bottom; }
 .agent-preview-quick { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; }
 .agent-preview-quick span { display: grid; place-items: center; border-radius: 6px; background: var(--agent-select); width: 24px; height: 24px; }
-.agent-menu-sample { box-sizing: border-box; list-style: none; width: 100%; margin: 0; padding: 5px 10px; font-size: 13px; line-height: 1.55; border: 1px solid var(--agent-border); border-radius: 11px; background: var(--agent-bubble); }
-.agent-menu-sample li { padding: 1px 0; }
-.agent-menu-sample li:nth-last-child(3) { border-top: 1px solid var(--agent-border); margin-top: 4px; padding-top: 4px; }
+.agent-context {
+  box-sizing: border-box;
+  background: var(--agent-bubble);
+  border: 1px solid var(--agent-border);
+  border-radius: 16px;
+  box-shadow: 0 3px 10px #314b6029;
+  padding: 9px;
+  font-size: 14px;
+}
+.agent-menu-body .agent-context { position: fixed; inset: 6px; overflow: auto; scrollbar-width: thin; }
+.agent-context-preview { width: 100%; box-shadow: none; }
+.agent-context header,.agent-context footer { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
+.agent-context footer { justify-content: flex-end; margin-top: 6px; padding-top: 5px; border-top: 1px solid var(--agent-border); }
+.agent-context-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 6px; margin-top: 8px; }
+.agent-context-tile,.agent-context-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 0;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  padding: 4px 6px;
+  color: inherit;
+  background: transparent;
+  font-size: 13px;
+}
+.agent-context-settings { font-size: 14px; background: var(--agent-select); }
+.agent-context-tile { flex-direction: column; min-height: 53px; background: var(--agent-wash); text-align: center; }
+.agent-context-tile svg { width: 20px; height: 20px; flex: none; }
+.agent-context-link svg { flex: none; }
+button.agent-context-tile:hover,button.agent-context-link:hover { background: var(--agent-select); border-color: var(--agent-border); }
+.agent-context-preview .agent-context-grid { grid-template-columns: repeat(auto-fit,minmax(54px,1fr)); }
 .agent-guide-body #app { display: flex; align-items: flex-end; padding: 8px 7px 11px; box-sizing: border-box; }
 .agent-guide {
   width: 100%;

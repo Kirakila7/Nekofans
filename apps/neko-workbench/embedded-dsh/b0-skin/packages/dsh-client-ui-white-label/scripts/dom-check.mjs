@@ -108,7 +108,6 @@ window.nekoWorkbench = {
   action: (name) => {
     calls.push(['action', name])
     if (name === 'task-notes') return new Promise((resolve) => { deferred = resolve })
-    if (name === 'open-neko') return Promise.reject(new Error('桌宠未运行'))
     return Promise.resolve({ ok: true })
   },
   subscribe(fn) { subs.add(fn); return () => subs.delete(fn) },

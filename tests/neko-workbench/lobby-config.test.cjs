@@ -2,12 +2,55 @@
 // Locks lobby-config.cjs: NEKO_WORKBENCH_CHAT_* resolution. Synthetic hosts and values only.
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const path = require('node:path');
 const C = require('../../apps/neko-workbench/lobby-config.cjs');
 const { OFFICIAL_AUTH_ORIGIN } = require('../../apps/neko-workbench/community-config.cjs');
 
 const CHAT_ERROR = /频道服务地址/;
 const AUTH_ERROR = /频道登录地址/;
 const CHANNEL = '0f8e9d7c-6b5a-4c3d-8e2f-1a0b9c8d7e6f';
+
+test('Nekofans selects its own HTTPS services and keeps credentials separate per deployment', () => {
+  const own = C.resolveChatConfig({NEKO_WORKBENCH_CHAT_DEPLOYMENT:'nekofans'});
+  assert.equal(own.chatUrl,'https://chat.nekofans.games/');
+  assert.equal(own.wsUrl,'wss://chat.nekofans.games/ws');
+  assert.equal(own.authUrl,'https://auth.nekofans.games');
+  assert.equal(C.chatDeployment(own),'nekofans');
+  const root = path.resolve('fixture-profile');
+  const official = C.lobbyDataDirectory(root,C.resolveChatConfig({}));
+  assert.equal(official,path.join(root,'lobby'));
+  const stored = C.lobbyDataDirectory(root,own);
+  assert.equal(path.dirname(stored),path.join(root,'lobby-deployments'));
+  for (const patch of [
+    {NEKO_WORKBENCH_CHAT_URL:'https://staging.nekofans.games/chat'},
+    {NEKO_WORKBENCH_CHAT_AUTH_URL:'https://auth-staging.nekofans.games'},
+    {NEKO_WORKBENCH_CHAT_CLIENT_ID:'neko-chat-desktop-staging'},
+  ]) {
+    const changed = C.resolveChatConfig({NEKO_WORKBENCH_CHAT_DEPLOYMENT:'nekofans',...patch});
+    assert.notEqual(C.lobbyDataDirectory(root,changed),stored);
+  }
+  const explicit = C.resolveChatConfig({NEKO_WORKBENCH_CHAT_URL:own.chatUrl,NEKO_WORKBENCH_CHAT_AUTH_URL:own.authUrl});
+  assert.equal(C.chatDeployment(explicit),'custom');
+  assert.notEqual(C.lobbyDataDirectory(root,explicit),official);
+  assert.notEqual(C.lobbyDataDirectory(root,explicit),stored);
+});
+
+test('Nekofans rejects mixed official, localhost and unowned HTTPS endpoints', () => {
+  const mode={NEKO_WORKBENCH_CHAT_DEPLOYMENT:'nekofans'};
+  for (const patch of [
+    {NEKO_WORKBENCH_CHAT_AUTH_URL:OFFICIAL_AUTH_ORIGIN},
+    {NEKO_WORKBENCH_CHAT_URL:'https://chat.nekotech.ai'},
+    {NEKO_WORKBENCH_CHAT_URL:'https://nekofans.games.other.test'},
+    {NEKO_WORKBENCH_CHAT_URL:'https://chat.nekofans.games/?region=dev'},
+    {NEKO_WORKBENCH_CHAT_AUTH_URL:'http://127.0.0.1:8094'},
+  ]) assert.throws(()=>C.resolveChatConfig({...mode,...patch}),/nekofans\.games|频道登录地址/);
+  assert.throws(()=>C.resolveChatConfig({NEKO_WORKBENCH_CHAT_DEPLOYMENT:'typo'}),/部署配置/);
+  const qa=C.resolveChatConfig({...mode,NEKO_WORKBENCH_CHAT_URL:'http://127.0.0.1:8091',NEKO_WORKBENCH_CHAT_AUTH_URL:'http://127.0.0.1:8094'});
+  assert.equal(qa.wsUrl,'ws://127.0.0.1:8091/ws');
+  const disabled=C.resolveChatConfig({...mode,NEKO_WORKBENCH_CHAT_URL:''});
+  assert.equal(C.chatDeployment(disabled),'nekofans');
+  assert.equal(C.lobbyDataDirectory('/fixture',disabled),null);
+});
 
 test('an unset chat URL uses the official service while an explicitly empty URL disables the lobby', () => {
   assert.equal(C.resolveChatUrl(undefined), null);

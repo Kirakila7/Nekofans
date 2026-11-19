@@ -2,7 +2,6 @@
 
 // Reuse the official local N.E.K.O. OAuth owner. No cloud token, local
 // credential file or account profile is copied into the workbench/DSH.
-const { localBase } = require('./neko-chat.cjs');
 const { DEFAULT_COMMUNITY_URL, OFFICIAL_AUTH_ORIGIN, resolveCommunityUrl } = require('./community-config.cjs');
 const { setTimeout: delay } = require('node:timers/promises');
 const PROOF = /^[A-Za-z0-9_-]{32,256}$/;
@@ -18,6 +17,13 @@ const SAFE_ERROR = {
   page: '桌面身份交接页面未能加载，请在社区内重试。',
 };
 const failure = code => Object.assign(new Error(SAFE_ERROR[code]), { code });
+
+function localBase(value) {
+  const url = new URL(value || 'http://127.0.0.1:48911');
+  if (url.protocol !== 'http:' || !['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname)
+      || url.username || url.password || url.search || url.hash || url.pathname !== '/') throw failure('unavailable');
+  return url.origin;
+}
 
 function validateAccountAction(value) {
   if (!['status', 'connect', 'cancel'].includes(value)) throw new Error('未知社区身份操作');

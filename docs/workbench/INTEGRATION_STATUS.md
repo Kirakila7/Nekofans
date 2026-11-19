@@ -1,5 +1,22 @@
 # Local integration 0.28.41 / build 77
 
+## Ultra 自建 Nekofans 聊天室
+
+- `NEKO_WORKBENCH_CHAT_DEPLOYMENT=nekofans` 选择独立的 Nekofans 账号授权与频道。配置分别指向 `auth.nekofans.games` 和 `chat.nekofans.games`，本地凭据、频道设置和公共经历按部署隔离。官方路线沿用原来的登录和资料目录。
+- 并行部署复用 N.E.K.O.Chat 后端，使用独立 Compose 项目和空数据卷。配置见 [自建聊天室](NEKOFANS_GAMES_CHAT.md)。
+- 本机合成账号通过实际 HTTP 回调、PKCE、本机 WebSocket、双向消息、重连和退出的联调。生产域名、正式 Auth 和用户资料服务需在部署环境验收。
+
+## Ultra 桌宠右键与新手引导
+
+- 主桌宠右键弹出带图标的操作面板。悬停快捷按钮与右键面板共享选择，精简模式只列出已选快捷动作，主 Agent 设置和更多操作使用固定入口。设置预览与桌面面板使用同一套内容。
+- 引导的走动设置可通过「先走一步」让真实桌宠移动。回复步骤可以选定左键单击的动作，称呼、性格、回复和快捷项即时生效。引导结束后按选择的频率走动。
+- Windows Electron 使用隔离资料验证了气泡、走动、互动回复、快捷操作、双击进入内置工作台、键盘打开和关闭右键面板，以及重启后恢复设置。真实模型和账号请求未用于验证。
+
+## 本地 N.E.K.O. 聊天独立保留
+
+- 本地聊天适配器和原角色模板迁至 `tools/local-neko-chat/`。日常 Nekofans 包不包含该工具，桌宠、引导和工作台设置不再发起本地聊天连接。
+- 旧本地聊天路线等待用户明确选择聊天方式。旧地址、角色与历史记录保留在原资料，已有工作台账号或 Chat API 配置沿用原路线。
+
 ## Private chess compiler & engine: playable Open Source rule & safe Erasure placeholder (2026-11-15)
 
 Implemented real playable borrowed moves for the 《开源与抹除》 rule set in both the chess core and private compiler:

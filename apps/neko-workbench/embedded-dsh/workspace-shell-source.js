@@ -1303,7 +1303,7 @@ function installWorkspaceShell(options = {}) {
   function closeSettings() { if (modal.hidden) return; modal.hidden = true;if(lobby?.isOpen()){lobby.panel.style.visibility='';lobby.panel.removeAttribute('inert');}schedule();const target = settingsReturnFocus; settingsReturnFocus = null; if (target?.isConnected && typeof target.focus === 'function') target.focus(); else (doc.querySelector('.neko-side-rail__account')||officeButton).focus(); }
   function accountSettings(event){if(disposed)return;const detail=event.detail||{};detail.handled=true;const target=detail.returnFocus;openSettings('general');if(target?.isConnected)settingsReturnFocus=target;}
   doc.addEventListener('neko-workbench-open-settings',accountSettings);releases.push(()=>doc.removeEventListener('neko-workbench-open-settings',accountSettings));
-  function accountLobby(event){if(disposed||!lobby)return;const detail=event.detail||{};detail.handled=true;detail.promise=(async()=>{if(isOfficeEdition()&&!await saveLayout({workbenchEdition:'daily'}))throw Error('版本切换未完成');closeSettings();hideSocial();setRoomActive(true);lobby.show({connect:detail.connect!==false});})();}
+  function accountLobby(event){if(disposed||!lobby)return;const detail=event.detail||{};detail.handled=true;detail.promise=(async()=>{if(isOfficeEdition()&&!await saveLayout({workbenchEdition:'daily'}))throw Error('版本切换未完成');closeSettings();hideSocial();setRoomActive(true);lobby.show({connect:detail.connect!==false});if(detail.signIn===true)await lobby.signIn();})();}
   doc.addEventListener('neko-account-open-lobby',accountLobby);releases.push(()=>doc.removeEventListener('neko-account-open-lobby',accountLobby));
   function officeChoices() {
     const choices = el('div', 'neko-office-choices');
@@ -1313,7 +1313,7 @@ function installWorkspaceShell(options = {}) {
     }
     return choices;
   }
-  function connectionSummary() { const connected = phase => ['ready', 'connected'].includes(phase) ? '已连接' : phase === 'error' ? '连接出错' : '未连接'; return 'N.E.K.O.：' + connected(state?.neko?.connection) + ' · 工作台：' + connected(state?.workbench?.connection); }
+  function connectionSummary() { const connected = phase => ['ready', 'connected'].includes(phase) ? '已连接' : phase === 'error' ? '连接出错' : '未连接'; return '工作台：' + connected(state?.workbench?.connection); }
   function openSettings(kind = 'general', id) {
     if (modal.hidden) settingsReturnFocus = doc.activeElement;
     hideSocial(); modalBody.replaceChildren(); modalTitle.textContent = kind === 'seat' ? '自定义工作 agent' : '工作台设置'; modal.setAttribute('aria-label', modalTitle.textContent); modal.hidden = false;
@@ -1334,11 +1334,11 @@ function installWorkspaceShell(options = {}) {
         connections.setAttribute('role', 'status'); more.appendChild(connections);
         const actions = el('div', 'neko-workspace-actions'), actionError = el('p', 'neko-workspace-form-error'); actionError.setAttribute('role', 'status');
         for (const [action, label] of options.settingsActions || []) {
-          if (action === 'neko-settings') continue; // The main-chat settings entry above opens the same native window.
+          if (['neko-settings', 'open-neko', 'connect-neko'].includes(action)) continue;
           if (/codex|claude/i.test(action + ' ' + label)) continue;
           const item = button(label, 'neko-workspace-setting-link', async () => {
             const controls = [...actions.querySelectorAll('button')]; controls.forEach(b => b.disabled = true); item.setAttribute('aria-busy', 'true'); actionError.textContent = '';
-            try { const result = await bridge.action(action); if (result?.ok === false) throw Error('操作未完成，请重试'); if (!['connect-neko', 'reconnect-workbench', 'connection-status'].includes(action)) closeSettings(); }
+            try { const result = await bridge.action(action); if (result?.ok === false) throw Error('操作未完成，请重试'); if (!['reconnect-workbench', 'connection-status'].includes(action)) closeSettings(); }
             catch (error) { actionError.textContent = error.message || '操作未完成，请重试'; }
             finally { controls.forEach(b => b.disabled = false); item.removeAttribute('aria-busy'); }
           }); item.dataset.workbenchAction = action; actions.appendChild(item);
@@ -1779,7 +1779,7 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
   headerActions.append(membersToggle, gameShareButton, catSettingsButton, signOut, historyButton);
   header.append(back, title, topic, onlineCount, headerActions);
   const gate = el('div', 'neko-lobby-gate'), gateText = el('p', 'neko-lobby-gate__text');
-  const signIn = button(typeof bridge.nekoSignIn==='function'?'一键登录 N.E.K.O.':'登录频道', 'neko-lobby-sign-in', () => {void beginSignIn();});
+  const signIn = button('登录频道', 'neko-lobby-sign-in', () => {void beginSignIn();});
   const signInCancel = button('取消登录', 'neko-lobby-sign-in-cancel', () => {void cancelSignIn();});
   const reconnect = button('重新连接', 'neko-lobby-reconnect', () => join(true));
   gate.append(gateText, signIn, signInCancel, reconnect);
@@ -1866,11 +1866,11 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
   // The main-agent route is ready (independent of a server cat profile).
   // Older snapshots without providerAvailable fall back to cat.available.
   const lineReady = () => { const part = snap?.participation; return connection() === 'online' && (typeof part?.providerAvailable === 'boolean' ? part.providerAvailable : snap?.cat?.available === true || part?.available === true); };
-  async function call(request) {
+  async function call(request, isCurrent = () => true) {
     if (disposed) return null;
     let result = null;
     try { result = await bridge.lobby(request); } catch { result = { ok: false, error: '大厅操作失败，请稍后重试' }; }
-    if (disposed) return result;
+    if (disposed || !isCurrent()) return result;
     if (result?.state && typeof result.state === 'object') snap = result.state;
     error = result?.ok === false && typeof result.error === 'string' ? result.error : '';
     render();
@@ -1894,7 +1894,8 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     try { await call({ action: 'load-older' }); }
     finally { loadingOlder = false; if (!disposed) renderHistory(); }
   }
-  const unifiedBusy=()=>['checking','community','chatroom'].includes(unifiedLoginState?.status);
+  const usesCommunitySignIn=()=>!snap?.deployment&&typeof bridge.nekoSignIn==='function';
+  const unifiedBusy=()=>usesCommunitySignIn()&&['checking','community','chatroom'].includes(unifiedLoginState?.status);
   // connected: both official grants exist but one principal is unproven. It is
   // a usable, non-error end state and must not prompt another authorization.
   const loginTerminal=status=>['signed-in','connected','partial','error','canceled'].includes(status);
@@ -1927,22 +1928,22 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     render();
   }
   async function beginSignIn(){
-    if(disposed||localSigningIn||loginCancelPending||unifiedBusy())return;
+    if(disposed||localSigningIn||loginCancelPending||unifiedBusy()||connection()!=='signed-out')return;
     const epoch=++loginEpoch,isCurrent=()=>!disposed&&epoch===loginEpoch;localSigningIn=true;unifiedAttempt=false;error='';render();
     try{
-      if(typeof bridge.nekoSignIn==='function'){
+      if(usesCommunitySignIn()){
         unifiedAttempt=true;const result=await bridge.nekoSignIn({source:'lobby'});if(!isCurrent())return;if(result?.ok===false)throw Error(result.error||'N.E.K.O. 登录未能完成，请重试。');
         const flow=result?.state;
         if(flow?.source==='lobby'&&Number.isSafeInteger(flow.flowId))loginReturn={flowId:flow.flowId,relayStarted:false,navigating:false,terminal:null};
         observeUnifiedLogin(unifiedLoginState?.flowId===flow?.flowId&&loginRank(unifiedLoginState?.status)>=loginRank(flow?.status)?unifiedLoginState:flow);
         await call({action:'state'});
-      }else await call({action:'sign-in'});
+      }else await call({action:'sign-in'},isCurrent);
       if(isCurrent()&&open&&connected())join();
     }catch(failure){if(isCurrent()){error=failure?.message||'N.E.K.O. 登录未能完成，请重试。';render();}}
     finally{if(isCurrent()){localSigningIn=false;unifiedAttempt=false;render();}}
   }
   async function cancelSignIn(){
-    if(disposed||loginCancelPending)return;const cancelUnified=(unifiedAttempt||!localSigningIn&&typeof bridge.nekoSignIn==='function')&&typeof bridge.nekoSignInCancel==='function';++loginEpoch;localSigningIn=false;loginCancelPending=true;render();
+    if(disposed||loginCancelPending)return;const cancelUnified=(unifiedAttempt||!localSigningIn&&usesCommunitySignIn())&&typeof bridge.nekoSignInCancel==='function';++loginEpoch;localSigningIn=false;loginCancelPending=true;render();
     try{if(cancelUnified){const result=await bridge.nekoSignInCancel();if(result?.ok===false)throw Error('cancel failed');observeUnifiedLogin(result?.state);}else await call({action:'sign-in-cancel'});}
     catch{if(!disposed)error='授权暂未取消，请重试或关闭授权窗口。';}
     finally{unifiedAttempt=false;loginCancelPending=false;if(!disposed)render();}
@@ -2669,7 +2670,8 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     signOut.hidden = conn === 'unconfigured' || conn === 'signed-out';
     gate.hidden = conn === 'online';
     const signingIn=!!auth.signingIn||localSigningIn||loginCancelPending||unifiedBusy();
-    gateText.textContent = conn === 'unconfigured' ? (auth.message || '频道服务未配置。') : conn === 'signed-out' ? (signingIn ? (unifiedBusy()&&unifiedLoginState.message|| (typeof bridge.nekoSignIn==='function'?'请完成 N.E.K.O. 官方登录与聊天室授权…':'请在浏览器里完成社区账号授权…')) : auth.message || '登录后即可进入频道。')
+    signIn.textContent = snap?.deployment === 'nekofans' ? '登录 Nekofans' : usesCommunitySignIn() ? '一键登录 N.E.K.O.' : '登录频道';
+    gateText.textContent = conn === 'unconfigured' ? (auth.message || '频道服务未配置。') : conn === 'signed-out' ? (signingIn ? (unifiedBusy()&&unifiedLoginState.message|| (usesCommunitySignIn()?'请完成 N.E.K.O. 官方登录与聊天室授权…':'请在浏览器里完成频道授权…')) : auth.message || '登录后即可进入频道。')
       : conn === 'connecting' ? '正在连接频道…' : '频道暂时连不上，私聊不受影响。';
     signIn.hidden = conn !== 'signed-out' || signingIn;signIn.disabled=signingIn;signInCancel.hidden = !(conn === 'signed-out' && signingIn);signInCancel.disabled=loginCancelPending; reconnect.hidden = conn !== 'offline';
     if (conn !== 'online') { browsingHistory = false; closeMessageMenu(); }
@@ -2708,5 +2710,8 @@ function createLobbyView({ doc, bridge, el, button, image, avatar, composer, com
     if (joined) { joined = false; try { Promise.resolve(bridge.lobby({ action: 'close' })).catch(() => {}); } catch {} }
     disposed = true;loginReturn=null; if (typeof release === 'function') release();if(typeof releaseNeko==='function')releaseNeko(); rows.clear(); if (dialog) { dialog.cleanup?.(); dialog.node.remove(); dialog = null; } doc.removeEventListener('pointerdown', dismissMessageMenu); doc.removeEventListener('focusin', dismissMessageMenu); panel.remove(); railButton.remove();
   }
-  return { panel, railButton, show, hide, isOpen: () => open, dialogOpen: () => !!dialog, place, renderStatus, dispose };
+  return { panel, railButton, show, hide, signIn: async () => {
+    if (!snap) await call({action:'state'});
+    if (snap?.deployment) await beginSignIn();
+  }, isOpen: () => open, dialogOpen: () => !!dialog, place, renderStatus, dispose };
 }

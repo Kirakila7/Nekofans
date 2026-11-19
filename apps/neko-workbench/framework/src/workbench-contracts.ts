@@ -159,7 +159,7 @@ export interface WorkbenchRoleBridge {
 }
 
 export type WorkbenchOptionId = 'nekoSettings' | 'openNeko' | 'taskNotes' | 'connect' | 'status' | 'reconnect';
-export type NativeWorkbenchAction = 'neko-settings' | 'open-neko' | 'task-notes' | 'connect-neko' | 'connection-status' | 'reconnect-workbench';
+export type NativeWorkbenchAction = 'neko-settings' | 'task-notes' | 'connection-status' | 'reconnect-workbench';
 export interface WorkbenchOption {
   id: WorkbenchOptionId;
   label: string;

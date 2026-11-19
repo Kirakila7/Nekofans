@@ -3,7 +3,6 @@
 
   const iconPaths = {
     message: 'M20 11.5a8 8 0 0 1-8 8H4l1.8-3A8 8 0 1 1 20 11.5Z',
-    mic: 'M9 5a3 3 0 0 1 6 0v6a3 3 0 0 1-6 0ZM5 11a7 7 0 0 0 14 0M12 18v4',
     shirt: 'm8 4-6 3 2 5 3-1v9h10v-9l3 1 2-5-6-3a4 4 0 0 1-8 0Z',
     window: 'M3 4h18v16H3zM3 9h18M9 9v11',
     book: 'M6 4h13v16H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm3 5h6m-6 4h6',
@@ -22,9 +21,11 @@
     friends: 'M16 20v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2m18 0v-2a4 4 0 0 0-3-4M13 8a3.5 3.5 0 1 1-7 0 3.5 3.5 0 0 1 7 0zm3-3a3.5 3.5 0 0 1 0 7',
     create: 'm14 4 6 6-3 3-2-2-8 8-3-3 8-8-2-2 3-3z',
     game: 'M7 7h10q3 0 4 8a2 2 0 0 1-3 2l-3-2H9l-3 2a2 2 0 0 1-3-2q1-8 4-8zm1 2v4m-2-2h4m5 0h.1m2 1h.1',
+    gear: 'M10 3h4l.7 2.5 2 .9 2.3-1.3 2 3.5-1.7 1.9v2.7l1.7 1.9-2 3.5-2.3-1.3-2 .9L14 21h-4l-.7-2.8-2-.9L5 18.6l-2-3.5 1.7-1.9v-2.7L3 8.6l2-3.5 2.3 1.3 2-.9zM15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z',
+    walk: 'm8 22 2-6 3 2v4m3-15a2 2 0 1 0 0-4 2 2 0 0 0 0 4ZM4 14l4-3 4-2 3 4 4 1m-7-5-2 7',
   };
   const shortcuts = {
-    chat:['聊天','message'], voice:['语音设置','mic'], dress:['装扮','shirt'],
+    chat:['聊天','message'], dress:['装扮','shirt'],
     workbench:['工作台','window'], memory:['记忆','book'], visits:['串门','door'],
     sound:['音效','volume'], size:['大小','resize'], hide:['隐藏','eye'],
   };
@@ -33,13 +34,14 @@
     persona:['称呼与性格','face','这点小习惯，我记着就好。'],
     touch:['桌宠交互','cursor','你习惯怎么点，我就怎么配合。'],
     menu:['快捷与右键','list','常用的放身边，其他的右键再找。'],
-    connect:['聊天与语音','message','哪里没接上，我们就在这里看看。'],
+    connect:['聊天设置','message','在这里选你想用的聊天方式。'],
     guide:['新手引导','spark','刚见面那会儿的事，还能再聊一遍。'],
   };
   const personality = {curious:'温柔好奇', playful:'活泼黏人', quiet:'安静靠谱'};
   const roaming = {still:'安静待着', occasional:'偶尔走动', often:'常常走动'};
   const replies = {quiet:'安静陪着', poke:'被戳时回应', all:'互动都回应', custom:'自己挑'};
   const gestures = {poke:'戳一下', pet:'在头上停留', drop:'拖动放下'};
+  const singleActions = {chat:'打开聊天', poke:'戳一下', none:'不触发操作'};
   const quotes = {
     curious:'你忙你的，我在旁边陪着。遇到好玩的，分我看看。',
     playful:'那我就多来找你玩啦。嫌我闹的时候，告诉我就好。',
@@ -67,6 +69,46 @@
   const select = (key, label, options, current) => `<select data-pref="${key}" aria-label="${esc(label)}">${Object.entries(options).map(([id, text]) =>
     `<option value="${id}" ${current === id ? 'selected' : ''}>${text}</option>`).join('')}</select>`;
   const checkbox = (key, label, current) => `<label class="agent-check"><input type="checkbox" data-pref="${key}" ${current ? 'checked' : ''}>${esc(label)}</label>`;
+
+  function menuContents(menu, preview = false) {
+    const control = (id, glyph, label, className) => {
+      const content = `${icon(glyph)}<span>${esc(label)}</span>`;
+      return preview ? `<span class="${className}">${content}</span>`
+        : `<button type="button" class="${className}" data-menu-action="${id}">${content}</button>`;
+    };
+    return `<header>${control('settings','gear','主 Agent 设置','agent-context-link agent-context-settings')}
+      ${preview ? '' : iconButton('close','关闭右键菜单','data-menu-action="close"')}</header>
+      ${menu.items.length ? `<div class="agent-context-grid">${menu.items.map(({id, label}) =>
+        control(id,shortcuts[id][1],label,'agent-context-tile')).join('')}</div>` : ''}
+      <footer>${menu.canContinue ? control('guide','spark','继续引导','agent-context-link') : ''}
+        ${control('more','list','更多操作','agent-context-link')}</footer>`;
+  }
+
+  function mountMenu(host, api, keyboard) {
+    document.body.classList.add('agent-menu-body');
+    let pending = false;
+    async function run(id) {
+      if (pending) return;
+      pending = true;
+      try {
+        await api.call(id === 'close' ? 'close' : 'menu-action', {id});
+      } catch {
+        await api.call('close').catch(() => {});
+      }
+    }
+    host.addEventListener('click', event => {
+      const id = event.target.closest('[data-menu-action]')?.dataset.menuAction;
+      if (id) void run(id);
+    });
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape') void run('close');
+    });
+    document.addEventListener('contextmenu', event => event.preventDefault());
+    void api.call('read').then(menu => {
+      host.innerHTML = `<main class="agent-context" aria-label="大肥鱼的右键菜单">${menuContents(menu)}</main>`;
+      if (keyboard) host.querySelector('[data-menu-action=settings]').focus({preventScroll:true});
+    }).catch(() => api.call('close').catch(() => {}));
+  }
 
   function quickActions(parent, onAction) {
     const element = document.createElement('div');
@@ -101,7 +143,8 @@
     let previewMode = 'desktop', data, draftName, busy = false, notice = '';
     let undo, savedFocus;
     const reduced = matchMedia('(prefers-reduced-motion: reduce)');
-    const statusText = () => data.ready ? '聊天已连接' : '聊天还没接上，可以稍后再来。';
+    const statusText = () => data.chatBackend === 'deepseek-account' ? '当前使用 DeepSeek 工作台账号。'
+      : data.chatConfigured ? '聊天 API 已配置，可以发条消息试试。' : '聊天还没配置好，可以稍后再来。';
     const choiceGroup = (key, options, current) => `<div class="agent-choices">${Object.entries(options).map(([id, label]) =>
       `<button type="button" class="agent-button" data-pref-button="${key}" data-value="${id}" aria-pressed="${id === current}">${label}</button>`).join('')}</div>`;
     const checks = (key, options, selected, icons = false) => `<div class="agent-choices agent-checks">${Object.entries(options).map(([id, item]) => {
@@ -123,15 +166,13 @@
       const current = data.activeModel === 'custom' ? data.custom : data.models.find(model => model.id === data.activeModel);
       const switcher = tab === 'menu' ? `<div class="agent-preview-switch">${button('cursor','桌宠效果',`data-preview="desktop" aria-pressed="${previewMode === 'desktop'}"`)}
         ${button('list','右键菜单',`data-preview="menu" aria-pressed="${previewMode === 'menu'}"`)}</div>` : '<small>桌面效果</small>';
-      const compact = [...prefs.shortcuts.map(id => shortcuts[id][0]), '主 Agent 设置', '显示桌宠', '退出'];
-      const full = ['开始养鱼','形象','养鱼','打开工作台','串门','说话显示时长','设置','鱼的记忆','重新连接工作台','主 Agent 设置','显示桌宠','退出'];
       const pet = `<div class="agent-speech" aria-live="polite">${esc(tab === 'appearance' ? '挑一身你喜欢的吧。小习惯也都记着。' : quotes[prefs.personality])}</div>
         ${tab === 'menu' ? `<div class="agent-preview-quick">${prefs.shortcuts.map(id => `<span aria-label="${shortcuts[id][0]}" title="${shortcuts[id][0]}">${icon(shortcuts[id][1])}</span>`).join('')}</div>` : ''}
         <div class="agent-model-stage" style="--model-scale:${data.scale};--model-facing:${prefs.mirror ? -1 : 1}">${modelMedia(current, true)}</div>
         <small>${esc(current?.label)}</small>
         ${tab === 'touch' ? `<div class="agent-preview-quick">${iconButton('cursor','试试戳一下','data-test-gesture="poke"')}${iconButton('face','试试在头上停留','data-test-gesture="pet"')}${iconButton('resize','试试拖动放下','data-test-gesture="drop"')}</div>` : ''}`;
       return `<aside class="agent-preview" aria-label="桌宠预览">${switcher}<div class="agent-preview-body">${tab === 'menu' && previewMode === 'menu'
-        ? `<ul class="agent-menu-sample">${(prefs.compactMenu ? compact : full).map(label => `<li>${esc(label)}</li>`).join('')}</ul>` : pet}</div></aside>`;
+        ? `<div class="agent-context agent-context-preview">${menuContents(data.menu, true)}</div>` : pet}</div></aside>`;
     }
 
     function page() {
@@ -152,7 +193,7 @@
           return `<h3>我怎么叫你</h3>${nameField()}<h3>陪你的方式</h3>${choiceGroup('personality',personality,prefs.personality)}
             ${row('平时走动',select('roam','平时走动',roaming,prefs.roam))}`;
         case 'touch':
-          return row('左键单击',select('single','左键单击',{chat:'打开聊天',poke:'戳一下',none:'不触发操作'},prefs.single))
+          return row('左键单击',select('single','左键单击',singleActions,prefs.single))
             + row('左键双击',select('double','左键双击',{workbench:'打开工作台',chat:'打开聊天',none:'不触发操作'},prefs.double))
             + row('按住拖动','<small>移动桌宠，松手保存位置。</small>')
             + row('互动时开口',select('response','互动时开口',replies,prefs.response))
@@ -160,10 +201,9 @@
         case 'menu':
           return `<h3>悬停按钮 <small>${prefs.shortcuts.length} / 6</small></h3>${checks('shortcuts',shortcuts,prefs.shortcuts)}
             ${row('右键菜单',checkbox('compactMenu','只显示常用功能',prefs.compactMenu))}
-            <p>主 Agent 设置、显示桌宠和退出始终保留。</p>`;
+            <p>选中的按钮会出现在桌宠旁，也会同步到右键面板。</p>`;
         case 'connect':
-          return row('聊天模型',button('message','打开聊天设置','data-action="chat-settings"'),statusText())
-            + row('语音与本地 N.E.K.O.',button('mic','打开连接设置','data-action="voice-settings"'),'语音能力取决于当前连接。');
+          return row('聊天模型',button('message','打开聊天设置','data-action="chat-settings"'),statusText());
         case 'guide':
           return `<p>从桌面气泡学会聊天、装扮和打开工作台。</p>
             <div class="agent-choices">${button('spark',data.prefs.guide.status === 'finished' ? '重看新手引导' : '继续新手引导','data-action="guide-open"')}
@@ -178,12 +218,13 @@
       switch (prefs.guide.step) {
         case 0: return `<h1>唔，终于见面啦。</h1><p>我是大肥鱼，以后就赖在这儿陪你了。我该怎么叫你呀？</p>${nameField()}`;
         case 1: return `<h1>${esc(prefs.name || '伙伴')}，我平时这样陪你，好不好？</h1>${choiceGroup('personality',personality,prefs.personality)}<p>${quotes[prefs.personality]}</p>`;
-        case 2: return `<h1>窝安好了。我能偶尔去溜达一圈吗？</h1>${choiceGroup('roam',roaming,prefs.roam)}`;
-        case 3: return `<h1>你戳我、摸我脑袋的时候，要我搭句话吗？</h1>${choiceGroup('response',replies,prefs.response)}${prefs.response === 'custom' ? checks('gestures',gestures,prefs.gestures) : ''}`;
+        case 2: return `<h1>窝安好了。我能偶尔去溜达一圈吗？</h1>${choiceGroup('roam',roaming,prefs.roam)}
+          ${button('walk','先走一步',`data-action="walk-preview" ${prefs.roam === 'still' ? 'disabled' : ''}`)}`;
+        case 3: return `<h1>你碰我的时候，要我搭句话吗？</h1>${choiceGroup('response',replies,prefs.response)}${prefs.response === 'custom' ? checks('gestures',gestures,prefs.gestures) : ''}
+          ${row('左键单击',select('single','左键单击',singleActions,prefs.single))}`;
         case 4: return `<h1>想跟我聊聊天？</h1><p>用工作台账号，或者到聊天设置里选个模型。晚点弄也行。</p>${button('message','聊天设置','data-action="chat-settings"')}<small>${statusText()}</small>`;
-        case 5: return `<h1>想直接喊我一声吗？</h1><p>有语音连接的话，就去设置看看。喜欢打字，我们也可以慢慢聊。</p>${button('mic','打开连接设置','data-action="voice-settings"')}`;
-        case 6: return `<h1>把常用的小按钮挑出来吧。</h1><p>以后鼠标挪过来，它们就待在我旁边。最多放六个哦。</p>${checks('shortcuts',shortcuts,prefs.shortcuts,true)}`;
-        case 7: return `<h1>对了，还有个热闹地方。</h1><p>双击我，就能打开 Nekofans 工作台。找朋友聊聊天，捣鼓自己的小游戏，也能玩玩大家做的。碰到好玩的，记得带我一起呀。</p>
+        case 5: return `<h1>把常用的小按钮挑出来吧。</h1><p>把鼠标挪过来，或者右键点我，就能找到它们。最多放六个哦。</p>${checks('shortcuts',shortcuts,prefs.shortcuts,true)}`;
+        case 6: return `<h1>对了，还有个热闹地方。</h1><p>双击我，就能打开 Nekofans 工作台。找朋友聊聊天，捣鼓自己的小游戏，也能玩玩大家做的。碰到好玩的，记得带我一起呀。</p>
           <div class="agent-guide-features"><span>${icon('friends')}朋友聊天</span><span>${icon('create')}制作游戏</span><span>${icon('game')}游玩游戏</span></div>`;
         default: return `<h1>好啦，${esc(prefs.name || '伙伴')}。</h1><p>右键能调我的小习惯。想找朋友或玩游戏，就去工作台。你忙你的，我在这儿。</p>`;
       }
@@ -198,12 +239,12 @@
         const step = data.prefs.guide.step;
         host.innerHTML = `<main class="agent-guide" aria-label="大肥鱼的新手引导">
           <header>${iconButton('back','上一步',`data-action="guide-back" ${step ? '' : 'disabled'}`)}
-          <span class="agent-dots" aria-label="第 ${step + 1} 步，共 9 步">${Array.from({length:9},(_,i) => `<i class="${i === step ? 'active' : ''}"></i>`).join('')}</span>
+          <span class="agent-dots" aria-label="第 ${step + 1} 步，共 8 步">${Array.from({length:8},(_,i) => `<i class="${i === step ? 'active' : ''}"></i>`).join('')}</span>
           ${iconButton('close','稍后继续','data-action="close"')}</header>
           <div class="agent-guide-content">${guideContent()}</div>
           <footer><span role="status">${esc(notice)}</span>
-          ${step === 7 ? iconButton('window','打开 Nekofans 工作台','data-action="workbench"') : ''}
-          ${iconButton('check',step === 8 ? '开始陪伴' : '下一步','data-action="guide-next"')}</footer></main>`;
+          ${step === 6 ? iconButton('window','打开 Nekofans 工作台','data-action="workbench"') : ''}
+          ${iconButton('check',step === 7 ? '开始陪伴' : '下一步','data-action="guide-next"')}</footer></main>`;
       } else {
         const [label,, hint] = tabs[tab];
         host.innerHTML = `<main class="agent-settings">
@@ -298,5 +339,5 @@
     window.addEventListener('unload',() => { stopState(); stopTab(); },{once:true});
   }
 
-  window.MainAgentUI = {mount, quickActions, gestureReply};
+  window.MainAgentUI = {mount, mountMenu, quickActions, gestureReply};
 })();
