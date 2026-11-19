@@ -75,12 +75,18 @@ test('Anthropic setting selects the existing provider and uses its own message p
   await runtime.saveApi(config(api.baseUrl,{protocol:'anthropic'}));assert.equal((await runtime.send('你好')).text,'原生协议');assert.equal(api.requests[0].url,'/v1/messages');assert.equal(api.requests[0].headers['x-api-key'],'fixture-secret-only');
 });
 
-test('backend selection commits before changing memory and a failed encrypted save preserves previous config/key',async t=>{
-  const f=fixture(t),runtime=f.create();await runtime.start();await runtime.saveApi(config('https://example.invalid/v1'));
-  await runtime.selectBackend('neko');assert.equal(runtime.read().backend,'neko');await assert.rejects(runtime.send('不能双发'),/启用聊天/);await assert.rejects(runtime.memories());
-  const previous=fs.readFileSync(runtime.configFile);f.safeStorage.encryptString=()=>{throw Error('private key detail');};await assert.rejects(runtime.saveApi(config('https://other.invalid/v1')),/保存失败/);assert.equal(runtime.backend,'neko');assert.deepEqual(fs.readFileSync(runtime.configFile),previous);assert.equal(await runtime.secretStore.get(),'fixture-secret-only');
+test('retired local route waits for explicit selection and a failed encrypted save preserves previous config/key',async t=>{
+  const f=fixture(t),original=f.create();await original.start();await original.saveApi(config('https://example.invalid/v1'));
+  const legacy=JSON.parse(fs.readFileSync(original.configFile,'utf8'));legacy.backend='neko';
+  await original.close();fs.writeFileSync(original.configFile,JSON.stringify(legacy));
+  const runtime=f.create();await runtime.start();
+  assert.equal(runtime.read().backend,null);assert.equal(runtime.read().ready,false);assert.match(runtime.read().error,/独立工具/);
+  await assert.rejects(runtime.selectBackend('neko'),/无效/);await assert.rejects(runtime.send('不能双发'),/启用聊天/);await assert.rejects(runtime.memories());
+  const previous=fs.readFileSync(runtime.configFile);f.safeStorage.encryptString=()=>{throw Error('private key detail');};await assert.rejects(runtime.saveApi(config('https://other.invalid/v1')),/保存失败/);assert.equal(runtime.backend,null);assert.deepEqual(fs.readFileSync(runtime.configFile),previous);assert.equal(await runtime.secretStore.get(),'fixture-secret-only');
   fs.renameSync(runtime.configFile,runtime.configFile+'.saved');fs.mkdirSync(runtime.configFile);let cancellations=0;const cancel=runtime.opened.service.cancel.bind(runtime.opened.service);runtime.opened.service.cancel=()=>{cancellations++;return cancel();};
-  await assert.rejects(runtime.selectBackend('chat-api'));assert.equal(runtime.backend,'neko');assert.equal(cancellations,0,'failed selection does not cancel the current backend');
+  await assert.rejects(runtime.selectBackend('chat-api'));assert.equal(runtime.backend,null);assert.equal(cancellations,0,'failed selection does not cancel the current backend');
+  fs.rmdirSync(runtime.configFile);fs.renameSync(runtime.configFile+'.saved',runtime.configFile);
+  await runtime.selectBackend('chat-api');assert.equal(runtime.read().backend,'chat-api');assert.equal(runtime.read().ready,true);
 });
 
 test('account provider shares companion history and native memory wiring while keeping API credentials separate',async t=>{

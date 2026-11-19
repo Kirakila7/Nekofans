@@ -7,7 +7,8 @@ const {createMemoryAccountRelay}=require('./memory-account-relay.cjs');
 const {createCompanionMedia,splitMessage}=require('./companion-media.cjs');
 
 const PERSONA = 'bigfish';
-const BACKENDS = new Set(['chat-api', 'neko', 'deepseek-account']);
+const BACKENDS = new Set(['chat-api', 'deepseek-account']);
+const movedLocalChat = '本地 N.E.K.O. 聊天已移至独立工具，请在这里选择聊天方式。';
 const usesChatService = backend => backend === 'chat-api' || backend === 'deepseek-account';
 const unavailableAccountProvider = Object.freeze({ async *stream() { throw new Error('工作台账号聊天尚未接入'); } });
 const clone = value => structuredClone(value);
@@ -69,7 +70,8 @@ class WorkbenchMainChat {
     this.lobbyAccountProvider = lobbyAccountProvider || null; this.lobbyAccountStatus = 'unavailable';
     this.lobbyProviderEpoch = 0; this.lobbyAccountCheckedAt = 0; this.lobbyAccountCheck = null;
     this.environmentContext=environmentContext;
-    this.fetch = fetchImpl; this.initialBackend = BACKENDS.has(initialBackend) ? initialBackend : 'chat-api';
+    this.fetch = fetchImpl;
+    this.initialBackend = initialBackend === null ? null : BACKENDS.has(initialBackend) ? initialBackend : 'chat-api';
     this.shared = sharedModules; this.opened = null; this.listeners = new Set(); this.tail = Promise.resolve();
     this.closed = false; this.backend = this.initialBackend; this.configError = '';
   }
@@ -98,14 +100,17 @@ class WorkbenchMainChat {
   }
   readConfig() {
     this.configError = '';
+    let localChatMoved = this.initialBackend === null;
     try {
       const value = fs.existsSync(this.configFile) ? JSON.parse(fs.readFileSync(this.configFile, 'utf8')) : {};
-      if (value.backend !== undefined && !BACKENDS.has(value.backend)) throw failure();
+      localChatMoved ||= value.backend === 'neko';
+      if (value.backend !== undefined && value.backend !== 'neko' && !BACKENDS.has(value.backend)) throw failure();
       this.settings = this.shared.parseMainChatConfig(value.mainChat);
       if (this.settings.personaId !== PERSONA) throw failure();
-      this.backend = value.backend || this.initialBackend;
+      this.backend = value.backend === 'neko' ? null : value.backend ?? this.initialBackend;
+      if (this.backend === null) this.configError = movedLocalChat;
     } catch {
-      this.settings = this.shared.parseMainChatConfig({}); this.backend = 'chat-api';
+      this.settings = this.shared.parseMainChatConfig({}); this.backend = localChatMoved ? null : 'chat-api';
       this.configError = '聊天配置无法读取，请重新保存设置';
     }
   }
@@ -138,7 +143,7 @@ class WorkbenchMainChat {
     const chat=this.opened?.service.state()||{personaId:PERSONA,phase:'idle'};
     if(chat.lastUserMessage)chat.lastUserMessage=splitMessage(chat.lastUserMessage).text||'[图片]';
     return clone({ backend: this.backend, settings: this.settings || null, hasKey: this.secretStore.has(),
-      secureStorageAvailable: this.secureStorageAvailable ?? null, ready: !!this.opened && (this.backend !== 'deepseek-account' || !!this.accountProvider), error: this.configError || (this.backend === 'deepseek-account' && !this.accountProvider ? '工作台账号聊天尚未接入' : ''),
+      secureStorageAvailable: this.secureStorageAvailable ?? null, ready: usesChatService(this.backend) && !!this.opened && (this.backend !== 'deepseek-account' || !!this.accountProvider), error: this.configError || (this.backend === 'deepseek-account' && !this.accountProvider ? '工作台账号聊天尚未接入' : ''),
       memoryAvailable: usesChatService(this.backend) && !!this.opened?.memory,
       memorySystem: this.memorySystem?.status(),
       voiceStatus: '未接入', chat });

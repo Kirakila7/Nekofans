@@ -8,4 +8,4 @@
 
 使用 `node b0-skin/packages/dsh-client-ui-white-label/scripts/embed-avatars.mjs assets/avatars` 重新嵌入五张头像；脚本会检查五张齐全、类型和单图大小，再执行插件 smoke。v0.10 的单头像 `neko-hero.webp` 与旧 HANDOFF 作为历史来源保留，本版不使用旧 HERO_ART。
 
-上传的自定义头像在主进程内裁切、缩小并保存到 `data/workbench-appearance.json`；它不进入源码 ZIP。用户手动选择“连接 N.E.K.O.”之前，不会因更换头像启动聊天连接。
+上传的自定义头像在主进程内裁切、缩小并保存到 `data/workbench-appearance.json`；它不进入源码 ZIP。

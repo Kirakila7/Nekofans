@@ -1,5 +1,10 @@
 # Local integration 0.28.41 / build 77
 
+## 本地 N.E.K.O. 聊天独立保留
+
+- 本地聊天适配器和原角色模板迁至 `tools/local-neko-chat/`。日常 Nekofans 包不包含该工具，桌宠、引导和工作台设置不再发起本地聊天连接。
+- 旧本地聊天路线等待用户明确选择聊天方式。旧地址、角色与历史记录保留在原资料，已有工作台账号或 Chat API 配置沿用原路线。
+
 ## Private chess compiler & engine: playable Open Source rule & safe Erasure placeholder (2026-11-15)
 
 Implemented real playable borrowed moves for the 《开源与抹除》 rule set in both the chess core and private compiler:

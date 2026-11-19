@@ -2,7 +2,6 @@
 
 const shortcuts = Object.freeze({
   chat: ['聊天', 'message'],
-  voice: ['语音设置', 'mic'],
   dress: ['装扮', 'shirt'],
   workbench: ['工作台', 'window'],
   memory: ['记忆', 'book'],
@@ -17,7 +16,7 @@ const personalities = {curious: '温柔好奇', playful: '活泼黏人', quiet: 
 const roaming = {still: '安静待着', occasional: '偶尔走动', often: '常常走动'};
 const responses = {quiet: '安静陪着', poke: '被戳时回应', all: '互动都回应', custom: '自己挑'};
 const gestures = {poke: '戳一下', pet: '在头上停留', drop: '拖动放下'};
-const guideSteps = ['name', 'personality', 'roaming', 'responses', 'chat', 'voice', 'shortcuts', 'workbench', 'done'];
+const guideSteps = ['name', 'personality', 'roaming', 'responses', 'chat', 'shortcuts', 'workbench', 'done'];
 const owns = (options, value) => typeof value === 'string' && Object.hasOwn(options, value);
 const pick = (options, value, fallback) => owns(options, value) ? value : fallback;
 const list = (options, values, fallback, limit) => Array.isArray(values)
@@ -27,7 +26,9 @@ const list = (options, values, fallback, limit) => Array.isArray(values)
 function normalize(value, firstRun = false) {
   const input = value && typeof value === 'object' ? value : {};
   const guide = input.guide || {};
-  const step = Number.isInteger(guide.step) ? Math.max(0, Math.min(guideSteps.length - 1, guide.step)) : 0;
+  const savedStep = Number.isInteger(guide.step) ? guide.step : 0;
+  const migratedStep = input.guideRevision === 2 || savedStep <= 5 ? savedStep : savedStep - 1;
+  const step = Math.max(0, Math.min(guideSteps.length - 1, migratedStep));
   const name = typeof input.name === 'string' ? input.name.replace(/[\r\n\x00-\x1f\x7f]/g, ' ').trim() : '';
   return {
     name: Array.from(name).slice(0, 20).join(''),
@@ -41,6 +42,7 @@ function normalize(value, firstRun = false) {
     compactMenu: input.compactMenu === true,
     mirror: input.mirror === true,
     muted: input.muted === true,
+    guideRevision: 2,
     guide: {step, status: ['pending', 'paused', 'finished'].includes(guide.status)
       ? guide.status : firstRun ? 'pending' : 'paused'},
   };

@@ -1313,7 +1313,7 @@ function installWorkspaceShell(options = {}) {
     }
     return choices;
   }
-  function connectionSummary() { const connected = phase => ['ready', 'connected'].includes(phase) ? '已连接' : phase === 'error' ? '连接出错' : '未连接'; return 'N.E.K.O.：' + connected(state?.neko?.connection) + ' · 工作台：' + connected(state?.workbench?.connection); }
+  function connectionSummary() { const connected = phase => ['ready', 'connected'].includes(phase) ? '已连接' : phase === 'error' ? '连接出错' : '未连接'; return '工作台：' + connected(state?.workbench?.connection); }
   function openSettings(kind = 'general', id) {
     if (modal.hidden) settingsReturnFocus = doc.activeElement;
     hideSocial(); modalBody.replaceChildren(); modalTitle.textContent = kind === 'seat' ? '自定义工作 agent' : '工作台设置'; modal.setAttribute('aria-label', modalTitle.textContent); modal.hidden = false;
@@ -1334,11 +1334,11 @@ function installWorkspaceShell(options = {}) {
         connections.setAttribute('role', 'status'); more.appendChild(connections);
         const actions = el('div', 'neko-workspace-actions'), actionError = el('p', 'neko-workspace-form-error'); actionError.setAttribute('role', 'status');
         for (const [action, label] of options.settingsActions || []) {
-          if (action === 'neko-settings') continue; // The main-chat settings entry above opens the same native window.
+          if (['neko-settings', 'open-neko', 'connect-neko'].includes(action)) continue;
           if (/codex|claude/i.test(action + ' ' + label)) continue;
           const item = button(label, 'neko-workspace-setting-link', async () => {
             const controls = [...actions.querySelectorAll('button')]; controls.forEach(b => b.disabled = true); item.setAttribute('aria-busy', 'true'); actionError.textContent = '';
-            try { const result = await bridge.action(action); if (result?.ok === false) throw Error('操作未完成，请重试'); if (!['connect-neko', 'reconnect-workbench', 'connection-status'].includes(action)) closeSettings(); }
+            try { const result = await bridge.action(action); if (result?.ok === false) throw Error('操作未完成，请重试'); if (!['reconnect-workbench', 'connection-status'].includes(action)) closeSettings(); }
             catch (error) { actionError.textContent = error.message || '操作未完成，请重试'; }
             finally { controls.forEach(b => b.disabled = false); item.removeAttribute('aria-busy'); }
           }); item.dataset.workbenchAction = action; actions.appendChild(item);

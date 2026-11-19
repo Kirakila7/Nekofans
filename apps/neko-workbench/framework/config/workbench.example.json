@@ -203,24 +203,13 @@
   "options": [
     {
       "id": "nekoSettings",
-      "label": "N.E.K.O. 聊天设置",
+      "label": "主角色聊天设置",
       "nativeAction": "neko-settings"
-    },
-    {
-      "id": "openNeko",
-      "label": "打开 N.E.K.O.",
-      "nativeAction": "open-neko"
     },
     {
       "id": "taskNotes",
       "label": "任务备注",
       "nativeAction": "task-notes"
-    },
-    {
-      "id": "connect",
-      "label": "连接 N.E.K.O.（可选）",
-      "nativeAction": "connect-neko",
-      "explicitUserActionOnly": true
     },
     {
       "id": "status",

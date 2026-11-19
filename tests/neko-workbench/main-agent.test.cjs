@@ -50,7 +50,11 @@ test('upgrades preserve existing click behavior and new profiles start at the fi
   assert.deepEqual(prefs.normalize(null,true).guide,{status:'pending',step:0});
   const options = prefs.normalize({shortcuts:['chat','chat','wrong','dress','visits','memory','hide','size','voice'], guide:{step:50,status:'broken'}});
   assert.deepEqual(options.shortcuts,['chat','dress','visits','memory','hide','size']);
-  assert.deepEqual(options.guide,{status:'paused',step:8});
+  assert.deepEqual(options.guide,{status:'paused',step:7});
+  const oldVoice = prefs.normalize({guide:{status:'paused',step:5}, shortcuts:['voice','dress']});
+  assert.deepEqual(oldVoice.guide,{status:'paused',step:5});
+  assert.deepEqual(oldVoice.shortcuts,['dress']);
+  assert.equal(prefs.normalize({guide:{status:'finished',step:8}}).guide.step,7);
 });
 
 test('guide pauses, resumes, and advances to completion only after workbench opens or the user continues', async () => {
@@ -65,17 +69,17 @@ test('guide pauses, resumes, and advances to completion only after workbench ope
   await assert.rejects(controller.call(pet,'edit',{key:'double',value:'none'}),/请从主 Agent/);
   await assert.rejects(controller.call(guide,'edit',{key:'single',value:'none'}),/这一步/);
   await assert.rejects(controller.openWorkbench(),/offline/);
-  assert.deepEqual(state.preferences.mainAgent.guide,{status:'pending',step:7});
+  assert.deepEqual(state.preferences.mainAgent.guide,{status:'pending',step:6});
   guide.close();
-  assert.deepEqual(state.preferences.mainAgent.guide,{status:'paused',step:7});
+  assert.deepEqual(state.preferences.mainAgent.guide,{status:'paused',step:6});
   controller.openGuide();
   guide = windows['main-agent-guide'];
   shouldFail = false;
   await controller.openWorkbench();
+  await controller.call(guide,'guide-next',{step:6});
+  assert.deepEqual(state.preferences.mainAgent.guide,{status:'pending',step:7});
   await controller.call(guide,'guide-next',{step:7});
-  assert.deepEqual(state.preferences.mainAgent.guide,{status:'pending',step:8});
-  await controller.call(guide,'guide-next',{step:8});
-  assert.deepEqual(state.preferences.mainAgent.guide,{status:'finished',step:8});
+  assert.deepEqual(state.preferences.mainAgent.guide,{status:'finished',step:7});
   assert.equal(guide.isDestroyed(),true);
   assert.ok(writes() > 0);
 });

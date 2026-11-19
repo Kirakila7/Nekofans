@@ -62,7 +62,8 @@ test('missing login, unavailable owner and route changes fail closed without usi
   const configs=[];const current=providerGetter({runtime,createChatApiProvider:config=>{configs.push(config);return {async *stream(){yield {type:'delta',text:'API回复'};yield {type:'complete'};}};}})();
   assert.equal(await runModel(current,publicInput()),'API回复');assert.equal(configs[0].config.model,runtime.settings.model);
   assert.equal(await configs[0].getApiKey(),'synthetic-private-api-key');assert.equal(h.calls.length,0);
-  await runtime.selectBackend('neko');assert.equal(providerGetter({runtime})(),null);
+  await assert.rejects(runtime.selectBackend('neko'),/聊天方式无效/);
+  assert.equal(runtime.read().backend,'chat-api');
 });
 
 test('public and private account requests have separate locks, cancellation, context, and the same credit route',async()=>{

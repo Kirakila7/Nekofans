@@ -86,7 +86,7 @@ assert.ok(Object.isFrozen(exports.PRODUCT_BRAND))
 const IDS = ['yui', 'devcat', 'bigfish', 'claude', 'gemini']
 assert.deepEqual([...exports.AVATARS.map((a) => a.id)], IDS)
 assert.deepEqual([...exports.AVATARS.map((a) => a.name)], ['YUi', '开发喵', '大肥鱼', 'Claude娘', 'Gemini小猫'])
-assert.deepEqual([...exports.ACTION_NAMES], ['screen-share', 'neko-settings', 'open-neko', 'task-notes', 'connect-neko', 'connection-status', 'reconnect-workbench', 'open-community', 'open-bilibili'])
+assert.deepEqual([...exports.ACTION_NAMES], ['screen-share', 'neko-settings', 'task-notes', 'connection-status', 'reconnect-workbench', 'open-community', 'open-bilibili'])
 for (const id of IDS) assert.match(exports.PLACEHOLDERS[id], /^data:image\/svg\+xml,/, `placeholder ${id}`)
 const art = exports.AVATAR_ART
 const embedded = Object.keys(art)
@@ -242,7 +242,7 @@ function fakeBridge() {
       state = { ...state, avatar: { builtinId: 'custom', customDataUrl: tinyPng } }
       return state
     },
-    action: async (name) => { calls.push(['action', name]); if (name === 'open-neko') return { ok: false }; return { ok: true } },
+    action: async (name) => { calls.push(['action', name]); if (name === 'task-notes') return { ok: false }; return { ok: true } },
     subscribe(fn) { subs.add(fn); return () => subs.delete(fn) },
   }
 }
@@ -269,7 +269,7 @@ assert.equal(store.get().state.avatar.builtinId, 'custom')
 assert.equal(await store.runAction('task-notes'), true)
 assert.equal(await store.runAction('rm -rf'), false)
 assert.ok(!bridge.calls.some((c) => c[1] === 'rm -rf'), 'only allowlisted actions reach the bridge')
-assert.equal(await store.runAction('open-neko'), false, 'unconfirmed action reported')
+assert.equal(await store.runAction('task-notes'), false, 'unconfirmed action reported')
 assert.equal(store.get().notice.tone, 'error')
 bridge.push({ ...store.get().state, workbench: { connection: 'reconnecting', error: '' } })
 assert.equal(store.get().state.workbench.connection, 'reconnecting', 'subscribe pushes state')
@@ -282,7 +282,7 @@ const preview = createStore(null)
 assert.equal(preview.get().preview, true)
 await preview.setAvatar('bigfish')
 assert.equal(preview.get().state.avatar.builtinId, 'bigfish')
-assert.equal(await preview.runAction('open-neko'), false)
+assert.equal(await preview.runAction('task-notes'), false)
 assert.match(preview.get().notice.text, /预览模式/)
 preview.dispose()
 

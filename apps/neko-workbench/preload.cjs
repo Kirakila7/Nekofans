@@ -1,6 +1,6 @@
 const { contextBridge, ipcRenderer } = require('electron');
-const methods=new Set(['state','neko-settings','rename','settings','menu','move','move-end','motion-input','pass-through','memory','prompt','open-task','open-workbench',
-  'chat-settings-read','chat-settings-save','chat-use-deepseek-account','chat-open-neko-settings','chat-open-memory','chat-memory-read','chat-history','chat-memory-action','chat-cancel','question-reveal']);
+const methods=new Set(['state','rename','settings','menu','move','move-end','motion-input','pass-through','memory','prompt','open-task','open-workbench',
+  'chat-settings-read','chat-settings-save','chat-use-deepseek-account','chat-open-memory','chat-memory-read','chat-history','chat-memory-action','chat-cancel','question-reveal']);
 contextBridge.exposeInMainWorld('pet', Object.freeze({
   agent: Object.freeze({
     call: (method, payload = {}) => ipcRenderer.invoke('main-agent:call', method, payload),

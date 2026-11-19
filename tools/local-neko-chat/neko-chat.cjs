@@ -21,10 +21,10 @@ class NekoChat extends EventEmitter{
         const result=await created.json();
         if(generation!==this.generation)return;
         if(!created.ok||!result.success)throw new Error('N.E.K.O. 大肥鱼角色创建失败，请在原界面检查。');
-        if(result.character_name!==character)throw new Error('N.E.K.O. 角色名称发生冲突，请在聊天设置中选择。');
+        if(result.character_name!==character)throw new Error('N.E.K.O. 角色名称发生冲突，请启动工具时指定已有角色。');
         names=[...names,character];this.emit('profile-created',{character,memoryServerReloaded:result.memory_server_reloaded===true});
       }
-      if(!character||!names.includes(character))throw new Error('没有找到 N.E.K.O. 角色，请在设置中选择。');
+      if(!character||!names.includes(character))throw new Error('没有找到 N.E.K.O. 角色，请指定已有角色名。');
       if(generation!==this.generation)return;
       this.character=character;this.emit('characters',{names,character});
       const socket=new this.WebSocket(this.baseUrl.replace(/^http:/,'ws:')+'/ws/'+encodeURIComponent(character));this.socket=socket;
@@ -38,10 +38,10 @@ class NekoChat extends EventEmitter{
       socket.addEventListener('close',()=>{if(generation!==this.generation)return;this.fail(new Error('N.E.K.O. 连接已断开'));this.emit('connection',{connection:'disconnected',error:'N.E.K.O. 连接已断开'});});
       this.ping=setInterval(()=>{if(socket.readyState===1)socket.send(JSON.stringify({action:'ping'}));},25000);
       this.emit('connection',{connection:'ready',error:''});
-    }catch(error){if(generation!==this.generation)return;this.emit('connection',{connection:'disconnected',error:error.message.startsWith('N.E.K.O.')||error.message.startsWith('没有找到')?error.message:'N.E.K.O. 未启动，右键可重新连接。'});throw error;}
+    }catch(error){if(generation!==this.generation)return;this.emit('connection',{connection:'disconnected',error:error.message.startsWith('N.E.K.O.')||error.message.startsWith('没有找到')?error.message:'N.E.K.O. 未启动，请启动本机服务后重试。'});throw error;}
   }
   send(text,{environmentContext}={}){
-    if(this.socket?.readyState!==1)throw new Error('N.E.K.O. 未连接，右键可以重新连接。');
+    if(this.socket?.readyState!==1)throw new Error('N.E.K.O. 未连接，请重新运行工具。');
     if(this.pending)throw new Error('我还在回复，等我一下。');
     const requestId='dshpet-'+randomUUID();
     this.pending={requestId,text:'',turnId:null,timer:setTimeout(()=>this.fail(new Error('N.E.K.O. 回复超时，请在原界面查看后重试。')),this.timeout)};
@@ -51,7 +51,7 @@ class NekoChat extends EventEmitter{
   }
   receive(message){
     const pending=this.pending;
-    if(message.type==='catgirl_switched'){this.emit('connection',{connection:'disconnected',error:'N.E.K.O. 角色已切换，右键重新连接。'});this.fail(new Error('N.E.K.O. 角色已切换。'));return;}
+    if(message.type==='catgirl_switched'){this.emit('connection',{connection:'disconnected',error:'N.E.K.O. 角色已切换，请重新运行工具。'});this.fail(new Error('N.E.K.O. 角色已切换。'));return;}
     if(!pending)return;
     if(message.request_id&&message.request_id!==pending.requestId)return;
     if(message.type==='gemini_response'){

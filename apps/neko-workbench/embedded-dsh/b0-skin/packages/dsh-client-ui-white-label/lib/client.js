@@ -84,9 +84,7 @@ window.__ModuleLoader__.load({
     const ACTION_NAMES = Object.freeze([
       'screen-share',
       'neko-settings',
-      'open-neko',
       'task-notes',
-      'connect-neko',
       'connection-status',
       'reconnect-workbench',
       'open-community',
@@ -95,12 +93,10 @@ window.__ModuleLoader__.load({
     const ACTION_GROUPS = Object.freeze([
       Object.freeze([
         ['screen-share', '屏幕陪伴'],
-        ['neko-settings', 'N.E.K.O. 聊天设置'],
-        ['open-neko', '打开 N.E.K.O.'],
+        ['neko-settings', '聊天设置'],
         ['task-notes', '任务备注'],
       ]),
       Object.freeze([
-        ['connect-neko', '连接 N.E.K.O.'],
         ['reconnect-workbench', '重新连接工作台'],
       ]),
     ])
@@ -5006,7 +5002,7 @@ function installWorkspaceShell(options = {}) {
     }
     return choices;
   }
-  function connectionSummary() { const connected = phase => ['ready', 'connected'].includes(phase) ? '已连接' : phase === 'error' ? '连接出错' : '未连接'; return 'N.E.K.O.：' + connected(state?.neko?.connection) + ' · 工作台：' + connected(state?.workbench?.connection); }
+  function connectionSummary() { const connected = phase => ['ready', 'connected'].includes(phase) ? '已连接' : phase === 'error' ? '连接出错' : '未连接'; return '工作台：' + connected(state?.workbench?.connection); }
   function openSettings(kind = 'general', id) {
     if (modal.hidden) settingsReturnFocus = doc.activeElement;
     hideSocial(); modalBody.replaceChildren(); modalTitle.textContent = kind === 'seat' ? '自定义工作 agent' : '工作台设置'; modal.setAttribute('aria-label', modalTitle.textContent); modal.hidden = false;
@@ -5027,11 +5023,11 @@ function installWorkspaceShell(options = {}) {
         connections.setAttribute('role', 'status'); more.appendChild(connections);
         const actions = el('div', 'neko-workspace-actions'), actionError = el('p', 'neko-workspace-form-error'); actionError.setAttribute('role', 'status');
         for (const [action, label] of options.settingsActions || []) {
-          if (action === 'neko-settings') continue; // The main-chat settings entry above opens the same native window.
+          if (['neko-settings', 'open-neko', 'connect-neko'].includes(action)) continue;
           if (/codex|claude/i.test(action + ' ' + label)) continue;
           const item = button(label, 'neko-workspace-setting-link', async () => {
             const controls = [...actions.querySelectorAll('button')]; controls.forEach(b => b.disabled = true); item.setAttribute('aria-busy', 'true'); actionError.textContent = '';
-            try { const result = await bridge.action(action); if (result?.ok === false) throw Error('操作未完成，请重试'); if (!['connect-neko', 'reconnect-workbench', 'connection-status'].includes(action)) closeSettings(); }
+            try { const result = await bridge.action(action); if (result?.ok === false) throw Error('操作未完成，请重试'); if (!['reconnect-workbench', 'connection-status'].includes(action)) closeSettings(); }
             catch (error) { actionError.textContent = error.message || '操作未完成，请重试'; }
             finally { controls.forEach(b => b.disabled = false); item.removeAttribute('aria-busy'); }
           }); item.dataset.workbenchAction = action; actions.appendChild(item);
@@ -8110,15 +8106,13 @@ function installNekoAccountHabitat(ctx, options) {
       const panelId = usePopoverId('neko-options')
       const { state, pending, notice } = snap
       const absent = { label: '未接入桌宠', tone: 'unknown' }
-      const neko = snap.preview ? absent : describeConnection(state.neko.connection, state.neko.error, state.neko.enabled)
       const wb = snap.preview ? absent : describeConnection(state.workbench.connection, state.workbench.error)
-      const nekoDetail = state.neko.error || (state.neko.character ? `角色：${state.neko.character}` : '')
-      const worst = [neko.tone, wb.tone].includes('error') ? 'error' : [neko.tone, wb.tone].includes('busy') ? 'busy' : wb.tone
+      const worst = wb.tone
 
       async function run(name) {
         const ok = await store.runAction(name)
         // Actions that hand off to a native window close the panel; status actions keep it open.
-        if (ok && name !== 'connect-neko' && name !== 'reconnect-workbench' && name !== 'connection-status') pop.close(true)
+        if (ok && name !== 'reconnect-workbench' && name !== 'connection-status') pop.close(true)
       }
 
       const groups = ACTION_GROUPS.map((group, gi) =>
@@ -8189,7 +8183,6 @@ function installNekoAccountHabitat(ctx, options) {
           h(
             'div',
             { className: 'neko-statuses', role: 'status', 'aria-live': 'polite' },
-            h(StatusRow, { label: 'N.E.K.O.', info: snap.ready ? neko : { label: '读取中', tone: 'busy' }, detail: nekoDetail }),
             h(StatusRow, { label: '工作台', info: snap.ready ? wb : { label: '读取中', tone: 'busy' }, detail: state.workbench.error }),
           ),
           ...groups,

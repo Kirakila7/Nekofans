@@ -30,7 +30,9 @@ function createMainAgentWindows({
       custom: custom ? {label: custom.name, source: custom.stillDataUrl || custom.dataUrl} : null,
       scale: appearance.scaleFor(state, actor),
       followsDefaultSize: !Number.isFinite(actor.appearanceScale),
-      ready: state.mainChat?.ready === true || state.neko?.connection === 'ready',
+      chatConfigured: state.mainChat?.backend === 'chat-api' && state.mainChat.hasKey === true
+        && !!state.mainChat.settings?.baseUrl && !!state.mainChat.settings?.model,
+      chatBackend: state.mainChat?.backend ?? null,
     };
   }
 
@@ -165,7 +167,6 @@ function createMainAgentWindows({
 
   const runShortcut = {
     chat: actions.chat,
-    voice: actions.voice,
     dress: () => openSettings('appearance'),
     workbench: openWorkbench,
     memory: actions.memory,
@@ -218,8 +219,6 @@ function createMainAgentWindows({
       await actions.import(main(), sender);
     } else if (method === 'chat-settings') {
       actions.chatSettings();
-    } else if (method === 'voice-settings') {
-      actions.voice();
     } else if (method === 'guide-open' && fromSettings) {
       sender.hide();
       openGuide({restart: payload.restart === true});
