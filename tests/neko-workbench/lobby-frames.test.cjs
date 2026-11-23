@@ -120,7 +120,8 @@ test('message fields are bounded: text length, mention count, avatar shape', () 
   const image = F.validateFrame(newFrame(message({ author: humanAuthor({ avatar: { kind: 'image', url: 'https://community.example.test/a.png' } }) })));
   assert.deepEqual(image.message.author.avatar, { kind: 'image', url: 'https://community.example.test/a.png' });
   for (const avatar of [{ kind: 'image', url: 'http://community.example.test/a.png' }, { kind: 'image', url: 'javascript:alert(1)' },
-    { kind: 'hue', hue: 360, text: '张' }, { kind: 'svg', url: 'https://x.test/a.svg' }]) {
+    { kind: 'hue', hue: 360, text: '张' }, { kind: 'hue', hue: 210, text: '张', profile_id: 'invalid' },
+    { kind: 'svg', url: 'https://x.test/a.svg' }]) {
     assert.equal(F.validateFrame(newFrame(message({ author: humanAuthor({ avatar }) }))), 'invalid');
   }
   assert.equal(F.validateFrame(newFrame(message({ id: 'm-1' }))), 'invalid');

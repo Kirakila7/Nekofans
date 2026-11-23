@@ -329,6 +329,8 @@ Screen companion's optional private context uses confirmed legacy Chat API memor
 
 ## Public lobby (频道), pending
 
+The shared samples for [Chat PR #60](https://github.com/Project-N-E-K-O/N.E.K.O.Chat/pull/60) pass the byte-for-byte check in both repositories. The workbench preserves the optional `profile_id` on hue avatars in messages, member updates and history responses. Its lobby continues to render the colored initial.
+
 The workbench has a 频道 panel for the new N.E.K.O.Chat service (protocol: `N.E.K.O.Chat/docs/protocol.md`). This source change is not in the existing 0.28.0 daily artifact. Details are in `apps/neko-workbench/IMPLEMENTATION_v0.29.md`.
 
 - Modules: `lobby-config`, `lobby-auth`, `lobby-client`, `lobby-frames`, `lobby-sanitize`, `lobby-avatars`, `lobby-cat`, `lobby-experience`, `lobby-controller` (main process) and `lobby-composer.js` plus `createLobbyView` in the workspace shell (renderer). Wired through `workbench:lobby` IPC with `assertWorkbenchCaller`, and `lobby`/`subscribeLobby` in the preload.
@@ -336,7 +338,7 @@ The workbench has a 频道 panel for the new N.E.K.O.Chat service (protocol: `N.
 - Memory write-back: summaries of lobby segments the user took part in go to the native memory through `recordSharedExperience` (`lobby:` item ids, `lobby-msg:` refs, `inferred`). Independent mode reads no memory; assist reads recall only.
 - Isolation: companion chat keeps working when the lobby is unconfigured, offline, muted, failing to initialize or generating a suggestion.
 
-Verified only with synthetic fixtures: injected fetch, fake WebSocket, a loopback OAuth callback server on port 0, fake model providers, fake clocks and temporary memory directories. The N.E.K.O.Chat backend has its own tests and a two-user smoke script (`scripts/ws_smoke.py`) against fake auth; the workbench has not been run end-to-end against that backend in this step.
+Local integration tests use synthetic identities and model providers. The workbench lobby E2E suite passed against the Chat PR #60 server with PostgreSQL, Redis and the development Auth service. It sets both nicknames through Chat and checks human messages, assisted replies, cat replies and replay after reconnect.
 
 The default chat service is `https://chat.nekotech.ai`. `NEKO_WORKBENCH_CHAT_URL` can override it, or explicitly be set to an empty string to disable it.
 

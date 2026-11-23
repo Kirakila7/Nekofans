@@ -107,8 +107,10 @@
           "name": "李四",
           "display_name": "李四",
           "avatar": {
-            "kind": "image",
-            "url": "https://community.example.test/static/avatars/00000000-0000-4000-8000-000000000003.png"
+            "kind": "hue",
+            "hue": 232,
+            "text": "李",
+            "profile_id": "00000000-0000-4000-8000-000000000003"
           }
         },
         "mentions": [
@@ -242,8 +244,10 @@
       "changes": {
         "display_name": "李四",
         "avatar": {
-          "kind": "image",
-          "url": "https://community.example.test/static/avatars/00000000-0000-4000-8000-000000000003.png"
+          "kind": "hue",
+          "hue": 232,
+          "text": "李",
+          "profile_id": "00000000-0000-4000-8000-000000000003"
         }
       },
       "event_seq": 1239
@@ -341,8 +345,10 @@
             "name": "李四",
             "display_name": "李四",
             "avatar": {
-              "kind": "image",
-              "url": "https://community.example.test/static/avatars/00000000-0000-4000-8000-000000000003.png"
+              "kind": "hue",
+              "hue": 232,
+              "text": "李",
+              "profile_id": "00000000-0000-4000-8000-000000000003"
             }
           },
           "mentions": [
@@ -429,8 +435,10 @@
             "name": "李四",
             "display_name": "李四",
             "avatar": {
-              "kind": "image",
-              "url": "https://community.example.test/static/avatars/00000000-0000-4000-8000-000000000003.png"
+              "kind": "hue",
+              "hue": 232,
+              "text": "李",
+              "profile_id": "00000000-0000-4000-8000-000000000003"
             }
           },
           "mentions": [],

@@ -59,7 +59,11 @@ function avatar(value) {
     if (!url.startsWith('https://')) fail();
     return { kind: 'image', url };
   }
-  if (value.kind === 'hue') return { kind: 'hue', hue: int(value.hue, 0, 359), text: str(value.text, 4, 0) };
+  if (value.kind === 'hue') {
+    const result = { kind: 'hue', hue: int(value.hue, 0, 359), text: str(value.text, 4, 0) };
+    if (value.profile_id !== undefined) result.profile_id = id(value.profile_id);
+    return result;
+  }
   return fail();
 }
 const optAvatar = value => (value === undefined || value === null ? null : avatar(value));
