@@ -28,7 +28,7 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function mint(user) {
   const response = await fetch(`${AUTH_URL}/dev/tokens`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: user.name, display_name: user.display, avatar: true, expires_in: 900 }),
+    body: JSON.stringify({ name: user.name, expires_in: 900 }),
   });
   assert.equal(response.status, 200, 'dev_fake_auth /dev/tokens');
   const body = await response.json();
@@ -142,6 +142,14 @@ test('lobby e2e against a running N.E.K.O.Chat (two synthetic subjects)', {
   let firstId = null;
   try {
     await t.test('both clients reach online with their own identity and cat', async () => {
+      for (const side of [a, b]) {
+        const saved = await fetch(new URL('api/v1/me/profile', CHAT_URL.replace(/\/?$/, '/')), {
+          method: 'PATCH', redirect: 'error',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + side.creds.token },
+          body: JSON.stringify({ display_name: side.user.display }),
+        });
+        assert.equal(saved.status, 200, 'Chat accepted the synthetic profile');
+      }
       a.client.connect(); b.client.connect();
       await until(() => a.client.status === 'online' && b.client.status === 'online', 'online');
       for (const side of [a, b]) {
@@ -149,7 +157,7 @@ test('lobby e2e against a running N.E.K.O.Chat (two synthetic subjects)', {
         // user_id is N.E.K.O.Chat's own id, not the auth subject; hello reports the same one.
         assert.match(side.me.user.user_id, /^[0-9a-f-]{36}$/);
         assert.equal(side.client.snapshot().userId, side.me.user.user_id);
-        assert.equal(side.me.user.display_name, side.user.display, 'display name from the fake profile directory');
+        assert.equal(side.me.user.display_name, side.user.display, 'display name saved in Chat');
         const from = side.events.mark();
         side.cat = await side.client.rest.putCat({ name: side.user.catName, avatarKey: 'default', replyMode: 'mention', enabled: true });
         await side.events.waitFor('cat.updated', p => p.cat?.id === side.cat.id, 'own cat.updated', { from });
